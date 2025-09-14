@@ -117,3 +117,6 @@ export interface MockOptions {
   scenario: 'empty' | 'existing' | 'conflicts' | 'error'
   data?: unknown
 }
+
+// Worktree management types
+export * from './worktree.js'

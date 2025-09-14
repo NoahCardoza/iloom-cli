@@ -6,6 +6,7 @@ import type { MockOptions } from '../types/index.js'
  */
 export class MockGitProvider {
   private scenarios = new Map<string, unknown>()
+  private worktreeOutputs = new Map<string, string>()
 
   setupWorktreeScenario(scenario: MockOptions['scenario'], data?: unknown): void {
     this.scenarios.set('worktree', { scenario, data })
@@ -13,6 +14,240 @@ export class MockGitProvider {
 
   setupBranchScenario(scenario: MockOptions['scenario'], data?: unknown): void {
     this.scenarios.set('branch', { scenario, data })
+  }
+
+  /**
+   * Setup realistic worktree list output for testing
+   */
+  setupWorktreeListOutput(scenario: 'empty' | 'single' | 'multiple' | 'with-pr' | 'locked'): void {
+    switch (scenario) {
+      case 'empty':
+        this.worktreeOutputs.set('worktree-list', '')
+        break
+      case 'single':
+        this.worktreeOutputs.set(
+          'worktree-list',
+          [
+            'worktree /Users/dev/myproject',
+            'HEAD abc123def456789',
+            'branch refs/heads/main',
+            '',
+          ].join('\n')
+        )
+        break
+      case 'multiple':
+        this.worktreeOutputs.set(
+          'worktree-list',
+          [
+            'worktree /Users/dev/myproject',
+            'HEAD abc123def456789',
+            'branch refs/heads/main',
+            '',
+            'worktree /Users/dev/worktree-feature-123',
+            'HEAD def456abc123456',
+            'branch refs/heads/feature/issue-123',
+            '',
+            'worktree /Users/dev/worktree-pr-456',
+            'HEAD 789abc123def456',
+            'branch refs/heads/pr/456',
+            '',
+          ].join('\n')
+        )
+        break
+      case 'with-pr':
+        this.worktreeOutputs.set(
+          'worktree-list',
+          [
+            'worktree /Users/dev/myproject',
+            'HEAD abc123def456789',
+            'branch refs/heads/main',
+            '',
+            'worktree /Users/dev/worktree-pr-123',
+            'HEAD def456abc123456',
+            'branch refs/heads/pr/123',
+            '',
+          ].join('\n')
+        )
+        break
+      case 'locked':
+        this.worktreeOutputs.set(
+          'worktree-list',
+          [
+            'worktree /Users/dev/myproject',
+            'HEAD abc123def456789',
+            'branch refs/heads/main',
+            '',
+            'worktree /Users/dev/worktree-locked',
+            'HEAD def456abc123456',
+            'locked under maintenance',
+            '',
+          ].join('\n')
+        )
+        break
+    }
+  }
+
+  /**
+   * Setup git status output for worktree status testing
+   */
+  setupStatusOutput(scenario: 'clean' | 'modified' | 'staged' | 'untracked' | 'mixed'): void {
+    switch (scenario) {
+      case 'clean':
+        this.worktreeOutputs.set('status', '')
+        break
+      case 'modified':
+        this.worktreeOutputs.set('status', ' M src/file1.ts\n M src/file2.ts')
+        break
+      case 'staged':
+        this.worktreeOutputs.set('status', 'A  src/new-file.ts\nM  src/modified.ts')
+        break
+      case 'untracked':
+        this.worktreeOutputs.set('status', '?? temp-file.txt\n?? untracked-dir/')
+        break
+      case 'mixed':
+        this.worktreeOutputs.set(
+          'status',
+          ' M src/modified.ts\nA  src/new-file.ts\n?? temp.txt\nD  old-file.ts'
+        )
+        break
+    }
+  }
+
+  /**
+   * Setup branch information
+   */
+  setupBranchInfo(currentBranch: string, remoteBranch?: string): void {
+    this.worktreeOutputs.set('current-branch', currentBranch)
+    if (remoteBranch) {
+      this.worktreeOutputs.set('remote-branch', remoteBranch)
+    }
+  }
+
+  /**
+   * Setup ahead/behind information
+   */
+  setupAheadBehind(ahead: number, behind: number): void {
+    this.worktreeOutputs.set('ahead-behind', `${behind}\t${ahead}`)
+  }
+
+  /**
+   * Create mock for executeGitCommand with realistic responses
+   */
+  mockExecuteGitCommand(): ReturnType<typeof vi.fn> {
+    return vi.fn().mockImplementation((args: string[]) => {
+      const command = args.join(' ')
+
+      // Handle worktree list command
+      if (command.includes('worktree list')) {
+        const output = this.worktreeOutputs.get('worktree-list') ?? ''
+        return Promise.resolve({
+          success: true,
+          message: output,
+          exitCode: 0,
+        })
+      }
+
+      // Handle status command
+      if (command.includes('status --porcelain')) {
+        const output = this.worktreeOutputs.get('status') ?? ''
+        return Promise.resolve({
+          success: true,
+          message: output,
+          exitCode: 0,
+        })
+      }
+
+      // Handle current branch command
+      if (command.includes('branch --show-current')) {
+        const branch = this.worktreeOutputs.get('current-branch') ?? 'main'
+        return Promise.resolve({
+          success: true,
+          message: branch,
+          exitCode: 0,
+        })
+      }
+
+      // Handle ahead/behind command
+      if (command.includes('rev-list --left-right --count')) {
+        const aheadBehind = this.worktreeOutputs.get('ahead-behind') ?? '0\t0'
+        return Promise.resolve({
+          success: true,
+          message: aheadBehind,
+          exitCode: 0,
+        })
+      }
+
+      // Handle worktree add command
+      if (command.includes('worktree add')) {
+        const worktreeScenario = this.scenarios.get('worktree') as { scenario: string } | undefined
+        if (worktreeScenario?.scenario === 'error') {
+          return Promise.resolve({
+            success: false,
+            message: '',
+            error: 'Failed to create worktree',
+            exitCode: 1,
+          })
+        }
+        return Promise.resolve({
+          success: true,
+          message: 'Preparing worktree',
+          exitCode: 0,
+        })
+      }
+
+      // Handle worktree remove command
+      if (command.includes('worktree remove')) {
+        const worktreeScenario = this.scenarios.get('worktree') as { scenario: string } | undefined
+        if (worktreeScenario?.scenario === 'error') {
+          return Promise.resolve({
+            success: false,
+            message: '',
+            error: 'Failed to remove worktree',
+            exitCode: 1,
+          })
+        }
+        return Promise.resolve({
+          success: true,
+          message: 'Worktree removed',
+          exitCode: 0,
+        })
+      }
+
+      // Handle repository validation commands
+      if (command.includes('rev-parse --git-dir')) {
+        const isValid = this.scenarios.get('repo-valid') !== false
+        if (isValid) {
+          return Promise.resolve({
+            success: true,
+            message: '.git',
+            exitCode: 0,
+          })
+        } else {
+          return Promise.resolve({
+            success: false,
+            message: '',
+            error: 'Not a git repository',
+            exitCode: 1,
+          })
+        }
+      }
+
+      // Handle repo root command
+      if (command.includes('rev-parse --show-toplevel')) {
+        return Promise.resolve({
+          success: true,
+          message: '/Users/dev/myproject',
+          exitCode: 0,
+        })
+      }
+
+      // Default successful response
+      return Promise.resolve({
+        success: true,
+        message: 'Mock git command success',
+        exitCode: 0,
+      })
+    })
   }
 
   mockCommand(_command: string, response: string | Error): ReturnType<typeof vi.fn> {
@@ -34,6 +269,7 @@ export class MockGitProvider {
 
   reset(): void {
     this.scenarios.clear()
+    this.worktreeOutputs.clear()
   }
 }
 

@@ -1,0 +1,769 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import path from 'path'
+import fs from 'fs-extra'
+import { GitWorktreeManager } from './GitWorktreeManager.js'
+import { MockFactories } from '../test-utils/mock-factories.js'
+import * as gitUtils from '../utils/git.js'
+
+// Mock the git utils module
+vi.mock('../utils/git.js', () => ({
+  executeGitCommand: vi.fn(),
+  parseWorktreeList: vi.fn(),
+  isPRBranch: vi.fn(),
+  extractPRNumber: vi.fn(),
+  generateWorktreePath: vi.fn(),
+  isValidGitRepo: vi.fn(),
+  getCurrentBranch: vi.fn(),
+  getRepoRoot: vi.fn(),
+  hasUncommittedChanges: vi.fn(),
+  getDefaultBranch: vi.fn(),
+}))
+
+// Mock fs-extra
+vi.mock('fs-extra', () => ({
+  default: {
+    pathExists: vi.fn(),
+    remove: vi.fn(),
+  },
+  pathExists: vi.fn(),
+  remove: vi.fn(),
+}))
+
+describe('GitWorktreeManager', () => {
+  let manager: GitWorktreeManager
+  const mockRepoPath = '/test/repo'
+
+  beforeEach(() => {
+    manager = new GitWorktreeManager(mockRepoPath)
+    MockFactories.resetAll()
+    vi.clearAllMocks()
+  })
+
+  describe('listWorktrees', () => {
+    it('should list worktrees successfully', async () => {
+      const mockWorktrees = [
+        {
+          path: '/test/repo',
+          branch: 'main',
+          commit: 'abc123',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+        {
+          path: '/test/worktree-feature',
+          branch: 'feature-branch',
+          commit: 'def456',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+      ]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: 'mock worktree output',
+        exitCode: 0,
+      })
+
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+
+      const result = await manager.listWorktrees()
+
+      expect(result).toEqual(mockWorktrees)
+      expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(['worktree', 'list'], {
+        cwd: mockRepoPath,
+      })
+      expect(gitUtils.parseWorktreeList).toHaveBeenCalledWith('mock worktree output')
+    })
+
+    it('should include porcelain flag when requested', async () => {
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: '',
+        exitCode: 0,
+      })
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue([])
+
+      await manager.listWorktrees({ porcelain: true })
+
+      expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(['worktree', 'list', '--porcelain'], {
+        cwd: mockRepoPath,
+      })
+    })
+
+    it('should include verbose flag when requested', async () => {
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: '',
+        exitCode: 0,
+      })
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue([])
+
+      await manager.listWorktrees({ verbose: true })
+
+      expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(['worktree', 'list', '-v'], {
+        cwd: mockRepoPath,
+      })
+    })
+
+    it('should throw error when git command fails', async () => {
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: false,
+        message: '',
+        error: 'Git command failed',
+        exitCode: 1,
+      })
+
+      await expect(manager.listWorktrees()).rejects.toThrow(
+        'Failed to list worktrees: Git command failed'
+      )
+    })
+  })
+
+  describe('findWorktreeForBranch', () => {
+    it('should find worktree for existing branch', async () => {
+      const targetWorktree = {
+        path: '/test/worktree-feature',
+        branch: 'feature-branch',
+        commit: 'def456',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      const mockWorktrees = [
+        {
+          path: '/test/repo',
+          branch: 'main',
+          commit: 'abc123',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+        targetWorktree,
+      ]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: 'mock output',
+        exitCode: 0,
+      })
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+
+      const result = await manager.findWorktreeForBranch('feature-branch')
+
+      expect(result).toEqual(targetWorktree)
+    })
+
+    it('should return null for non-existent branch', async () => {
+      const mockWorktrees = [
+        {
+          path: '/test/repo',
+          branch: 'main',
+          commit: 'abc123',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+      ]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: 'mock output',
+        exitCode: 0,
+      })
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+
+      const result = await manager.findWorktreeForBranch('non-existent')
+
+      expect(result).toBeNull()
+    })
+  })
+
+  describe('isPRWorktree', () => {
+    it('should identify PR worktree correctly', () => {
+      const worktree = {
+        path: '/test/worktree-pr-123',
+        branch: 'pr/123',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(gitUtils.isPRBranch).mockReturnValue(true)
+
+      const result = manager.isPRWorktree(worktree)
+
+      expect(result).toBe(true)
+      expect(gitUtils.isPRBranch).toHaveBeenCalledWith('pr/123')
+    })
+
+    it('should identify non-PR worktree correctly', () => {
+      const worktree = {
+        path: '/test/worktree-feature',
+        branch: 'feature-branch',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(gitUtils.isPRBranch).mockReturnValue(false)
+
+      const result = manager.isPRWorktree(worktree)
+
+      expect(result).toBe(false)
+      expect(gitUtils.isPRBranch).toHaveBeenCalledWith('feature-branch')
+    })
+  })
+
+  describe('getPRNumberFromWorktree', () => {
+    it('should extract PR number correctly', () => {
+      const worktree = {
+        path: '/test/worktree-pr-123',
+        branch: 'pr/123',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(gitUtils.extractPRNumber).mockReturnValue(123)
+
+      const result = manager.getPRNumberFromWorktree(worktree)
+
+      expect(result).toBe(123)
+      expect(gitUtils.extractPRNumber).toHaveBeenCalledWith('pr/123')
+    })
+
+    it('should return null for non-PR worktree', () => {
+      const worktree = {
+        path: '/test/worktree-feature',
+        branch: 'feature-branch',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(gitUtils.extractPRNumber).mockReturnValue(null)
+
+      const result = manager.getPRNumberFromWorktree(worktree)
+
+      expect(result).toBeNull()
+      expect(gitUtils.extractPRNumber).toHaveBeenCalledWith('feature-branch')
+    })
+  })
+
+  describe('createWorktree', () => {
+    it('should create worktree successfully', async () => {
+      const options = {
+        path: '/test/new-worktree',
+        branch: 'new-feature',
+        createBranch: true,
+        baseBranch: 'main',
+      }
+
+      vi.mocked(fs.pathExists).mockResolvedValue(false)
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: 'Worktree created successfully',
+        exitCode: 0,
+      })
+
+      const result = await manager.createWorktree(options)
+
+      expect(result.success).toBe(true)
+      expect(result.message).toBe('Worktree created successfully')
+      expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(
+        ['worktree', 'add', '-b', 'new-feature', path.resolve('/test/new-worktree'), 'main'],
+        { cwd: mockRepoPath }
+      )
+    })
+
+    it('should fail when branch name is missing', async () => {
+      const options = {
+        path: '/test/new-worktree',
+        branch: '',
+      }
+
+      const result = await manager.createWorktree(options)
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Branch name is required')
+      expect(result.exitCode).toBe(1)
+    })
+
+    it('should fail when path exists and force is false', async () => {
+      const options = {
+        path: '/test/existing-path',
+        branch: 'new-feature',
+      }
+
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+
+      const result = await manager.createWorktree(options)
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('Path already exists')
+      expect(result.exitCode).toBe(1)
+    })
+
+    it('should remove existing path when force is true', async () => {
+      const options = {
+        path: '/test/existing-path',
+        branch: 'new-feature',
+        force: true,
+      }
+
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.remove).mockResolvedValue()
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: 'Worktree created',
+        exitCode: 0,
+      })
+
+      const result = await manager.createWorktree(options)
+
+      expect(result.success).toBe(true)
+      expect(fs.remove).toHaveBeenCalledWith(path.resolve('/test/existing-path'))
+    })
+
+    it('should create worktree from existing branch', async () => {
+      const options = {
+        path: '/test/new-worktree',
+        branch: 'existing-branch',
+        createBranch: false,
+      }
+
+      vi.mocked(fs.pathExists).mockResolvedValue(false)
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: 'Worktree created',
+        exitCode: 0,
+      })
+
+      await manager.createWorktree(options)
+
+      expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(
+        ['worktree', 'add', path.resolve('/test/new-worktree'), 'existing-branch'],
+        { cwd: mockRepoPath }
+      )
+    })
+  })
+
+  describe('removeWorktree', () => {
+    it('should remove worktree successfully', async () => {
+      const worktreePath = '/test/worktree-feature'
+      const mockWorktrees = [
+        {
+          path: worktreePath,
+          branch: 'feature-branch',
+          commit: 'abc123',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+      ]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: 'Worktree removed',
+        exitCode: 0,
+      })
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+      vi.mocked(gitUtils.hasUncommittedChanges).mockResolvedValue(false)
+
+      const result = await manager.removeWorktree(worktreePath)
+
+      expect(result.success).toBe(true)
+      expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(
+        ['worktree', 'remove', worktreePath],
+        {
+          cwd: mockRepoPath,
+        }
+      )
+    })
+
+    it('should fail when worktree not found', async () => {
+      const worktreePath = '/test/non-existent'
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: '',
+        exitCode: 0,
+      })
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue([])
+
+      const result = await manager.removeWorktree(worktreePath)
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('Worktree not found')
+      expect(result.exitCode).toBe(1)
+    })
+
+    it('should fail when worktree has uncommitted changes without force', async () => {
+      const worktreePath = '/test/worktree-feature'
+      const mockWorktrees = [
+        {
+          path: worktreePath,
+          branch: 'feature-branch',
+          commit: 'abc123',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+      ]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: '',
+        exitCode: 0,
+      })
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+      vi.mocked(gitUtils.hasUncommittedChanges).mockResolvedValue(true)
+
+      const result = await manager.removeWorktree(worktreePath)
+
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('uncommitted changes')
+      expect(result.exitCode).toBe(1)
+    })
+
+    it('should perform dry run when requested', async () => {
+      const worktreePath = '/test/worktree-feature'
+      const mockWorktrees = [
+        {
+          path: worktreePath,
+          branch: 'feature-branch',
+          commit: 'abc123',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+      ]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: '',
+        exitCode: 0,
+      })
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+
+      const result = await manager.removeWorktree(worktreePath, { dryRun: true })
+
+      expect(result.success).toBe(true)
+      expect(result.message).toContain('Would perform')
+      expect(result.exitCode).toBe(0)
+    })
+
+    it('should remove directory when removeDirectory option is true', async () => {
+      const worktreePath = '/test/worktree-feature'
+      const mockWorktrees = [
+        {
+          path: worktreePath,
+          branch: 'feature-branch',
+          commit: 'abc123',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+      ]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: 'Worktree removed',
+        exitCode: 0,
+      })
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+      vi.mocked(gitUtils.hasUncommittedChanges).mockResolvedValue(false)
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.remove).mockResolvedValue()
+
+      const result = await manager.removeWorktree(worktreePath, { removeDirectory: true })
+
+      expect(result.success).toBe(true)
+      expect(fs.remove).toHaveBeenCalledWith(worktreePath)
+    })
+  })
+
+  describe('validateWorktree', () => {
+    it('should validate healthy worktree', async () => {
+      const worktreePath = '/test/worktree-feature'
+      const mockWorktrees = [
+        {
+          path: worktreePath,
+          branch: 'feature-branch',
+          commit: 'abc123',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+      ]
+
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(gitUtils.isValidGitRepo).mockResolvedValue(true)
+      vi.mocked(gitUtils.getCurrentBranch).mockResolvedValue('feature-branch')
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: '',
+        exitCode: 0,
+      })
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+
+      const result = await manager.validateWorktree(worktreePath)
+
+      expect(result.isValid).toBe(true)
+      expect(result.issues).toHaveLength(0)
+      expect(result.existsOnDisk).toBe(true)
+      expect(result.isValidRepo).toBe(true)
+      expect(result.hasValidBranch).toBe(true)
+    })
+
+    it('should identify missing directory', async () => {
+      const worktreePath = '/test/missing-worktree'
+
+      vi.mocked(fs.pathExists).mockResolvedValue(false)
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: '',
+        exitCode: 0,
+      })
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue([])
+
+      const result = await manager.validateWorktree(worktreePath)
+
+      expect(result.isValid).toBe(false)
+      expect(result.issues).toContain('Worktree directory does not exist on disk')
+      expect(result.issues).toContain('Worktree is not registered with Git')
+      expect(result.existsOnDisk).toBe(false)
+    })
+
+    it('should identify invalid Git repository', async () => {
+      const worktreePath = '/test/invalid-repo'
+
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(gitUtils.isValidGitRepo).mockResolvedValue(false)
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: '',
+        exitCode: 0,
+      })
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue([])
+
+      const result = await manager.validateWorktree(worktreePath)
+
+      expect(result.isValid).toBe(false)
+      expect(result.issues).toContain('Directory is not a valid Git repository')
+      expect(result.isValidRepo).toBe(false)
+    })
+  })
+
+  describe('getWorktreeStatus', () => {
+    it('should get worktree status successfully', async () => {
+      const worktreePath = '/test/worktree-feature'
+
+      vi.mocked(gitUtils.executeGitCommand)
+        .mockResolvedValueOnce({
+          success: true,
+          message: ' M file1.txt\n?? file2.txt\nA  file3.txt',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          success: true,
+          message: '0\t1',
+          exitCode: 0,
+        })
+
+      vi.mocked(gitUtils.getCurrentBranch).mockResolvedValue('feature-branch')
+
+      const result = await manager.getWorktreeStatus(worktreePath)
+
+      expect(result.modified).toBe(1)
+      expect(result.untracked).toBe(1)
+      expect(result.staged).toBe(1)
+      expect(result.hasChanges).toBe(true)
+      expect(result.branch).toBe('feature-branch')
+      expect(result.detached).toBe(false)
+      expect(result.behind).toBe(0)
+      expect(result.ahead).toBe(1)
+    })
+
+    it('should handle empty status', async () => {
+      const worktreePath = '/test/clean-worktree'
+
+      vi.mocked(gitUtils.executeGitCommand)
+        .mockResolvedValueOnce({
+          success: true,
+          message: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          success: false,
+          message: '',
+          error: 'No upstream',
+          exitCode: 1,
+        })
+
+      vi.mocked(gitUtils.getCurrentBranch).mockResolvedValue('main')
+
+      const result = await manager.getWorktreeStatus(worktreePath)
+
+      expect(result.modified).toBe(0)
+      expect(result.untracked).toBe(0)
+      expect(result.staged).toBe(0)
+      expect(result.hasChanges).toBe(false)
+      expect(result.branch).toBe('main')
+      expect(result.ahead).toBe(0)
+      expect(result.behind).toBe(0)
+    })
+  })
+
+  describe('generateWorktreePath', () => {
+    it('should generate worktree path', () => {
+      const branchName = 'feature-branch'
+      const expectedPath = '/expected/path'
+
+      vi.mocked(gitUtils.generateWorktreePath).mockReturnValue(expectedPath)
+
+      const result = manager.generateWorktreePath(branchName)
+
+      expect(result).toBe(expectedPath)
+      expect(gitUtils.generateWorktreePath).toHaveBeenCalledWith(branchName, mockRepoPath)
+    })
+
+    it('should use custom root when provided', () => {
+      const branchName = 'feature-branch'
+      const customRoot = '/custom/root'
+      const expectedPath = '/custom/path'
+
+      vi.mocked(gitUtils.generateWorktreePath).mockReturnValue(expectedPath)
+
+      const result = manager.generateWorktreePath(branchName, customRoot)
+
+      expect(result).toBe(expectedPath)
+      expect(gitUtils.generateWorktreePath).toHaveBeenCalledWith(branchName, customRoot)
+    })
+  })
+
+  describe('isRepoReady', () => {
+    it('should return true for valid repository', async () => {
+      vi.mocked(gitUtils.getRepoRoot).mockResolvedValue('/test/repo')
+
+      const result = await manager.isRepoReady()
+
+      expect(result).toBe(true)
+    })
+
+    it('should return false for invalid repository', async () => {
+      vi.mocked(gitUtils.getRepoRoot).mockResolvedValue(null)
+
+      const result = await manager.isRepoReady()
+
+      expect(result).toBe(false)
+    })
+
+    it('should return false when getRepoRoot throws', async () => {
+      vi.mocked(gitUtils.getRepoRoot).mockRejectedValue(new Error('Git error'))
+
+      const result = await manager.isRepoReady()
+
+      expect(result).toBe(false)
+    })
+  })
+
+  describe('getRepoInfo', () => {
+    it('should get repository information', async () => {
+      vi.mocked(gitUtils.getRepoRoot).mockResolvedValue('/test/repo')
+      vi.mocked(gitUtils.getDefaultBranch).mockResolvedValue('main')
+      vi.mocked(gitUtils.getCurrentBranch).mockResolvedValue('feature-branch')
+
+      const result = await manager.getRepoInfo()
+
+      expect(result.root).toBe('/test/repo')
+      expect(result.defaultBranch).toBe('main')
+      expect(result.currentBranch).toBe('feature-branch')
+    })
+  })
+
+  describe('pruneWorktrees', () => {
+    it('should prune stale worktrees', async () => {
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: 'Pruned worktrees',
+        exitCode: 0,
+      })
+
+      const result = await manager.pruneWorktrees()
+
+      expect(result.success).toBe(true)
+      expect(result.message).toBe('Pruned worktrees')
+      expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(['worktree', 'prune', '-v'], {
+        cwd: mockRepoPath,
+      })
+    })
+  })
+
+  describe('lockWorktree', () => {
+    it('should lock worktree without reason', async () => {
+      const worktreePath = '/test/worktree'
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: 'Worktree locked',
+        exitCode: 0,
+      })
+
+      const result = await manager.lockWorktree(worktreePath)
+
+      expect(result.success).toBe(true)
+      expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(['worktree', 'lock', worktreePath], {
+        cwd: mockRepoPath,
+      })
+    })
+
+    it('should lock worktree with reason', async () => {
+      const worktreePath = '/test/worktree'
+      const reason = 'Under maintenance'
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: 'Worktree locked',
+        exitCode: 0,
+      })
+
+      const result = await manager.lockWorktree(worktreePath, reason)
+
+      expect(result.success).toBe(true)
+      expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(
+        ['worktree', 'lock', worktreePath, '--reason', reason],
+        { cwd: mockRepoPath }
+      )
+    })
+  })
+
+  describe('unlockWorktree', () => {
+    it('should unlock worktree', async () => {
+      const worktreePath = '/test/worktree'
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
+        success: true,
+        message: 'Worktree unlocked',
+        exitCode: 0,
+      })
+
+      const result = await manager.unlockWorktree(worktreePath)
+
+      expect(result.success).toBe(true)
+      expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(
+        ['worktree', 'unlock', worktreePath],
+        {
+          cwd: mockRepoPath,
+        }
+      )
+    })
+  })
+})
