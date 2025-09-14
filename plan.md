@@ -9,12 +9,14 @@ Convert the existing bash workflow scripts into "Hatchbox AI" - a TypeScript CLI
 ## Current Bash Scripts Analysis
 
 ### Core Scripts
+
 1. **`new-branch-workflow.sh`** - Creates isolated workspace for an issue/PR
 2. **`merge-and-clean.sh`** - Completes work and cleans up
 3. **`cleanup-worktree.sh`** - Removes workspaces
 4. **`merge-current-issue.sh`** - Merges current work from within worktree
 
 ### Utility Scripts
+
 1. **`find-worktree-for-branch.sh`** - Locates worktree for a branch
 2. **`worktree-utils.sh`** - PR worktree detection utilities
 3. **`env-utils.sh`** - Environment file manipulation
@@ -23,6 +25,7 @@ Convert the existing bash workflow scripts into "Hatchbox AI" - a TypeScript CLI
 ### Key Functionality Identified
 
 #### From `new-branch-workflow.sh`:
+
 - GitHub issue/PR detection and fetching
 - Branch name generation using Claude AI
 - Git worktree creation
@@ -33,6 +36,7 @@ Convert the existing bash workflow scripts into "Hatchbox AI" - a TypeScript CLI
 - Terminal launching with Claude
 
 #### From `merge-and-clean.sh`:
+
 - Uncommitted changes detection and auto-commit
 - Migration conflict handling (Payload CMS specific)
 - Branch rebasing on main
@@ -44,12 +48,14 @@ Convert the existing bash workflow scripts into "Hatchbox AI" - a TypeScript CLI
 - Worktree and branch cleanup
 
 #### From `cleanup-worktree.sh`:
+
 - Worktree listing and removal
 - Issue-based cleanup (find all branches for an issue)
 - Bulk worktree removal
 - Database branch cleanup integration
 
 #### From Utility Scripts:
+
 - PR worktree detection (`_pr_N` suffix pattern)
 - Environment variable manipulation in .env files
 - Neon database branch management
@@ -59,6 +65,7 @@ Convert the existing bash workflow scripts into "Hatchbox AI" - a TypeScript CLI
 ## Development Plan Structure
 
 **Development Approach**: Test-Driven Development (TDD)
+
 - Write comprehensive unit tests before implementing each module
 - Maintain minimum 95% code coverage throughout development
 - Use mock factories for all external dependencies (Git, GitHub CLI, Neon CLI, Claude CLI)
@@ -66,12 +73,15 @@ Convert the existing bash workflow scripts into "Hatchbox AI" - a TypeScript CLI
 - Continuous integration with automated test gates
 
 ### Phase 1: Core Foundation (Issues 1-5)
+
 Focus on exact functionality parity with bash scripts using TDD approach.
 
 #### Issue #1: Initialize TypeScript Project and CLI Structure
+
 **Goal**: Set up the basic TypeScript project infrastructure
 
 **Tasks**:
+
 - [x] Create `package.json` with correct metadata and dependencies
 - [x] Configure TypeScript with `tsconfig.json`
 - [x] Set up build system using `tsup` for CLI and library builds
@@ -80,6 +90,7 @@ Focus on exact functionality parity with bash scripts using TDD approach.
 - [ ] Create basic project structure (`src/`, `lib/`, `commands/`, `utils/`)
 
 **Dependencies**:
+
 - `commander` - CLI framework
 - `execa` - Shell command execution
 - `fs-extra` - File system operations
@@ -88,6 +99,7 @@ Focus on exact functionality parity with bash scripts using TDD approach.
 - `inquirer` - Interactive prompts
 
 **Testing Requirements**:
+
 - Set up Vitest with comprehensive test configuration
 - Configure test coverage reporting (minimum 95%)
 - Set up GitHub Actions CI/CD with test gates
@@ -95,6 +107,7 @@ Focus on exact functionality parity with bash scripts using TDD approach.
 - Implement pre-commit hooks for test runs
 
 **Acceptance Criteria**:
+
 - Package builds successfully with `npm run build`
 - CLI executable works with basic `--help` command
 - TypeScript compilation passes
@@ -104,14 +117,17 @@ Focus on exact functionality parity with bash scripts using TDD approach.
 - CI/CD pipeline running tests automatically
 
 #### Issue #2: Core Git Worktree Management Module
+
 **Goal**: Port all git worktree functionality from bash scripts
 
 **Key Files to Create**:
+
 - `src/lib/GitWorktreeManager.ts`
 - `src/utils/git.ts`
 - `src/types/worktree.ts`
 
 **Functions to Port**:
+
 - `find_worktree_for_branch()` from `find-worktree-for-branch.sh`
 - `is_pr_worktree()` from `worktree-utils.sh`
 - `get_pr_number_from_worktree()` from `worktree-utils.sh`
@@ -119,6 +135,7 @@ Focus on exact functionality parity with bash scripts using TDD approach.
 - Worktree removal logic from `cleanup-worktree.sh`
 
 **Features**:
+
 - List all worktrees with branch information
 - Create worktree for branch
 - Remove worktree and associated files
@@ -127,6 +144,7 @@ Focus on exact functionality parity with bash scripts using TDD approach.
 - Validate worktree states
 
 **Testing Requirements**:
+
 - Unit tests for each GitWorktreeManager method using mocked Git commands
 - Mock factory for Git CLI responses and states
 - Test fixtures for various worktree configurations
@@ -136,20 +154,24 @@ Focus on exact functionality parity with bash scripts using TDD approach.
 - Cross-platform compatibility tests
 
 #### Issue #3: GitHub Integration Module
+
 **Goal**: Port GitHub CLI integration and issue/PR handling
 
 **Key Files to Create**:
+
 - `src/lib/GitHubService.ts`
 - `src/utils/github.ts`
 - `src/types/github.ts`
 
 **Functions to Port**:
+
 - Issue fetching and validation
 - PR fetching and state checking
 - Branch name generation from issue titles
 - Issue/PR context extraction for Claude
 
 **Features**:
+
 - Detect if input is issue number or PR number
 - Fetch issue/PR details using GitHub CLI
 - Validate issue/PR state (open/closed)
@@ -157,6 +179,7 @@ Focus on exact functionality parity with bash scripts using TDD approach.
 - Extract context for Claude integration
 
 **Testing Requirements**:
+
 - Unit tests for GitHub API response parsing
 - Mock factory for GitHub CLI responses (issues, PRs, edge cases)
 - Test fixtures for various issue/PR states and formats
@@ -166,18 +189,22 @@ Focus on exact functionality parity with bash scripts using TDD approach.
 - Rate limiting and retry logic tests
 
 #### Issue #4: Environment Management Module
+
 **Goal**: Port .env file manipulation functionality
 
 **Key Files to Create**:
+
 - `src/lib/EnvironmentManager.ts`
 - `src/utils/env.ts`
 
 **Functions to Port**:
+
 - `setEnvVar()` from `env-utils.sh`
 - Port assignment logic (3000 + issue/PR number)
 - .env file copying between worktrees
 
 **Features**:
+
 - Read/write/update .env files
 - Set environment variables in target file
 - Copy .env files between directories
@@ -185,6 +212,7 @@ Focus on exact functionality parity with bash scripts using TDD approach.
 - Validate environment configurations
 
 **Testing Requirements**:
+
 - Unit tests for .env file parsing and manipulation
 - File system mocking for atomic file operations
 - Port calculation tests including conflict detection
@@ -194,21 +222,25 @@ Focus on exact functionality parity with bash scripts using TDD approach.
 - Backup and recovery mechanism tests
 
 #### Issue #5: Database Branch Management (Neon)
+
 **Goal**: Port Neon database utilities with provider abstraction
 
 **Key Files to Create**:
+
 - `src/lib/DatabaseManager.ts`
 - `src/lib/providers/NeonProvider.ts`
 - `src/utils/database.ts`
 - `src/types/database.ts`
 
 **Functions to Port**:
+
 - `create_neon_database_branch()` from `neon-utils.sh`
 - `delete_neon_database_branch()` from `neon-utils.sh`
 - `find_preview_database_branch()` from `neon-utils.sh`
 - All Neon CLI wrapper functions
 
 **Features**:
+
 - Create isolated database branches
 - Generate connection strings
 - Delete database branches on cleanup
@@ -217,6 +249,7 @@ Focus on exact functionality parity with bash scripts using TDD approach.
 - Abstract interface for future providers (Supabase, PlanetScale)
 
 **Testing Requirements**:
+
 - Unit tests for Neon CLI wrapper functions
 - Mock factory for Neon API responses and CLI outputs
 - Database provider interface tests ensuring contract compliance
@@ -227,14 +260,17 @@ Focus on exact functionality parity with bash scripts using TDD approach.
 - Failure recovery and cleanup tests
 
 ### Phase 2: Core Commands (Issues 6-10)
+
 Transform bash scripts into CLI commands with exact functionality using comprehensive integration testing.
 
 #### Issue #6: Implement 'start' Command
+
 **Goal**: Port `new-branch-workflow.sh` functionality
 
 **Command**: `cw start <issue-number-or-branch-name>`
 
 **Key Logic to Port**:
+
 - Input validation and type detection
 - GitHub issue/PR fetching
 - Branch creation or validation
@@ -246,10 +282,12 @@ Transform bash scripts into CLI commands with exact functionality using comprehe
 - Terminal launching
 
 **Files**:
+
 - `src/commands/start.ts`
 - Integration with all Phase 1 modules
 
 **Testing Requirements**:
+
 - End-to-end workflow tests using temporary Git repositories
 - Integration tests with mocked external dependencies
 - Command-line argument parsing and validation tests
@@ -259,11 +297,13 @@ Transform bash scripts into CLI commands with exact functionality using comprehe
 - Regression tests ensuring exact bash script parity
 
 #### Issue #7: Implement 'finish' Command
+
 **Goal**: Port `merge-and-clean.sh` functionality
 
 **Command**: `cw finish <issue-number-or-branch-name>`
 
 **Key Logic to Port**:
+
 - Uncommitted changes detection and auto-commit
 - Migration conflict handling (Payload CMS specific)
 - Type checking, linting, testing workflows
@@ -275,11 +315,13 @@ Transform bash scripts into CLI commands with exact functionality using comprehe
 - Worktree and branch cleanup
 
 **Files**:
+
 - `src/commands/finish.ts`
 - `src/lib/MigrationManager.ts` (for Payload CMS)
 - `src/lib/TestRunner.ts`
 
 **Testing Requirements**:
+
 - Complex integration tests for merge workflow scenarios
 - Migration conflict detection and resolution tests
 - Claude-assisted error fixing workflow tests
@@ -290,12 +332,14 @@ Transform bash scripts into CLI commands with exact functionality using comprehe
 - Error recovery and rollback mechanism tests
 
 #### Issue #8: Implement 'cleanup' Command
+
 **Goal**: Port `cleanup-worktree.sh` functionality
 
 **Command**: `cw cleanup [branch-name|issue-number]`
 **Options**: `--all`, `--issue <number>`, `--force`, `--list`
 
 **Key Logic to Port**:
+
 - List all worktrees
 - Remove single worktree by branch name
 - Remove all worktrees for an issue
@@ -303,9 +347,11 @@ Transform bash scripts into CLI commands with exact functionality using comprehe
 - Database branch cleanup integration
 
 **Files**:
+
 - `src/commands/cleanup.ts`
 
 **Testing Requirements**:
+
 - Batch operation tests for multiple worktree cleanup
 - Interactive confirmation flow tests
 - Force mode and dry-run mode tests
@@ -315,11 +361,13 @@ Transform bash scripts into CLI commands with exact functionality using comprehe
 - Cross-platform cleanup operation tests
 
 #### Issue #9: Implement 'list' Command
+
 **Goal**: Show all active workspaces with rich information
 
 **Command**: `cw list`
 
 **Features** (Enhanced from bash):
+
 - Show all active workspaces
 - Display issue/PR information
 - Show port assignments
@@ -328,9 +376,11 @@ Transform bash scripts into CLI commands with exact functionality using comprehe
 - Format output with colors and icons
 
 **Files**:
+
 - `src/commands/list.ts`
 
 **Testing Requirements**:
+
 - Output formatting and color rendering tests
 - Performance tests with large numbers of workspaces
 - Workspace status detection and reporting tests
@@ -340,11 +390,13 @@ Transform bash scripts into CLI commands with exact functionality using comprehe
 - Accessibility tests for color-blind users
 
 #### Issue #10: Implement 'switch' Command
+
 **Goal**: Quick context switching between workspaces
 
 **Command**: `cw switch <issue-number-or-branch-name>`
 
 **Features**:
+
 - Navigate to worktree directory
 - Display Claude context for the workspace
 - Show current issue/PR details
@@ -352,9 +404,11 @@ Transform bash scripts into CLI commands with exact functionality using comprehe
 - Launch Claude if requested
 
 **Files**:
+
 - `src/commands/switch.ts`
 
 **Testing Requirements**:
+
 - Cross-platform directory navigation tests
 - Terminal integration tests for different shells
 - Claude context generation and display tests
@@ -362,16 +416,20 @@ Transform bash scripts into CLI commands with exact functionality using comprehe
 - Performance tests for context switching operations
 
 ### Phase 3: Claude AI Integration (Issues 11-13)
+
 Enhance Claude integration beyond bash script capabilities.
 
 #### Issue #11: Claude Context Generation
+
 **Goal**: Generate rich context files for Claude
 
 **Key Files**:
+
 - `src/lib/ClaudeContextManager.ts`
 - `src/utils/claude.ts`
 
 **Features**:
+
 - Generate `.claude-context.md` files in worktrees
 - Create issue/PR summaries for Claude
 - Include port and database information
@@ -379,9 +437,11 @@ Enhance Claude integration beyond bash script capabilities.
 - Format instructions appropriately
 
 #### Issue #12: Claude CLI Integration
+
 **Goal**: Enhanced Claude CLI integration
 
 **Features**:
+
 - Detect Claude CLI availability
 - Launch Claude with appropriate permissions and models
 - Pass context and instructions
@@ -389,9 +449,11 @@ Enhance Claude integration beyond bash script capabilities.
 - Handle different Claude models (opus, haiku, sonnet)
 
 #### Issue #13: AI-Assisted Features
+
 **Goal**: Leverage Claude for development tasks
 
 **Features**:
+
 - Auto-generate commit messages
 - Generate semantic branch names from issues
 - Conflict resolution assistance
@@ -399,12 +461,15 @@ Enhance Claude integration beyond bash script capabilities.
 - Test failure analysis and fixes
 
 ### Phase 4: Migration and Testing (Issues 14-16)
+
 Handle Payload CMS specifics and establish production-grade testing infrastructure.
 
 #### Issue #14: Payload CMS Migration Support
+
 **Goal**: Port migration-specific functionality
 
 **Features from `merge-and-clean.sh`**:
+
 - Migration conflict detection
 - Branch-specific migration removal
 - Migration regeneration after merge
@@ -412,9 +477,11 @@ Handle Payload CMS specifics and establish production-grade testing infrastructu
 - `migrations/index.ts` management
 
 #### Issue #15: Test Infrastructure
+
 **Goal**: Production-grade comprehensive test coverage
 
 **Test Infrastructure**:
+
 - **Unit Tests**: >95% code coverage for all modules
 - **Integration Tests**: End-to-end command workflow testing
 - **Mock Framework**: Complete mock factories for Git, GitHub CLI, Neon CLI, Claude CLI
@@ -427,9 +494,11 @@ Handle Payload CMS specifics and establish production-grade testing infrastructu
 - **Accessibility Tests**: CLI output readability and color-blind support
 
 #### Issue #16: Build and Release Pipeline
+
 **Goal**: Production-ready packaging and distribution
 
 **Features**:
+
 - npm publishing configuration
 - GitHub Actions CI/CD
 - Semantic versioning
@@ -437,48 +506,59 @@ Handle Payload CMS specifics and establish production-grade testing infrastructu
 - Changelog generation
 
 ### Phase 5: Enhanced Features (Issues 17-20)
+
 Go beyond bash script functionality.
 
 #### Issue #17: Multi-Provider Support
+
 **Goal**: Support multiple database providers
 
 **Providers**:
+
 - Neon (existing)
 - Supabase
 - PlanetScale
 - Local databases
 
 #### Issue #18: IDE Integration
+
 **Goal**: Enhanced development environment integration
 
 **Features**:
+
 - VS Code workspace opening
 - Cursor IDE support
 - Terminal session management
 - Workspace settings configuration
 
 #### Issue #19: Configuration Management
+
 **Goal**: Flexible configuration system
 
 **Features**:
+
 - Global config file (`~/.cwm/config.json`)
 - Per-project configuration
 - Custom workflow hooks
 - Template system for new workspaces
 
 #### Issue #20: Advanced Workflow Features
+
 **Goal**: Power user features
 
 **Features**:
+
 - Parallel workspace operations
 - Workspace templates
 - Custom Claude instructions per project
 - Workspace backup and restore
 
 ### Phase 6: Documentation and Polish (Issues 21-23)
+
 Production-ready documentation and UX.
 
 #### Issue #21: Comprehensive Documentation
+
 - README with quick start guide
 - API documentation
 - Configuration guide
@@ -486,6 +566,7 @@ Production-ready documentation and UX.
 - Troubleshooting guide
 
 #### Issue #22: CLI Help and UX
+
 - Interactive prompts for missing arguments
 - Progress indicators for long operations
 - Colored output with emoji indicators
@@ -493,6 +574,7 @@ Production-ready documentation and UX.
 - Verbose and quiet modes
 
 #### Issue #23: Community Features
+
 - Example configurations
 - Plugin system architecture
 - Community workflow templates
@@ -599,22 +681,30 @@ hatchbox-ai/
 ## Implementation Priority
 
 ### Critical Path (Must Have)
+
 **Phase 1-2 (Issues #1-10)** - Exact feature parity with bash scripts
+
 - Timeline: 2-3 weeks
 - Goal: Drop-in replacement for bash scripts
 
 ### High Priority (Should Have)
+
 **Phase 3-4 (Issues #11-16)** - Enhanced Claude integration and production readiness
+
 - Timeline: 1-2 weeks
 - Goal: Superior experience to bash scripts
 
 ### Medium Priority (Nice to Have)
+
 **Phase 5 (Issues #17-20)** - Enhanced features and compatibility
+
 - Timeline: 2-3 weeks
 - Goal: Power user features
 
 ### Low Priority (Future)
+
 **Phase 6 (Issues #21-23)** - Documentation and community
+
 - Timeline: 1 week
 - Goal: Production polish
 
@@ -649,17 +739,20 @@ hatchbox-ai/
 ## Risk Mitigation
 
 ### Technical Risks
+
 - **Shell Command Dependencies**: Extensive testing of `execa` wrapper functions
 - **Git Worktree Complexity**: Comprehensive integration testing
 - **Database Provider APIs**: Robust error handling and fallbacks
 - **Cross-Platform Compatibility**: Test on macOS, Linux, Windows
 
 ### User Experience Risks
+
 - **Learning Curve**: Maintain familiar command interfaces
 - **Migration Complexity**: Provide automated migration tools
 - **Performance Regression**: Benchmark against bash script speed
 
 ### Project Risks
+
 - **Scope Creep**: Strict adherence to bash script functionality first
 - **Timeline Pressure**: Focus on critical path features first
 - **Maintenance Burden**: Comprehensive documentation and testing

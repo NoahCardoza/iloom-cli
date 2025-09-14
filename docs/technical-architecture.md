@@ -1,29 +1,37 @@
 # Technical Architecture
 
 ## Overview
+
 This document defines the technical architecture for Hatchbox AI TypeScript implementation, including class structures, interfaces, and design patterns.
 
 ## Architecture Principles
 
 ### 1. Test-Driven Development (TDD)
+
 All code is written test-first with comprehensive unit tests before implementation. Every class and function must have corresponding test coverage >95%.
 
 ### 2. Single Responsibility
+
 Each class and module has a single, well-defined responsibility that maps directly to functionality from the bash scripts.
 
 ### 3. Dependency Injection
+
 Core classes accept their dependencies through constructor injection, enabling complete test isolation and mocking.
 
 ### 4. Provider Pattern
+
 Database and external service integrations use the provider pattern to support multiple implementations and enable easy mocking.
 
 ### 5. Command Pattern
+
 CLI commands are implemented as separate classes that can be tested independently with full workflow testing.
 
 ### 6. Error-First Design
+
 All operations return Results or throw typed errors with recovery suggestions, with comprehensive error scenario testing.
 
 ### 7. Testability First
+
 Every design decision prioritizes testability - pure functions, dependency injection, mock-friendly interfaces, and deterministic behavior.
 
 ## Core Architecture
@@ -136,13 +144,13 @@ export class GitWorktreeManager {
 }
 
 export interface Worktree {
-  path: string;
-  branch: string;
-  commit: string;
-  isPR: boolean;
-  prNumber?: number;
-  issueNumber?: number;
-  port?: number;
+  path: string
+  branch: string
+  commit: string
+  isPR: boolean
+  prNumber?: number
+  issueNumber?: number
+  port?: number
 }
 ```
 
@@ -150,7 +158,10 @@ export interface Worktree {
 
 ```typescript
 export class GitHubService {
-  constructor(private shell: ShellUtils, private claude?: ClaudeService) {}
+  constructor(
+    private shell: ShellUtils,
+    private claude?: ClaudeService
+  ) {}
 
   // Issue operations from new-branch-workflow.sh
   async getIssue(number: number): Promise<Issue>
@@ -169,30 +180,30 @@ export class GitHubService {
 }
 
 export interface Issue {
-  number: number;
-  title: string;
-  body: string;
-  state: 'open' | 'closed';
-  labels: string[];
+  number: number
+  title: string
+  body: string
+  state: 'open' | 'closed'
+  labels: string[]
 }
 
 export interface PullRequest {
-  number: number;
-  title: string;
-  body: string;
-  state: 'open' | 'closed' | 'merged';
-  headRefName: string;
-  baseRefName: string;
+  number: number
+  title: string
+  body: string
+  state: 'open' | 'closed' | 'merged'
+  headRefName: string
+  baseRefName: string
 }
 
-export type InputType = 'issue' | 'pr' | 'branch';
+export type InputType = 'issue' | 'pr' | 'branch'
 
 export interface WorkspaceInput {
-  type: InputType;
-  value: string;
-  issue?: Issue;
-  pr?: PullRequest;
-  branch?: string;
+  type: InputType
+  value: string
+  issue?: Issue
+  pr?: PullRequest
+  branch?: string
 }
 ```
 
@@ -227,7 +238,7 @@ export class EnvironmentManager {
 
 ```typescript
 export interface DatabaseProvider {
-  readonly name: string;
+  readonly name: string
 
   // Core operations from neon-utils.sh
   createBranch(name: string, parent?: string): Promise<string>
@@ -259,18 +270,21 @@ export class DatabaseManager {
 }
 
 export class NeonProvider implements DatabaseProvider {
-  constructor(private config: NeonConfig, private shell: ShellUtils) {}
+  constructor(
+    private config: NeonConfig,
+    private shell: ShellUtils
+  ) {}
 
   // Implementation of all DatabaseProvider methods
   // Direct port of neon-utils.sh functions
 }
 
 export interface DatabaseBranch {
-  name: string;
-  parent?: string;
-  connectionString: string;
-  createdAt: Date;
-  isPreview: boolean;
+  name: string
+  parent?: string
+  connectionString: string
+  createdAt: Date
+  isPreview: boolean
 }
 ```
 
@@ -278,7 +292,10 @@ export interface DatabaseBranch {
 
 ```typescript
 export class ClaudeContextManager {
-  constructor(private shell: ShellUtils, private fileUtils: FileUtils) {}
+  constructor(
+    private shell: ShellUtils,
+    private fileUtils: FileUtils
+  ) {}
 
   // Generate context files for worktrees
   async generateContextFile(workspace: Workspace, contextPath: string): Promise<void>
@@ -328,9 +345,9 @@ export class MigrationManager {
 }
 
 export interface MigrationConflict {
-  filePath: string;
-  timestamp: string;
-  conflictType: 'duplicate' | 'ordering' | 'dependency';
+  filePath: string
+  timestamp: string
+  conflictType: 'duplicate' | 'ordering' | 'dependency'
 }
 ```
 
@@ -338,7 +355,10 @@ export interface MigrationConflict {
 
 ```typescript
 export class TestRunner {
-  constructor(private shell: ShellUtils, private claude?: ClaudeService) {}
+  constructor(
+    private shell: ShellUtils,
+    private claude?: ClaudeService
+  ) {}
 
   // Pre-merge validation from merge-and-clean.sh
   async runTypeCheck(): Promise<TestResult>
@@ -355,10 +375,10 @@ export class TestRunner {
 }
 
 export interface TestResult {
-  success: boolean;
-  output: string;
-  errors: string[];
-  suggestions: string[];
+  success: boolean
+  output: string
+  errors: string[]
+  suggestions: string[]
 }
 ```
 
@@ -429,7 +449,10 @@ export class ConfigManager {
 
 ```typescript
 export abstract class BaseCommand {
-  constructor(protected manager: WorkspaceManager, protected ui: UIManager) {}
+  constructor(
+    protected manager: WorkspaceManager,
+    protected ui: UIManager
+  ) {}
 
   abstract execute(args: CommandArgs): Promise<void>
 
@@ -479,33 +502,33 @@ export class SwitchCommand extends BaseCommand {
 
 ```typescript
 export interface Workspace {
-  id: string;
-  path: string;
-  branch: string;
-  type: 'issue' | 'pr' | 'custom';
-  issueNumber?: number;
-  prNumber?: number;
-  port?: number;
-  databaseBranch?: string;
-  createdAt: Date;
-  lastActivity: Date;
-  status: 'active' | 'merged' | 'abandoned';
+  id: string
+  path: string
+  branch: string
+  type: 'issue' | 'pr' | 'custom'
+  issueNumber?: number
+  prNumber?: number
+  port?: number
+  databaseBranch?: string
+  createdAt: Date
+  lastActivity: Date
+  status: 'active' | 'merged' | 'abandoned'
 }
 
 export interface WorkspaceSummary {
-  workspace: Workspace;
-  issue?: Issue;
-  pr?: PullRequest;
-  gitStatus: GitStatus;
-  databaseStatus: DatabaseStatus;
+  workspace: Workspace
+  issue?: Issue
+  pr?: PullRequest
+  gitStatus: GitStatus
+  databaseStatus: DatabaseStatus
 }
 
 export interface Config {
-  database: DatabaseProviderConfig;
-  claude: ClaudeConfig;
-  git: GitConfig;
-  ui: UIConfig;
-  workspace: WorkspaceConfig;
+  database: DatabaseProviderConfig
+  claude: ClaudeConfig
+  git: GitConfig
+  ui: UIConfig
+  workspace: WorkspaceConfig
 }
 ```
 
@@ -518,7 +541,7 @@ export class WorkspaceError extends Error {
     public code: string,
     public suggestions: string[] = []
   ) {
-    super(message);
+    super(message)
   }
 }
 
@@ -531,25 +554,27 @@ export class ClaudeError extends WorkspaceError {}
 ## Design Patterns Used
 
 ### 1. Factory Pattern
+
 ```typescript
 export class DatabaseProviderFactory {
   static create(type: string, config: any): DatabaseProvider {
     switch (type) {
       case 'neon':
-        return new NeonProvider(config);
+        return new NeonProvider(config)
       case 'supabase':
-        return new SupabaseProvider(config);
+        return new SupabaseProvider(config)
       default:
-        throw new Error(`Unknown provider: ${type}`);
+        throw new Error(`Unknown provider: ${type}`)
     }
   }
 }
 ```
 
 ### 2. Strategy Pattern
+
 ```typescript
 export interface MergeStrategy {
-  merge(workspace: Workspace, options: MergeOptions): Promise<void>;
+  merge(workspace: Workspace, options: MergeOptions): Promise<void>
 }
 
 export class FastForwardMergeStrategy implements MergeStrategy {
@@ -562,25 +587,27 @@ export class SquashMergeStrategy implements MergeStrategy {
 ```
 
 ### 3. Observer Pattern
+
 ```typescript
 export interface WorkspaceEventListener {
-  onWorkspaceCreated(workspace: Workspace): void;
-  onWorkspaceFinished(workspace: Workspace): void;
-  onWorkspaceCleaned(workspace: Workspace): void;
+  onWorkspaceCreated(workspace: Workspace): void
+  onWorkspaceFinished(workspace: Workspace): void
+  onWorkspaceCleaned(workspace: Workspace): void
 }
 
 export class WorkspaceManager {
-  private listeners: WorkspaceEventListener[] = [];
+  private listeners: WorkspaceEventListener[] = []
 
-  addListener(listener: WorkspaceEventListener): void;
-  removeListener(listener: WorkspaceEventListener): void;
-  private notify(event: string, workspace: Workspace): void;
+  addListener(listener: WorkspaceEventListener): void
+  removeListener(listener: WorkspaceEventListener): void
+  private notify(event: string, workspace: Workspace): void
 }
 ```
 
 ## Comprehensive Testing Strategy
 
 ### 1. Test-Driven Development Workflow
+
 ```typescript
 // 1. Write failing test first
 describe('GitWorktreeManager', () => {
@@ -598,6 +625,7 @@ describe('GitWorktreeManager', () => {
 ```
 
 ### 2. Unit Testing Strategy
+
 - **Mock All External Dependencies**: Git CLI, GitHub CLI, Neon CLI, Claude CLI, file system
 - **Pure Function Testing**: Every utility function tested in isolation
 - **Class Method Testing**: Each method tested with various inputs and edge cases
@@ -605,6 +633,7 @@ describe('GitWorktreeManager', () => {
 - **Performance Testing**: Critical path performance benchmarked
 
 ### 3. Integration Testing Strategy
+
 - **Command Workflow Testing**: Full end-to-end command execution with mocked externals
 - **Module Integration**: Test interaction between core modules
 - **File System Integration**: Test with temporary directories and real file operations
@@ -612,6 +641,7 @@ describe('GitWorktreeManager', () => {
 - **Cross-Platform Testing**: Test on multiple operating systems
 
 ### 4. Mock Factory System
+
 ```typescript
 // Comprehensive mock factories for all external dependencies
 export class MockFactories {
@@ -629,9 +659,15 @@ export class MockGitProvider {
 }
 
 export class TestFixtures {
-  static readonly SAMPLE_ISSUE: Issue = { /* realistic test data */ }
-  static readonly SAMPLE_PR: PullRequest = { /* realistic test data */ }
-  static readonly SAMPLE_WORKTREE: Worktree = { /* realistic test data */ }
+  static readonly SAMPLE_ISSUE: Issue = {
+    /* realistic test data */
+  }
+  static readonly SAMPLE_PR: PullRequest = {
+    /* realistic test data */
+  }
+  static readonly SAMPLE_WORKTREE: Worktree = {
+    /* realistic test data */
+  }
 
   static createTemporaryRepo(): Promise<string>
   static createWorkspaceScenario(type: 'issue' | 'pr' | 'custom'): Promise<Workspace>
@@ -639,6 +675,7 @@ export class TestFixtures {
 ```
 
 ### 5. Testing Architecture
+
 ```typescript
 // Base test class with common setup/teardown
 export abstract class BaseTest {
@@ -665,27 +702,31 @@ export class CommandTestUtils {
 ```
 
 ### 6. Property-Based and Fuzz Testing
+
 ```typescript
 import { fc } from 'fast-check'
 
 // Property-based testing for edge case discovery
 describe('Environment Manager', () => {
   it('should handle arbitrary valid environment variables', () => {
-    fc.assert(fc.property(
-      fc.string({ minLength: 1, maxLength: 100 }), // key
-      fc.string({ maxLength: 1000 }), // value
-      async (key, value) => {
-        const result = await envManager.setEnvVar(testFile, key, value)
-        expect(result).toBe(true)
-        const retrieved = await envManager.getEnvVar(testFile, key)
-        expect(retrieved).toBe(value)
-      }
-    ))
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 100 }), // key
+        fc.string({ maxLength: 1000 }), // value
+        async (key, value) => {
+          const result = await envManager.setEnvVar(testFile, key, value)
+          expect(result).toBe(true)
+          const retrieved = await envManager.getEnvVar(testFile, key)
+          expect(retrieved).toBe(value)
+        }
+      )
+    )
   })
 })
 ```
 
 ### 7. Regression Testing Against Bash Scripts
+
 ```typescript
 // Automated comparison with bash script behavior
 export class RegressionTester {
@@ -710,6 +751,7 @@ export class RegressionTester {
 ```
 
 ### 8. Performance and Benchmark Testing
+
 ```typescript
 export class PerformanceTester {
   static async benchmarkCommand(
@@ -734,6 +776,7 @@ export class PerformanceTester {
 ```
 
 ### 9. Test Coverage and Quality Gates
+
 ```typescript
 // Vitest configuration with strict coverage requirements
 export default defineConfig({
@@ -746,23 +789,20 @@ export default defineConfig({
           branches: 95,
           functions: 95,
           lines: 95,
-          statements: 95
-        }
+          statements: 95,
+        },
       },
-      exclude: [
-        'src/types/**',
-        'src/**/*.test.ts',
-        'src/**/*.mock.ts'
-      ]
+      exclude: ['src/types/**', 'src/**/*.test.ts', 'src/**/*.mock.ts'],
     },
     mockReset: true,
     clearMocks: true,
-    restoreMocks: true
-  }
+    restoreMocks: true,
+  },
 })
 ```
 
 ### 10. Continuous Testing Infrastructure
+
 ```typescript
 // GitHub Actions workflow integration
 export class ContinuousTestingSetup {
@@ -787,12 +827,13 @@ export class ContinuousTestingSetup {
 ## Cross-Platform Considerations
 
 ### Platform Abstraction
+
 ```typescript
 export interface PlatformUtils {
-  openTerminal(path: string, command?: string): Promise<void>;
-  getHomeDirectory(): string;
-  getConfigDirectory(): string;
-  killProcess(pid: number): Promise<void>;
+  openTerminal(path: string, command?: string): Promise<void>
+  getHomeDirectory(): string
+  getConfigDirectory(): string
+  killProcess(pid: number): Promise<void>
 }
 
 export class MacOSPlatformUtils implements PlatformUtils {

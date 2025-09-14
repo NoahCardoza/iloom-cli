@@ -19,6 +19,7 @@ This document outlines the comprehensive testing strategy for Hatchbox AI, empha
 ### Why We Moved from Bash to TypeScript
 
 **Primary Motivation**: Testing and Maintainability
+
 - Bash scripts cannot be reliably unit tested
 - Complex workflows in bash are difficult to debug and maintain
 - No type safety leads to runtime errors in production
@@ -26,6 +27,7 @@ This document outlines the comprehensive testing strategy for Hatchbox AI, empha
 - Refactoring bash scripts is risky without test coverage
 
 **TypeScript Advantages**:
+
 - Complete test coverage with isolated unit tests
 - Type safety prevents entire classes of runtime errors
 - Mocking enables testing of all scenarios including failures
@@ -108,12 +110,14 @@ tests/
 **Purpose**: Test individual functions and classes in complete isolation
 
 **Strategy**:
+
 - Every public method has corresponding unit tests
 - All external dependencies mocked using factories
 - Test all code paths including error scenarios
 - Use AAA pattern (Arrange, Act, Assert)
 
 **Example Structure**:
+
 ```typescript
 describe('GitWorktreeManager', () => {
   let manager: GitWorktreeManager
@@ -135,27 +139,32 @@ describe('GitWorktreeManager', () => {
       await manager.createWorktree(branch, path)
 
       // Assert
-      expect(mockShell.verifyCommandCalled).toHaveBeenCalledWith(
-        'git', ['worktree', 'add', path, branch]
-      )
+      expect(mockShell.verifyCommandCalled).toHaveBeenCalledWith('git', [
+        'worktree',
+        'add',
+        path,
+        branch,
+      ])
     })
 
     it('should throw error when git command fails', async () => {
       // Arrange
       mockShell.mockGitCommand('worktree add', {
         exitCode: 1,
-        stderr: 'fatal: invalid reference'
+        stderr: 'fatal: invalid reference',
       })
 
       // Act & Assert
-      await expect(manager.createWorktree('invalid', '/path'))
-        .rejects.toThrow('Failed to create worktree')
+      await expect(manager.createWorktree('invalid', '/path')).rejects.toThrow(
+        'Failed to create worktree'
+      )
     })
   })
 })
 ```
 
 **Coverage Requirements**:
+
 - 95% line coverage minimum
 - 90% branch coverage minimum
 - 100% function coverage
@@ -166,12 +175,14 @@ describe('GitWorktreeManager', () => {
 **Purpose**: Test interactions between modules and components
 
 **Strategy**:
+
 - Test realistic workflows combining multiple modules
 - Use real file system operations with temporary directories
 - Mock only external CLI tools, not internal modules
 - Verify complete data flow through the system
 
 **Example Structure**:
+
 ```typescript
 describe('Issue Workflow Integration', () => {
   let tempDir: string
@@ -191,13 +202,13 @@ describe('Issue Workflow Integration', () => {
     // Setup GitHub issue mock
     MockFactories.github.mockIssue(25, {
       title: 'Add authentication feature',
-      state: 'open'
+      state: 'open',
     })
 
     // Create workspace
     const workspace = await workspaceManager.createWorkspace({
       type: 'issue',
-      value: '25'
+      value: '25',
     })
 
     // Verify workspace structure
@@ -224,12 +235,14 @@ describe('Issue Workflow Integration', () => {
 **Purpose**: Test complete CLI workflows as users would experience them
 
 **Strategy**:
+
 - Test full CLI commands from command-line invocation
 - Use real temporary directories and mock external services
 - Capture and validate CLI output and exit codes
 - Test complex scenarios with multiple commands
 
 **Example Structure**:
+
 ```typescript
 describe('CLI End-to-End Tests', () => {
   let testRepo: string
@@ -243,7 +256,7 @@ describe('CLI End-to-End Tests', () => {
     // Mock GitHub issue
     MockFactories.github.mockIssue(42, {
       title: 'Fix critical bug',
-      state: 'open'
+      state: 'open',
     })
 
     // Run start command
@@ -275,12 +288,14 @@ describe('CLI End-to-End Tests', () => {
 **Purpose**: Ensure TypeScript version behaves identically to bash scripts
 
 **Strategy**:
+
 - Compare outputs and side effects between bash and TypeScript versions
 - Test with same inputs and verify same results
 - Automated testing of behavior parity
 - File system state comparison
 
 **Example Structure**:
+
 ```typescript
 describe('Bash Script Regression Tests', () => {
   let tempDir: string
@@ -333,74 +348,80 @@ describe('Bash Script Regression Tests', () => {
 **Purpose**: Discover edge cases through automated test generation
 
 **Strategy**:
+
 - Use fast-check to generate random inputs
 - Test invariants and properties that should always hold
 - Discover edge cases that manual testing might miss
 - Focus on data validation and transformation functions
 
 **Example Structure**:
+
 ```typescript
 import { fc } from 'fast-check'
 
 describe('Property-Based Tests', () => {
   describe('Environment Variable Handling', () => {
     it('should round-trip environment variables correctly', () => {
-      fc.assert(fc.property(
-        fc.string({ minLength: 1, maxLength: 100 }).filter(s => !s.includes('=')), // key
-        fc.string({ maxLength: 1000 }), // value
-        async (key, value) => {
-          const envManager = new EnvironmentManager(mockFileUtils)
-          const testFile = await TestHelpers.createTempFile()
+      fc.assert(
+        fc.property(
+          fc.string({ minLength: 1, maxLength: 100 }).filter(s => !s.includes('=')), // key
+          fc.string({ maxLength: 1000 }), // value
+          async (key, value) => {
+            const envManager = new EnvironmentManager(mockFileUtils)
+            const testFile = await TestHelpers.createTempFile()
 
-          // Set environment variable
-          await envManager.setEnvVar(testFile, key, value)
+            // Set environment variable
+            await envManager.setEnvVar(testFile, key, value)
 
-          // Get environment variable
-          const retrieved = await envManager.getEnvVar(testFile, key)
+            // Get environment variable
+            const retrieved = await envManager.getEnvVar(testFile, key)
 
-          // Should round-trip correctly
-          expect(retrieved).toBe(value)
-        }
-      ))
+            // Should round-trip correctly
+            expect(retrieved).toBe(value)
+          }
+        )
+      )
     })
 
     it('should handle concurrent environment variable updates safely', () => {
-      fc.assert(fc.property(
-        fc.array(fc.tuple(fc.string(), fc.string()), { minLength: 1, maxLength: 10 }),
-        async (keyValuePairs) => {
-          const envManager = new EnvironmentManager(mockFileUtils)
-          const testFile = await TestHelpers.createTempFile()
+      fc.assert(
+        fc.property(
+          fc.array(fc.tuple(fc.string(), fc.string()), { minLength: 1, maxLength: 10 }),
+          async keyValuePairs => {
+            const envManager = new EnvironmentManager(mockFileUtils)
+            const testFile = await TestHelpers.createTempFile()
 
-          // Set all variables concurrently
-          await Promise.all(
-            keyValuePairs.map(([key, value]) =>
-              envManager.setEnvVar(testFile, key, value)
+            // Set all variables concurrently
+            await Promise.all(
+              keyValuePairs.map(([key, value]) => envManager.setEnvVar(testFile, key, value))
             )
-          )
 
-          // Verify all variables set correctly
-          for (const [key, expectedValue] of keyValuePairs) {
-            const actualValue = await envManager.getEnvVar(testFile, key)
-            expect(actualValue).toBe(expectedValue)
+            // Verify all variables set correctly
+            for (const [key, expectedValue] of keyValuePairs) {
+              const actualValue = await envManager.getEnvVar(testFile, key)
+              expect(actualValue).toBe(expectedValue)
+            }
           }
-        }
-      ))
+        )
+      )
     })
   })
 
   describe('Port Calculation', () => {
     it('should always produce valid port numbers', () => {
-      fc.assert(fc.property(
-        fc.integer({ min: 1, max: 999999 }), // issue number
-        (issueNumber) => {
-          const envManager = new EnvironmentManager(mockFileUtils)
-          const port = envManager.calculatePort(issueNumber)
+      fc.assert(
+        fc.property(
+          fc.integer({ min: 1, max: 999999 }), // issue number
+          issueNumber => {
+            const envManager = new EnvironmentManager(mockFileUtils)
+            const port = envManager.calculatePort(issueNumber)
 
-          expect(port).toBeGreaterThan(3000)
-          expect(port).toBeLessThan(65536)
-          expect(Number.isInteger(port)).toBe(true)
-        }
-      ))
+            expect(port).toBeGreaterThan(3000)
+            expect(port).toBeLessThan(65536)
+            expect(Number.isInteger(port)).toBe(true)
+          }
+        )
+      )
     })
   })
 })
@@ -411,12 +432,14 @@ describe('Property-Based Tests', () => {
 **Purpose**: Ensure TypeScript version performs adequately compared to bash scripts
 
 **Strategy**:
+
 - Benchmark critical operations against bash equivalents
 - Set performance budgets and fail tests if exceeded
 - Test with realistic data volumes
 - Monitor memory usage and cleanup
 
 **Example Structure**:
+
 ```typescript
 describe('Performance Tests', () => {
   describe('Command Performance', () => {
@@ -425,7 +448,7 @@ describe('Performance Tests', () => {
 
       await workspaceManager.createWorkspace({
         type: 'issue',
-        value: '25'
+        value: '25',
       })
 
       const endTime = performance.now()
@@ -451,7 +474,7 @@ describe('Performance Tests', () => {
       for (let i = 0; i < 100; i++) {
         const workspace = await workspaceManager.createWorkspace({
           type: 'issue',
-          value: `test-${i}`
+          value: `test-${i}`,
         })
         await workspaceManager.cleanupWorkspace(workspace.id)
       }
@@ -474,6 +497,7 @@ describe('Performance Tests', () => {
 ### Mock Factory Architecture
 
 **Design Principles**:
+
 - Single source of truth for each external dependency
 - Realistic response scenarios including edge cases
 - Easy setup and teardown for test isolation
@@ -502,14 +526,14 @@ export class GitMockFactory {
   private commandMocks = new Map<string, MockResponse>()
 
   mockWorktreeList(worktrees: WorktreeData[]): void {
-    const output = worktrees.map(w =>
-      `worktree ${w.path}\n${w.commit}\nbranch refs/heads/${w.branch}\n`
-    ).join('\n')
+    const output = worktrees
+      .map(w => `worktree ${w.path}\n${w.commit}\nbranch refs/heads/${w.branch}\n`)
+      .join('\n')
 
     this.commandMocks.set('worktree list --porcelain', {
       exitCode: 0,
       stdout: output,
-      stderr: ''
+      stderr: '',
     })
   }
 
@@ -517,7 +541,7 @@ export class GitMockFactory {
     this.commandMocks.set(`worktree add ${path} ${branch}`, {
       exitCode: success ? 0 : 1,
       stdout: success ? `Preparing worktree (new branch '${branch}')` : '',
-      stderr: success ? '' : `fatal: '${path}' already exists`
+      stderr: success ? '' : `fatal: '${path}' already exists`,
     })
   }
 
@@ -541,7 +565,7 @@ export class GitHubMockFactory {
       body: '',
       state: 'open',
       labels: [],
-      ...data
+      ...data,
     })
   }
 
@@ -553,7 +577,7 @@ export class GitHubMockFactory {
       state: 'open',
       headRefName: `feature/pr-${number}`,
       baseRefName: 'main',
-      ...data
+      ...data,
     })
   }
 
@@ -571,6 +595,7 @@ export class GitHubMockFactory {
 ### Mock Usage Patterns
 
 **Setup and Teardown**:
+
 ```typescript
 describe('GitWorktreeManager', () => {
   beforeEach(() => {
@@ -585,7 +610,7 @@ describe('GitWorktreeManager', () => {
     // Arrange
     MockFactories.git.mockWorktreeList([
       { path: '/repo/main', branch: 'main', commit: 'abc123' },
-      { path: '/repo/feature', branch: 'feat/test', commit: 'def456' }
+      { path: '/repo/feature', branch: 'feat/test', commit: 'def456' },
     ])
 
     const manager = new GitWorktreeManager(MockFactories.git.createShellUtils())
@@ -606,11 +631,13 @@ describe('GitWorktreeManager', () => {
 ### Fixture Strategy
 
 **Structure**:
+
 - **Static Fixtures**: Predefined test data for common scenarios
 - **Dynamic Fixtures**: Generated test data for specific test needs
 - **Realistic Data**: Based on actual GitHub issues, Git repositories, etc.
 
 **Implementation**:
+
 ```typescript
 export class TestFixtures {
   static readonly SAMPLE_ISSUE: Issue = {
@@ -618,7 +645,7 @@ export class TestFixtures {
     title: 'Add user authentication',
     body: 'We need to implement OAuth login...',
     state: 'open',
-    labels: ['enhancement', 'authentication']
+    labels: ['enhancement', 'authentication'],
   }
 
   static readonly SAMPLE_PR: PullRequest = {
@@ -627,14 +654,14 @@ export class TestFixtures {
     body: 'This PR implements the OAuth login feature...',
     state: 'open',
     headRefName: 'feat/oauth-login',
-    baseRefName: 'main'
+    baseRefName: 'main',
   }
 
   static createIssue(overrides: Partial<Issue> = {}): Issue {
     return {
       ...this.SAMPLE_ISSUE,
       ...overrides,
-      number: overrides.number || Math.floor(Math.random() * 1000)
+      number: overrides.number || Math.floor(Math.random() * 1000),
     }
   }
 
@@ -662,13 +689,13 @@ export class TestFixtures {
       case 'issue':
         MockFactories.github.mockIssue(options.number || 25, {
           title: options.title || 'Test Issue',
-          state: options.state || 'open'
+          state: options.state || 'open',
         })
         break
       case 'pr':
         MockFactories.github.mockPR(options.number || 148, {
           title: options.title || 'Test PR',
-          state: options.state || 'open'
+          state: options.state || 'open',
         })
         break
     }
@@ -676,7 +703,7 @@ export class TestFixtures {
     return {
       repoPath,
       type,
-      number: options.number || (type === 'pr' ? 148 : 25)
+      number: options.number || (type === 'pr' ? 148 : 25),
     }
   }
 }
@@ -687,6 +714,7 @@ export class TestFixtures {
 ### GitHub Actions Configuration
 
 **Test Pipeline Structure**:
+
 ```yaml
 name: Comprehensive Testing
 
@@ -747,6 +775,7 @@ jobs:
 ### Quality Gates
 
 **Pre-commit Hooks**:
+
 ```typescript
 // .husky/pre-commit
 #!/usr/bin/env sh
@@ -759,6 +788,7 @@ npm run coverage:check
 ```
 
 **Coverage Requirements**:
+
 ```typescript
 // vitest.config.ts
 export default defineConfig({
@@ -771,17 +801,12 @@ export default defineConfig({
           branches: 95,
           functions: 95,
           lines: 95,
-          statements: 95
-        }
+          statements: 95,
+        },
       },
-      exclude: [
-        'src/types/**',
-        'src/**/*.test.ts',
-        'src/**/*.mock.ts',
-        'tests/**'
-      ]
-    }
-  }
+      exclude: ['src/types/**', 'src/**/*.test.ts', 'src/**/*.mock.ts', 'tests/**'],
+    },
+  },
 })
 ```
 
@@ -790,17 +815,20 @@ export default defineConfig({
 ### Quantitative Metrics
 
 **Test Coverage**:
-- [ ] >95% line coverage
-- [ ] >90% branch coverage
+
+- [ ] > 95% line coverage
+- [ ] > 90% branch coverage
 - [ ] 100% function coverage
-- [ ] >1000 total test cases
+- [ ] > 1000 total test cases
 
 **Performance Benchmarks**:
+
 - [ ] TypeScript version ≤150% of bash script execution time
 - [ ] Memory usage <100MB for typical operations
 - [ ] Startup time <2 seconds
 
 **Reliability Metrics**:
+
 - [ ] <1% test failure rate in CI
 - [ ] 100% bash script behavioral parity
 - [ ] Zero data loss in all tested scenarios
@@ -808,12 +836,14 @@ export default defineConfig({
 ### Qualitative Metrics
 
 **Developer Experience**:
+
 - [ ] Tests serve as clear documentation
 - [ ] Easy to add new tests for new features
 - [ ] Fast test execution (<30 seconds for full suite)
 - [ ] Clear error messages from failing tests
 
 **Maintainability**:
+
 - [ ] Refactoring confidence through test coverage
 - [ ] Easy debugging through isolated unit tests
 - [ ] Clear separation between mocked and real dependencies

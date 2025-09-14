@@ -14,6 +14,7 @@ This document contains templates for creating GitHub issues based on the develop
 Set up the basic TypeScript project infrastructure for the Hatchbox AI CLI tool.
 
 **Tasks**:
+
 - [ ] Create `package.json` with correct metadata and dependencies
 - [ ] Configure TypeScript with `tsconfig.json`
 - [ ] Set up build system using `tsup` for CLI and library builds
@@ -28,6 +29,7 @@ Set up the basic TypeScript project infrastructure for the Hatchbox AI CLI tool.
 - [ ] Configure pre-commit hooks for automated test runs
 
 **Dependencies**:
+
 - `commander` - CLI framework
 - `execa` - Shell command execution
 - `fs-extra` - File system operations
@@ -39,6 +41,7 @@ Set up the basic TypeScript project infrastructure for the Hatchbox AI CLI tool.
 - `fast-check` - Property-based testing
 
 **Testing Requirements**:
+
 - Comprehensive Vitest configuration with 95% coverage threshold
 - Mock factories for Git, GitHub CLI, Neon CLI, Claude CLI, file system
 - Property-based testing setup for edge case discovery
@@ -46,6 +49,7 @@ Set up the basic TypeScript project infrastructure for the Hatchbox AI CLI tool.
 - CI/CD pipeline with automated test gates and performance benchmarks
 
 **Acceptance Criteria**:
+
 - [ ] Package builds successfully with `npm run build`
 - [ ] CLI executable works with basic `--help` command
 - [ ] TypeScript compilation passes without errors
@@ -56,6 +60,7 @@ Set up the basic TypeScript project infrastructure for the Hatchbox AI CLI tool.
 - [ ] Pre-commit hooks preventing untested code commits
 
 **Definition of Done**:
+
 - All tasks completed following TDD approach
 - Code follows established patterns with >95% test coverage
 - All tests pass including unit, integration, and property-based tests
@@ -73,11 +78,13 @@ Set up the basic TypeScript project infrastructure for the Hatchbox AI CLI tool.
 Port all git worktree functionality from bash scripts into a TypeScript module.
 
 **Key Files to Create**:
+
 - `src/lib/GitWorktreeManager.ts`
 - `src/utils/git.ts`
 - `src/types/worktree.ts`
 
 **Functions to Port**:
+
 - [ ] `find_worktree_for_branch()` from `find-worktree-for-branch.sh`
 - [ ] `is_pr_worktree()` from `worktree-utils.sh`
 - [ ] `get_pr_number_from_worktree()` from `worktree-utils.sh`
@@ -85,6 +92,7 @@ Port all git worktree functionality from bash scripts into a TypeScript module.
 - [ ] Worktree removal logic from `cleanup-worktree.sh`
 
 **Features**:
+
 - [ ] List all worktrees with branch information
 - [ ] Create worktree for branch
 - [ ] Remove worktree and associated files
@@ -93,6 +101,7 @@ Port all git worktree functionality from bash scripts into a TypeScript module.
 - [ ] Validate worktree states
 
 **Testing Requirements**:
+
 - Unit tests for each GitWorktreeManager method using mocked Git commands
 - Git CLI mock factory with realistic scenarios (empty, existing, conflicts)
 - Test fixtures for various worktree configurations
@@ -103,6 +112,7 @@ Port all git worktree functionality from bash scripts into a TypeScript module.
 - Property-based tests for edge case discovery
 
 **Acceptance Criteria**:
+
 - [ ] All bash script worktree functionality replicated with test verification
 - [ ] Comprehensive unit tests achieving >95% coverage
 - [ ] Git CLI mock factory working with all scenarios
@@ -121,17 +131,20 @@ Port all git worktree functionality from bash scripts into a TypeScript module.
 Port GitHub CLI integration and issue/PR handling functionality.
 
 **Key Files to Create**:
+
 - `src/lib/GitHubService.ts`
 - `src/utils/github.ts`
 - `src/types/github.ts`
 
 **Functions to Port**:
+
 - [ ] Issue fetching and validation
 - [ ] PR fetching and state checking
 - [ ] Branch name generation from issue titles
 - [ ] Issue/PR context extraction for Claude
 
 **Features**:
+
 - [ ] Detect if input is issue number or PR number
 - [ ] Fetch issue/PR details using GitHub CLI
 - [ ] Validate issue/PR state (open/closed)
@@ -139,6 +152,7 @@ Port GitHub CLI integration and issue/PR handling functionality.
 - [ ] Extract context for Claude integration
 
 **Testing Requirements**:
+
 - Unit tests for GitHub API response parsing
 - GitHub CLI mock factory with various response scenarios (issues, PRs, edge cases)
 - Test fixtures for various issue/PR states and formats
@@ -149,6 +163,7 @@ Port GitHub CLI integration and issue/PR handling functionality.
 - Integration tests with GitHub CLI wrapper
 
 **Acceptance Criteria**:
+
 - [ ] GitHub CLI integration working with comprehensive test coverage
 - [ ] Issue and PR detection accurate with >95% test coverage
 - [ ] Branch name generation matches bash script behavior verified through regression tests
@@ -167,15 +182,18 @@ Port GitHub CLI integration and issue/PR handling functionality.
 Port .env file manipulation functionality from bash scripts.
 
 **Key Files to Create**:
+
 - `src/lib/EnvironmentManager.ts`
 - `src/utils/env.ts`
 
 **Functions to Port**:
+
 - [ ] `setEnvVar()` from `env-utils.sh`
 - [ ] Port assignment logic (3000 + issue/PR number)
 - [ ] .env file copying between worktrees
 
 **Features**:
+
 - [ ] Read/write/update .env files
 - [ ] Set environment variables in target file
 - [ ] Copy .env files between directories
@@ -183,6 +201,7 @@ Port .env file manipulation functionality from bash scripts.
 - [ ] Validate environment configurations
 
 **Testing Requirements**:
+
 - Unit tests for .env file parsing and manipulation
 - File system mocking for atomic file operations
 - Property-based tests for environment variable validation
@@ -193,6 +212,7 @@ Port .env file manipulation functionality from bash scripts.
 - Backup and recovery mechanism tests
 
 **Acceptance Criteria**:
+
 - [ ] .env file manipulation works identically to bash scripts verified through regression tests
 - [ ] Atomic file updates tested with concurrency scenarios
 - [ ] Port calculation matches existing logic with comprehensive test coverage
@@ -211,18 +231,21 @@ Port .env file manipulation functionality from bash scripts.
 Port Neon database utilities with provider abstraction for future database providers.
 
 **Key Files to Create**:
+
 - `src/lib/DatabaseManager.ts`
 - `src/lib/providers/NeonProvider.ts`
 - `src/utils/database.ts`
 - `src/types/database.ts`
 
 **Functions to Port**:
+
 - [ ] `create_neon_database_branch()` from `neon-utils.sh`
 - [ ] `delete_neon_database_branch()` from `neon-utils.sh`
 - [ ] `find_preview_database_branch()` from `neon-utils.sh`
 - [ ] All Neon CLI wrapper functions
 
 **Features**:
+
 - [ ] Create isolated database branches
 - [ ] Generate connection strings
 - [ ] Delete database branches on cleanup
@@ -231,6 +254,7 @@ Port Neon database utilities with provider abstraction for future database provi
 - [ ] Abstract interface for future providers
 
 **Acceptance Criteria**:
+
 - [ ] Neon integration works identically to bash scripts
 - [ ] Provider abstraction allows for future database providers
 - [ ] Safety checks prevent accidental data loss
@@ -250,6 +274,7 @@ Port `new-branch-workflow.sh` functionality into the `start` command.
 **Command**: `cw start <issue-number-or-branch-name>`
 
 **Key Logic to Port**:
+
 - [ ] Input validation and type detection
 - [ ] GitHub issue/PR fetching
 - [ ] Branch creation or validation
@@ -261,9 +286,11 @@ Port `new-branch-workflow.sh` functionality into the `start` command.
 - [ ] Terminal launching
 
 **Files**:
+
 - `src/commands/start.ts`
 
 **Acceptance Criteria**:
+
 - [ ] All functionality from `new-branch-workflow.sh` replicated
 - [ ] Error handling and user feedback
 - [ ] Integration with all Phase 1 modules
@@ -281,6 +308,7 @@ Port `merge-and-clean.sh` functionality into the `finish` command.
 **Command**: `cw finish <issue-number-or-branch-name>`
 
 **Key Logic to Port**:
+
 - [ ] Uncommitted changes detection and auto-commit
 - [ ] Migration conflict handling (Payload CMS specific)
 - [ ] Type checking, linting, testing workflows
@@ -292,11 +320,13 @@ Port `merge-and-clean.sh` functionality into the `finish` command.
 - [ ] Worktree and branch cleanup
 
 **Files**:
+
 - `src/commands/finish.ts`
 - `src/lib/MigrationManager.ts` (for Payload CMS)
 - `src/lib/TestRunner.ts`
 
 **Acceptance Criteria**:
+
 - [ ] All functionality from `merge-and-clean.sh` replicated
 - [ ] Migration handling for Payload CMS working
 - [ ] Claude-assisted error fixing
@@ -315,6 +345,7 @@ Port `cleanup-worktree.sh` functionality into the `cleanup` command.
 **Options**: `--all`, `--issue <number>`, `--force`, `--list`
 
 **Key Logic to Port**:
+
 - [ ] List all worktrees
 - [ ] Remove single worktree by branch name
 - [ ] Remove all worktrees for an issue
@@ -322,9 +353,11 @@ Port `cleanup-worktree.sh` functionality into the `cleanup` command.
 - [ ] Database branch cleanup integration
 
 **Files**:
+
 - `src/commands/cleanup.ts`
 
 **Acceptance Criteria**:
+
 - [ ] All functionality from `cleanup-worktree.sh` replicated
 - [ ] Interactive confirmations working
 - [ ] Database cleanup integration
@@ -342,6 +375,7 @@ Show all active workspaces with rich information.
 **Command**: `cw list`
 
 **Features** (Enhanced from bash):
+
 - [ ] Show all active workspaces
 - [ ] Display issue/PR information
 - [ ] Show port assignments
@@ -350,9 +384,11 @@ Show all active workspaces with rich information.
 - [ ] Format output with colors and icons
 
 **Files**:
+
 - `src/commands/list.ts`
 
 **Acceptance Criteria**:
+
 - [ ] Rich workspace information displayed
 - [ ] Colored and formatted output
 - [ ] Fast performance even with many workspaces
@@ -370,6 +406,7 @@ Quick context switching between workspaces.
 **Command**: `cw switch <issue-number-or-branch-name>`
 
 **Features**:
+
 - [ ] Navigate to worktree directory
 - [ ] Display Claude context for the workspace
 - [ ] Show current issue/PR details
@@ -377,9 +414,11 @@ Quick context switching between workspaces.
 - [ ] Launch Claude if requested
 
 **Files**:
+
 - `src/commands/switch.ts`
 
 **Acceptance Criteria**:
+
 - [ ] Directory switching working on all platforms
 - [ ] Claude context properly displayed
 - [ ] Terminal integration working
@@ -397,10 +436,12 @@ Quick context switching between workspaces.
 Generate rich context files for Claude AI integration.
 
 **Key Files**:
+
 - `src/lib/ClaudeContextManager.ts`
 - `src/utils/claude.ts`
 
 **Features**:
+
 - [ ] Generate `.claude-context.md` files in worktrees
 - [ ] Create issue/PR summaries for Claude
 - [ ] Include port and database information
@@ -408,6 +449,7 @@ Generate rich context files for Claude AI integration.
 - [ ] Format instructions appropriately
 
 **Acceptance Criteria**:
+
 - [ ] Context files generated correctly
 - [ ] Claude integration enhanced beyond bash scripts
 - [ ] Project-specific customization
@@ -423,6 +465,7 @@ Generate rich context files for Claude AI integration.
 Enhanced Claude CLI integration beyond bash script capabilities.
 
 **Features**:
+
 - [ ] Detect Claude CLI availability
 - [ ] Launch Claude with appropriate permissions and models
 - [ ] Pass context and instructions
@@ -430,6 +473,7 @@ Enhanced Claude CLI integration beyond bash script capabilities.
 - [ ] Handle different Claude models (opus, haiku, sonnet)
 
 **Acceptance Criteria**:
+
 - [ ] Claude launching works on all platforms
 - [ ] Model selection working
 - [ ] Context passing accurate
@@ -445,6 +489,7 @@ Enhanced Claude CLI integration beyond bash script capabilities.
 Leverage Claude for development tasks beyond the bash scripts.
 
 **Features**:
+
 - [ ] Auto-generate commit messages
 - [ ] Generate semantic branch names from issues
 - [ ] Conflict resolution assistance
@@ -452,6 +497,7 @@ Leverage Claude for development tasks beyond the bash scripts.
 - [ ] Test failure analysis and fixes
 
 **Acceptance Criteria**:
+
 - [ ] Commit message generation matches bash behavior
 - [ ] Branch naming enhanced with AI
 - [ ] Error fixing assistance working
@@ -469,6 +515,7 @@ Leverage Claude for development tasks beyond the bash scripts.
 Handle Payload CMS specific migration functionality.
 
 **Features from `merge-and-clean.sh`**:
+
 - [ ] Migration conflict detection
 - [ ] Branch-specific migration removal
 - [ ] Migration regeneration after merge
@@ -476,6 +523,7 @@ Handle Payload CMS specific migration functionality.
 - [ ] `migrations/index.ts` management
 
 **Acceptance Criteria**:
+
 - [ ] Migration handling identical to bash scripts
 - [ ] Safety checks prevent data loss
 - [ ] Proper conflict resolution
@@ -491,6 +539,7 @@ Handle Payload CMS specific migration functionality.
 Comprehensive test coverage for all functionality.
 
 **Test Types**:
+
 - [ ] Unit tests for all modules
 - [ ] Integration tests for commands
 - [ ] Mock Git operations
@@ -498,7 +547,8 @@ Comprehensive test coverage for all functionality.
 - [ ] Test environment isolation
 
 **Acceptance Criteria**:
-- [ ] >90% code coverage
+
+- [ ] > 90% code coverage
 - [ ] All critical paths tested
 - [ ] Mocking framework working
 - [ ] CI/CD integration
@@ -513,6 +563,7 @@ Comprehensive test coverage for all functionality.
 Production-ready packaging and distribution.
 
 **Features**:
+
 - [ ] npm publishing configuration
 - [ ] GitHub Actions CI/CD
 - [ ] Semantic versioning
@@ -520,6 +571,7 @@ Production-ready packaging and distribution.
 - [ ] Changelog generation
 
 **Acceptance Criteria**:
+
 - [ ] Automated releases working
 - [ ] npm package published correctly
 - [ ] Version management automated
@@ -537,12 +589,14 @@ Production-ready packaging and distribution.
 Support multiple database providers beyond Neon.
 
 **Providers**:
+
 - [ ] Neon (existing)
 - [ ] Supabase
 - [ ] PlanetScale
 - [ ] Local databases
 
 **Acceptance Criteria**:
+
 - [ ] Provider abstraction working
 - [ ] Multiple providers configurable
 - [ ] Migration path from Neon-only
@@ -558,12 +612,14 @@ Support multiple database providers beyond Neon.
 Enhanced development environment integration.
 
 **Features**:
+
 - [ ] VS Code workspace opening
 - [ ] Cursor IDE support
 - [ ] Terminal session management
 - [ ] Workspace settings configuration
 
 **Acceptance Criteria**:
+
 - [ ] IDE launching working
 - [ ] Workspace configuration applied
 - [ ] Cross-platform support
@@ -579,12 +635,14 @@ Enhanced development environment integration.
 Flexible configuration system for customization.
 
 **Features**:
+
 - [ ] Global config file (`~/.cwm/config.json`)
 - [ ] Per-project configuration
 - [ ] Custom workflow hooks
 - [ ] Template system for new workspaces
 
 **Acceptance Criteria**:
+
 - [ ] Configuration loading working
 - [ ] Per-project overrides
 - [ ] Template system functional
@@ -600,12 +658,14 @@ Flexible configuration system for customization.
 Power user features beyond basic workflow.
 
 **Features**:
+
 - [ ] Parallel workspace operations
 - [ ] Workspace templates
 - [ ] Custom Claude instructions per project
 - [ ] Workspace backup and restore
 
 **Acceptance Criteria**:
+
 - [ ] Parallel operations safe
 - [ ] Template system working
 - [ ] Custom instructions applied
@@ -623,6 +683,7 @@ Power user features beyond basic workflow.
 Production-ready documentation for users and contributors.
 
 **Documentation Types**:
+
 - [ ] README with quick start guide
 - [ ] API documentation
 - [ ] Configuration guide
@@ -630,6 +691,7 @@ Production-ready documentation for users and contributors.
 - [ ] Troubleshooting guide
 
 **Acceptance Criteria**:
+
 - [ ] All features documented
 - [ ] Migration guide complete
 - [ ] Troubleshooting covers common issues
@@ -645,6 +707,7 @@ Production-ready documentation for users and contributors.
 Enhanced user experience and CLI interface.
 
 **Features**:
+
 - [ ] Interactive prompts for missing arguments
 - [ ] Progress indicators for long operations
 - [ ] Colored output with emoji indicators
@@ -652,6 +715,7 @@ Enhanced user experience and CLI interface.
 - [ ] Verbose and quiet modes
 
 **Acceptance Criteria**:
+
 - [ ] Help system comprehensive
 - [ ] Progress indicators working
 - [ ] Error messages actionable
@@ -667,12 +731,14 @@ Enhanced user experience and CLI interface.
 Features to support community adoption and contribution.
 
 **Features**:
+
 - [ ] Example configurations
 - [ ] Plugin system architecture
 - [ ] Community workflow templates
 - [ ] Integration examples
 
 **Acceptance Criteria**:
+
 - [ ] Plugin system documented
 - [ ] Examples comprehensive
 - [ ] Community templates available
@@ -685,6 +751,7 @@ Features to support community adoption and contribution.
 ### Universal Testing Requirements
 
 **Every issue must include**:
+
 - [ ] **Test-First Development**: Write failing tests before implementation
 - [ ] **95% Coverage Minimum**: All new code must achieve 95% test coverage
 - [ ] **Mock All Externals**: Use mock factories for Git, GitHub CLI, Neon CLI, Claude CLI, file system
@@ -695,6 +762,7 @@ Features to support community adoption and contribution.
 - [ ] **Performance Benchmarking**: Measure and compare against bash script performance
 
 **Testing Definition of Done**:
+
 - [ ] All tests pass (unit, integration, property-based)
 - [ ] Code coverage >95% with meaningful tests (not just coverage padding)
 - [ ] Mock factories work for all external dependencies used
@@ -706,12 +774,14 @@ Features to support community adoption and contribution.
 ## Issue Templates
 
 ### Bug Report Template
+
 ```markdown
 **Bug Description**
 A clear and concise description of what the bug is.
 
 **To Reproduce**
 Steps to reproduce the behavior:
+
 1. Run command '...'
 2. With arguments '...'
 3. See error
@@ -723,11 +793,13 @@ What you expected to happen.
 What actually happened.
 
 **Test Coverage**
+
 - [ ] Bug reproduced with a failing test
 - [ ] Fix implemented with test passing
 - [ ] Regression test added to prevent reoccurrence
 
 **Environment**
+
 - OS: [e.g. macOS, Linux, Windows]
 - Node.js version: [e.g. 18.0.0]
 - Package version: [e.g. 0.1.0]
@@ -740,6 +812,7 @@ Add any other context about the problem here.
 ```
 
 ### Feature Request Template
+
 ```markdown
 **Feature Description**
 A clear and concise description of what you want to happen.
@@ -754,6 +827,7 @@ Describe what currently happens.
 Describe what you would like to happen instead.
 
 **Testing Requirements**
+
 - [ ] TDD approach - tests written before implementation
 - [ ] Mock factories for any external dependencies
 - [ ] Property-based tests for edge case discovery
@@ -762,6 +836,7 @@ Describe what you would like to happen instead.
 - [ ] Error handling tests for failure scenarios
 
 **Definition of Done**
+
 - [ ] Feature implemented with >95% test coverage
 - [ ] All tests passing including edge cases
 - [ ] Performance within acceptable bounds

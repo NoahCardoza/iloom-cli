@@ -1,0 +1,12 @@
+# Run linting and formatting
+pnpm run lint
+pnpm run format:check
+
+# Run type checking
+pnpm run typecheck
+
+# Run tests to ensure nothing is broken
+pnpm run test
+
+# Run build to ensure it still works
+pnpm run build

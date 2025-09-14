@@ -1,6 +1,7 @@
 # Bash Script Analysis
 
 ## Overview
+
 This document provides a comprehensive analysis of the existing bash scripts that need to be ported to TypeScript for Hatchbox AI.
 
 ## Script Inventory
@@ -8,9 +9,11 @@ This document provides a comprehensive analysis of the existing bash scripts tha
 ### Main Workflow Scripts
 
 #### 1. `new-branch-workflow.sh` (425 lines)
+
 **Purpose**: Creates isolated workspace for an issue or PR
 
 **Key Functionality**:
+
 - **Input Processing**: Handles issue numbers, PR numbers, or custom branch names
 - **GitHub Integration**:
   - Detects if input is PR or issue using `gh pr view` and `gh issue view`
@@ -38,6 +41,7 @@ This document provides a comprehensive analysis of the existing bash scripts tha
   - Provides detailed context about the workspace
 
 **Dependencies**:
+
 - GitHub CLI (`gh`)
 - Claude CLI (`claude`)
 - `pnpm`
@@ -45,13 +49,16 @@ This document provides a comprehensive analysis of the existing bash scripts tha
 - `jq` for JSON parsing
 
 **Environment Variables**:
+
 - `DISABLE_AUTO_UPDATE`
 - Database environment variables
 
 #### 2. `merge-and-clean.sh` (1211 lines)
+
 **Purpose**: Completes work and cleans up workspace
 
 **Key Functionality**:
+
 - **Argument Parsing**: Supports `--force`, `--dry-run`, `--pr <number>` flags
 - **PR Workflow**:
   - Fetches PR status from GitHub
@@ -79,14 +86,17 @@ This document provides a comprehensive analysis of the existing bash scripts tha
   - Cleans up database branches
 
 **Dependencies**:
+
 - All from `new-branch-workflow.sh`
 - `lsof` for port checking
 - `ps` for process inspection
 
 #### 3. `cleanup-worktree.sh` (399 lines)
+
 **Purpose**: Removes workspaces and associated resources
 
 **Key Functionality**:
+
 - **Multiple Modes**:
   - `--list`: Show all worktrees
   - `--all`: Remove all worktrees
@@ -106,9 +116,11 @@ This document provides a comprehensive analysis of the existing bash scripts tha
   - Offers branch cleanup after worktree removal
 
 #### 4. `merge-current-issue.sh` (93 lines)
+
 **Purpose**: Merges current work from within a worktree
 
 **Key Functionality**:
+
 - **Context Detection**:
   - Detects current branch and issue/PR number
   - Identifies if in PR worktree by `_pr_N` suffix
@@ -119,35 +131,43 @@ This document provides a comprehensive analysis of the existing bash scripts tha
 ### Utility Scripts
 
 #### 1. `utils/find-worktree-for-branch.sh` (44 lines)
+
 **Purpose**: Locates worktree path for a given branch
 
 **Key Functionality**:
+
 - Parses `git worktree list` output
 - Matches branch names exactly
 - Returns worktree path or empty string
 - Can be sourced or called directly
 
 #### 2. `utils/worktree-utils.sh` (29 lines)
+
 **Purpose**: PR worktree detection utilities
 
 **Key Functionality**:
+
 - `is_pr_worktree()`: Detects PR worktrees by `_pr_N` suffix
 - `get_pr_number_from_worktree()`: Extracts PR number from path
 - Shared color definitions
 
 #### 3. `utils/env-utils.sh` (54 lines)
+
 **Purpose**: Environment file manipulation
 
 **Key Functionality**:
+
 - `setEnvVar()`: Updates or adds variables to .env files
 - Handles existing variable replacement
 - Creates .env file if doesn't exist
 - Uses temporary files for atomic updates
 
 #### 4. `utils/neon-utils.sh` (296 lines)
+
 **Purpose**: Database isolation utilities
 
 **Key Functionality**:
+
 - **Branch Management**:
   - `create_neon_database_branch()`: Creates isolated database branches
   - `delete_neon_database_branch()`: Cleans up database branches
@@ -167,6 +187,7 @@ This document provides a comprehensive analysis of the existing bash scripts tha
 ## Data Flow Analysis
 
 ### Workspace Creation Flow
+
 ```
 User Input (issue/PR #)
   → GitHub API (fetch details)
@@ -179,6 +200,7 @@ User Input (issue/PR #)
 ```
 
 ### Merge and Cleanup Flow
+
 ```
 Worktree Context Detection
   → Pre-merge Validation (tests, lint, typecheck)
@@ -192,18 +214,21 @@ Worktree Context Detection
 ## Key Patterns and Conventions
 
 ### Naming Conventions
+
 - **Worktree Directories**: `{branch-name-with-dashes}` or `{branch-name}_pr_{number}`
 - **Database Branches**: `{branch-name-with-underscores}`
 - **Branch Names**: `feat/issue-{number}-{description}` or existing PR branch
 - **Port Numbers**: `3000 + issue/PR number`
 
 ### Error Handling Patterns
+
 - Color-coded output (red for errors, yellow for warnings, green for success)
 - Graceful degradation when optional tools unavailable
 - Interactive confirmations for destructive operations
 - Detailed error messages with suggested remediation
 
 ### Integration Points
+
 - **GitHub CLI**: All GitHub operations go through `gh` command
 - **Claude CLI**: Used for branch naming and error assistance
 - **Neon CLI**: Database operations through `neon` command
@@ -213,6 +238,7 @@ Worktree Context Detection
 ## Configuration Dependencies
 
 ### Required Environment Variables
+
 ```bash
 # Neon Database
 NEON_API_KEY=
@@ -225,6 +251,7 @@ NEXT_PUBLIC_SERVER_URL=     # Set dynamically to calculated port
 ```
 
 ### Required External Tools
+
 - `git` (with worktree support)
 - `gh` (GitHub CLI)
 - `claude` (Claude CLI)
@@ -237,18 +264,21 @@ NEXT_PUBLIC_SERVER_URL=     # Set dynamically to calculated port
 ## Migration Complexity Assessment
 
 ### High Complexity Areas
+
 1. **Migration Handling**: Complex Payload CMS-specific logic for detecting and resolving migration conflicts
 2. **Claude Integration**: Multiple integration points with different contexts and permissions
 3. **Error Recovery**: Sophisticated error handling with Claude-assisted fixes
 4. **Cross-platform Shell Commands**: Heavy use of Unix utilities that need cross-platform abstractions
 
 ### Medium Complexity Areas
+
 1. **Git Worktree Operations**: Well-defined git commands but need proper error handling
 2. **GitHub Integration**: Straightforward API calls through GitHub CLI
 3. **Environment Management**: File manipulation with atomic updates
 4. **Database Integration**: Well-structured provider pattern
 
 ### Low Complexity Areas
+
 1. **Argument Parsing**: Standard CLI patterns
 2. **Configuration Loading**: Environment variable reading
 3. **Output Formatting**: Color and emoji output
@@ -257,6 +287,7 @@ NEXT_PUBLIC_SERVER_URL=     # Set dynamically to calculated port
 ## Critical Success Factors
 
 ### Must Preserve
+
 1. **Exact Command Interfaces**: All CLI arguments and options
 2. **Directory Structure**: Worktree naming and organization
 3. **Environment Variables**: Names and formats
@@ -264,6 +295,7 @@ NEXT_PUBLIC_SERVER_URL=     # Set dynamically to calculated port
 5. **Claude Context**: Issue/PR context format for Claude
 
 ### Must Improve
+
 1. **Cross-platform Support**: Windows compatibility
 2. **Error Messages**: More descriptive and actionable
 3. **Performance**: Faster execution through concurrent operations
@@ -271,6 +303,7 @@ NEXT_PUBLIC_SERVER_URL=     # Set dynamically to calculated port
 5. **Testing**: Comprehensive test coverage
 
 ### Can Enhance
+
 1. **Provider Support**: Multiple database providers
 2. **IDE Integration**: Beyond just terminal launching
 3. **Workflow Customization**: Configurable hooks and templates

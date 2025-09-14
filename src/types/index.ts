@@ -1,0 +1,119 @@
+// Core types
+export interface Workspace {
+  id: string
+  path: string
+  branch: string
+  issueNumber?: number
+  prNumber?: number
+  port: number
+  databaseBranch?: string
+  createdAt: Date
+  lastAccessed: Date
+}
+
+export interface WorkspaceInput {
+  identifier: string
+  type: 'issue' | 'pr' | 'branch'
+  urgent?: boolean
+  skipClaude?: boolean
+}
+
+export interface WorkspaceSummary {
+  id: string
+  issueNumber?: number
+  prNumber?: number
+  title: string
+  branch: string
+  port: number
+  status: 'active' | 'stale' | 'error'
+  lastAccessed: string
+}
+
+// Git types
+export interface Worktree {
+  path: string
+  branch: string
+  commit: string
+  isPR: boolean
+  prNumber?: number
+  issueNumber?: number
+  port?: number
+}
+
+export interface GitStatus {
+  hasUncommittedChanges: boolean
+  unstagedFiles: string[]
+  stagedFiles: string[]
+  currentBranch: string
+  isAheadOfRemote: boolean
+  isBehindRemote: boolean
+}
+
+// GitHub types
+export interface Issue {
+  number: number
+  title: string
+  body: string
+  state: 'open' | 'closed'
+  labels: string[]
+  assignees: string[]
+  url: string
+}
+
+export interface PullRequest {
+  number: number
+  title: string
+  body: string
+  state: 'open' | 'closed' | 'merged'
+  branch: string
+  baseBranch: string
+  url: string
+  isDraft: boolean
+}
+
+// Database types
+export interface DatabaseProvider {
+  createBranch(name: string, fromBranch?: string): Promise<string>
+  deleteBranch(name: string): Promise<void>
+  getConnectionString(branch: string): Promise<string>
+  listBranches(): Promise<string[]>
+  branchExists(name: string): Promise<boolean>
+}
+
+// Configuration types
+export interface Config {
+  defaultPort: number
+  databaseProvider?: 'neon' | 'supabase' | 'planetscale'
+  claudeModel?: 'opus' | 'sonnet' | 'haiku'
+  skipClaude?: boolean
+  customWorkspaceRoot?: string
+}
+
+// Command option types
+export interface StartOptions {
+  urgent?: boolean
+  claude?: boolean
+}
+
+export interface FinishOptions {
+  force?: boolean
+}
+
+export interface CleanupOptions {
+  all?: boolean
+  issue?: string
+  force?: boolean
+}
+
+export interface ListOptions {
+  json?: boolean
+}
+
+// Result types
+export type Result<T, E = Error> = { success: true; data: T } | { success: false; error: E }
+
+// Mock factory types for testing
+export interface MockOptions {
+  scenario: 'empty' | 'existing' | 'conflicts' | 'error'
+  data?: unknown
+}

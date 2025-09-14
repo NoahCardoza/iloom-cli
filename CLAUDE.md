@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Hatchbox AI is a TypeScript CLI tool that converts existing bash workflow scripts into a robust, testable system for managing isolated Git worktrees with Claude AI integration. The tool enables developers to work on multiple issues simultaneously without context confusion.
 
 **Core Commands**:
+
 - `hb start <issue-number>` - Create isolated workspace for an issue/PR
 - `hb finish <issue-number>` - Merge work and cleanup workspace
 - `hb cleanup [identifier]` - Remove workspaces
@@ -16,6 +17,7 @@ Hatchbox AI is a TypeScript CLI tool that converts existing bash workflow script
 ## Development Commands
 
 **Build & Test** (when implemented):
+
 ```bash
 npm run build          # Build TypeScript to dist/
 npm test               # Run all tests with Vitest
@@ -26,6 +28,7 @@ npm run typecheck      # Run TypeScript compiler check
 ```
 
 **Development Workflow**:
+
 ```bash
 npm run dev            # Watch mode development
 npm run test:single -- <test-file>  # Run specific test file
@@ -36,6 +39,7 @@ npm run test:single -- <test-file>  # Run specific test file
 **Test-Driven Development (TDD)**: All code must be written test-first with >95% coverage. Use comprehensive mock factories for external dependencies (Git, GitHub CLI, Neon CLI, Claude CLI).
 
 ### Core Module Structure
+
 ```
 src/
 ├── cli.ts                    # Main CLI entry point
@@ -80,6 +84,7 @@ The TypeScript implementation maintains exact functional parity with these bash 
 ## Testing Requirements
 
 **Comprehensive Testing Strategy**:
+
 - **Unit Tests**: Every class/function with mocked externals
 - **Integration Tests**: Command workflows with temporary Git repos
 - **Regression Tests**: Automated comparison with bash script behavior
@@ -87,6 +92,7 @@ The TypeScript implementation maintains exact functional parity with these bash 
 - **Performance Tests**: Benchmarking against bash script performance
 
 **Mock Factories Required**:
+
 ```typescript
 MockGitProvider        # Mock git commands and responses
 MockGitHubProvider     # Mock gh CLI responses
@@ -98,6 +104,7 @@ MockFileSystem         # Mock file operations
 ## Core Functionality Being Ported
 
 **From new-branch-workflow.sh**:
+
 - GitHub issue/PR detection and fetching
 - Branch name generation using Claude AI
 - Git worktree creation with sanitized naming
@@ -106,6 +113,7 @@ MockFileSystem         # Mock file operations
 - Claude context generation and CLI launching
 
 **From merge-and-clean.sh**:
+
 - Uncommitted changes detection and auto-commit
 - Migration conflict handling (Payload CMS specific)
 - Pre-merge validation pipeline (typecheck, lint, test)
@@ -114,6 +122,7 @@ MockFileSystem         # Mock file operations
 - Resource cleanup (worktrees, database branches)
 
 **Critical Integration Points**:
+
 - **GitHub CLI**: Issue/PR fetching, branch detection
 - **Claude CLI**: Context generation, branch naming, error fixing
 - **Neon CLI**: Database branch management for isolation
@@ -131,6 +140,7 @@ Uses Neon database branching to create isolated database copies per workspace. E
 ## Claude Context Generation
 
 Automatically generates `.claude-context.md` files in each worktree containing:
+
 - Issue/PR details and requirements
 - Workspace-specific environment information
 - Port assignments and database connection details

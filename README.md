@@ -9,6 +9,7 @@
 ## The Problem
 
 When using Claude for development, switching between issues is painful:
+
 - Git branch switching loses Claude's context
 - Database changes conflict between features
 - Multiple dev servers fight over ports
@@ -91,6 +92,7 @@ hb finish 26  # Bug fixed
 ## How It Works
 
 Each workspace gets:
+
 - **Isolated Git worktree** (no branch switching needed)
 - **Separate database branch** (no data conflicts)
 - **Unique port assignment** (run multiple dev servers)
@@ -102,6 +104,7 @@ Each workspace gets:
 🚧 **Currently in Development** - Converting existing bash workflow scripts to TypeScript.
 
 This project is migrating from proven bash scripts to a robust TypeScript implementation with:
+
 - **Test-Driven Development** (95% coverage requirement)
 - **Type Safety** and better error handling
 - **Cross-platform compatibility**
@@ -112,6 +115,7 @@ See [plan.md](./plan.md) for complete development roadmap and [docs/](./docs/) f
 ## Architecture
 
 **Core Technologies**:
+
 - TypeScript CLI built with Commander.js
 - Git worktrees for workspace isolation
 - GitHub CLI integration for issues/PRs
@@ -119,6 +123,7 @@ See [plan.md](./plan.md) for complete development roadmap and [docs/](./docs/) f
 - Claude CLI integration for AI assistance
 
 **Project Structure**:
+
 ```
 src/
 ├── commands/          # CLI commands (start, finish, cleanup, list, switch)
@@ -138,6 +143,7 @@ src/
 ## Contributing
 
 This project follows Test-Driven Development (TDD). All code must:
+
 - Be written test-first with comprehensive unit tests
 - Achieve >95% code coverage
 - Include regression tests against bash script behavior
