@@ -678,35 +678,173 @@ hatchbox-ai/
 └── README.md
 ```
 
-## Implementation Priority
+## Implementation Priority and Execution Order
 
-### Critical Path (Must Have)
+**Note:** This order has been updated to reflect bash script enhancements discovered after initial planning. See `enhancement-integration-plan.md` for details.
 
-**Phase 1-2 (Issues #1-10)** - Exact feature parity with bash scripts
+### Wave 1: Foundation
+**Goal:** Core infrastructure and utilities
 
-- Timeline: 2-3 weeks
-- Goal: Drop-in replacement for bash scripts
+**Completed:**
+- ✅ **Issue #1** - TypeScript project initialization
+- ✅ **Issue #2** - Core Git Worktree Management
 
-### High Priority (Should Have)
+**Next (in order):**
+1. **Issue #24** - Logging Infrastructure ⭐ CRITICAL
+   - Required by all subsequent commands
+   - Establishes consistent output formatting
 
-**Phase 3-4 (Issues #11-16)** - Enhanced Claude integration and production readiness
+2. **Issue #25** - Enhanced Worktree Detection ⭐ CRITICAL
+   - Builds on completed Issue #2
+   - Critical UX improvement for worktree reuse
 
-- Timeline: 1-2 weeks
-- Goal: Superior experience to bash scripts
+3. **Issue #4** - Environment Management Module
+   - Required by start command
+   - Port assignment logic
 
-### Medium Priority (Nice to Have)
+4. **Issue #5** - Database Branch Management (Neon) ⭐ CRITICAL
+   - Required by start/finish commands
+   - Includes Vercel preview integration
 
-**Phase 5 (Issues #17-20)** - Enhanced features and compatibility
+---
 
-- Timeline: 2-3 weeks
-- Goal: Power user features
+### Wave 2: Core Commands
+**Goal:** Primary workflow commands with bash parity
 
-### Low Priority (Future)
+5. **Issue #3** - GitHub Integration Module
+   - Required by start/finish commands
+   - Enhanced PR workflow support
 
-**Phase 6 (Issues #21-23)** - Documentation and community
+6. **Issue #11** - Claude Context Generation ⭐ HIGH PRIORITY
+   - Structured prompt template system
+   - Required by start command
 
-- Timeline: 1 week
-- Goal: Production polish
+7. **Issue #12** - Claude CLI Integration
+   - Required by start/finish commands
+   - Prompt system integration
+
+8. **Issue #6** - Implement 'start' Command ⭐ CRITICAL
+   - Most complex command with many enhancements
+   - Multiple modes, coloring, dual-window support
+   - Depends on: #24, #25, #3, #4, #5, #11, #12
+
+9. **Issue #7** - Implement 'finish' Command ⭐ CRITICAL
+   - Second most complex command
+   - Claude-assisted automation workflows
+   - Depends on: #24, #3, #5, #12, #13
+
+10. **Issue #13** - AI-Assisted Features ⭐ HIGH PRIORITY
+    - Detailed implementation workflows
+    - Supports finish command
+    - Can be developed in parallel with #7
+
+---
+
+### Wave 3: Supporting Commands
+**Goal:** Complete core workflow tooling
+
+11. **Issue #8** - Implement 'cleanup' Command
+    - Enhanced with numeric detection
+    - Depends on: #24, #25, #5
+
+12. **Issue #9** - Implement 'list' Command
+    - Colored output integration
+    - Depends on: #24
+
+13. **Issue #10** - Implement 'switch' Command
+    - Quick context switching
+    - Depends on: #24, #11
+
+---
+
+### Wave 4: Quality and Stability
+**Goal:** Production readiness
+
+14. **Issue #14** - Payload CMS Migration Support
+    - Framework-specific functionality
+    - Depends on: #7
+
+15. **Issue #15** - Test Infrastructure
+    - Comprehensive test coverage
+    - Continuous: ongoing during development
+
+16. **Issue #16** - Build and Release Pipeline
+    - CI/CD, publishing, versioning
+
+---
+
+### Wave 5: Enhanced Features
+**Goal:** Beyond bash script capabilities
+
+17. **Issue #27** - GitHub Projects Integration 🆕
+    - Auto-status updates
+    - Nice-to-have automation
+
+18. **Issue #26** - IDE Terminal Integration 🆕
+    - Quick-start wrapper convenience
+
+19. **Issue #17** - Multi-Provider Support
+    - Supabase, PlanetScale support
+
+20. **Issue #18** - IDE Integration
+    - Enhanced environment integration
+
+21. **Issue #19** - Configuration Management
+    - Flexible config system
+
+22. **Issue #20** - Advanced Workflow Features
+    - Power user features
+
+---
+
+### Wave 6: Polish and Community
+**Goal:** Production polish and extensibility
+
+23. **Issue #28** - User-Customizable Prompt Templates 🆕
+    - Power user feature
+    - Override capability
+
+24. **Issue #21** - Comprehensive Documentation
+    - User guides, API docs
+
+25. **Issue #22** - CLI Help and UX
+    - Interactive prompts, progress indicators
+
+26. **Issue #23** - Community Features
+    - Plugin system, templates
+
+---
+
+### Critical Path Dependencies
+
+```
+Foundation Layer:
+#24 (Logging) → ALL subsequent issues
+#25 (Worktree Detection) → #6, #8
+
+Core Integrations:
+#3 (GitHub) → #6, #7
+#4 (Environment) → #6
+#5 (Database) → #6, #7, #8
+#11 (Prompts) → #6, #10, #12
+#12 (Claude CLI) → #6, #7
+
+Primary Commands:
+#6 (start) + #7 (finish) → Core workflow complete
+
+Quality Gates:
+#15 (Tests) → Continuous throughout
+#16 (Build) → Before any release
+```
+
+### Parallelization Opportunities
+
+Issues that can be developed simultaneously:
+- **Wave 1:** #24 + #4 can start in parallel
+- **Wave 2:** #11 + #12 can be developed together
+- **Wave 2:** #13 can be developed alongside #7
+- **Wave 3:** #8, #9, #10 can all be done in parallel
+- **Wave 5:** #17-20, #26-27 can be parallelized
 
 ## Success Metrics
 
