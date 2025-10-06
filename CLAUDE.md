@@ -6,6 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Hatchbox AI is a TypeScript CLI tool that converts existing bash workflow scripts into a robust, testable system for managing isolated Git worktrees with Claude AI integration. The tool enables developers to work on multiple issues simultaneously without context confusion.
 
+## DEVELOPMENT GUIDELINES
+* DO NOT SWALLOW ERRORS
+* Use Exception throwing, do not use "CommandResult" objects that return "success: true | false" - it either returns successfully or not at all.
+* When catching exceptions and returning objects or throwing new exceptions, you must be very specific about the circumstances in which you are doing that. You must explicitly check for the expected error class, message (or substring) or code before returning an object or throwing a new error. Failure to do this effectively swallows the error.
+
 **Core Commands**:
 
 - `hb start <issue-number>` - Create isolated workspace for an issue/PR
