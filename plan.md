@@ -690,11 +690,11 @@ hatchbox-ai/
 - ✅ **Issue #2** - Core Git Worktree Management
 
 **Next (in order):**
-1. **Issue #24** - Logging Infrastructure ⭐ CRITICAL
+1. **Issue #27** - Logging Infrastructure ⭐ CRITICAL
    - Required by all subsequent commands
    - Establishes consistent output formatting
 
-2. **Issue #25** - Enhanced Worktree Detection ⭐ CRITICAL
+2. **Issue #28** - Enhanced Worktree Detection ⭐ CRITICAL
    - Builds on completed Issue #2
    - Critical UX improvement for worktree reuse
 
@@ -726,12 +726,12 @@ hatchbox-ai/
 8. **Issue #6** - Implement 'start' Command ⭐ CRITICAL
    - Most complex command with many enhancements
    - Multiple modes, coloring, dual-window support
-   - Depends on: #24, #25, #3, #4, #5, #11, #12
+   - Depends on: #27, #28, #3, #4, #5, #11, #12
 
 9. **Issue #7** - Implement 'finish' Command ⭐ CRITICAL
    - Second most complex command
    - Claude-assisted automation workflows
-   - Depends on: #24, #3, #5, #12, #13
+   - Depends on: #27, #3, #5, #12, #13
 
 10. **Issue #13** - AI-Assisted Features ⭐ HIGH PRIORITY
     - Detailed implementation workflows
@@ -745,15 +745,15 @@ hatchbox-ai/
 
 11. **Issue #8** - Implement 'cleanup' Command
     - Enhanced with numeric detection
-    - Depends on: #24, #25, #5
+    - Depends on: #27, #28, #5
 
 12. **Issue #9** - Implement 'list' Command
     - Colored output integration
-    - Depends on: #24
+    - Depends on: #27
 
 13. **Issue #10** - Implement 'switch' Command
     - Quick context switching
-    - Depends on: #24, #11
+    - Depends on: #27, #11
 
 ---
 
@@ -776,11 +776,11 @@ hatchbox-ai/
 ### Wave 5: Enhanced Features
 **Goal:** Beyond bash script capabilities
 
-17. **Issue #27** - GitHub Projects Integration 🆕
+17. **Issue #30** - GitHub Projects Integration 🆕
     - Auto-status updates
     - Nice-to-have automation
 
-18. **Issue #26** - IDE Terminal Integration 🆕
+18. **Issue #29** - IDE Terminal Integration 🆕
     - Quick-start wrapper convenience
 
 19. **Issue #17** - Multi-Provider Support
@@ -800,7 +800,7 @@ hatchbox-ai/
 ### Wave 6: Polish and Community
 **Goal:** Production polish and extensibility
 
-23. **Issue #28** - User-Customizable Prompt Templates 🆕
+23. **Issue #31** - User-Customizable Prompt Templates 🆕
     - Power user feature
     - Override capability
 
@@ -819,8 +819,8 @@ hatchbox-ai/
 
 ```
 Foundation Layer:
-#24 (Logging) → ALL subsequent issues
-#25 (Worktree Detection) → #6, #8
+#27 (Logging) → ALL subsequent issues
+#28 (Worktree Detection) → #6, #8
 
 Core Integrations:
 #3 (GitHub) → #6, #7
@@ -840,11 +840,11 @@ Quality Gates:
 ### Parallelization Opportunities
 
 Issues that can be developed simultaneously:
-- **Wave 1:** #24 + #4 can start in parallel
+- **Wave 1:** #27 + #4 can start in parallel
 - **Wave 2:** #11 + #12 can be developed together
 - **Wave 2:** #13 can be developed alongside #7
 - **Wave 3:** #8, #9, #10 can all be done in parallel
-- **Wave 5:** #17-20, #26-27 can be parallelized
+- **Wave 5:** #17-20, #29-30 can be parallelized
 
 ## Success Metrics
 
