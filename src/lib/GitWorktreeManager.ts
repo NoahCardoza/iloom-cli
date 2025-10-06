@@ -60,6 +60,15 @@ export class GitWorktreeManager {
   }
 
   /**
+   * Check if a worktree is the main repository worktree
+   * The main worktree is the first one listed and cannot be removed
+   */
+  async isMainWorktree(worktree: GitWorktree): Promise<boolean> {
+    const repoRoot = await getRepoRoot(this.repoPath)
+    return worktree.path === repoRoot
+  }
+
+  /**
    * Check if a worktree is a PR worktree based on naming patterns
    * Ports: is_pr_worktree() from worktree-utils.sh
    */
@@ -374,5 +383,85 @@ export class GitWorktreeManager {
    */
   async unlockWorktree(worktreePath: string): Promise<WorktreeOperationResult> {
     return await executeGitCommand(['worktree', 'unlock', worktreePath], { cwd: this.repoPath })
+  }
+
+  /**
+   * Find worktrees matching an identifier (branch name, path, or PR number)
+   */
+  async findWorktreesByIdentifier(identifier: string): Promise<GitWorktree[]> {
+    const worktrees = await this.listWorktrees({ porcelain: true })
+    return worktrees.filter(
+      wt =>
+        wt.branch.includes(identifier) ||
+        wt.path.includes(identifier) ||
+        this.getPRNumberFromWorktree(wt)?.toString() === identifier
+    )
+  }
+
+  /**
+   * Remove multiple worktrees
+   * Returns a summary of successes and failures
+   * Automatically filters out the main worktree
+   */
+  async removeWorktrees(
+    worktrees: GitWorktree[],
+    options: WorktreeCleanupOptions = {}
+  ): Promise<{
+    successes: Array<{ worktree: GitWorktree; result: WorktreeOperationResult }>
+    failures: Array<{ worktree: GitWorktree; error: string }>
+    skipped: Array<{ worktree: GitWorktree; reason: string }>
+  }> {
+    const successes: Array<{ worktree: GitWorktree; result: WorktreeOperationResult }> = []
+    const failures: Array<{ worktree: GitWorktree; error: string }> = []
+    const skipped: Array<{ worktree: GitWorktree; reason: string }> = []
+
+    const repoRoot = await getRepoRoot(this.repoPath)
+
+    for (const worktree of worktrees) {
+      // Skip main worktree
+      if (worktree.path === repoRoot) {
+        skipped.push({ worktree, reason: 'Cannot remove main worktree' })
+        continue
+      }
+
+      try {
+        const result = await this.removeWorktree(worktree.path, {
+          ...options,
+          removeDirectory: true,
+        })
+
+        if (result.success) {
+          successes.push({ worktree, result })
+        } else {
+          failures.push({ worktree, error: result.error ?? 'Unknown error' })
+        }
+      } catch (error) {
+        failures.push({
+          worktree,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        })
+      }
+    }
+
+    return { successes, failures, skipped }
+  }
+
+  /**
+   * Format worktree information for display
+   */
+  formatWorktree(worktree: GitWorktree): {
+    title: string
+    path: string
+    commit: string
+  } {
+    const prNumber = this.getPRNumberFromWorktree(worktree)
+    const prLabel = prNumber ? ` (PR #${prNumber})` : ''
+    const bareLabel = worktree.bare ? ' [main]' : ''
+
+    return {
+      title: `${worktree.branch}${prLabel}${bareLabel}`,
+      path: worktree.path,
+      commit: worktree.commit.substring(0, 7),
+    }
   }
 }

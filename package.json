@@ -54,6 +54,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "validate:commit": "pnpm run typecheck && pnpm run lint && pnpm run test",
     "clean": "rimraf dist",
     "prepublishOnly": "pnpm run build",
     "prepare": "husky"
