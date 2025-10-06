@@ -690,11 +690,11 @@ hatchbox-ai/
 - ✅ **Issue #2** - Core Git Worktree Management
 
 **Next (in order):**
-1. **Issue #27** - Logging Infrastructure ⭐ CRITICAL
+1. **Issue #27** - Logging Infrastructure ⭐ CRITICAL - DONE
    - Required by all subsequent commands
    - Establishes consistent output formatting
 
-2. **Issue #28** - Enhanced Worktree Detection ⭐ CRITICAL
+2. **Issue #28** - Enhanced Worktree Detection ⭐ CRITICAL - DEFERRED - this can wait
    - Builds on completed Issue #2
    - Critical UX improvement for worktree reuse
 

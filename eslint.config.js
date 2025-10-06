@@ -19,6 +19,7 @@ export default [
         console: 'readonly',
         process: 'readonly',
         Buffer: 'readonly',
+        BufferEncoding: 'readonly',
         __dirname: 'readonly',
         __filename: 'readonly',
         global: 'readonly',
@@ -53,6 +54,7 @@ export default [
         console: 'readonly',
         process: 'readonly',
         Buffer: 'readonly',
+        BufferEncoding: 'readonly',
         __dirname: 'readonly',
         __filename: 'readonly',
         global: 'readonly',
@@ -87,6 +89,7 @@ export default [
         console: 'readonly',
         process: 'readonly',
         Buffer: 'readonly',
+        BufferEncoding: 'readonly',
       },
     },
     plugins: {

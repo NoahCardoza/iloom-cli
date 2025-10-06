@@ -1,4 +1,243 @@
-// Placeholder - will be implemented as part of Issue #4
+import fs from 'fs-extra'
+import { createLogger } from '../utils/logger.js'
+import type {
+  EnvOperationResult,
+  PortAssignmentOptions,
+} from '../types/environment.js'
+import {
+  parseEnvFile,
+  formatEnvLine,
+  validateEnvVariable,
+} from '../utils/env.js'
+
+const logger = createLogger({ prefix: '📝' })
+
 export class EnvironmentManager {
-  // TODO: Implement in Issue #4
+  private readonly backupSuffix: string = '.backup'
+
+  /**
+   * Set or update an environment variable in a .env file
+   * Ports functionality from bash/utils/env-utils.sh:setEnvVar()
+   */
+  async setEnvVar(
+    filePath: string,
+    key: string,
+    value: string,
+    backup: boolean = false
+  ): Promise<EnvOperationResult> {
+    try {
+      // Validate variable name
+      const validation = validateEnvVariable(key, value)
+      if (!validation.valid) {
+        return {
+          success: false,
+          error: validation.error ?? 'Invalid variable name',
+        }
+      }
+
+      const fileExists = await fs.pathExists(filePath)
+
+      if (!fileExists) {
+        // File doesn't exist, create it
+        logger.info(`Creating ${filePath} with ${key}...`)
+        const content = formatEnvLine(key, value)
+        await fs.writeFile(filePath, content, 'utf8')
+        logger.success(`${filePath} created with ${key}`)
+        return { success: true }
+      }
+
+      // File exists, read and parse it
+      const existingContent = await fs.readFile(filePath, 'utf8')
+      const envMap = parseEnvFile(existingContent)
+
+      // Create backup if requested
+      let backupPath: string | undefined
+      if (backup) {
+        backupPath = await this.createBackup(filePath)
+      }
+
+      // Update or add the variable
+      envMap.set(key, value)
+
+      // Rebuild the file content, preserving comments and empty lines
+      const lines = existingContent.split('\n')
+      const newLines: string[] = []
+      let variableUpdated = false
+
+      for (const line of lines) {
+        const trimmedLine = line.trim()
+
+        // Preserve comments and empty lines
+        if (!trimmedLine || trimmedLine.startsWith('#')) {
+          newLines.push(line)
+          continue
+        }
+
+        // Remove 'export ' prefix if present
+        const cleanLine = trimmedLine.startsWith('export ')
+          ? trimmedLine.substring(7)
+          : trimmedLine
+
+        // Check if this line contains our variable
+        const equalsIndex = cleanLine.indexOf('=')
+        if (equalsIndex !== -1) {
+          const lineKey = cleanLine.substring(0, equalsIndex).trim()
+          if (lineKey === key) {
+            // Replace this line with the new value
+            newLines.push(formatEnvLine(key, value))
+            variableUpdated = true
+            continue
+          }
+        }
+
+        // Keep other lines as-is
+        newLines.push(line)
+      }
+
+      // If variable wasn't in the file, add it at the end
+      if (!variableUpdated) {
+        logger.info(`Adding ${key} to ${filePath}...`)
+        newLines.push(formatEnvLine(key, value))
+        logger.success(`${key} added successfully`)
+      } else {
+        logger.info(`Updating ${key} in ${filePath}...`)
+        logger.success(`${key} updated successfully`)
+      }
+
+      // Write the updated content
+      const newContent = newLines.join('\n')
+      await fs.writeFile(filePath, newContent, 'utf8')
+
+      const result: EnvOperationResult = { success: true }
+      if (backupPath) {
+        result.backupPath = backupPath
+      }
+      return result
+    } catch (error) {
+      logger.error(
+        `Failed to set environment variable: ${error instanceof Error ? error.message : String(error)}`
+      )
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
+  }
+
+  /**
+   * Read and parse a .env file
+   */
+  async readEnvFile(filePath: string): Promise<Map<string, string>> {
+    try {
+      const content = await fs.readFile(filePath, 'utf8')
+      return parseEnvFile(content)
+    } catch (error) {
+      // If file doesn't exist or can't be read, return empty map
+      logger.debug(
+        `Could not read env file ${filePath}: ${error instanceof Error ? error.message : String(error)}`
+      )
+      return new Map()
+    }
+  }
+
+  /**
+   * Copy .env file from source to destination
+   */
+  async copyEnvFile(
+    source: string,
+    destination: string,
+    options?: { overwrite?: boolean }
+  ): Promise<void> {
+    const sourceExists = await fs.pathExists(source)
+    if (!sourceExists) {
+      throw new Error(`Source file ${source} does not exist`)
+    }
+
+    const overwrite = options?.overwrite ?? true
+    await fs.copy(source, destination, { overwrite })
+    logger.success(`Copied ${source} to ${destination}`)
+  }
+
+  /**
+   * Calculate unique port for workspace
+   * Implements: 3000 + issue/PR number
+   */
+  calculatePort(options: PortAssignmentOptions): number {
+    const basePort = options.basePort ?? 3000
+    const offset = options.issueNumber ?? options.prNumber ?? 0
+    const port = basePort + offset
+
+    // Ensure port is in valid range (1-65535)
+    if (port > 65535) {
+      throw new Error(
+        `Calculated port ${port} exceeds maximum (65535). Use a lower base port or issue number.`
+      )
+    }
+
+    return port
+  }
+
+  /**
+   * Set port environment variable for workspace
+   */
+  async setPortForWorkspace(
+    envFilePath: string,
+    issueNumber?: number,
+    prNumber?: number
+  ): Promise<number> {
+    const options: PortAssignmentOptions = {}
+    if (issueNumber !== undefined) {
+      options.issueNumber = issueNumber
+    }
+    if (prNumber !== undefined) {
+      options.prNumber = prNumber
+    }
+    const port = this.calculatePort(options)
+    await this.setEnvVar(envFilePath, 'PORT', String(port))
+    return port
+  }
+
+  /**
+   * Validate environment configuration
+   */
+  async validateEnvFile(
+    filePath: string
+  ): Promise<{ valid: boolean; errors: string[] }> {
+    try {
+      const content = await fs.readFile(filePath, 'utf8')
+      const envMap = parseEnvFile(content)
+      const errors: string[] = []
+
+      // Validate each variable name
+      for (const [key, value] of envMap.entries()) {
+        const validation = validateEnvVariable(key, value)
+        if (!validation.valid) {
+          errors.push(`${key}: ${validation.error}`)
+        }
+      }
+
+      return {
+        valid: errors.length === 0,
+        errors,
+      }
+    } catch (error) {
+      return {
+        valid: false,
+        errors: [
+          `Failed to read or parse file: ${error instanceof Error ? error.message : String(error)}`,
+        ],
+      }
+    }
+  }
+
+  /**
+   * Create backup of existing file
+   */
+  private async createBackup(filePath: string): Promise<string> {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const backupPath = `${filePath}${this.backupSuffix}-${timestamp}`
+    await fs.copy(filePath, backupPath)
+    logger.debug(`Created backup at ${backupPath}`)
+    return backupPath
+  }
 }

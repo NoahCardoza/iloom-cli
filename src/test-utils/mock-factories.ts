@@ -360,6 +360,34 @@ export class MockFileSystem {
     })
   }
 
+  setupEnvFile(path: string, variables: Record<string, string>): void {
+    const content = Object.entries(variables)
+      .map(([key, value]) => `${key}="${value}"`)
+      .join('\n')
+    this.files.set(path, content)
+  }
+
+  mockPathExists(path: string): ReturnType<typeof vi.fn> {
+    return vi
+      .fn()
+      .mockResolvedValue(
+        this.files.has(path) || this.directories.has(path)
+      )
+  }
+
+  mockCopyFile(): ReturnType<typeof vi.fn> {
+    return vi.fn().mockImplementation((src: string, dest: string) => {
+      const content = this.files.get(src)
+      if (!content) throw new Error(`Source file ${src} not found`)
+      this.files.set(dest, content)
+      return Promise.resolve()
+    })
+  }
+
+  getFileContent(path: string): string | undefined {
+    return this.files.get(path)
+  }
+
   reset(): void {
     this.files.clear()
     this.directories.clear()

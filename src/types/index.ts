@@ -120,3 +120,6 @@ export interface MockOptions {
 
 // Worktree management types
 export * from './worktree.js'
+
+// Environment management types
+export * from './environment.js'
