@@ -715,11 +715,11 @@ hatchbox-ai/
    - Required by start/finish commands
    - Enhanced PR workflow support
 
-6. **Issue #11** - Claude Context Generation ⭐ HIGH PRIORITY
+6. **Issue #11** - Claude Context Generation ⭐ HIGH PRIORITY - DEFERRED - NEEDS TO HAVE "STEPS" in (research, plan, etc)
    - Structured prompt template system
    - Required by start command
 
-7. **Issue #12** - Claude CLI Integration
+7. **Issue #12** - Claude CLI Integration - DONE
    - Required by start/finish commands
    - Prompt system integration
 

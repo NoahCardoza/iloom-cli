@@ -167,43 +167,11 @@ export class ClaudeBranchNameStrategy implements BranchNameStrategy {
 	constructor(private claudeModel = 'claude-3-5-haiku-20241022') {}
 
 	async generate(issueNumber: number, title: string): Promise<string> {
-		try {
-			logger.debug('Generating branch name with Claude', { issueNumber, title })
+		// Import dynamically to avoid circular dependency
+		const { generateBranchName } = await import('../utils/claude.js')
 
-			// Simplified prompt without newlines for better CLI compatibility
-			const prompt = `Generate a git branch name for <IssueTitle>${title}</IssueTitle>. Requirements: max 50 chars, lowercase/numbers/hyphens only, format: {prefix}/issue-${issueNumber}-{description}, where prefix is feat/fix/docs/refactor/test/chore. Reply with ONLY the branch name.`
-
-			// Use stdin to pass the prompt to avoid shell escaping issues
-			const result = await execa(
-				'claude',
-				['-p', '--model', this.claudeModel],
-				{
-					input: prompt,
-					timeout: 10000, // Increase timeout to 10s for Claude response
-				}
-			)
-
-			const branchName = result.stdout.trim()
-
-			// Validate generated name
-			if (!branchName || !this.isValidBranchName(branchName)) {
-				logger.warn('Invalid branch name from Claude, using fallback', {
-					branchName,
-				})
-				return new SimpleBranchNameStrategy().generate(issueNumber, title)
-			}
-
-			return branchName
-		} catch (error) {
-			logger.warn('Failed to generate branch name with Claude', { error })
-			return new SimpleBranchNameStrategy().generate(issueNumber, title)
-		}
-	}
-
-	private isValidBranchName(name: string): boolean {
-		// Check format: {prefix}/issue-{number}-{description}
-		const pattern = /^(feat|fix|docs|refactor|test|chore)\/issue-\d+-[a-z0-9-]+$/
-		return pattern.test(name) && name.length <= 50
+		// Delegate to the shared implementation
+		return generateBranchName(title, issueNumber, this.claudeModel)
 	}
 }
 

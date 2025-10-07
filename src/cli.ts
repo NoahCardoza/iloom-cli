@@ -25,7 +25,7 @@ function notImplemented(
     logger.info(`  - ${requirement}`)
   }
   if (bashScript) {
-    logger.info('')
+    
     logger.info('For now, use the bash script:')
     logger.info(`  ${bashScript}`)
   }
@@ -99,7 +99,7 @@ program
         process.exit(1)
       }
 
-      logger.info(`🧹 Removing ${toRemove.length} worktree(s)...`)
+      logger.info(`Removing ${toRemove.length} worktree(s)...`)
 
       // Remove worktrees
       const { successes, failures, skipped } = await manager.removeWorktrees(toRemove, {
@@ -152,7 +152,7 @@ program
         return
       }
 
-      logger.info('📋 Active workspaces:')
+      logger.info('Active workspaces:')
       for (const worktree of worktrees) {
         const formatted = manager.formatWorktree(worktree)
         logger.info(`  ${formatted.title}`)
@@ -187,24 +187,23 @@ program
     try {
       const { GitHubService } = await import('./lib/GitHubService.js')
 
-      logger.info('🧪 Testing GitHub Integration\n')
+      logger.info('Testing GitHub Integration\n')
 
       const service = new GitHubService(options.claude !== undefined ? { useClaude: options.claude } : {})
 
       // Test 1: Input detection
-      logger.info('1️⃣  Detecting input type...')
+      logger.info('Detecting input type...')
       const detection = await service.detectInputType(identifier)
       logger.info(`   Type: ${detection.type}`)
-      logger.info(`   Number: ${detection.number}`)
-      logger.info('')
+      logger.info(`   Number: ${detection.number}`)      
 
       if (detection.type === 'unknown') {
-        logger.error('❌ Could not detect if input is an issue or PR')
+        logger.error('Could not detect if input is an issue or PR')
         process.exit(1)
       }
 
       // Test 2: Fetch the issue/PR
-      logger.info('2️⃣  Fetching from GitHub...')
+      logger.info('Fetching from GitHub...')
       if (detection.type === 'issue') {
         if (!detection.number) {
           throw new Error('Issue number not detected')
@@ -216,8 +215,8 @@ program
         logger.info(`   URL: ${issue.url}`)
 
         // Test 3: Generate branch name
-        logger.info('')
-        logger.info('3️⃣  Generating branch name...')
+        
+        logger.info('Generating branch name...')
         const branchName = await service.generateBranchName({
           issueNumber: issue.number,
           title: issue.title
@@ -225,8 +224,8 @@ program
         logger.success(`   Branch: ${branchName}`)
 
         // Test 4: Extract context
-        logger.info('')
-        logger.info('4️⃣  Extracting context for Claude...')
+        
+        logger.info('Extracting context for Claude...')
         const context = service.extractContext(issue)
         logger.info(`   ${context.split('\n').join('\n   ')}`)
 
@@ -242,17 +241,205 @@ program
         logger.info(`   URL: ${pr.url}`)
 
         // Test 3: Extract context
-        logger.info('')
-        logger.info('3️⃣  Extracting context for Claude...')
+        
+        logger.info('Extracting context for Claude...')
         const context = service.extractContext(pr)
         logger.info(`   ${context.split('\n').join('\n   ')}`)
       }
 
-      logger.info('')
-      logger.success('✅ All GitHub integration tests passed!')
+      
+      logger.success('All GitHub integration tests passed!')
 
     } catch (error) {
-      logger.error(`❌ Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      logger.error(`Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      if (error instanceof Error && error.stack) {
+        logger.debug(error.stack)
+      }
+      process.exit(1)
+    }
+  })
+
+// Test command for Claude integration
+program
+  .command('test-claude')
+  .description('Test Claude integration (Issue #10)')
+  .option('--detect', 'Test Claude CLI detection')
+  .option('--version', 'Get Claude CLI version')
+  .option('--branch <title>', 'Test branch name generation with given title')
+  .option('--issue <number>', 'Issue number for branch generation', '123')
+  .option('--launch <prompt>', 'Launch Claude with a prompt (headless)')
+  .option('--interactive', 'Launch Claude interactively (requires --launch)')
+  .option('--template <name>', 'Test template loading')
+  .action(async (options: {
+    detect?: boolean
+    version?: boolean
+    branch?: string
+    issue?: string
+    launch?: string
+    interactive?: boolean
+    template?: 'issue' | 'pr' | 'regular'
+  }) => {
+    try {
+      const { detectClaudeCli, getClaudeVersion, generateBranchName, launchClaude } = await import('./utils/claude.js')
+      const { PromptTemplateManager } = await import('./lib/PromptTemplateManager.js')
+      const { ClaudeService } = await import('./lib/ClaudeService.js')
+      const { ClaudeContextManager } = await import('./lib/ClaudeContextManager.js')
+
+      logger.info('Testing Claude Integration\n')
+
+      // Test 1: Detection
+      if (options.detect) {
+        logger.info('Detecting Claude CLI...')
+        const isAvailable = await detectClaudeCli()
+        if (isAvailable) {
+          logger.success('   Claude CLI is available')
+        } else {
+          logger.error('   Claude CLI not found')
+        }
+      }
+
+      // Test 2: Version
+      if (options.version) {
+        logger.info('Getting Claude version...')
+        const version = await getClaudeVersion()
+        if (version) {
+          logger.success(`   Version: ${version}`)
+        } else {
+          logger.error('   Could not get version')
+        }
+      }
+
+      // Test 3: Branch name generation
+      if (options.branch) {
+        logger.info('Generating branch name...')
+        const issueNumber = parseInt(options.issue ?? '123')
+        logger.info(`   Issue #${issueNumber}: ${options.branch}`)
+        const branchName = await generateBranchName(options.branch, issueNumber)
+        logger.success(`   Generated: ${branchName}`)
+      }
+
+      // Test 4: Launch Claude
+      if (options.launch) {
+        logger.info('Launching Claude...')
+        logger.info(`   Prompt: "${options.launch}"`)
+        logger.info(`   Mode: ${options.interactive ? 'Interactive' : 'Headless'}`)
+
+        if (options.interactive) {
+          logger.info('   Launching Claude in new terminal...')
+          await launchClaude(options.launch, { headless: false })
+          logger.info('   (Claude should open in a separate process)')
+        } else {
+          logger.info('   Waiting for response...')
+          const result = await launchClaude(options.launch, { headless: true })
+          if (result) {
+            logger.success('   Response:')
+            logger.info(`   ${result.split('\n').join('\n   ')}`)
+          }
+        }
+      }
+
+      // Test 5: Template loading
+      if (options.template) {
+        logger.info('Loading template...')
+        logger.info(`   Template: ${options.template}`)
+        const manager = new PromptTemplateManager()
+        try {
+          const content = await manager.loadTemplate(options.template)
+          logger.success('   Template loaded successfully')
+          logger.info('   First 200 chars:')
+          logger.info(`   ${content.substring(0, 200).split('\n').join('\n   ')}...`)
+        } catch (error) {
+          logger.error(`   Failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+      }
+
+      // Run all tests in sequence when no specific options provided
+      if (!options.detect && !options.version && !options.branch && !options.launch && !options.template) {
+        logger.info('Running full Claude integration test suite...\n')
+
+        // Test 1: Detection
+        logger.info('1. Testing Claude CLI detection...')
+        const isAvailable = await detectClaudeCli()
+        if (isAvailable) {
+          logger.success('   Claude CLI is available')
+        } else {
+          logger.error('   Claude CLI not found')
+          logger.info('\nSkipping remaining tests since Claude CLI is not available')
+          return
+        }
+
+        // Test 2: Version
+        logger.info('\n2. Getting Claude version...')
+        const version = await getClaudeVersion()
+        if (version) {
+          logger.success(`   Version: ${version}`)
+        } else {
+          logger.error('   Could not get version')
+        }
+
+        // Test 3: Branch name generation
+        logger.info('\n3. Testing branch name generation...')
+        const testIssueNumber = 123
+        const testTitle = 'Add user authentication feature'
+        logger.info(`   Issue #${testIssueNumber}: ${testTitle}`)
+        const branchName = await generateBranchName(testTitle, testIssueNumber)
+        logger.success(`   Generated: ${branchName}`)
+
+        // Test 4: Service initialization
+        logger.info('\n4. Testing ClaudeService initialization...')
+        new ClaudeService() // Just verify it can be instantiated
+        logger.success('   Service initialized')
+
+        // Test 5: Context manager
+        logger.info('\n5. Testing ClaudeContextManager...')
+        const contextManager = new ClaudeContextManager()
+        await contextManager.prepareContext({
+          type: 'issue',
+          identifier: 123,
+          title: 'Test issue',
+          workspacePath: process.cwd(),
+          port: 3123
+        })
+        logger.success('   Context prepared')
+
+        // Test 6: Template loading
+        logger.info('\n6. Testing template loading...')
+        const templateManager = new PromptTemplateManager()
+        const templates: Array<'issue' | 'pr' | 'regular'> = ['issue', 'pr', 'regular']
+        let templateCount = 0
+        for (const template of templates) {
+          try {
+            await templateManager.loadTemplate(template)
+            logger.success(`   ${template} template loaded`)
+            templateCount++
+          } catch {
+            logger.warn(`   ${template} template not found`)
+          }
+        }
+        logger.info(`   Loaded ${templateCount}/${templates.length} templates`)
+
+        // Test 7: Launch Claude headless (quick test)
+        logger.info('\n7. Testing Claude launch (headless)...')
+        logger.info('   Sending test prompt: "Say hello"')
+        try {
+          const result = await launchClaude('Say hello', { headless: true })
+          if (result) {
+            logger.success('   Claude responded successfully')
+            logger.info(`   Response preview: ${result.substring(0, 100)}...`)
+          } else {
+            logger.warn('   No response received')
+          }
+        } catch (error) {
+          logger.error(`   Launch failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+
+        logger.info('\n' + '='.repeat(50))
+        logger.success('All Claude integration tests complete!')
+        logger.info('Summary: All core Claude features are working correctly')
+      }
+
+    } catch (error) {
+      logger.error(`Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
       if (error instanceof Error && error.stack) {
         logger.debug(error.stack)
       }

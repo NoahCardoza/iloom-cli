@@ -358,94 +358,32 @@ describe('github utils', () => {
 	})
 
 	describe('ClaudeBranchNameStrategy', () => {
-		it('should generate branch name using Claude', async () => {
-			vi.mocked(execa).mockResolvedValueOnce({
-				stdout: 'feat/issue-123-add-authentication',
-				stderr: '',
-				exitCode: 0,
-			} as MockExecaReturn)
+		it('should delegate to generateBranchName from claude utils', async () => {
+			// Mock the generateBranchName function from claude.ts
+			const mockGenerateBranchName = vi.fn().mockResolvedValue('feat/issue-123-add-authentication')
+			vi.doMock('../utils/claude.js', () => ({
+				generateBranchName: mockGenerateBranchName
+			}))
 
 			const strategy = new ClaudeBranchNameStrategy()
 			const name = await strategy.generate(123, 'Add authentication')
 
 			expect(name).toBe('feat/issue-123-add-authentication')
-			expect(execa).toHaveBeenCalledWith(
-				'claude',
-				expect.arrayContaining(['-p', '--model']),
-				expect.objectContaining({
-					input: expect.stringContaining('Add authentication'),
-					timeout: 10000,
-				})
-			)
-		})
-
-		it('should fall back to simple strategy on Claude failure', async () => {
-			vi.mocked(execa).mockRejectedValueOnce(new Error('Claude not available'))
-
-			const strategy = new ClaudeBranchNameStrategy()
-			const name = await strategy.generate(123, 'Add feature')
-
-			expect(name).toMatch(/^feat\/issue-123-/)
-		})
-
-		it('should fall back to simple strategy on invalid branch name', async () => {
-			vi.mocked(execa).mockResolvedValueOnce({
-				stdout: 'INVALID BRANCH NAME!',
-				stderr: '',
-				exitCode: 0,
-			} as MockExecaReturn)
-
-			const strategy = new ClaudeBranchNameStrategy()
-			const name = await strategy.generate(123, 'Add feature')
-
-			expect(name).toMatch(/^feat\/issue-123-/)
+			expect(mockGenerateBranchName).toHaveBeenCalledWith('Add authentication', 123, 'claude-3-5-haiku-20241022')
 		})
 
 		it('should use custom Claude model', async () => {
-			vi.mocked(execa).mockResolvedValueOnce({
-				stdout: 'feat/issue-123-test',
-				stderr: '',
-				exitCode: 0,
-			} as MockExecaReturn)
+			// Mock the generateBranchName function from claude.ts
+			const mockGenerateBranchName = vi.fn().mockResolvedValue('feat/issue-123-test')
+			vi.doMock('../utils/claude.js', () => ({
+				generateBranchName: mockGenerateBranchName
+			}))
 
 			const strategy = new ClaudeBranchNameStrategy('custom-model')
-			await strategy.generate(123, 'Test')
+			const name = await strategy.generate(123, 'Test')
 
-			expect(execa).toHaveBeenCalledWith(
-				'claude',
-				expect.arrayContaining(['--model', 'custom-model']),
-				expect.objectContaining({
-					input: expect.stringContaining('Test'),
-					timeout: 10000,
-				})
-			)
-		})
-
-		it('should reject branch name over 50 characters', async () => {
-			vi.mocked(execa).mockResolvedValueOnce({
-				stdout:
-					'feat/this-is-a-very-long-branch-name-that-exceeds-fifty-characters-issue-123',
-				stderr: '',
-				exitCode: 0,
-			} as MockExecaReturn)
-
-			const strategy = new ClaudeBranchNameStrategy()
-			const name = await strategy.generate(123, 'Long title')
-
-			expect(name).toMatch(/^feat\/issue-123-/)
-		})
-
-		it('should reject branch name with uppercase letters', async () => {
-			vi.mocked(execa).mockResolvedValueOnce({
-				stdout: 'Feat/Issue-123-Add-Feature',
-				stderr: '',
-				exitCode: 0,
-			} as MockExecaReturn)
-
-			const strategy = new ClaudeBranchNameStrategy()
-			const name = await strategy.generate(123, 'Add feature')
-
-			expect(name).toMatch(/^feat\/issue-123-/)
+			expect(name).toBe('feat/issue-123-test')
+			expect(mockGenerateBranchName).toHaveBeenCalledWith('Test', 123, 'custom-model')
 		})
 	})
 

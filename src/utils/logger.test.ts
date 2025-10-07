@@ -236,9 +236,24 @@ describe('Logger', () => {
 
   // Lines 382-430: Coverage edge cases
   describe('edge cases', () => {
-    it('should handle empty messages', () => {
+    it('should handle empty messages without emoji', () => {
       logger.info('')
-      expect(stdoutBuffer[0]).toContain('🗂️')
+      expect(stdoutBuffer[0]).toBe('')
+      expect(stdoutSpy).toHaveBeenCalledOnce()
+    })
+
+    it('should handle whitespace-only messages without emoji', () => {
+      logger.info('   ')
+      expect(stdoutBuffer[0]).toBe('')
+
+      logger.success(' \t ')
+      expect(stdoutBuffer[1]).toBe('')
+
+      logger.warn(' \n ')
+      expect(stderrBuffer[0]).toBe('')
+
+      logger.error('  ')
+      expect(stderrBuffer[1]).toBe('')
     })
 
     it('should handle very long messages', () => {

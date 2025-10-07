@@ -32,6 +32,14 @@ function formatMessage(message: string, ...args: unknown[]): string {
   return formattedArgs.length > 0 ? `${message} ${formattedArgs.join(' ')}` : message
 }
 
+function formatWithEmoji(message: string, emoji: string, colorFn: (str: string) => string): string {
+  if (message.trim()) {
+    return colorFn(`${emoji} ${message}`)
+  } else {
+    return ''
+  }
+}
+
 // Global debug flag - defaulting to true temporarily for debugging
 let globalDebugEnabled = true
 
@@ -40,28 +48,33 @@ let globalDebugEnabled = true
 export const logger: Logger = {
   info: (message: string, ...args: unknown[]): void => {
     const formatted = formatMessage(message, ...args)
-    console.log(stdoutChalk.blue(`🗂️  ${formatted}`))
+    const output = formatWithEmoji(formatted, '🗂️ ', stdoutChalk.blue)
+    console.log(output)
   },
 
   success: (message: string, ...args: unknown[]): void => {
     const formatted = formatMessage(message, ...args)
-    console.log(stdoutChalk.green(`✅ ${formatted}`))
+    const output = formatWithEmoji(formatted, '✅', stdoutChalk.green)
+    console.log(output)
   },
 
   warn: (message: string, ...args: unknown[]): void => {
     const formatted = formatMessage(message, ...args)
-    console.error(stderrChalk.yellow(`⚠️  ${formatted}`))
+    const output = formatWithEmoji(formatted, '⚠️ ', stderrChalk.yellow)
+    console.error(output)
   },
 
   error: (message: string, ...args: unknown[]): void => {
     const formatted = formatMessage(message, ...args)
-    console.error(stderrChalk.red(`❌ ${formatted}`))
+    const output = formatWithEmoji(formatted, '❌', stderrChalk.red)
+    console.error(output)
   },
 
   debug: (message: string, ...args: unknown[]): void => {
     if (globalDebugEnabled) {
       const formatted = formatMessage(message, ...args)
-      console.log(stdoutChalk.gray(`🔍 ${formatted}`))
+      const output = formatWithEmoji(formatted, '🔍', stdoutChalk.gray)
+      console.log(output)
     }
   },
 
@@ -105,24 +118,34 @@ export function createLogger(options: LoggerOptions = {}): Logger {
   return {
     info: (message: string, ...args: unknown[]): void => {
       const formatted = formatMessage(message, ...args)
-      console.log(customStdoutChalk.blue(`🗂️  ${getTimestamp()}${prefixStr}${formatted}`))
+      const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
+      const output = formatWithEmoji(fullMessage, '🗂️ ', customStdoutChalk.blue)
+      console.log(output)
     },
     success: (message: string, ...args: unknown[]): void => {
       const formatted = formatMessage(message, ...args)
-      console.log(customStdoutChalk.green(`✅ ${getTimestamp()}${prefixStr}${formatted}`))
+      const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
+      const output = formatWithEmoji(fullMessage, '✅', customStdoutChalk.green)
+      console.log(output)
     },
     warn: (message: string, ...args: unknown[]): void => {
       const formatted = formatMessage(message, ...args)
-      console.error(customStderrChalk.yellow(`⚠️  ${getTimestamp()}${prefixStr}${formatted}`))
+      const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
+      const output = formatWithEmoji(fullMessage, '⚠️ ', customStderrChalk.yellow)
+      console.error(output)
     },
     error: (message: string, ...args: unknown[]): void => {
       const formatted = formatMessage(message, ...args)
-      console.error(customStderrChalk.red(`❌ ${getTimestamp()}${prefixStr}${formatted}`))
+      const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
+      const output = formatWithEmoji(fullMessage, '❌', customStderrChalk.red)
+      console.error(output)
     },
     debug: (message: string, ...args: unknown[]): void => {
       if (localDebugEnabled) {
         const formatted = formatMessage(message, ...args)
-        console.log(customStdoutChalk.gray(`🔍 ${getTimestamp()}${prefixStr}${formatted}`))
+        const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
+        const output = formatWithEmoji(fullMessage, '🔍', customStdoutChalk.gray)
+        console.log(output)
       }
     },
     setDebug: (enabled: boolean): void => {
