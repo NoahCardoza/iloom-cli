@@ -109,8 +109,8 @@ export interface ListOptions {
   json?: boolean
 }
 
-// Result types
-export type Result<T, E = Error> = { success: true; data: T } | { success: false; error: E }
+// Deprecated: Result types - use exception-based error handling instead
+// export type Result<T, E = Error> = { success: true; data: T } | { success: false; error: E }
 
 // Mock factory types for testing
 export interface MockOptions {
@@ -123,3 +123,6 @@ export * from './worktree.js'
 
 // Environment management types
 export * from './environment.js'
+
+// Hatchbox types
+export * from './hatchbox.js'

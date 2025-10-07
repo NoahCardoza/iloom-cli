@@ -1,7 +1,6 @@
 import fs from 'fs-extra'
 import { createLogger } from '../utils/logger.js'
 import type {
-  EnvOperationResult,
   PortAssignmentOptions,
 } from '../types/environment.js'
 import {
@@ -18,110 +17,94 @@ export class EnvironmentManager {
   /**
    * Set or update an environment variable in a .env file
    * Ports functionality from bash/utils/env-utils.sh:setEnvVar()
+   * @returns The backup path if a backup was created
    */
   async setEnvVar(
     filePath: string,
     key: string,
     value: string,
     backup: boolean = false
-  ): Promise<EnvOperationResult> {
-    try {
-      // Validate variable name
-      const validation = validateEnvVariable(key, value)
-      if (!validation.valid) {
-        return {
-          success: false,
-          error: validation.error ?? 'Invalid variable name',
-        }
+  ): Promise<string | void> {
+    // Validate variable name
+    const validation = validateEnvVariable(key, value)
+    if (!validation.valid) {
+      throw new Error(validation.error ?? 'Invalid variable name')
+    }
+
+    const fileExists = await fs.pathExists(filePath)
+
+    if (!fileExists) {
+      // File doesn't exist, create it
+      logger.info(`Creating ${filePath} with ${key}...`)
+      const content = formatEnvLine(key, value)
+      await fs.writeFile(filePath, content, 'utf8')
+      logger.success(`${filePath} created with ${key}`)
+      return
+    }
+
+    // File exists, read and parse it
+    const existingContent = await fs.readFile(filePath, 'utf8')
+    const envMap = parseEnvFile(existingContent)
+
+    // Create backup if requested
+    let backupPath: string | undefined
+    if (backup) {
+      backupPath = await this.createBackup(filePath)
+    }
+
+    // Update or add the variable
+    envMap.set(key, value)
+
+    // Rebuild the file content, preserving comments and empty lines
+    const lines = existingContent.split('\n')
+    const newLines: string[] = []
+    let variableUpdated = false
+
+    for (const line of lines) {
+      const trimmedLine = line.trim()
+
+      // Preserve comments and empty lines
+      if (!trimmedLine || trimmedLine.startsWith('#')) {
+        newLines.push(line)
+        continue
       }
 
-      const fileExists = await fs.pathExists(filePath)
+      // Remove 'export ' prefix if present
+      const cleanLine = trimmedLine.startsWith('export ')
+        ? trimmedLine.substring(7)
+        : trimmedLine
 
-      if (!fileExists) {
-        // File doesn't exist, create it
-        logger.info(`Creating ${filePath} with ${key}...`)
-        const content = formatEnvLine(key, value)
-        await fs.writeFile(filePath, content, 'utf8')
-        logger.success(`${filePath} created with ${key}`)
-        return { success: true }
-      }
-
-      // File exists, read and parse it
-      const existingContent = await fs.readFile(filePath, 'utf8')
-      const envMap = parseEnvFile(existingContent)
-
-      // Create backup if requested
-      let backupPath: string | undefined
-      if (backup) {
-        backupPath = await this.createBackup(filePath)
-      }
-
-      // Update or add the variable
-      envMap.set(key, value)
-
-      // Rebuild the file content, preserving comments and empty lines
-      const lines = existingContent.split('\n')
-      const newLines: string[] = []
-      let variableUpdated = false
-
-      for (const line of lines) {
-        const trimmedLine = line.trim()
-
-        // Preserve comments and empty lines
-        if (!trimmedLine || trimmedLine.startsWith('#')) {
-          newLines.push(line)
+      // Check if this line contains our variable
+      const equalsIndex = cleanLine.indexOf('=')
+      if (equalsIndex !== -1) {
+        const lineKey = cleanLine.substring(0, equalsIndex).trim()
+        if (lineKey === key) {
+          // Replace this line with the new value
+          newLines.push(formatEnvLine(key, value))
+          variableUpdated = true
           continue
         }
-
-        // Remove 'export ' prefix if present
-        const cleanLine = trimmedLine.startsWith('export ')
-          ? trimmedLine.substring(7)
-          : trimmedLine
-
-        // Check if this line contains our variable
-        const equalsIndex = cleanLine.indexOf('=')
-        if (equalsIndex !== -1) {
-          const lineKey = cleanLine.substring(0, equalsIndex).trim()
-          if (lineKey === key) {
-            // Replace this line with the new value
-            newLines.push(formatEnvLine(key, value))
-            variableUpdated = true
-            continue
-          }
-        }
-
-        // Keep other lines as-is
-        newLines.push(line)
       }
 
-      // If variable wasn't in the file, add it at the end
-      if (!variableUpdated) {
-        logger.info(`Adding ${key} to ${filePath}...`)
-        newLines.push(formatEnvLine(key, value))
-        logger.success(`${key} added successfully`)
-      } else {
-        logger.info(`Updating ${key} in ${filePath}...`)
-        logger.success(`${key} updated successfully`)
-      }
-
-      // Write the updated content
-      const newContent = newLines.join('\n')
-      await fs.writeFile(filePath, newContent, 'utf8')
-
-      const result: EnvOperationResult = { success: true }
-      if (backupPath) {
-        result.backupPath = backupPath
-      }
-      return result
-    } catch (error) {
-      logger.error(
-        `Failed to set environment variable: ${error instanceof Error ? error.message : String(error)}`
-      )
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      }
+      // Keep other lines as-is
+      newLines.push(line)
     }
+
+    // If variable wasn't in the file, add it at the end
+    if (!variableUpdated) {
+      logger.info(`Adding ${key} to ${filePath}...`)
+      newLines.push(formatEnvLine(key, value))
+      logger.success(`${key} added successfully`)
+    } else {
+      logger.info(`Updating ${key} in ${filePath}...`)
+      logger.success(`${key} updated successfully`)
+    }
+
+    // Write the updated content
+    const newContent = newLines.join('\n')
+    await fs.writeFile(filePath, newContent, 'utf8')
+
+    return backupPath
   }
 
   /**

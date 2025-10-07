@@ -5,6 +5,25 @@ import { GitHubService } from '../lib/GitHubService.js'
 // Mock the GitHubService
 vi.mock('../lib/GitHubService.js')
 
+// Mock the HatchboxManager and its dependencies
+vi.mock('../lib/HatchboxManager.js', () => ({
+	HatchboxManager: vi.fn(() => ({
+		createHatchbox: vi.fn().mockResolvedValue({
+			id: 'test-hatchbox-123',
+			path: '/test/path',
+			branch: 'test-branch',
+			type: 'issue',
+			identifier: 123,
+			port: 3123,
+			createdAt: new Date(),
+			githubData: null,
+		}),
+	})),
+}))
+vi.mock('../lib/GitWorktreeManager.js')
+vi.mock('../lib/EnvironmentManager.js')
+vi.mock('../lib/ClaudeContextManager.js')
+
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
 	logger: {
@@ -14,6 +33,13 @@ vi.mock('../utils/logger.js', () => ({
 		debug: vi.fn(),
 		success: vi.fn(),
 	},
+	createLogger: vi.fn(() => ({
+		info: vi.fn(),
+		error: vi.fn(),
+		warn: vi.fn(),
+		debug: vi.fn(),
+		success: vi.fn(),
+	})),
 }))
 
 describe('StartCommand', () => {

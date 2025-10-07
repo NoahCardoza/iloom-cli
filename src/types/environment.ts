@@ -9,6 +9,9 @@ export interface EnvFileOptions {
   encoding?: BufferEncoding
 }
 
+/**
+ * @deprecated Use exception-based error handling instead
+ */
 export interface EnvOperationResult {
   success: boolean
   backupPath?: string

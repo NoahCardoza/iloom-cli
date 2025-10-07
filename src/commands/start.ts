@@ -1,5 +1,9 @@
 import { logger } from '../utils/logger.js'
 import { GitHubService } from '../lib/GitHubService.js'
+import { HatchboxManager } from '../lib/HatchboxManager.js'
+import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { EnvironmentManager } from '../lib/EnvironmentManager.js'
+import { ClaudeContextManager } from '../lib/ClaudeContextManager.js'
 import type { StartOptions } from '../types/index.js'
 
 export interface StartCommandInput {
@@ -16,9 +20,18 @@ export interface ParsedInput {
 
 export class StartCommand {
 	private gitHubService: GitHubService
+	private hatchboxManager: HatchboxManager
 
-	constructor(gitHubService?: GitHubService) {
+	constructor(gitHubService?: GitHubService, hatchboxManager?: HatchboxManager) {
 		this.gitHubService = gitHubService ?? new GitHubService()
+		this.hatchboxManager =
+			hatchboxManager ??
+			new HatchboxManager(
+				new GitWorktreeManager(),
+				this.gitHubService,
+				new EnvironmentManager(),
+				new ClaudeContextManager()
+			)
 	}
 
 	/**
@@ -32,15 +45,31 @@ export class StartCommand {
 			// Step 2: Validate based on type
 			await this.validateInput(parsed)
 
-			// Step 3: Log success and prepare for next steps (HatchboxManager)
+			// Step 3: Log success and create hatchbox
 			logger.info(`✅ Validated input: ${this.formatParsedInput(parsed)}`)
 
-			// TODO: Issue #41 - Create hatchbox using HatchboxManager
-			// The HatchboxManager will orchestrate the creation of the workspace
-			// including worktree setup, environment configuration, and Claude integration
-			logger.warn(
-				'Hatchbox creation not yet implemented (requires Issue #41 - HatchboxManager)'
-			)
+			// Step 4: Create hatchbox using HatchboxManager
+			const identifier =
+				parsed.type === 'branch'
+					? parsed.branchName ?? ''
+					: parsed.number ?? 0
+
+			const hatchbox = await this.hatchboxManager.createHatchbox({
+				type: parsed.type,
+				identifier,
+				originalInput: parsed.originalInput,
+				options: {
+					...(input.options.urgent !== undefined && { urgent: input.options.urgent }),
+					skipClaude: !input.options.claude,
+				},
+			})
+
+			logger.success(`✅ Created hatchbox: ${hatchbox.id} at ${hatchbox.path}`)
+			logger.info(`   Branch: ${hatchbox.branch}`)
+			logger.info(`   Port: ${hatchbox.port}`)
+			if (hatchbox.githubData?.title) {
+				logger.info(`   Title: ${hatchbox.githubData.title}`)
+			}
 		} catch (error) {
 			if (error instanceof Error) {
 				logger.error(`❌ ${error.message}`)

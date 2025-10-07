@@ -60,11 +60,7 @@ describe('GitWorktreeManager', () => {
         },
       ]
 
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: 'mock worktree output',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('mock worktree output')
 
       vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
 
@@ -78,11 +74,7 @@ describe('GitWorktreeManager', () => {
     })
 
     it('should include porcelain flag when requested', async () => {
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: '',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('')
       vi.mocked(gitUtils.parseWorktreeList).mockReturnValue([])
 
       await manager.listWorktrees({ porcelain: true })
@@ -93,11 +85,7 @@ describe('GitWorktreeManager', () => {
     })
 
     it('should include verbose flag when requested', async () => {
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: '',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('')
       vi.mocked(gitUtils.parseWorktreeList).mockReturnValue([])
 
       await manager.listWorktrees({ verbose: true })
@@ -108,16 +96,11 @@ describe('GitWorktreeManager', () => {
     })
 
     it('should throw error when git command fails', async () => {
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: false,
-        message: '',
-        error: 'Git command failed',
-        exitCode: 1,
-      })
-
-      await expect(manager.listWorktrees()).rejects.toThrow(
-        'Failed to list worktrees: Git command failed'
+      vi.mocked(gitUtils.executeGitCommand).mockRejectedValue(
+        new Error('Git command failed: Git command failed')
       )
+
+      await expect(manager.listWorktrees()).rejects.toThrow('Git command failed')
     })
   })
 
@@ -144,11 +127,7 @@ describe('GitWorktreeManager', () => {
         targetWorktree,
       ]
 
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: 'mock output',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('mock output')
       vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
 
       const result = await manager.findWorktreeForBranch('feature-branch')
@@ -168,11 +147,7 @@ describe('GitWorktreeManager', () => {
         },
       ]
 
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: 'mock output',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('mock output')
       vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
 
       const result = await manager.findWorktreeForBranch('non-existent')
@@ -267,36 +242,27 @@ describe('GitWorktreeManager', () => {
       }
 
       vi.mocked(fs.pathExists).mockResolvedValue(false)
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: 'Worktree created successfully',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('Worktree created successfully')
 
       const result = await manager.createWorktree(options)
 
-      expect(result.success).toBe(true)
-      expect(result.message).toBe('Worktree created successfully')
+      expect(result).toBe(path.resolve('/test/new-worktree'))
       expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(
         ['worktree', 'add', '-b', 'new-feature', path.resolve('/test/new-worktree'), 'main'],
         { cwd: mockRepoPath }
       )
     })
 
-    it('should fail when branch name is missing', async () => {
+    it('should throw when branch name is missing', async () => {
       const options = {
         path: '/test/new-worktree',
         branch: '',
       }
 
-      const result = await manager.createWorktree(options)
-
-      expect(result.success).toBe(false)
-      expect(result.error).toBe('Branch name is required')
-      expect(result.exitCode).toBe(1)
+      await expect(manager.createWorktree(options)).rejects.toThrow('Branch name is required')
     })
 
-    it('should fail when path exists and force is false', async () => {
+    it('should throw when path exists and force is false', async () => {
       const options = {
         path: '/test/existing-path',
         branch: 'new-feature',
@@ -304,11 +270,7 @@ describe('GitWorktreeManager', () => {
 
       vi.mocked(fs.pathExists).mockResolvedValue(true)
 
-      const result = await manager.createWorktree(options)
-
-      expect(result.success).toBe(false)
-      expect(result.error).toContain('Path already exists')
-      expect(result.exitCode).toBe(1)
+      await expect(manager.createWorktree(options)).rejects.toThrow('Path already exists')
     })
 
     it('should remove existing path when force is true', async () => {
@@ -320,15 +282,11 @@ describe('GitWorktreeManager', () => {
 
       vi.mocked(fs.pathExists).mockResolvedValue(true)
       vi.mocked(fs.remove).mockResolvedValue()
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: 'Worktree created',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('Worktree created')
 
       const result = await manager.createWorktree(options)
 
-      expect(result.success).toBe(true)
+      expect(result).toBe(path.resolve('/test/existing-path'))
       expect(fs.remove).toHaveBeenCalledWith(path.resolve('/test/existing-path'))
     })
 
@@ -340,11 +298,7 @@ describe('GitWorktreeManager', () => {
       }
 
       vi.mocked(fs.pathExists).mockResolvedValue(false)
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: 'Worktree created',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('Worktree created')
 
       await manager.createWorktree(options)
 
@@ -369,17 +323,12 @@ describe('GitWorktreeManager', () => {
         },
       ]
 
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: 'Worktree removed',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('Worktree removed')
       vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
       vi.mocked(gitUtils.hasUncommittedChanges).mockResolvedValue(false)
 
-      const result = await manager.removeWorktree(worktreePath)
+      await manager.removeWorktree(worktreePath)
 
-      expect(result.success).toBe(true)
       expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(
         ['worktree', 'remove', worktreePath],
         {
@@ -388,24 +337,16 @@ describe('GitWorktreeManager', () => {
       )
     })
 
-    it('should fail when worktree not found', async () => {
+    it('should throw when worktree not found', async () => {
       const worktreePath = '/test/non-existent'
 
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: '',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('')
       vi.mocked(gitUtils.parseWorktreeList).mockReturnValue([])
 
-      const result = await manager.removeWorktree(worktreePath)
-
-      expect(result.success).toBe(false)
-      expect(result.error).toContain('Worktree not found')
-      expect(result.exitCode).toBe(1)
+      await expect(manager.removeWorktree(worktreePath)).rejects.toThrow('Worktree not found')
     })
 
-    it('should fail when worktree has uncommitted changes without force', async () => {
+    it('should throw when worktree has uncommitted changes without force', async () => {
       const worktreePath = '/test/worktree-feature'
       const mockWorktrees = [
         {
@@ -418,19 +359,11 @@ describe('GitWorktreeManager', () => {
         },
       ]
 
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: '',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('')
       vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
       vi.mocked(gitUtils.hasUncommittedChanges).mockResolvedValue(true)
 
-      const result = await manager.removeWorktree(worktreePath)
-
-      expect(result.success).toBe(false)
-      expect(result.error).toContain('uncommitted changes')
-      expect(result.exitCode).toBe(1)
+      await expect(manager.removeWorktree(worktreePath)).rejects.toThrow('uncommitted changes')
     })
 
     it('should perform dry run when requested', async () => {
@@ -446,18 +379,12 @@ describe('GitWorktreeManager', () => {
         },
       ]
 
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: '',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('')
       vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
 
       const result = await manager.removeWorktree(worktreePath, { dryRun: true })
 
-      expect(result.success).toBe(true)
-      expect(result.message).toContain('Would perform')
-      expect(result.exitCode).toBe(0)
+      expect(result).toContain('Would perform')
     })
 
     it('should remove directory when removeDirectory option is true', async () => {
@@ -473,19 +400,14 @@ describe('GitWorktreeManager', () => {
         },
       ]
 
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: 'Worktree removed',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('Worktree removed')
       vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
       vi.mocked(gitUtils.hasUncommittedChanges).mockResolvedValue(false)
       vi.mocked(fs.pathExists).mockResolvedValue(true)
       vi.mocked(fs.remove).mockResolvedValue()
 
-      const result = await manager.removeWorktree(worktreePath, { removeDirectory: true })
+      await manager.removeWorktree(worktreePath, { removeDirectory: true })
 
-      expect(result.success).toBe(true)
       expect(fs.remove).toHaveBeenCalledWith(worktreePath)
     })
   })
@@ -507,11 +429,7 @@ describe('GitWorktreeManager', () => {
       vi.mocked(fs.pathExists).mockResolvedValue(true)
       vi.mocked(gitUtils.isValidGitRepo).mockResolvedValue(true)
       vi.mocked(gitUtils.getCurrentBranch).mockResolvedValue('feature-branch')
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: '',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('')
       vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
 
       const result = await manager.validateWorktree(worktreePath)
@@ -527,11 +445,7 @@ describe('GitWorktreeManager', () => {
       const worktreePath = '/test/missing-worktree'
 
       vi.mocked(fs.pathExists).mockResolvedValue(false)
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: '',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('')
       vi.mocked(gitUtils.parseWorktreeList).mockReturnValue([])
 
       const result = await manager.validateWorktree(worktreePath)
@@ -547,11 +461,7 @@ describe('GitWorktreeManager', () => {
 
       vi.mocked(fs.pathExists).mockResolvedValue(true)
       vi.mocked(gitUtils.isValidGitRepo).mockResolvedValue(false)
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: '',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('')
       vi.mocked(gitUtils.parseWorktreeList).mockReturnValue([])
 
       const result = await manager.validateWorktree(worktreePath)
@@ -567,16 +477,8 @@ describe('GitWorktreeManager', () => {
       const worktreePath = '/test/worktree-feature'
 
       vi.mocked(gitUtils.executeGitCommand)
-        .mockResolvedValueOnce({
-          success: true,
-          message: ' M file1.txt\n?? file2.txt\nA  file3.txt',
-          exitCode: 0,
-        })
-        .mockResolvedValueOnce({
-          success: true,
-          message: '0\t1',
-          exitCode: 0,
-        })
+        .mockResolvedValueOnce(' M file1.txt\n?? file2.txt\nA  file3.txt')
+        .mockResolvedValueOnce('0\t1')
 
       vi.mocked(gitUtils.getCurrentBranch).mockResolvedValue('feature-branch')
 
@@ -596,17 +498,8 @@ describe('GitWorktreeManager', () => {
       const worktreePath = '/test/clean-worktree'
 
       vi.mocked(gitUtils.executeGitCommand)
-        .mockResolvedValueOnce({
-          success: true,
-          message: '',
-          exitCode: 0,
-        })
-        .mockResolvedValueOnce({
-          success: false,
-          message: '',
-          error: 'No upstream',
-          exitCode: 1,
-        })
+        .mockResolvedValueOnce('')
+        .mockRejectedValueOnce(new Error('No upstream'))
 
       vi.mocked(gitUtils.getCurrentBranch).mockResolvedValue('main')
 
@@ -691,16 +584,10 @@ describe('GitWorktreeManager', () => {
 
   describe('pruneWorktrees', () => {
     it('should prune stale worktrees', async () => {
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: 'Pruned worktrees',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('Pruned worktrees')
 
-      const result = await manager.pruneWorktrees()
+      await manager.pruneWorktrees()
 
-      expect(result.success).toBe(true)
-      expect(result.message).toBe('Pruned worktrees')
       expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(['worktree', 'prune', '-v'], {
         cwd: mockRepoPath,
       })
@@ -711,15 +598,10 @@ describe('GitWorktreeManager', () => {
     it('should lock worktree without reason', async () => {
       const worktreePath = '/test/worktree'
 
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: 'Worktree locked',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('Worktree locked')
 
-      const result = await manager.lockWorktree(worktreePath)
+      await manager.lockWorktree(worktreePath)
 
-      expect(result.success).toBe(true)
       expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(['worktree', 'lock', worktreePath], {
         cwd: mockRepoPath,
       })
@@ -729,15 +611,10 @@ describe('GitWorktreeManager', () => {
       const worktreePath = '/test/worktree'
       const reason = 'Under maintenance'
 
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: 'Worktree locked',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('Worktree locked')
 
-      const result = await manager.lockWorktree(worktreePath, reason)
+      await manager.lockWorktree(worktreePath, reason)
 
-      expect(result.success).toBe(true)
       expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(
         ['worktree', 'lock', worktreePath, '--reason', reason],
         { cwd: mockRepoPath }
@@ -749,15 +626,10 @@ describe('GitWorktreeManager', () => {
     it('should unlock worktree', async () => {
       const worktreePath = '/test/worktree'
 
-      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue({
-        success: true,
-        message: 'Worktree unlocked',
-        exitCode: 0,
-      })
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('Worktree unlocked')
 
-      const result = await manager.unlockWorktree(worktreePath)
+      await manager.unlockWorktree(worktreePath)
 
-      expect(result.success).toBe(true)
       expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(
         ['worktree', 'unlock', worktreePath],
         {

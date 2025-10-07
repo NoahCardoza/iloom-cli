@@ -46,6 +46,7 @@ export interface WorktreeListOptions {
 
 /**
  * Result of a worktree operation
+ * @deprecated Use exception-based error handling instead
  */
 export interface WorktreeOperationResult {
   /** Whether the operation was successful */

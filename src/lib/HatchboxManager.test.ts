@@ -1,0 +1,326 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { HatchboxManager } from './HatchboxManager.js'
+import { GitWorktreeManager } from './GitWorktreeManager.js'
+import { GitHubService } from './GitHubService.js'
+import { EnvironmentManager } from './EnvironmentManager.js'
+import { ClaudeContextManager } from './ClaudeContextManager.js'
+import type { CreateHatchboxInput } from '../types/hatchbox.js'
+
+// Mock all dependencies
+vi.mock('./GitWorktreeManager.js')
+vi.mock('./GitHubService.js')
+vi.mock('./EnvironmentManager.js')
+vi.mock('./ClaudeContextManager.js')
+
+describe('HatchboxManager', () => {
+  let manager: HatchboxManager
+  let mockGitWorktree: vi.Mocked<GitWorktreeManager>
+  let mockGitHub: vi.Mocked<GitHubService>
+  let mockEnvironment: vi.Mocked<EnvironmentManager>
+  let mockClaude: vi.Mocked<ClaudeContextManager>
+
+  beforeEach(() => {
+    mockGitWorktree = new GitWorktreeManager() as vi.Mocked<GitWorktreeManager>
+    mockGitHub = new GitHubService() as vi.Mocked<GitHubService>
+    mockEnvironment = new EnvironmentManager() as vi.Mocked<EnvironmentManager>
+    mockClaude = new ClaudeContextManager() as vi.Mocked<ClaudeContextManager>
+
+    manager = new HatchboxManager(
+      mockGitWorktree,
+      mockGitHub,
+      mockEnvironment,
+      mockClaude
+    )
+
+    vi.clearAllMocks()
+  })
+
+  describe('createHatchbox', () => {
+    const baseInput: CreateHatchboxInput = {
+      type: 'issue',
+      identifier: 123,
+      originalInput: '123',
+    }
+
+    it('should create hatchbox for issue successfully', async () => {
+      // Mock GitHub data fetch
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test Issue',
+        body: 'Test description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/123',
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-issue-123'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+
+      // Mock environment setup
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3123)
+
+      // Mock Claude context preparation
+      vi.mocked(mockClaude.prepareContext).mockResolvedValue()
+
+      const result = await manager.createHatchbox(baseInput)
+
+      expect(result.id).toBeDefined()
+      expect(result.path).toBe(expectedPath)
+      expect(result.type).toBe('issue')
+      expect(result.identifier).toBe(123)
+      expect(result.port).toBe(3123)
+      expect(result.githubData?.title).toBe('Test Issue')
+      expect(result.createdAt).toBeInstanceOf(Date)
+    })
+
+    it('should create hatchbox for PR successfully', async () => {
+      const prInput: CreateHatchboxInput = {
+        type: 'pr',
+        identifier: 456,
+        originalInput: 'pr/456',
+      }
+
+      // Mock GitHub PR fetch
+      vi.mocked(mockGitHub.fetchPR).mockResolvedValue({
+        number: 456,
+        title: 'Test PR',
+        body: 'Test PR description',
+        state: 'open',
+        branch: 'feature-branch',
+        baseBranch: 'main',
+        url: 'https://github.com/owner/repo/pull/456',
+        isDraft: false,
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-feature-branch'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+
+      // Mock environment setup
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3456)
+
+      // Mock Claude context preparation
+      vi.mocked(mockClaude.prepareContext).mockResolvedValue()
+
+      const result = await manager.createHatchbox(prInput)
+
+      expect(result.type).toBe('pr')
+      expect(result.identifier).toBe(456)
+      expect(result.port).toBe(3456)
+      expect(result.branch).toBe('feature-branch')
+    })
+
+    it('should create hatchbox for branch successfully', async () => {
+      const branchInput: CreateHatchboxInput = {
+        type: 'branch',
+        identifier: 'feature-xyz',
+        originalInput: 'feature-xyz',
+      }
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-feature-xyz'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+
+      // Mock environment setup
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3000)
+
+      // Mock Claude context preparation
+      vi.mocked(mockClaude.prepareContext).mockResolvedValue()
+
+      const result = await manager.createHatchbox(branchInput)
+
+      expect(result.type).toBe('branch')
+      expect(result.identifier).toBe('feature-xyz')
+      expect(result.branch).toBe('feature-xyz')
+      expect(result.port).toBeGreaterThanOrEqual(3000)
+    })
+
+    it('should calculate correct port for issue', async () => {
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 42,
+        title: 'Test',
+        body: '',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/42',
+      })
+
+      const expectedPath = '/test/worktree-issue-42'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockClaude.prepareContext).mockResolvedValue()
+
+      const result = await manager.createHatchbox({
+        type: 'issue',
+        identifier: 42,
+        originalInput: '42',
+      })
+
+      expect(result.port).toBe(3042)
+      expect(mockEnvironment.setPortForWorkspace).toHaveBeenCalledWith(
+        expect.stringContaining('.env'),
+        42,
+        undefined
+      )
+    })
+
+    it('should throw when GitHub fetch fails', async () => {
+      vi.mocked(mockGitHub.fetchIssue).mockRejectedValue(new Error('Issue not found'))
+
+      await expect(manager.createHatchbox(baseInput)).rejects.toThrow('Issue not found')
+    })
+
+    it('should throw when worktree creation fails', async () => {
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test',
+        body: '',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/123',
+      })
+
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/path')
+      vi.mocked(mockGitWorktree.createWorktree).mockRejectedValue(
+        new Error('Worktree creation failed')
+      )
+
+      await expect(manager.createHatchbox(baseInput)).rejects.toThrow('Worktree creation failed')
+    })
+
+    it('should throw when environment setup fails', async () => {
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test',
+        body: '',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/123',
+      })
+
+      const expectedPath = '/test/path'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockRejectedValue(
+        new Error('Environment setup failed')
+      )
+
+      await expect(manager.createHatchbox(baseInput)).rejects.toThrow('Environment setup failed')
+    })
+
+    it('should skip Claude context when skipClaude option is true', async () => {
+      const inputWithSkipClaude: CreateHatchboxInput = {
+        ...baseInput,
+        options: { skipClaude: true },
+      }
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test',
+        body: '',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/123',
+      })
+
+      const expectedPath = '/test/path'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3123)
+
+      await manager.createHatchbox(inputWithSkipClaude)
+
+      expect(mockClaude.prepareContext).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('listHatchboxes', () => {
+    it('should list active hatchboxes from worktrees', async () => {
+      const mockWorktrees = [
+        {
+          path: '/test/worktree-issue-123',
+          branch: 'issue-123',
+          commit: 'abc123',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+        {
+          path: '/test/repo',
+          branch: 'main',
+          commit: 'def456',
+          bare: true,
+          detached: false,
+          locked: false,
+        },
+      ]
+
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue(mockWorktrees)
+
+      const result = await manager.listHatchboxes()
+
+      expect(result).toHaveLength(2)
+      expect(mockGitWorktree.listWorktrees).toHaveBeenCalled()
+    })
+
+    it('should return empty array when no worktrees exist', async () => {
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue([])
+
+      const result = await manager.listHatchboxes()
+
+      expect(result).toEqual([])
+    })
+  })
+
+  describe('findHatchbox', () => {
+    it('should find hatchbox by identifier', async () => {
+      const mockWorktrees = [
+        {
+          path: '/test/worktree-issue-123',
+          branch: 'issue-123',
+          commit: 'abc123',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+      ]
+
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue(mockWorktrees)
+
+      const result = await manager.findHatchbox('123')
+
+      expect(result).toBeDefined()
+      expect(result?.identifier).toBe(123)
+    })
+
+    it('should return null when hatchbox not found', async () => {
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue([])
+
+      const result = await manager.findHatchbox('999')
+
+      expect(result).toBeNull()
+    })
+  })
+
+  describe('finishHatchbox', () => {
+    it('should throw not implemented error', async () => {
+      await expect(manager.finishHatchbox('123')).rejects.toThrow('Not implemented')
+    })
+  })
+
+  describe('cleanupHatchbox', () => {
+    it('should throw not implemented error', async () => {
+      await expect(manager.cleanupHatchbox('123')).rejects.toThrow('Not implemented')
+    })
+  })
+})

@@ -4,7 +4,6 @@ import {
   type GitWorktree,
   type WorktreeCreateOptions,
   type WorktreeListOptions,
-  type WorktreeOperationResult,
   type WorktreeValidation,
   type WorktreeStatus,
   type WorktreeCleanupOptions,
@@ -42,12 +41,8 @@ export class GitWorktreeManager {
     if (options.porcelain) args.push('--porcelain')
     if (options.verbose) args.push('-v')
 
-    const result = await executeGitCommand(args, { cwd: this.repoPath })
-    if (!result.success) {
-      throw new Error(`Failed to list worktrees: ${result.error}`)
-    }
-
-    return parseWorktreeList(result.message)
+    const output = await executeGitCommand(args, { cwd: this.repoPath })
+    return parseWorktreeList(output)
   }
 
   /**
@@ -87,16 +82,12 @@ export class GitWorktreeManager {
   /**
    * Create a new worktree
    * Ports worktree creation logic from new-branch-workflow.sh
+   * @returns The absolute path to the created worktree
    */
-  async createWorktree(options: WorktreeCreateOptions): Promise<WorktreeOperationResult> {
+  async createWorktree(options: WorktreeCreateOptions): Promise<string> {
     // Validate inputs
     if (!options.branch) {
-      return {
-        success: false,
-        message: '',
-        error: 'Branch name is required',
-        exitCode: 1,
-      }
+      throw new Error('Branch name is required')
     }
 
     // Ensure path is absolute
@@ -105,12 +96,7 @@ export class GitWorktreeManager {
     // Check if path already exists and handle force flag
     if (await fs.pathExists(absolutePath)) {
       if (!options.force) {
-        return {
-          success: false,
-          message: '',
-          error: `Path already exists: ${absolutePath}`,
-          exitCode: 1,
-        }
+        throw new Error(`Path already exists: ${absolutePath}`)
       }
       // Remove existing directory if force is true
       await fs.remove(absolutePath)
@@ -136,40 +122,32 @@ export class GitWorktreeManager {
       args.push(options.baseBranch)
     }
 
-    return await executeGitCommand(args, { cwd: this.repoPath })
+    await executeGitCommand(args, { cwd: this.repoPath })
+    return absolutePath
   }
 
   /**
    * Remove a worktree and optionally clean up associated files
    * Ports worktree removal logic from cleanup-worktree.sh
+   * @returns A message describing what was done (for dry-run mode)
    */
   async removeWorktree(
     worktreePath: string,
     options: WorktreeCleanupOptions = {}
-  ): Promise<WorktreeOperationResult> {
+  ): Promise<string | void> {
     // Validate worktree exists
     const worktrees = await this.listWorktrees()
     const worktree = worktrees.find(wt => wt.path === worktreePath)
 
     if (!worktree) {
-      return {
-        success: false,
-        message: '',
-        error: `Worktree not found: ${worktreePath}`,
-        exitCode: 1,
-      }
+      throw new Error(`Worktree not found: ${worktreePath}`)
     }
 
     // Check for uncommitted changes unless force is specified
     if (!options.force && !options.dryRun) {
       const hasChanges = await hasUncommittedChanges(worktreePath)
       if (hasChanges) {
-        return {
-          success: false,
-          message: '',
-          error: `Worktree has uncommitted changes: ${worktreePath}. Use --force to override.`,
-          exitCode: 1,
-        }
+        throw new Error(`Worktree has uncommitted changes: ${worktreePath}. Use --force to override.`)
       }
     }
 
@@ -178,11 +156,7 @@ export class GitWorktreeManager {
       if (options.removeDirectory) actions.push('Remove directory from disk')
       if (options.removeBranch) actions.push(`Remove branch: ${worktree.branch}`)
 
-      return {
-        success: true,
-        message: `Would perform: ${actions.join(', ')}`,
-        exitCode: 0,
-      }
+      return `Would perform: ${actions.join(', ')}`
     }
 
     // Remove worktree registration
@@ -190,25 +164,27 @@ export class GitWorktreeManager {
     if (options.force) args.push('--force')
     args.push(worktreePath)
 
-    const result = await executeGitCommand(args, { cwd: this.repoPath })
+    await executeGitCommand(args, { cwd: this.repoPath })
 
-    // Remove directory if requested and command succeeded
-    if (result.success && options.removeDirectory && (await fs.pathExists(worktreePath))) {
+    // Remove directory if requested
+    if (options.removeDirectory && (await fs.pathExists(worktreePath))) {
       await fs.remove(worktreePath)
     }
 
     // Remove branch if requested and safe to do so
-    if (result.success && options.removeBranch && !worktree.bare) {
-      const branchResult = await executeGitCommand(['branch', '-D', worktree.branch], {
-        cwd: this.repoPath,
-      })
-      if (!branchResult.success) {
+    if (options.removeBranch && !worktree.bare) {
+      try {
+        await executeGitCommand(['branch', '-D', worktree.branch], {
+          cwd: this.repoPath,
+        })
+      } catch (error) {
         // Don't fail the whole operation if branch deletion fails
-        result.message += `\nWarning: Could not delete branch ${worktree.branch}: ${branchResult.error}`
+        // Just log a warning (caller can handle this)
+        throw new Error(
+          `Worktree removed but failed to delete branch ${worktree.branch}: ${error instanceof Error ? error.message : 'Unknown error'}`
+        )
       }
     }
-
-    return result
   }
 
   /**
@@ -267,7 +243,7 @@ export class GitWorktreeManager {
    * Get detailed status information for a worktree
    */
   async getWorktreeStatus(worktreePath: string): Promise<WorktreeStatus> {
-    const statusResult = await executeGitCommand(['status', '--porcelain=v1'], {
+    const statusOutput = await executeGitCommand(['status', '--porcelain=v1'], {
       cwd: worktreePath,
     })
 
@@ -276,15 +252,13 @@ export class GitWorktreeManager {
     let deleted = 0
     let untracked = 0
 
-    if (statusResult.success) {
-      const lines = statusResult.message.trim().split('\n').filter(Boolean)
-      for (const line of lines) {
-        const status = line.substring(0, 2)
-        if (status[0] === 'M' || status[1] === 'M') modified++
-        if (status[0] === 'A' || status[0] === 'D' || status[0] === 'R') staged++
-        if (status[0] === 'D' || status[1] === 'D') deleted++
-        if (status === '??') untracked++
-      }
+    const lines = statusOutput.trim().split('\n').filter(Boolean)
+    for (const line of lines) {
+      const status = line.substring(0, 2)
+      if (status[0] === 'M' || status[1] === 'M') modified++
+      if (status[0] === 'A' || status[0] === 'D' || status[0] === 'R') staged++
+      if (status[0] === 'D' || status[1] === 'D') deleted++
+      if (status === '??') untracked++
     }
 
     const currentBranch = (await getCurrentBranch(worktreePath)) ?? 'unknown'
@@ -294,17 +268,15 @@ export class GitWorktreeManager {
     let ahead = 0
     let behind = 0
     try {
-      const aheadBehindResult = await executeGitCommand(
+      const aheadBehindOutput = await executeGitCommand(
         ['rev-list', '--left-right', '--count', `origin/${currentBranch}...HEAD`],
         { cwd: worktreePath }
       )
-      if (aheadBehindResult.success) {
-        const parts = aheadBehindResult.message.trim().split('\t')
-        const behindStr = parts[0]
-        const aheadStr = parts[1]
-        behind = behindStr ? parseInt(behindStr, 10) || 0 : 0
-        ahead = aheadStr ? parseInt(aheadStr, 10) || 0 : 0
-      }
+      const parts = aheadBehindOutput.trim().split('\t')
+      const behindStr = parts[0]
+      const aheadStr = parts[1]
+      behind = behindStr ? parseInt(behindStr, 10) || 0 : 0
+      ahead = aheadStr ? parseInt(aheadStr, 10) || 0 : 0
     } catch {
       // Ignore errors for ahead/behind calculation
     }
@@ -364,25 +336,25 @@ export class GitWorktreeManager {
   /**
    * Prune stale worktree entries (worktrees that no longer exist on disk)
    */
-  async pruneWorktrees(): Promise<WorktreeOperationResult> {
-    return await executeGitCommand(['worktree', 'prune', '-v'], { cwd: this.repoPath })
+  async pruneWorktrees(): Promise<void> {
+    await executeGitCommand(['worktree', 'prune', '-v'], { cwd: this.repoPath })
   }
 
   /**
    * Lock a worktree to prevent it from being pruned or moved
    */
-  async lockWorktree(worktreePath: string, reason?: string): Promise<WorktreeOperationResult> {
+  async lockWorktree(worktreePath: string, reason?: string): Promise<void> {
     const args = ['worktree', 'lock', worktreePath]
     if (reason) args.push('--reason', reason)
 
-    return await executeGitCommand(args, { cwd: this.repoPath })
+    await executeGitCommand(args, { cwd: this.repoPath })
   }
 
   /**
    * Unlock a previously locked worktree
    */
-  async unlockWorktree(worktreePath: string): Promise<WorktreeOperationResult> {
-    return await executeGitCommand(['worktree', 'unlock', worktreePath], { cwd: this.repoPath })
+  async unlockWorktree(worktreePath: string): Promise<void> {
+    await executeGitCommand(['worktree', 'unlock', worktreePath], { cwd: this.repoPath })
   }
 
   /**
@@ -407,11 +379,11 @@ export class GitWorktreeManager {
     worktrees: GitWorktree[],
     options: WorktreeCleanupOptions = {}
   ): Promise<{
-    successes: Array<{ worktree: GitWorktree; result: WorktreeOperationResult }>
+    successes: Array<{ worktree: GitWorktree }>
     failures: Array<{ worktree: GitWorktree; error: string }>
     skipped: Array<{ worktree: GitWorktree; reason: string }>
   }> {
-    const successes: Array<{ worktree: GitWorktree; result: WorktreeOperationResult }> = []
+    const successes: Array<{ worktree: GitWorktree }> = []
     const failures: Array<{ worktree: GitWorktree; error: string }> = []
     const skipped: Array<{ worktree: GitWorktree; reason: string }> = []
 
@@ -425,16 +397,11 @@ export class GitWorktreeManager {
       }
 
       try {
-        const result = await this.removeWorktree(worktree.path, {
+        await this.removeWorktree(worktree.path, {
           ...options,
           removeDirectory: true,
         })
-
-        if (result.success) {
-          successes.push({ worktree, result })
-        } else {
-          failures.push({ worktree, error: result.error ?? 'Unknown error' })
-        }
+        successes.push({ worktree })
       } catch (error) {
         failures.push({
           worktree,

@@ -1,14 +1,15 @@
 import path from 'path'
-import { execa } from 'execa'
-import { type GitWorktree, type WorktreeOperationResult } from '../types/worktree.js'
+import { execa, type ExecaError } from 'execa'
+import { type GitWorktree } from '../types/worktree.js'
 
 /**
- * Execute a Git command and return the result
+ * Execute a Git command and return the stdout result
+ * Throws an error if the command fails
  */
 export async function executeGitCommand(
   args: string[],
   options?: { cwd?: string; timeout?: number }
-): Promise<WorktreeOperationResult> {
+): Promise<string> {
   try {
     const result = await execa('git', args, {
       cwd: options?.cwd ?? process.cwd(),
@@ -16,24 +17,11 @@ export async function executeGitCommand(
       encoding: 'utf8',
     })
 
-    return {
-      success: true,
-      message: result.stdout,
-      exitCode: result.exitCode ?? 0,
-    }
+    return result.stdout
   } catch (error) {
-    const execaError = error as {
-      stdout?: string
-      stderr?: string
-      message?: string
-      exitCode?: number
-    }
-    return {
-      success: false,
-      message: execaError.stdout ?? '',
-      error: execaError.stderr ?? execaError.message ?? 'Unknown Git error',
-      exitCode: execaError.exitCode ?? 1,
-    }
+    const execaError = error as ExecaError
+    const stderr = execaError.stderr ?? execaError.message ?? 'Unknown Git error'
+    throw new Error(`Git command failed: ${stderr}`)
   }
 }
 
@@ -179,8 +167,8 @@ export function generateWorktreePath(branchName: string, rootDir: string = proce
  */
 export async function isValidGitRepo(path: string): Promise<boolean> {
   try {
-    const result = await executeGitCommand(['rev-parse', '--git-dir'], { cwd: path })
-    return result.success
+    await executeGitCommand(['rev-parse', '--git-dir'], { cwd: path })
+    return true
   } catch {
     return false
   }
@@ -192,7 +180,7 @@ export async function isValidGitRepo(path: string): Promise<boolean> {
 export async function getCurrentBranch(path: string = process.cwd()): Promise<string | null> {
   try {
     const result = await executeGitCommand(['branch', '--show-current'], { cwd: path })
-    return result.success ? result.message.trim() : null
+    return result.trim()
   } catch {
     return null
   }
@@ -209,7 +197,7 @@ export async function branchExists(
   try {
     // Check local branches
     const localResult = await executeGitCommand(['branch', '--list', branchName], { cwd: path })
-    if (localResult.success && localResult.message.trim()) {
+    if (localResult.trim()) {
       return true
     }
 
@@ -218,7 +206,7 @@ export async function branchExists(
       const remoteResult = await executeGitCommand(['branch', '-r', '--list', `*/${branchName}`], {
         cwd: path,
       })
-      if (remoteResult.success && remoteResult.message.trim()) {
+      if (remoteResult.trim()) {
         return true
       }
     }
@@ -235,7 +223,7 @@ export async function branchExists(
 export async function getRepoRoot(path: string = process.cwd()): Promise<string | null> {
   try {
     const result = await executeGitCommand(['rev-parse', '--show-toplevel'], { cwd: path })
-    return result.success ? result.message.trim() : null
+    return result.trim()
   } catch {
     return null
   }
@@ -247,7 +235,7 @@ export async function getRepoRoot(path: string = process.cwd()): Promise<string 
 export async function hasUncommittedChanges(path: string = process.cwd()): Promise<boolean> {
   try {
     const result = await executeGitCommand(['status', '--porcelain'], { cwd: path })
-    return result.success && result.message.trim().length > 0
+    return result.trim().length > 0
   } catch {
     return false
   }
@@ -262,10 +250,8 @@ export async function getDefaultBranch(path: string = process.cwd()): Promise<st
     const remoteResult = await executeGitCommand(['symbolic-ref', 'refs/remotes/origin/HEAD'], {
       cwd: path,
     })
-    if (remoteResult.success) {
-      const match = remoteResult.message.match(/refs\/remotes\/origin\/(.+)/)
-      if (match) return match[1] ?? 'main'
-    }
+    const match = remoteResult.match(/refs\/remotes\/origin\/(.+)/)
+    if (match) return match[1] ?? 'main'
 
     // Fallback to common default branch names
     const commonDefaults = ['main', 'master', 'develop']

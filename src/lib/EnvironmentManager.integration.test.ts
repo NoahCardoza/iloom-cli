@@ -22,15 +22,11 @@ describe('EnvironmentManager integration', () => {
       const envPath = path.join(testDir, '.env')
 
       // Create .env file
-      const result1 = await manager.setEnvVar(envPath, 'DATABASE_URL', 'postgres://localhost/db')
-      expect(result1.success).toBe(true)
+      await manager.setEnvVar(envPath, 'DATABASE_URL', 'postgres://localhost/db')
 
       // Add more variables
-      const result2 = await manager.setEnvVar(envPath, 'API_KEY', 'test-key-123')
-      expect(result2.success).toBe(true)
-
-      const result3 = await manager.setEnvVar(envPath, 'NODE_ENV', 'development')
-      expect(result3.success).toBe(true)
+      await manager.setEnvVar(envPath, 'API_KEY', 'test-key-123')
+      await manager.setEnvVar(envPath, 'NODE_ENV', 'development')
 
       // Set port for workspace
       const port = await manager.setPortForWorkspace(envPath, 42)
@@ -77,8 +73,7 @@ NODE_ENV="development"`
       await fs.writeFile(envPath, initialContent, 'utf8')
 
       // Update a value
-      const result = await manager.setEnvVar(envPath, 'API_KEY', 'new-key')
-      expect(result.success).toBe(true)
+      await manager.setEnvVar(envPath, 'API_KEY', 'new-key')
 
       // Read the file content directly
       const fileContent = await fs.readFile(envPath, 'utf8')
@@ -105,16 +100,16 @@ NODE_ENV="development"`
       await manager.setEnvVar(envPath, 'KEY2', 'value2')
 
       // Update with backup
-      const result = await manager.setEnvVar(envPath, 'KEY1', 'new-value', true)
-      expect(result.success).toBe(true)
-      expect(result.backupPath).toBeDefined()
+      const backupPath = await manager.setEnvVar(envPath, 'KEY1', 'new-value', true)
+      expect(backupPath).toBeDefined()
+      expect(typeof backupPath).toBe('string')
 
       // Verify backup exists
-      const backupExists = await fs.pathExists(result.backupPath!)
+      const backupExists = await fs.pathExists(backupPath as string)
       expect(backupExists).toBe(true)
 
       // Verify backup contains old value
-      const backupContent = await fs.readFile(result.backupPath!, 'utf8')
+      const backupContent = await fs.readFile(backupPath as string, 'utf8')
       expect(backupContent).toContain('KEY1="value1"')
 
       // Verify main file has new value
@@ -122,7 +117,7 @@ NODE_ENV="development"`
       expect(mainContent.get('KEY1')).toBe('new-value')
 
       // Recovery: restore from backup
-      await manager.copyEnvFile(result.backupPath!, envPath)
+      await manager.copyEnvFile(backupPath as string, envPath)
       const restoredContent = await manager.readEnvFile(envPath)
       expect(restoredContent.get('KEY1')).toBe('value1')
     })
@@ -139,8 +134,7 @@ NODE_ENV="development"`
       ]
 
       for (const [key, value] of specialValues) {
-        const result = await manager.setEnvVar(envPath, key, value)
-        expect(result.success).toBe(true)
+        await manager.setEnvVar(envPath, key, value)
       }
 
       // Read back and verify
@@ -183,12 +177,10 @@ NODE_ENV="development"`
     it('should handle missing directories gracefully', async () => {
       const envPath = path.join(testDir, 'nonexistent', 'directory', '.env')
 
-      // Should fail because parent directory doesn't exist
-      const result = await manager.setEnvVar(envPath, 'KEY', 'value')
-
-      expect(result.success).toBe(false)
-      expect(result.error).toBeDefined()
-      expect(result.error).toContain('no such file or directory')
+      // Should throw because parent directory doesn't exist
+      await expect(
+        manager.setEnvVar(envPath, 'KEY', 'value')
+      ).rejects.toThrow('no such file or directory')
     })
 
     it('should handle read-only files', async () => {
@@ -197,10 +189,10 @@ NODE_ENV="development"`
       await fs.writeFile(envPath, 'KEY="value"', 'utf8')
       await fs.chmod(envPath, 0o444) // Read-only
 
-      const result = await manager.setEnvVar(envPath, 'KEY', 'new-value')
-
-      expect(result.success).toBe(false)
-      expect(result.error).toBeDefined()
+      // Should throw because file is read-only
+      await expect(
+        manager.setEnvVar(envPath, 'KEY', 'new-value')
+      ).rejects.toThrow('permission denied')
 
       // Cleanup
       await fs.chmod(envPath, 0o644)
@@ -231,23 +223,20 @@ _VALID_KEY="value"`
       const envPath = path.join(testDir, '.env')
 
       // Test case 1: Create new file
-      const result1 = await manager.setEnvVar(envPath, 'KEY', 'value')
-      expect(result1.success).toBe(true)
+      await manager.setEnvVar(envPath, 'KEY', 'value')
 
       let content = await fs.readFile(envPath, 'utf8')
       expect(content).toBe('KEY="value"')
 
       // Test case 2: Add variable to existing file
-      const result2 = await manager.setEnvVar(envPath, 'KEY2', 'value2')
-      expect(result2.success).toBe(true)
+      await manager.setEnvVar(envPath, 'KEY2', 'value2')
 
       content = await fs.readFile(envPath, 'utf8')
       expect(content).toContain('KEY="value"')
       expect(content).toContain('KEY2="value2"')
 
       // Test case 3: Update existing variable
-      const result3 = await manager.setEnvVar(envPath, 'KEY', 'new-value')
-      expect(result3.success).toBe(true)
+      await manager.setEnvVar(envPath, 'KEY', 'new-value')
 
       content = await fs.readFile(envPath, 'utf8')
       expect(content).toContain('KEY="new-value"')
@@ -270,8 +259,7 @@ _VALID_KEY="value"`
 
       // The bash script uses: escaped_value="${var_value//\"/\\\"}"
       const valueWithQuotes = 'value with "quotes" inside'
-      const result = await manager.setEnvVar(envPath, 'KEY', valueWithQuotes)
-      expect(result.success).toBe(true)
+      await manager.setEnvVar(envPath, 'KEY', valueWithQuotes)
 
       const fileContent = await fs.readFile(envPath, 'utf8')
       expect(fileContent).toBe('KEY="value with \\"quotes\\" inside"')
