@@ -727,6 +727,15 @@ hatchbox-ai/
    - Most complex command with many enhancements
    - Multiple modes, coloring, dual-window support
    - Depends on: #27, #28, #3, #4, #5, #11, #12
+   - **Broken down into sub-issues:**
+     - #33 - Core Start Command Structure & Input Validation
+     - #34 - GitHub Integration for Start Command
+     - #35 - Worktree Creation & Environment Setup
+     - #36 - Claude Integration & Context Generation
+     - #37 - Visual Workspace Distinction
+     - #38 - Multiple Opening Modes
+     - #39 - Advanced Features & Polish
+     - #40 - Database Branch Management (lower priority)
 
 9. **Issue #7** - Implement 'finish' Command ⭐ CRITICAL
    - Second most complex command
