@@ -131,6 +131,66 @@ if (detection.type === 'issue') {
 
 ---
 
+### Sub-Issue #2.5: HatchboxManager - Central Orchestrator
+
+**Title**: Implement HatchboxManager as central orchestrator for workspace operations
+
+**Description**:
+Create the HatchboxManager class as the central orchestrator that coordinates between all service classes and provides a clean API for commands to use. This addresses the architectural gap identified during Issue #33 implementation.
+
+**Scope**:
+- Create orchestrator class that coordinates all workspace operations
+- Manage lifecycle of workspaces (called "hatchboxes")
+- Implement transaction management with rollback on failure
+- Provide consistent error handling across operations
+- Create clean API for commands (start, finish, cleanup) to use
+
+**Architecture**:
+```typescript
+export class HatchboxManager {
+  constructor(
+    private gitWorktree: GitWorktreeManager,
+    private github: GitHubService,
+    private environment: EnvironmentManager,
+    private claude: ClaudeContextManager,
+    private database?: DatabaseManager
+  ) {}
+
+  async createHatchbox(input: CreateHatchboxInput): Promise<Hatchbox>
+  async finishHatchbox(identifier: string): Promise<void>
+  async cleanupHatchbox(identifier: string): Promise<void>
+  async listHatchboxes(): Promise<Hatchbox[]>
+  async findHatchbox(identifier: string): Promise<Hatchbox | null>
+}
+```
+
+**Files to Create/Modify**:
+- `src/lib/HatchboxManager.ts` (new - main orchestrator)
+- `src/lib/HatchboxManager.test.ts` (new - comprehensive tests)
+- `src/types/hatchbox.ts` (new - type definitions)
+- `src/commands/start.ts` (update to use HatchboxManager)
+
+**Testing Requirements**:
+- Unit tests with mocked dependencies
+- Integration tests for complete workflows
+- Error recovery and rollback tests
+- State transition tests
+- Concurrent operation tests
+
+**Acceptance Criteria**:
+- [ ] HatchboxManager class with all core methods
+- [ ] Comprehensive error handling and rollback
+- [ ] Integration with existing services
+- [ ] StartCommand updated to use HatchboxManager
+- [ ] 95%+ test coverage
+- [ ] Clear API documentation
+
+**Dependencies**: Sub-Issue #1 (provides validated input), uses existing services from Issues #2, #3, #4, #12
+
+**GitHub Issue**: #41
+
+---
+
 ### Sub-Issue #3: Worktree Creation & Environment Setup
 
 **Title**: Extend GitWorktreeManager and implement environment configuration
@@ -183,7 +243,7 @@ echo "PORT=$port" >> "$worktree_dir/.env"
 - [ ] Handles edge cases (spaces, special chars in names)
 - [ ] 95%+ test coverage
 
-**Dependencies**: Sub-Issue #2 (needs branch names from GitHub)
+**Dependencies**: Sub-Issue #2 (needs branch names from GitHub), Sub-Issue #2.5 (HatchboxManager for orchestration)
 
 ---
 

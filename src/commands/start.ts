@@ -32,12 +32,14 @@ export class StartCommand {
 			// Step 2: Validate based on type
 			await this.validateInput(parsed)
 
-			// Step 3: Log success and prepare for next steps (WorkspaceManager)
+			// Step 3: Log success and prepare for next steps (HatchboxManager)
 			logger.info(`✅ Validated input: ${this.formatParsedInput(parsed)}`)
 
-			// TODO: Issue #6 - Create workspace using WorkspaceManager
+			// TODO: Issue #41 - Create hatchbox using HatchboxManager
+			// The HatchboxManager will orchestrate the creation of the workspace
+			// including worktree setup, environment configuration, and Claude integration
 			logger.warn(
-				'Workspace creation not yet implemented (requires Issue #6)'
+				'Hatchbox creation not yet implemented (requires Issue #41 - HatchboxManager)'
 			)
 		} catch (error) {
 			if (error instanceof Error) {

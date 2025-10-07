@@ -2,7 +2,9 @@
 
 ## Project Overview
 
-Convert the existing bash workflow scripts into "Hatchbox AI" - a TypeScript CLI tool that enables developers to efficiently work on multiple issues/features simultaneously with Claude AI. The tool leverages standard development tools (Git worktrees, GitHub CLI, database branching) to create isolated workspaces that Claude can operate in without conflicts.
+Convert the existing bash workflow scripts into "Hatchbox AI" - a TypeScript CLI tool that enables developers to efficiently work on multiple issues/features simultaneously with Claude AI. The tool leverages standard development tools (Git worktrees, GitHub CLI, database branching) to create isolated workspaces (called "hatchboxes") that Claude can operate in without conflicts.
+
+**Terminology**: Each isolated workspace is called a "hatchbox" - a self-contained development environment for a single issue or PR.
 
 **Key Migration Motivation**: Moving from bash scripts to TypeScript enables comprehensive unit testing, better maintainability, type safety, and more reliable error handling - critical improvements for production workflows.
 
@@ -585,8 +587,8 @@ Production-ready documentation and UX.
 ### Core Classes
 
 ```typescript
-// Main orchestrator
-class WorkspaceManager {
+// Main orchestrator for hatchbox (workspace) operations
+class HatchboxManager {
   constructor(
     private git: GitWorktreeManager,
     private github: GitHubService,
@@ -594,6 +596,12 @@ class WorkspaceManager {
     private db: DatabaseManager,
     private claude: ClaudeContextManager
   ) {}
+
+  // Core operations for managing hatchboxes (isolated workspaces)
+  async createHatchbox(input: CreateHatchboxInput): Promise<Hatchbox>
+  async finishHatchbox(identifier: string): Promise<void>
+  async cleanupHatchbox(identifier: string): Promise<void>
+  async listHatchboxes(): Promise<Hatchbox[]>
 }
 
 // Git operations
@@ -644,7 +652,7 @@ hatchbox-ai/
 │   │   ├── list.ts
 │   │   └── switch.ts
 │   ├── lib/                   # Core business logic
-│   │   ├── WorkspaceManager.ts
+│   │   ├── HatchboxManager.ts # Main orchestrator for hatchboxes (Issue #41)
 │   │   ├── GitWorktreeManager.ts
 │   │   ├── GitHubService.ts
 │   │   ├── EnvironmentManager.ts
@@ -728,7 +736,8 @@ hatchbox-ai/
    - Multiple modes, coloring, dual-window support
    - Depends on: #27, #28, #3, #4, #5, #11, #12
    - **Broken down into sub-issues:**
-     - #33 - Core Start Command Structure & Input Validation
+     - #33 - Core Start Command Structure & Input Validation ✅ DONE
+     - #41 - HatchboxManager - Central Orchestrator (NEW - addresses architectural gap)
      - #34 - GitHub Integration for Start Command
      - #35 - Worktree Creation & Environment Setup
      - #36 - Claude Integration & Context Generation
