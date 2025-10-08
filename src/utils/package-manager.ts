@@ -1,24 +1,79 @@
 import { execa, type ExecaError } from 'execa'
 import { logger } from './logger.js'
+import fs from 'fs-extra'
+import path from 'path'
 
 export type PackageManager = 'pnpm' | 'npm' | 'yarn'
 
 /**
- * Detect which package manager is available
+ * Validate if a string is a supported package manager
  */
-export async function detectPackageManager(): Promise<PackageManager | null> {
-  const managers: PackageManager[] = ['pnpm', 'npm', 'yarn']
+function isValidPackageManager(manager: string): manager is PackageManager {
+  return manager === 'pnpm' || manager === 'npm' || manager === 'yarn'
+}
 
+/**
+ * Detect which package manager to use for a project
+ * Checks in order:
+ * 1. packageManager field in package.json (Node.js standard)
+ * 2. Lock files (pnpm-lock.yaml, package-lock.json, yarn.lock)
+ * 3. Installed package managers (system-wide check)
+ * 4. Defaults to npm if all detection fails
+ *
+ * @param cwd Working directory to detect package manager in (defaults to process.cwd())
+ * @returns The detected package manager, or 'npm' as default
+ */
+export async function detectPackageManager(cwd: string = process.cwd()): Promise<PackageManager> {
+  // 1. Check packageManager field in package.json
+  try {
+    const packageJsonPath = path.join(cwd, 'package.json')
+    if (await fs.pathExists(packageJsonPath)) {
+      const packageJsonContent = await fs.readFile(packageJsonPath, 'utf-8')
+      const packageJson = JSON.parse(packageJsonContent)
+
+      if (packageJson.packageManager) {
+        // Parse "pnpm@8.15.0" or "pnpm@10.16.1+sha512..." -> "pnpm"
+        const manager = packageJson.packageManager.split('@')[0]
+        if (isValidPackageManager(manager)) {
+          logger.debug(`Detected package manager from package.json: ${manager}`)
+          return manager
+        }
+      }
+    }
+  } catch (error) {
+    // If package.json doesn't exist, is malformed, or unreadable, continue to next detection method
+    logger.debug(`Could not read packageManager from package.json: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
+
+  // 2. Check lock files (priority: pnpm > npm > yarn)
+  const lockFiles: Array<{ file: string; manager: PackageManager }> = [
+    { file: 'pnpm-lock.yaml', manager: 'pnpm' },
+    { file: 'package-lock.json', manager: 'npm' },
+    { file: 'yarn.lock', manager: 'yarn' },
+  ]
+
+  for (const { file, manager } of lockFiles) {
+    if (await fs.pathExists(path.join(cwd, file))) {
+      logger.debug(`Detected package manager from lock file ${file}: ${manager}`)
+      return manager
+    }
+  }
+
+  // 3. Check installed package managers (original behavior)
+  const managers: PackageManager[] = ['pnpm', 'npm', 'yarn']
   for (const manager of managers) {
     try {
       await execa(manager, ['--version'])
+      logger.debug(`Detected installed package manager: ${manager}`)
       return manager
     } catch {
       // Continue to next manager
     }
   }
 
-  return null
+  // 4. Default to npm (always available in Node.js environments)
+  logger.debug('No package manager detected, defaulting to npm')
+  return 'npm'
 }
 
 /**
@@ -31,11 +86,7 @@ export async function installDependencies(
   cwd: string,
   frozen: boolean = true
 ): Promise<void> {
-  const packageManager = await detectPackageManager()
-
-  if (!packageManager) {
-    throw new Error('No package manager found (pnpm, npm, or yarn)')
-  }
+  const packageManager = await detectPackageManager(cwd)
 
   logger.info(`Installing dependencies with ${packageManager}...`)
 
@@ -83,11 +134,7 @@ export async function runScript(
   cwd: string,
   args: string[] = []
 ): Promise<void> {
-  const packageManager = await detectPackageManager()
-
-  if (!packageManager) {
-    throw new Error('No package manager found (pnpm, npm, or yarn)')
-  }
+  const packageManager = await detectPackageManager(cwd)
 
   const command = packageManager === 'npm' ? ['run', scriptName] : [scriptName]
 
