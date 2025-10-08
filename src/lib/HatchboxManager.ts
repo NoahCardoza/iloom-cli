@@ -5,8 +5,10 @@ import { EnvironmentManager } from './EnvironmentManager.js'
 import { ClaudeContextManager } from './ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
+import { VSCodeIntegration } from './VSCodeIntegration.js'
 import { branchExists } from '../utils/git.js'
 import { installDependencies } from '../utils/package-manager.js'
+import { generateColorFromBranchName } from '../utils/color.js'
 // import { DatabaseManager } from './DatabaseManager.js'
 import type { Hatchbox, CreateHatchboxInput } from '../types/hatchbox.js'
 import type { GitWorktree } from '../types/worktree.js'
@@ -69,12 +71,26 @@ export class HatchboxManager {
       }
     }
 
-    // 7. Launch Claude with context (unless skipped)
+    // 7. Apply color synchronization (terminal and VSCode)
+    if (!input.options?.skipColorSync) {
+      try {
+        await this.applyColorSynchronization(worktreePath, branchName)
+      } catch (error) {
+        // Log warning but don't fail - colors are cosmetic
+        logger.warn(
+          `Failed to apply color synchronization: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          error
+        )
+      }
+    }
+
+    // 8. Launch Claude with context (unless skipped)
     if (!input.options?.skipClaude) {
       await this.claude.launchWithContext({
         workspacePath: worktreePath,
         type: input.type === 'branch' ? 'regular' : input.type,
         identifier: input.identifier,
+        branchName, // Add branch name for terminal coloring
         ...(githubData?.title && { title: githubData.title }),
         port,
       })
@@ -281,6 +297,26 @@ export class HatchboxManager {
     }
     // Default for branch-based hatchboxes - random port
     return basePort + Math.floor(Math.random() * 1000)
+  }
+
+  /**
+   * Apply color synchronization to both VSCode and terminal
+   * Colors are cosmetic - errors are logged but don't block workflow
+   */
+  private async applyColorSynchronization(
+    worktreePath: string,
+    branchName: string
+  ): Promise<void> {
+    const colorData = generateColorFromBranchName(branchName)
+
+    // Apply VSCode title bar color
+    const vscode = new VSCodeIntegration()
+    await vscode.setTitleBarColor(worktreePath, colorData.hex)
+
+    logger.info(`Applied VSCode title bar color: ${colorData.hex} for branch: ${branchName}`)
+
+    // Note: Terminal color is applied during window creation in ClaudeContextManager
+    // This ensures the color is set when the new terminal window is opened
   }
 
   /**

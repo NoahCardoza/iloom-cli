@@ -30,6 +30,7 @@ export interface CreateHatchboxInput {
     urgent?: boolean
     skipClaude?: boolean
     skipDatabase?: boolean
+    skipColorSync?: boolean
   }
 }
 

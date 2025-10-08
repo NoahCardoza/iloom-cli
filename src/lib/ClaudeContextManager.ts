@@ -8,6 +8,7 @@ export interface ClaudeContext {
 	title?: string
 	workspacePath: string
 	port: number
+	branchName?: string
 }
 
 export class ClaudeContextManager {
@@ -59,6 +60,11 @@ export class ClaudeContextManager {
 		// Add optional title if present
 		if (context.title !== undefined) {
 			workflowOptions.title = context.title
+		}
+
+		// Add optional branch name if present
+		if (context.branchName !== undefined) {
+			workflowOptions.branchName = context.branchName
 		}
 
 		// Set issue or PR number based on type

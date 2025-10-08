@@ -6,6 +6,7 @@ export interface ClaudeCliOptions {
 	permissionMode?: 'plan' | 'acceptEdits' | 'bypassPermissions' | 'default'
 	addDir?: string
 	headless?: boolean
+	branchName?: string // Optional branch name for terminal coloring
 }
 
 /**
@@ -49,7 +50,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false } = options
+	const { model, permissionMode, addDir, headless = false, branchName } = options
 
 	// Build command arguments
 	const args: string[] = []
@@ -76,6 +77,7 @@ export async function launchClaude(
 			const result = await execa('claude', args, {
 				input: prompt,
 				timeout: 1200000, // 20 mins
+				...(addDir && { cwd: addDir }), // Run Claude in the worktree directory
 			})
 			return result.stdout.trim()
 		} else {
@@ -84,18 +86,31 @@ export async function launchClaude(
 			args.push("--")
 			args.push(prompt)
 
-			// TODO: This implementation is temporary and will likely be replaced
-			// when implementing the 'start' command (Issue #6).
-			// The actual implementation will:
-			// - Use AppleScript/osascript to open a new Terminal window (like bash scripts)
-			// - Set up environment (cd to directory, source .env, export PORT)
-			// - Launch Claude with appropriate context and permissions
-			// - Apply terminal background colors for visual workspace distinction
-			// For now, this simplified approach launches Claude in the current terminal.
+			// TODO: This implementation is temporary and will be enhanced for Issue #6.
+			// Current implementation applies terminal background color (Issue #37)
+			// Future enhancements for Issue #6:
+			// - Use AppleScript/osascript to open NEW Terminal window (not current terminal)
+			// - Set up environment in new window (cd to directory, source .env, export PORT)
+			// - Launch Claude with appropriate context and permissions in the new window
+
+			// Apply terminal background color if branch name is available
+			if (branchName && process.platform === 'darwin') {
+				try {
+					const { TerminalColorManager } = await import('../lib/TerminalColorManager.js')
+					const terminalColor = new TerminalColorManager()
+					await terminalColor.applyTerminalColor(branchName)
+				} catch (error) {
+					// Log warning but don't block Claude launch
+					logger.warn(
+						`Failed to apply terminal background color: ${error instanceof Error ? error.message : 'Unknown error'}`
+					)
+				}
+			}
 
 			// Launch in background without awaiting
 			execa('claude', args, {
 				stdio: 'inherit',
+				...(addDir && { cwd: addDir }), // Run Claude in the worktree directory
 			}).catch((error) => {
 				logger.error('Claude interactive session failed', { error })
 			})

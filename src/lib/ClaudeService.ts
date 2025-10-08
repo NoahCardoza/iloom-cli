@@ -10,6 +10,7 @@ export interface ClaudeWorkflowOptions {
 	workspacePath: string
 	port?: number
 	headless?: boolean
+	branchName?: string
 }
 
 export class ClaudeService {
@@ -30,9 +31,9 @@ export class ClaudeService {
 	 * Get the appropriate model for a workflow type
 	 */
 	private getModelForWorkflow(type: 'issue' | 'pr' | 'regular'): string | undefined {
-		// Issue workflows use opusplan model with plan permission mode
+		// Issue workflows use claude-sonnet-4-20250514
 		if (type === 'issue') {
-			return 'opusplan'
+			return 'claude-sonnet-4-20250514'
 		}
 		// For PR and regular workflows, use Claude's default model
 		return undefined
@@ -44,9 +45,9 @@ export class ClaudeService {
 	private getPermissionModeForWorkflow(
 		type: 'issue' | 'pr' | 'regular'
 	): ClaudeCliOptions['permissionMode'] {
-		// Issue workflows use plan mode
+		// Issue workflows use acceptEdits mode
 		if (type === 'issue') {
-			return 'plan'
+			return 'acceptEdits'
 		}
 		// For PR and regular workflows, use default permissions
 		return 'default'
@@ -56,7 +57,7 @@ export class ClaudeService {
 	 * Launch Claude for a specific workflow
 	 */
 	async launchForWorkflow(options: ClaudeWorkflowOptions): Promise<string | void> {
-		const { type, issueNumber, prNumber, title, workspacePath, port, headless = false } = options
+		const { type, issueNumber, prNumber, title, workspacePath, port, headless = false, branchName } = options
 
 		try {
 			// Build template variables
@@ -105,6 +106,11 @@ export class ClaudeService {
 			// Add permission mode if not default
 			if (permissionMode !== undefined && permissionMode !== 'default') {
 				claudeOptions.permissionMode = permissionMode
+			}
+
+			// Add optional branch name for terminal coloring
+			if (branchName !== undefined) {
+				claudeOptions.branchName = branchName
 			}
 
 			logger.debug('Launching Claude for workflow', {

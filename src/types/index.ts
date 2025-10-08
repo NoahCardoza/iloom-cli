@@ -126,3 +126,18 @@ export * from './environment.js'
 
 // Hatchbox types
 export * from './hatchbox.js'
+
+// Color synchronization types
+export interface RgbColor {
+	r: number
+	g: number
+	b: number
+}
+
+export interface ColorData {
+	rgb: RgbColor
+	hex: string
+	index: number
+}
+
+export type Platform = 'darwin' | 'linux' | 'win32' | 'unsupported'

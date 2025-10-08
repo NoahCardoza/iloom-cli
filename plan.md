@@ -739,8 +739,8 @@ hatchbox-ai/
      - #33 - Core Start Command Structure & Input Validation ✅ DONE
      - #41 - HatchboxManager - Central Orchestrator (NEW - addresses architectural gap) - DONE
      - #34 - GitHub Integration for Start Command - DONE
-     - #35 - Worktree Creation & Environment Setup
-     - #36 - Claude Integration & Context Generation
+     - #35 - Worktree Creation & Environment Setup - DONE
+     - #36 - Claude Integration & Context Generation - DONE
      - #37 - Visual Workspace Distinction
      - #38 - Multiple Opening Modes
      - #39 - Advanced Features & Polish

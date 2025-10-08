@@ -200,6 +200,55 @@ describe('claude utils', () => {
 				)
 			})
 
+			it('should set cwd to addDir in headless mode when addDir is specified', async () => {
+				const prompt = 'Test prompt'
+				const workspacePath = '/path/to/workspace'
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: true,
+					addDir: workspacePath,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--print', '--add-dir', workspacePath],
+					expect.objectContaining({
+						input: prompt,
+						timeout: 1200000,
+						cwd: workspacePath,
+					})
+				)
+			})
+
+			it('should not set cwd in headless mode when addDir is not specified', async () => {
+				const prompt = 'Test prompt'
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: true,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--print'],
+					expect.objectContaining({
+						input: prompt,
+						timeout: 1200000,
+					})
+				)
+
+				// Ensure cwd is not in the options
+				const execaCall = vi.mocked(execa).mock.calls[0]
+				expect(execaCall[2]).not.toHaveProperty('cwd')
+			})
+
 			it('should throw error with context when Claude CLI fails', async () => {
 				const prompt = 'Test prompt'
 				vi.mocked(execa).mockRejectedValueOnce({
@@ -268,6 +317,97 @@ describe('claude utils', () => {
 						stdio: 'inherit',
 					})
 				)
+			})
+
+			it('should set cwd to addDir in interactive mode when addDir is specified', async () => {
+				const prompt = 'Work on this issue'
+				const workspacePath = '/path/to/workspace'
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: false,
+					addDir: workspacePath,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['--add-dir', workspacePath, '--', prompt],
+					expect.objectContaining({
+						stdio: 'inherit',
+						cwd: workspacePath,
+					})
+				)
+			})
+
+			it('should not set cwd in interactive mode when addDir is not specified', async () => {
+				const prompt = 'Work on this issue'
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: false,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['--', prompt],
+					expect.objectContaining({
+						stdio: 'inherit',
+					})
+				)
+
+				// Ensure cwd is not in the options
+				const execaCall = vi.mocked(execa).mock.calls[0]
+				expect(execaCall[2]).not.toHaveProperty('cwd')
+			})
+
+			it('should apply terminal color when branchName is provided on macOS', async () => {
+				const prompt = 'Work on this issue'
+				const originalPlatform = process.platform
+				const branchName = 'feat/issue-37-terminal-colors'
+
+				// Mock platform as macOS
+				Object.defineProperty(process, 'platform', {
+					value: 'darwin',
+					configurable: true,
+				})
+
+				// Mock TerminalColorManager
+				const mockApplyTerminalColor = vi.fn()
+				vi.doMock('../lib/TerminalColorManager.js', () => ({
+					TerminalColorManager: vi.fn().mockImplementation(() => ({
+						applyTerminalColor: mockApplyTerminalColor,
+					})),
+				}))
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: false,
+					branchName,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['--', prompt],
+					expect.objectContaining({
+						stdio: 'inherit',
+					})
+				)
+
+				// Restore original platform
+				Object.defineProperty(process, 'platform', {
+					value: originalPlatform,
+					configurable: true,
+				})
 			})
 		})
 	})

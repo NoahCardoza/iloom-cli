@@ -74,8 +74,8 @@ describe('ClaudeService', () => {
 				})
 
 				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(prompt, {
-					model: 'opusplan',
-					permissionMode: 'plan',
+					model: 'claude-sonnet-4-20250514',
+					permissionMode: 'acceptEdits',
 					addDir: '/workspace/issue-123',
 					headless: false,
 				})
