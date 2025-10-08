@@ -452,15 +452,22 @@ Enhance Claude integration beyond bash script capabilities.
 
 #### Issue #13: AI-Assisted Features
 
+**Status**: ✅ INCORPORATED INTO FINISH COMMAND SUB-ISSUES
+
 **Goal**: Leverage Claude for development tasks
 
-**Features**:
+**Implementation**: These features are now implemented as part of the finish command sub-issues:
+- **#52** - Claude-Powered Auto-Commit Messages (auto-generate commit messages)
+- **#46** - Claude-Assisted Error Fixing Workflows (type, lint, test error fixing)
+- **#53** - Claude-Assisted Conflict Resolution (conflict resolution assistance)
+- **Branch name generation** - Already implemented in start command (#34, #36)
 
-- Auto-generate commit messages
-- Generate semantic branch names from issues
-- Conflict resolution assistance
-- Type error and lint error fixing
-- Test failure analysis and fixes
+**Original Features**:
+- Auto-generate commit messages → #52
+- Generate semantic branch names from issues → Already in start command
+- Conflict resolution assistance → #53
+- Type error and lint error fixing → #46
+- Test failure analysis and fixes → #46
 
 ### Phase 4: Migration and Testing (Issues 14-16)
 
@@ -697,22 +704,28 @@ hatchbox-ai/
 - ✅ **Issue #1** - TypeScript project initialization
 - ✅ **Issue #2** - Core Git Worktree Management
 
-**Next (in order):**
-1. **Issue #27** - Logging Infrastructure ⭐ CRITICAL - DONE
-   - Required by all subsequent commands
-   - Establishes consistent output formatting
+**Completed Foundation:**
+- ✅ **Issue #27** - Logging Infrastructure - DONE
+- ✅ **Issue #4** - Environment Management Module - DONE
+- ✅ **Issue #3** - GitHub Integration Module - DONE
+- ✅ **Issue #12** - Claude CLI Integration - DONE
 
-2. **Issue #28** - Enhanced Worktree Detection ⭐ CRITICAL - DEFERRED - this can wait
-   - Builds on completed Issue #2
-   - Critical UX improvement for worktree reuse
+**Deferred Foundation (can wait):**
+- **Issue #28** - Enhanced Worktree Detection (UX improvement)
+- **Issue #5** - Database Branch Management (Neon integration)
 
-3. **Issue #4** - Environment Management Module - DONE
-   - Required by start command
-   - Port assignment logic
+**CURRENT IMMEDIATE PRIORITIES:**
 
-4. **Issue #5** - Database Branch Management (Neon) ⭐ CRITICAL - DEFERRED THIS CAN WAIT
-   - Required by start/finish commands
-   - Includes Vercel preview integration
+1. **ResourceCleanup Component** ⭐ URGENT (3-4 days)
+   - Can be developed in parallel with finish command
+   - Required by both finish and cleanup commands
+
+2. **Issue #7 Phase 1** ⭐ URGENT (1 week - bare-bones working finish)
+   - #44 - Core Finish Command Structure & Input Validation
+   - #45 - Pre-Merge Validation Pipeline (Fail-Fast)
+   - #47 - Uncommitted Changes & Basic Commit (No Claude)
+   - #49 - Git Rebase & Merge Workflow (Fail-Fast)
+   - #51 - PR Workflow & Integration
 
 ---
 
@@ -741,20 +754,34 @@ hatchbox-ai/
      - #34 - GitHub Integration for Start Command - DONE
      - #35 - Worktree Creation & Environment Setup - DONE
      - #36 - Claude Integration & Context Generation - DONE
-     - #37 - Visual Workspace Distinction
-     - #38 - Multiple Opening Modes
+     - #37 - Visual Workspace Distinction - DONE
+     - #38 - Multiple Opening Modes - DONE
      - #39 - Advanced Features & Polish
      - #40 - Database Branch Management (lower priority)
 
-9. **Issue #7** - Implement 'finish' Command ⭐ CRITICAL
-   - Second most complex command
-   - Claude-assisted automation workflows
-   - Depends on: #27, #3, #5, #12, #13
+9. **Shared Component: ResourceCleanup** ⭐ CRITICAL (Can be developed in parallel)
+   - Shared component for both finish and cleanup commands
+   - Handles dev server termination, worktree removal, branch deletion, database cleanup
+   - Required by: #7 (finish), #8 (cleanup)
+   - **Implementation phases:**
+     - Phase 1: Core architecture and dev server termination
+     - Phase 2: Database integration and comprehensive error handling
 
-10. **Issue #13** - AI-Assisted Features ⭐ HIGH PRIORITY
-    - Detailed implementation workflows
-    - Supports finish command
-    - Can be developed in parallel with #7
+10. **Issue #7** - Implement 'finish' Command ⭐ CRITICAL
+    - Second most complex command with Claude-assisted workflows
+    - Depends on: #27, #3, #12, ResourceCleanup component
+    - **Broken down into sub-issues (Phase 1 - Bare-bones working finish):**
+      - **#44** - Core Finish Command Structure & Input Validation
+      - **#45** - Pre-Merge Validation Pipeline (Fail-Fast initially)
+      - **#47** - Uncommitted Changes & Basic Commit (No Claude initially)
+      - **#49** - Git Rebase & Merge Workflow (Fail-Fast on conflicts)
+      - **#51** - PR Workflow & Integration
+    - **Phase 2 - Claude Intelligence Enhancements:**
+      - **#46** - Claude-Assisted Error Fixing Workflows
+      - **#52** - Claude-Powered Auto-Commit Messages
+      - **#53** - Claude-Assisted Conflict Resolution
+    - **Phase 3 - Advanced Features (Low Priority):**
+      - **#48** - Migration Conflict Detection & Resolution (Payload CMS specific)
 
 ---
 
@@ -762,8 +789,14 @@ hatchbox-ai/
 **Goal:** Complete core workflow tooling
 
 11. **Issue #8** - Implement 'cleanup' Command
-    - Enhanced with numeric detection
-    - Depends on: #27, #28, #5
+    - Enhanced with safety mechanisms and rich information display
+    - Depends on: #27, ResourceCleanup component
+    - **Broken down into sub-issues:**
+      - **#54** - Core Cleanup Command Structure & Options
+      - **#55** - List Worktrees with Rich Information
+      - **#56** - Single Worktree Removal (using ResourceCleanup)
+      - **#57** - Issue-based Cleanup (find all branches for issue)
+      - **#58** - Bulk Cleanup (All Worktrees with safety checks)
 
 12. **Issue #9** - Implement 'list' Command
     - Colored output integration
@@ -841,14 +874,20 @@ Foundation Layer:
 #28 (Worktree Detection) → #6, #8
 
 Core Integrations:
-#3 (GitHub) → #6, #7
+#3 (GitHub) → #6, #7 (sub-issues #44, #51)
 #4 (Environment) → #6
-#5 (Database) → #6, #7, #8
+#5 (Database) → #6, #7, #8, ResourceCleanup
 #11 (Prompts) → #6, #10, #12
-#12 (Claude CLI) → #6, #7
+#12 (Claude CLI) → #6, #7 (sub-issues #46, #52, #53)
+
+Shared Components:
+ResourceCleanup → #7 (finish), #8 (cleanup)
 
 Primary Commands:
-#6 (start) + #7 (finish) → Core workflow complete
+#6 (start) + #7 (finish with sub-issues #44-53) → Core workflow complete
+
+Supporting Commands:
+#8 (cleanup with sub-issues #54-58) → Complete workspace management
 
 Quality Gates:
 #15 (Tests) → Continuous throughout
@@ -857,12 +896,63 @@ Quality Gates:
 
 ### Parallelization Opportunities
 
-Issues that can be developed simultaneously:
-- **Wave 1:** #27 + #4 can start in parallel
-- **Wave 2:** #11 + #12 can be developed together
-- **Wave 2:** #13 can be developed alongside #7
-- **Wave 3:** #8, #9, #10 can all be done in parallel
-- **Wave 5:** #17-20, #29-30 can be parallelized
+Issues and sub-issues that can be developed simultaneously:
+
+**Foundation & Shared Components:**
+- ResourceCleanup component can be developed in parallel with finish/cleanup commands
+
+**Wave 2 - Core Commands:**
+- Finish command sub-issues have dependencies:
+  - #44 → #45 → #47, #49, #51 (sequential for Phase 1)
+  - Phase 2 enhancements (#46, #52, #53) can be parallel after Phase 1
+- #11 + #12 can be developed together
+
+**Wave 3 - Supporting Commands:**
+- Cleanup command sub-issues:
+  - #54 → #55, #56 (can be parallel after #54)
+  - #57, #58 depend on #56 but can be parallel with each other
+- #9, #10 can be developed in parallel with cleanup sub-issues
+
+**Wave 5 - Enhanced Features:**
+- #17-20, #29-30 can be parallelized
+
+## Detailed Implementation Timelines
+
+### ResourceCleanup Component (3-4 days)
+**Can be developed in parallel with commands**
+
+- **Day 1**: Core architecture and ProcessManager
+- **Day 2**: Core cleanup operations (dev server, worktree, branch)
+- **Day 3**: Database integration and error handling
+- **Day 4**: Testing and polish
+
+### Finish Command Implementation (2 weeks total)
+
+**Phase 1: Bare-bones Working Finish (1 week - PRIORITY)**
+- **Day 1**: #44 - Core Command Structure & Input Validation
+- **Day 2**: #45 - Pre-Merge Validation Pipeline (Fail-Fast)
+- **Day 3**: #47 - Uncommitted Changes & Basic Commit
+- **Day 4-5**: #49 - Git Rebase & Merge Workflow (Fail-Fast)
+- **Day 6**: #51 - PR Workflow & Integration
+
+**Phase 2: Claude Intelligence (1 week - ENHANCEMENT)**
+- **Sub-Issue #46**: Claude Error Fixing (2 days)
+- **Sub-Issue #52**: Claude Auto-Commit Messages (1 day)
+- **Sub-Issue #53**: Claude Conflict Resolution (2 days)
+
+**Phase 3: Advanced Features (Future - LOW PRIORITY)**
+- **Sub-Issue #48**: Migration Handling (3 days) - Only if using Payload CMS
+
+### Cleanup Command Implementation (2 weeks)
+
+**Phase 1: Foundation (Week 1)**
+- **Day 1-2**: #54 - Core Command Structure & Options
+- **Day 3**: #55 - List Worktrees with Rich Information
+- **Day 4-5**: #56 - Single Worktree Removal
+
+**Phase 2: Batch Operations (Week 2)**
+- **Day 1-3**: #57 - Issue-based Cleanup
+- **Day 4-5**: #58 - Bulk Cleanup with Safety Checks
 
 ## Success Metrics
 
@@ -914,3 +1004,43 @@ Issues that can be developed simultaneously:
 - **Maintenance Burden**: Comprehensive documentation and testing
 
 This plan provides a clear roadmap from the current bash scripts to a production-ready TypeScript CLI tool while maintaining exact functionality parity and adding significant value through enhanced Claude AI integration.
+
+## IMMEDIATE NEXT STEPS (Updated with Sub-Issues)
+
+### Priority 1: Get Working Finish Command (2-3 weeks total)
+
+**Week 1: ResourceCleanup Component + Finish Phase 1 (in parallel)**
+1. **ResourceCleanup Component** (3-4 days, can be parallel)
+   - Core architecture and dev server termination
+   - Worktree removal and branch deletion
+   - Database integration and error handling
+   - Testing and polish
+
+2. **Finish Command Phase 1** (1 week, bare-bones working)
+   - **#44** - Core Finish Command Structure & Input Validation (1 day)
+   - **#45** - Pre-Merge Validation Pipeline - Fail-Fast (1 day)
+   - **#47** - Uncommitted Changes & Basic Commit (1 day)
+   - **#49** - Git Rebase & Merge Workflow - Fail-Fast (2 days)
+   - **#51** - PR Workflow & Integration (1 day)
+
+**Week 2-3: Finish Phase 2 (Claude Intelligence)**
+   - **#46** - Claude-Assisted Error Fixing Workflows (2 days)
+   - **#52** - Claude-Powered Auto-Commit Messages (1 day)
+   - **#53** - Claude-Assisted Conflict Resolution (2 days)
+
+### Priority 2: Complete Workspace Management (2 weeks)
+
+**Cleanup Command Implementation**
+   - **#54** - Core Cleanup Command Structure & Options (2 days)
+   - **#55** - List Worktrees with Rich Information (1 day)
+   - **#56** - Single Worktree Removal (2 days)
+   - **#57** - Issue-based Cleanup (3 days)
+   - **#58** - Bulk Cleanup with Safety Checks (2 days)
+
+### Result
+After 4-5 weeks of focused development:
+- ✅ Working start command (already completed)
+- ✅ Working finish command with Claude assistance
+- ✅ Complete cleanup command with safety mechanisms
+- ✅ Shared ResourceCleanup component
+- **Ready for production use and dogfooding**

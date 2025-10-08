@@ -4,11 +4,11 @@ The first step which I want you to begin immediately is:
 
 @agent-github-issue-analyzer-sonnet ISSUE_NUMBER
 
-Once this has done, provide the user with a link to the github issue comment, and ask them to review and to signal when they're ready to proceed to the next step. When they are, proceed with:
+Once this has done, open a link to the github issue comment (including the comment ID), and ask them to review and to signal when they're ready to proceed to the next step. When they are, proceed with:
 
 @agent-github-issue-planner-sonnet ISSUE_NUMBER
 
-Once this has done, provide the user with a link to the github issue comment, and ask them to review and to signal when they're ready to proceed to the next step. When they are, proceed with:
+Once this has done, open a link to the github issue comment (including the comment ID), and ask them to review and to signal when they're ready to proceed to the next step. When they are, proceed with:
 
 @agent-github-issue-implementer ISSUE_NUMBER
 
