@@ -22,7 +22,11 @@
       "Bash(git log:*)",
       "Bash(gh issue comment:*)",
       "Bash(pnpm typecheck:*)",
-      "Bash(pnpm lint:*)"
+      "Bash(pnpm lint:*)",
+      "Bash(npm test:*)",
+      "Bash(cat:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run lint)"
     ],
     "deny": [],
     "ask": []
