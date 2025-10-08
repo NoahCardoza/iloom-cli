@@ -1,4 +1,5 @@
 export type ProjectCapability = 'cli' | 'web'
+export type Capability = ProjectCapability
 
 export interface Hatchbox {
   id: string
@@ -28,9 +29,12 @@ export interface CreateHatchboxInput {
   baseBranch?: string
   options?: {
     urgent?: boolean
-    skipClaude?: boolean
     skipDatabase?: boolean
     skipColorSync?: boolean
+    // Individual component flags
+    enableClaude?: boolean
+    enableCode?: boolean
+    enableDevServer?: boolean
   }
 }
 

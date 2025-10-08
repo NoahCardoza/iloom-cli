@@ -1,4 +1,6 @@
 import { execa } from 'execa'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { logger } from './logger.js'
 
 export interface ClaudeCliOptions {
@@ -82,38 +84,41 @@ export async function launchClaude(
 			return result.stdout.trim()
 		} else {
 			// Interactive mode: let user interact with Claude
-			// Add the prompt as final argument
 			args.push("--")
-			args.push(prompt)
 
-			// TODO: This implementation is temporary and will be enhanced for Issue #6.
-			// Current implementation applies terminal background color (Issue #37)
-			// Future enhancements for Issue #6:
-			// - Use AppleScript/osascript to open NEW Terminal window (not current terminal)
-			// - Set up environment in new window (cd to directory, source .env, export PORT)
-			// - Launch Claude with appropriate context and permissions in the new window
+			// Import terminal launcher for new terminal window creation
+			const { openTerminalWindow } = await import('./terminal.js')
 
-			// Apply terminal background color if branch name is available
-			if (branchName && process.platform === 'darwin') {
+			// Build Claude command for terminal execution with properly quoted prompt
+			const baseCommand = ['claude', ...args].join(' ')
+			const quotedPrompt = `'${prompt.replace(/'/g, "'\\''")}'`
+			const claudeCommand = `${baseCommand} ${quotedPrompt}`
+
+			// Apply terminal background color if branch name available
+			let backgroundColor: { r: number; g: number; b: number } | undefined
+			if (branchName) {
 				try {
-					const { TerminalColorManager } = await import('../lib/TerminalColorManager.js')
-					const terminalColor = new TerminalColorManager()
-					await terminalColor.applyTerminalColor(branchName)
+					const { generateColorFromBranchName } = await import('./color.js')
+					const colorData = generateColorFromBranchName(branchName)
+					backgroundColor = colorData.rgb
 				} catch (error) {
-					// Log warning but don't block Claude launch
 					logger.warn(
-						`Failed to apply terminal background color: ${error instanceof Error ? error.message : 'Unknown error'}`
+						`Failed to generate terminal color: ${error instanceof Error ? error.message : 'Unknown error'}`
 					)
 				}
 			}
 
-			// Launch in background without awaiting
-			execa('claude', args, {
-				stdio: 'inherit',
-				...(addDir && { cwd: addDir }), // Run Claude in the worktree directory
-			}).catch((error) => {
-				logger.error('Claude interactive session failed', { error })
+			// Check if .env file exists in workspace
+			const hasEnvFile = addDir ? existsSync(join(addDir, '.env')) : false
+
+			// Open new terminal window with Claude
+			await openTerminalWindow({
+				...(addDir && { workspacePath: addDir }),
+				command: claudeCommand,
+				...(backgroundColor && { backgroundColor }),
+				includeEnvSetup: hasEnvFile, // source .env only if it exists
 			})
+
 			return
 		}
 	} catch (error) {

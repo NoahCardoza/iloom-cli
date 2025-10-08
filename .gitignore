@@ -47,3 +47,4 @@ logs/
 *.log
 
 tmp/
+.vscode/

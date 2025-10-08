@@ -65,7 +65,10 @@ export class StartCommand {
 				originalInput: parsed.originalInput,
 				options: {
 					...(input.options.urgent !== undefined && { urgent: input.options.urgent }),
-					skipClaude: !input.options.claude,
+					// Pass individual component flags (defaults to true if not specified)
+					enableClaude: input.options.claude !== false,
+					enableCode: input.options.code !== false,
+					enableDevServer: input.options.devServer !== false,
 				},
 			})
 

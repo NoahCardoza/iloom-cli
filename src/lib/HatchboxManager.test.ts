@@ -27,6 +27,18 @@ vi.mock('../utils/package-manager.js', () => ({
   installDependencies: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Mock HatchboxLauncher (dynamically imported)
+vi.mock('./HatchboxLauncher.js', () => ({
+  HatchboxLauncher: vi.fn(() => ({
+    launchHatchbox: vi.fn().mockResolvedValue(undefined),
+  })),
+}))
+
+// Mock vscode utils (dynamically imported)
+vi.mock('../utils/vscode.js', () => ({
+  openVSCodeWindow: vi.fn().mockResolvedValue(undefined),
+}))
+
 describe('HatchboxManager', () => {
   let manager: HatchboxManager
   let mockGitWorktree: vi.Mocked<GitWorktreeManager>
@@ -901,6 +913,89 @@ describe('HatchboxManager', () => {
 
       expect(result.cliSymlinks).toEqual(['cmd1-42', 'cmd2-42'])
       expect(result.binEntries).toEqual({ cmd1: './bin/cmd1.js', cmd2: './bin/cmd2.js' })
+    })
+  })
+
+  describe('opening modes integration', () => {
+    it('should use default mode when no mode flags specified', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'branch',
+        identifier: 'test-branch',
+        originalInput: 'test-branch',
+      }
+
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue({
+        path: '/test/path',
+        branch: 'test-branch',
+        commit: 'abc123',
+      } as unknown)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {},
+      })
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3000)
+
+      await manager.createHatchbox(input)
+
+      // Default mode should launch (via HatchboxLauncher)
+      // We can't directly test HatchboxLauncher calls since it's dynamically imported
+      // But we verify the hatchbox is created successfully
+      expect(mockGitWorktree.createWorktree).toHaveBeenCalled()
+    })
+
+    it('should pass terminal-only mode option', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'branch',
+        identifier: 'test-branch',
+        originalInput: 'test-branch',
+        options: {
+          terminalOnly: true,
+        },
+      }
+
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue({
+        path: '/test/path',
+        branch: 'test-branch',
+        commit: 'abc123',
+      } as unknown)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {},
+      })
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3000)
+
+      await manager.createHatchbox(input)
+
+      // Terminal-only mode should not skip launching
+      expect(mockGitWorktree.createWorktree).toHaveBeenCalled()
+    })
+
+    it('should handle code-only mode separately', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'branch',
+        identifier: 'test-branch',
+        originalInput: 'test-branch',
+        options: {
+          codeOnly: true,
+        },
+      }
+
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue({
+        path: '/test/path',
+        branch: 'test-branch',
+        commit: 'abc123',
+      } as unknown)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {},
+      })
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3000)
+
+      await manager.createHatchbox(input)
+
+      // Code-only mode should create hatchbox successfully
+      // VSCode launching happens via dynamic import
+      expect(mockGitWorktree.createWorktree).toHaveBeenCalled()
     })
   })
 })

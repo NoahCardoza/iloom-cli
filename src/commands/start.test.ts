@@ -318,6 +318,80 @@ describe('StartCommand', () => {
 			})
 		})
 
+		describe('component flags', () => {
+			it('should handle --code flag', async () => {
+				await expect(
+					command.execute({
+						identifier: 'feature/test',
+						options: { code: true },
+					})
+				).resolves.not.toThrow()
+			})
+
+			it('should handle --no-code flag', async () => {
+				await expect(
+					command.execute({
+						identifier: 'feature/test',
+						options: { code: false },
+					})
+				).resolves.not.toThrow()
+			})
+
+			it('should handle --dev-server flag', async () => {
+				await expect(
+					command.execute({
+						identifier: 'feature/test',
+						options: { devServer: true },
+					})
+				).resolves.not.toThrow()
+			})
+
+			it('should handle --no-dev-server flag', async () => {
+				await expect(
+					command.execute({
+						identifier: 'feature/test',
+						options: { devServer: false },
+					})
+				).resolves.not.toThrow()
+			})
+
+			it('should handle component flags with urgent flag', async () => {
+				await expect(
+					command.execute({
+						identifier: 'feature/test',
+						options: { devServer: true, urgent: true },
+					})
+				).resolves.not.toThrow()
+			})
+
+			it('should handle component flags with no-claude flag', async () => {
+				await expect(
+					command.execute({
+						identifier: 'feature/test',
+						options: { code: true, claude: false },
+					})
+				).resolves.not.toThrow()
+			})
+
+			it('should handle multiple component flags', async () => {
+				await expect(
+					command.execute({
+						identifier: 'feature/test',
+						options: { code: true, claude: true, devServer: false },
+					})
+				).resolves.not.toThrow()
+			})
+
+			it('should handle all components disabled', async () => {
+				await expect(
+					command.execute({
+						identifier: 'feature/test',
+						options: { code: false, claude: false, devServer: false },
+					})
+				).resolves.not.toThrow()
+			})
+		})
+
 		describe('GitHub detection', () => {
 			it('should detect PR when number is a PR', async () => {
 				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({

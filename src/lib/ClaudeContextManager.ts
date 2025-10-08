@@ -7,7 +7,7 @@ export interface ClaudeContext {
 	identifier: number | string
 	title?: string
 	workspacePath: string
-	port: number
+	port?: number
 	branchName?: string
 }
 
@@ -53,7 +53,7 @@ export class ClaudeContextManager {
 		const workflowOptions: ClaudeWorkflowOptions = {
 			type: context.type,
 			workspacePath: context.workspacePath,
-			port: context.port,
+			...(context.port !== undefined && { port: context.port }),
 			headless,
 		}
 

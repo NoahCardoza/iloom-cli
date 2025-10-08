@@ -51,7 +51,12 @@ program
   .description('Create isolated workspace for an issue/PR')
   .argument('<identifier>', 'Issue number, PR number, or branch name')
   .option('--urgent', 'Mark as urgent workspace')
-  .option('--no-claude', 'Skip Claude integration')
+  .option('--claude', 'Enable Claude integration (default: true)', true)
+  .option('--no-claude', 'Disable Claude integration')
+  .option('--code', 'Enable VSCode (default: true)', true)
+  .option('--no-code', 'Disable VSCode')
+  .option('--dev-server', 'Enable dev server in terminal (default: true)', true)
+  .option('--no-dev-server', 'Disable dev server')
   .action(async (identifier: string, options: StartOptions) => {
     try {
       const { StartCommand } = await import('./commands/start.js')

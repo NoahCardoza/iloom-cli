@@ -92,7 +92,10 @@ export interface Config {
 // Command option types
 export interface StartOptions {
   urgent?: boolean
+  // Individual component flags (can be combined)
   claude?: boolean
+  code?: boolean
+  devServer?: boolean
 }
 
 export interface FinishOptions {

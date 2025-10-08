@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { execa, type ExecaReturnValue } from 'execa'
+import { existsSync } from 'node:fs'
 import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName } from './claude.js'
 
 vi.mock('execa')
+vi.mock('node:fs')
 vi.mock('./logger.js', () => ({
 	logger: {
 		debug: vi.fn(),
@@ -286,13 +288,10 @@ describe('claude utils', () => {
 				const result = await launchClaude(prompt, { headless: false })
 
 				expect(result).toBeUndefined()
+				// Interactive mode now uses terminal window launcher
 				expect(execa).toHaveBeenCalledWith(
-					'claude',
-					['--', prompt],
-					expect.objectContaining({
-						stdio: 'inherit',
-						// No timeout in interactive mode anymore
-					})
+					'osascript',
+					['-e', expect.stringContaining('tell application "Terminal"')]
 				)
 			})
 
@@ -310,12 +309,10 @@ describe('claude utils', () => {
 					addDir: '/workspace',
 				})
 
+				// Interactive mode now uses terminal window launcher
 				expect(execa).toHaveBeenCalledWith(
-					'claude',
-					['--model', 'opusplan', '--permission-mode', 'plan', '--add-dir', '/workspace', '--', prompt],
-					expect.objectContaining({
-						stdio: 'inherit',
-					})
+					'osascript',
+					['-e', expect.stringContaining('tell application "Terminal"')]
 				)
 			})
 
@@ -332,14 +329,14 @@ describe('claude utils', () => {
 					addDir: workspacePath,
 				})
 
+				// Interactive mode now uses terminal window launcher with workspace path
 				expect(execa).toHaveBeenCalledWith(
-					'claude',
-					['--add-dir', workspacePath, '--', prompt],
-					expect.objectContaining({
-						stdio: 'inherit',
-						cwd: workspacePath,
-					})
+					'osascript',
+					['-e', expect.stringContaining('tell application "Terminal"')]
 				)
+				// Verify the AppleScript includes the workspace path
+				const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+				expect(applescript).toContain(workspacePath)
 			})
 
 			it('should not set cwd in interactive mode when addDir is not specified', async () => {
@@ -353,17 +350,11 @@ describe('claude utils', () => {
 					headless: false,
 				})
 
+				// Interactive mode now uses terminal window launcher
 				expect(execa).toHaveBeenCalledWith(
-					'claude',
-					['--', prompt],
-					expect.objectContaining({
-						stdio: 'inherit',
-					})
+					'osascript',
+					['-e', expect.stringContaining('tell application "Terminal"')]
 				)
-
-				// Ensure cwd is not in the options
-				const execaCall = vi.mocked(execa).mock.calls[0]
-				expect(execaCall[2]).not.toHaveProperty('cwd')
 			})
 
 			it('should apply terminal color when branchName is provided on macOS', async () => {
@@ -395,12 +386,11 @@ describe('claude utils', () => {
 					branchName,
 				})
 
+				// Interactive mode now uses terminal window launcher
+				// Verify osascript was called (for terminal window creation)
 				expect(execa).toHaveBeenCalledWith(
-					'claude',
-					['--', prompt],
-					expect.objectContaining({
-						stdio: 'inherit',
-					})
+					'osascript',
+					['-e', expect.stringContaining('tell application "Terminal"')]
 				)
 
 				// Restore original platform
@@ -408,6 +398,106 @@ describe('claude utils', () => {
 					value: originalPlatform,
 					configurable: true,
 				})
+			})
+
+			it('should set includeEnvSetup to true when .env file exists in workspace', async () => {
+				const prompt = 'Work on this issue'
+				const workspacePath = '/path/to/workspace'
+
+				// Mock .env file exists
+				vi.mocked(existsSync).mockReturnValue(true)
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: false,
+					addDir: workspacePath,
+				})
+
+				// Verify the AppleScript includes sourcing .env
+				const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+				expect(applescript).toContain('source .env')
+				expect(existsSync).toHaveBeenCalledWith('/path/to/workspace/.env')
+			})
+
+			it('should set includeEnvSetup to false when .env file does not exist in workspace', async () => {
+				const prompt = 'Work on this issue'
+				const workspacePath = '/path/to/workspace'
+
+				// Mock .env file does not exist
+				vi.mocked(existsSync).mockReturnValue(false)
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: false,
+					addDir: workspacePath,
+				})
+
+				// Verify the AppleScript does NOT include sourcing .env
+				const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+				expect(applescript).not.toContain('source .env')
+				expect(existsSync).toHaveBeenCalledWith('/path/to/workspace/.env')
+			})
+
+			it('should set includeEnvSetup to false when no workspace path is provided', async () => {
+				const prompt = 'Work on this issue'
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: false,
+				})
+
+				// Verify the AppleScript does NOT include sourcing .env
+				const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+				expect(applescript).not.toContain('source .env')
+				expect(existsSync).not.toHaveBeenCalled()
+			})
+
+			it('should properly quote prompt with spaces and special characters', async () => {
+				const prompt = 'Work on this issue: "Fix authentication bug" with special chars & quotes'
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: false,
+				})
+
+				// Verify the command in AppleScript properly quotes the prompt
+				const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+				// The prompt should be wrapped in single quotes and double quotes should be escaped for AppleScript
+				expect(applescript).toContain(`claude -- 'Work on this issue: \\"Fix authentication bug\\" with special chars & quotes'`)
+			})
+
+			it('should properly escape single quotes in prompt', async () => {
+				const prompt = "Fix the user's authentication issue"
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: false,
+				})
+
+				// Verify the command in AppleScript properly escapes single quotes
+				const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+				// Single quotes should be escaped as '\'' and then further escaped for AppleScript
+				expect(applescript).toContain(`claude -- 'Fix the user'\\\\''s authentication issue'`)
 			})
 		})
 	})

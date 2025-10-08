@@ -24,7 +24,7 @@ export class HatchboxManager {
     private gitWorktree: GitWorktreeManager,
     private github: GitHubService,
     private environment: EnvironmentManager,
-    private claude: ClaudeContextManager,
+    _claude: ClaudeContextManager, // Not stored - kept for DI compatibility, HatchboxLauncher creates its own
     private capabilityDetector: ProjectCapabilityDetector,
     private cliIsolation: CLIIsolationManager
     // private database?: DatabaseManager  // Will be used in future for database branching
@@ -84,15 +84,27 @@ export class HatchboxManager {
       }
     }
 
-    // 8. Launch Claude with context (unless skipped)
-    if (!input.options?.skipClaude) {
-      await this.claude.launchWithContext({
-        workspacePath: worktreePath,
-        type: input.type === 'branch' ? 'regular' : input.type,
-        identifier: input.identifier,
-        branchName, // Add branch name for terminal coloring
-        ...(githubData?.title && { title: githubData.title }),
+    // 8. Launch workspace components based on individual flags
+    const enableClaude = input.options?.enableClaude !== false
+    const enableCode = input.options?.enableCode !== false
+    const enableDevServer = input.options?.enableDevServer !== false
+
+    // Only launch if at least one component is enabled
+    if (enableClaude || enableCode || enableDevServer) {
+      const { HatchboxLauncher } = await import('./HatchboxLauncher.js')
+      const launcher = new HatchboxLauncher()
+
+      await launcher.launchHatchbox({
+        enableClaude,
+        enableCode,
+        enableDevServer,
+        worktreePath,
+        branchName,
         port,
+        capabilities,
+        workflowType: input.type === 'branch' ? 'regular' : input.type,
+        identifier: input.identifier,
+        ...(githubData?.title && { title: githubData.title }),
       })
     }
 
@@ -298,6 +310,7 @@ export class HatchboxManager {
     // Default for branch-based hatchboxes - random port
     return basePort + Math.floor(Math.random() * 1000)
   }
+
 
   /**
    * Apply color synchronization to both VSCode and terminal
