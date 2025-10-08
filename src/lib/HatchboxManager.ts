@@ -3,6 +3,8 @@ import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { GitHubService } from './GitHubService.js'
 import { EnvironmentManager } from './EnvironmentManager.js'
 import { ClaudeContextManager } from './ClaudeContextManager.js'
+import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
+import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { branchExists } from '../utils/git.js'
 import { installDependencies } from '../utils/package-manager.js'
 // import { DatabaseManager } from './DatabaseManager.js'
@@ -20,7 +22,9 @@ export class HatchboxManager {
     private gitWorktree: GitWorktreeManager,
     private github: GitHubService,
     private environment: EnvironmentManager,
-    private claude: ClaudeContextManager
+    private claude: ClaudeContextManager,
+    private capabilityDetector: ProjectCapabilityDetector,
+    private cliIsolation: CLIIsolationManager
     // private database?: DatabaseManager  // Will be used in future for database branching
   ) {}
 
@@ -38,10 +42,34 @@ export class HatchboxManager {
     // 3. Create git worktree
     const worktreePath = await this.createWorktree(input, branchName)
 
-    // 4. Setup environment
-    const port = await this.setupEnvironment(worktreePath, input)
+    // 4. Detect project capabilities
+    const { capabilities, binEntries } = await this.capabilityDetector.detectCapabilities(worktreePath)
 
-    // 5. Generate Claude context (unless skipped)
+    // 5. Setup environment based on capabilities
+    let port = 3000 // default
+    if (capabilities.includes('web')) {
+      port = await this.setupEnvironment(worktreePath, input)
+    }
+
+    // 6. Setup CLI isolation if project has CLI capability
+    let cliSymlinks: string[] | undefined = undefined
+    if (capabilities.includes('cli')) {
+      try {
+        cliSymlinks = await this.cliIsolation.setupCLIIsolation(
+          worktreePath,
+          input.identifier,
+          binEntries
+        )
+      } catch (error) {
+        // Log warning but don't fail - matches dependency installation behavior
+        logger.warn(
+          `Failed to setup CLI isolation: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          error
+        )
+      }
+    }
+
+    // 7. Generate Claude context (unless skipped)
     if (!input.options?.skipClaude) {
       await this.claude.prepareContext({
         workspacePath: worktreePath,
@@ -52,14 +80,14 @@ export class HatchboxManager {
       })
     }
 
-    // 6. SKIP - DO NOT IMPLEMENT YET: Setup database branch
+    // 8. SKIP - DO NOT IMPLEMENT YET: Setup database branch
     let databaseBranch: string | undefined = undefined
     // Database branch creation will be implemented when needed
     // if (this.database && !input.options?.skipDatabase) {
     //   databaseBranch = await this.database.createBranch(branchName)
     // }
 
-    // 7. Create and return hatchbox metadata
+    // 9. Create and return hatchbox metadata
     const hatchbox: Hatchbox = {
       id: this.generateHatchboxId(input),
       path: worktreePath,
@@ -70,6 +98,9 @@ export class HatchboxManager {
       createdAt: new Date(),
       lastAccessed: new Date(),
       ...(databaseBranch !== undefined && { databaseBranch }),
+      ...(capabilities.length > 0 && { capabilities }),
+      ...(Object.keys(binEntries).length > 0 && { binEntries }),
+      ...(cliSymlinks && cliSymlinks.length > 0 && { cliSymlinks }),
       ...(githubData !== null && {
         githubData: {
           title: githubData.title,

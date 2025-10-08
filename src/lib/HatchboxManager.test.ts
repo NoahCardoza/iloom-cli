@@ -4,6 +4,8 @@ import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { GitHubService } from './GitHubService.js'
 import { EnvironmentManager } from './EnvironmentManager.js'
 import { ClaudeContextManager } from './ClaudeContextManager.js'
+import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
+import { CLIIsolationManager } from './CLIIsolationManager.js'
 import type { CreateHatchboxInput } from '../types/hatchbox.js'
 import { installDependencies } from '../utils/package-manager.js'
 
@@ -12,6 +14,8 @@ vi.mock('./GitWorktreeManager.js')
 vi.mock('./GitHubService.js')
 vi.mock('./EnvironmentManager.js')
 vi.mock('./ClaudeContextManager.js')
+vi.mock('./ProjectCapabilityDetector.js')
+vi.mock('./CLIIsolationManager.js')
 
 // Mock branchExists utility
 vi.mock('../utils/git.js', () => ({
@@ -29,19 +33,31 @@ describe('HatchboxManager', () => {
   let mockGitHub: vi.Mocked<GitHubService>
   let mockEnvironment: vi.Mocked<EnvironmentManager>
   let mockClaude: vi.Mocked<ClaudeContextManager>
+  let mockCapabilityDetector: vi.Mocked<ProjectCapabilityDetector>
+  let mockCLIIsolation: vi.Mocked<CLIIsolationManager>
 
   beforeEach(() => {
     mockGitWorktree = new GitWorktreeManager() as vi.Mocked<GitWorktreeManager>
     mockGitHub = new GitHubService() as vi.Mocked<GitHubService>
     mockEnvironment = new EnvironmentManager() as vi.Mocked<EnvironmentManager>
     mockClaude = new ClaudeContextManager() as vi.Mocked<ClaudeContextManager>
+    mockCapabilityDetector = new ProjectCapabilityDetector() as vi.Mocked<ProjectCapabilityDetector>
+    mockCLIIsolation = new CLIIsolationManager() as vi.Mocked<CLIIsolationManager>
 
     manager = new HatchboxManager(
       mockGitWorktree,
       mockGitHub,
       mockEnvironment,
-      mockClaude
+      mockClaude,
+      mockCapabilityDetector,
+      mockCLIIsolation
     )
+
+    // Default mock for capability detector (web-only) - can be overridden in tests
+    vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+      capabilities: ['web'],
+      binEntries: {}
+    })
 
     vi.clearAllMocks()
   })
@@ -582,6 +598,309 @@ describe('HatchboxManager', () => {
         branch: 'feature/123-test',
         createBranch: true,
       })
+    })
+  })
+
+  describe('CLI Isolation', () => {
+    it('should detect CLI capabilities and setup isolation', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'issue',
+        identifier: 42,
+        originalInput: '42',
+      }
+
+      const mockIssue = {
+        number: 42,
+        title: 'CLI Tool Issue',
+        body: '',
+        state: 'open' as const,
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/42',
+      }
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue(mockIssue)
+      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('feature/42-cli')
+
+      const expectedPath = '/test/worktree-issue-42'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockClaude.prepareContext).mockResolvedValue()
+
+      // Mock CLI capability detection
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: ['cli'],
+        binEntries: { hb: './dist/cli.js', hatchbox: './dist/cli.js' }
+      })
+
+      // Mock CLI isolation setup
+      vi.mocked(mockCLIIsolation.setupCLIIsolation).mockResolvedValue(['hb-42', 'hatchbox-42'])
+
+      const result = await manager.createHatchbox(input)
+
+      expect(result.capabilities).toEqual(['cli'])
+      expect(result.binEntries).toEqual({ hb: './dist/cli.js', hatchbox: './dist/cli.js' })
+      expect(result.cliSymlinks).toEqual(['hb-42', 'hatchbox-42'])
+      expect(mockCapabilityDetector.detectCapabilities).toHaveBeenCalledWith(expectedPath)
+      expect(mockCLIIsolation.setupCLIIsolation).toHaveBeenCalledWith(
+        expectedPath,
+        42,
+        { hb: './dist/cli.js', hatchbox: './dist/cli.js' }
+      )
+    })
+
+    it('should detect web capabilities and setup port isolation', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'issue',
+        identifier: 42,
+        originalInput: '42',
+      }
+
+      const mockIssue = {
+        number: 42,
+        title: 'Web App Issue',
+        body: '',
+        state: 'open' as const,
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/42',
+      }
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue(mockIssue)
+      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('feature/42-web')
+
+      const expectedPath = '/test/worktree-issue-42'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockClaude.prepareContext).mockResolvedValue()
+
+      // Mock web-only capability detection
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: ['web'],
+        binEntries: {}
+      })
+
+      const result = await manager.createHatchbox(input)
+
+      expect(result.capabilities).toEqual(['web'])
+      expect(result.port).toBe(3042)
+      expect(mockEnvironment.setPortForWorkspace).toHaveBeenCalledWith(
+        expectedPath + '/.env',
+        42,
+        undefined
+      )
+      expect(mockCLIIsolation.setupCLIIsolation).not.toHaveBeenCalled()
+    })
+
+    it('should detect hybrid project and setup both isolations', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'issue',
+        identifier: 42,
+        originalInput: '42',
+      }
+
+      const mockIssue = {
+        number: 42,
+        title: 'Hybrid Project Issue',
+        body: '',
+        state: 'open' as const,
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/42',
+      }
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue(mockIssue)
+      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('feature/42-hybrid')
+
+      const expectedPath = '/test/worktree-issue-42'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockClaude.prepareContext).mockResolvedValue()
+
+      // Mock hybrid capability detection
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: ['cli', 'web'],
+        binEntries: { 'my-tool': './dist/cli.js' }
+      })
+
+      vi.mocked(mockCLIIsolation.setupCLIIsolation).mockResolvedValue(['my-tool-42'])
+
+      const result = await manager.createHatchbox(input)
+
+      expect(result.capabilities).toEqual(['cli', 'web'])
+      expect(result.port).toBe(3042)
+      expect(result.cliSymlinks).toEqual(['my-tool-42'])
+      expect(mockEnvironment.setPortForWorkspace).toHaveBeenCalled()
+      expect(mockCLIIsolation.setupCLIIsolation).toHaveBeenCalled()
+    })
+
+    it('should skip CLI isolation if no bin field', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'issue',
+        identifier: 42,
+        originalInput: '42',
+      }
+
+      const mockIssue = {
+        number: 42,
+        title: 'Library Issue',
+        body: '',
+        state: 'open' as const,
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/42',
+      }
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue(mockIssue)
+      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('feature/42-lib')
+
+      const expectedPath = '/test/worktree-issue-42'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockClaude.prepareContext).mockResolvedValue()
+
+      // Mock no capabilities
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {}
+      })
+
+      const result = await manager.createHatchbox(input)
+
+      // Empty capabilities array is not added to hatchbox object (spread operator check)
+      expect(result.capabilities).toBeUndefined()
+      expect(result.binEntries).toBeUndefined()
+      expect(result.cliSymlinks).toBeUndefined()
+      expect(mockCLIIsolation.setupCLIIsolation).not.toHaveBeenCalled()
+    })
+
+    it('should continue if CLI isolation fails (lenient error handling)', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'issue',
+        identifier: 42,
+        originalInput: '42',
+      }
+
+      const mockIssue = {
+        number: 42,
+        title: 'CLI Issue',
+        body: '',
+        state: 'open' as const,
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/42',
+      }
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue(mockIssue)
+      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('feature/42-cli')
+
+      const expectedPath = '/test/worktree-issue-42'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockClaude.prepareContext).mockResolvedValue()
+
+      // Mock CLI capability detection
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: ['cli'],
+        binEntries: { hb: './dist/cli.js' }
+      })
+
+      // Mock CLI isolation failure
+      vi.mocked(mockCLIIsolation.setupCLIIsolation).mockRejectedValue(
+        new Error('Build failed')
+      )
+
+      // Should not throw - should continue despite CLI isolation failure
+      const result = await manager.createHatchbox(input)
+
+      expect(result).toBeDefined()
+      expect(result.path).toBe(expectedPath)
+      expect(result.capabilities).toEqual(['cli'])
+      expect(result.cliSymlinks).toBeUndefined() // Not set due to failure
+    })
+
+    it('should store capabilities in hatchbox metadata', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'issue',
+        identifier: 42,
+        originalInput: '42',
+      }
+
+      const mockIssue = {
+        number: 42,
+        title: 'Test Issue',
+        body: '',
+        state: 'open' as const,
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/42',
+      }
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue(mockIssue)
+      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('feature/42-test')
+
+      const expectedPath = '/test/worktree-issue-42'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockClaude.prepareContext).mockResolvedValue()
+
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: ['cli', 'web'],
+        binEntries: { tool: './bin/tool.js' }
+      })
+
+      vi.mocked(mockCLIIsolation.setupCLIIsolation).mockResolvedValue(['tool-42'])
+
+      const result = await manager.createHatchbox(input)
+
+      expect(result).toHaveProperty('capabilities')
+      expect(result).toHaveProperty('binEntries')
+      expect(result).toHaveProperty('cliSymlinks')
+    })
+
+    it('should include CLI symlink info in hatchbox metadata', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'issue',
+        identifier: 42,
+        originalInput: '42',
+      }
+
+      const mockIssue = {
+        number: 42,
+        title: 'Test Issue',
+        body: '',
+        state: 'open' as const,
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/42',
+      }
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue(mockIssue)
+      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('feature/42-test')
+
+      const expectedPath = '/test/worktree-issue-42'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockClaude.prepareContext).mockResolvedValue()
+
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: ['cli'],
+        binEntries: { cmd1: './bin/cmd1.js', cmd2: './bin/cmd2.js' }
+      })
+
+      vi.mocked(mockCLIIsolation.setupCLIIsolation).mockResolvedValue(['cmd1-42', 'cmd2-42'])
+
+      const result = await manager.createHatchbox(input)
+
+      expect(result.cliSymlinks).toEqual(['cmd1-42', 'cmd2-42'])
+      expect(result.binEntries).toEqual({ cmd1: './bin/cmd1.js', cmd2: './bin/cmd2.js' })
     })
   })
 })

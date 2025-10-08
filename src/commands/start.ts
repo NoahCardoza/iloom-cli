@@ -4,6 +4,8 @@ import { HatchboxManager } from '../lib/HatchboxManager.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { EnvironmentManager } from '../lib/EnvironmentManager.js'
 import { ClaudeContextManager } from '../lib/ClaudeContextManager.js'
+import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
+import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { branchExists } from '../utils/git.js'
 import type { StartOptions } from '../types/index.js'
 
@@ -31,7 +33,9 @@ export class StartCommand {
 				new GitWorktreeManager(),
 				this.gitHubService,
 				new EnvironmentManager(),
-				new ClaudeContextManager()
+				new ClaudeContextManager(),
+				new ProjectCapabilityDetector(),
+				new CLIIsolationManager()
 			)
 	}
 

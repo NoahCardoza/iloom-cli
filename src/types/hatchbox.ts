@@ -1,3 +1,5 @@
+export type ProjectCapability = 'cli' | 'web'
+
 export interface Hatchbox {
   id: string
   path: string
@@ -14,6 +16,9 @@ export interface Hatchbox {
     url?: string
     state?: string
   }
+  capabilities?: ProjectCapability[]
+  binEntries?: Record<string, string>
+  cliSymlinks?: string[]
 }
 
 export interface CreateHatchboxInput {
