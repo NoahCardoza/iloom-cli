@@ -194,3 +194,18 @@ export interface CommitOptions {
 	message?: string      // Custom message override
 	noReview?: boolean    // Skip user review of commit message
 }
+
+// Merge management types
+export interface MergeOptions {
+	dryRun?: boolean      // Preview actions without executing
+	force?: boolean       // Skip confirmation prompts
+	repoRoot?: string     // Repository root path (optional, auto-detected if not provided)
+}
+
+export interface MergeResult {
+	success: boolean
+	branchName: string
+	commitsMerged: number
+	rebaseCompleted: boolean
+	mergeCompleted: boolean
+}

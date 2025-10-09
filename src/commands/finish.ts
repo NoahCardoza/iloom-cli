@@ -3,7 +3,8 @@ import { GitHubService } from '../lib/GitHubService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ValidationRunner } from '../lib/ValidationRunner.js'
 import { CommitManager } from '../lib/CommitManager.js'
-import type { FinishOptions, GitWorktree, CommitOptions } from '../types/index.js'
+import { MergeManager } from '../lib/MergeManager.js'
+import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions } from '../types/index.js'
 import path from 'path'
 
 export interface FinishCommandInput {
@@ -24,18 +25,21 @@ export class FinishCommand {
 	private gitWorktreeManager: GitWorktreeManager
 	private validationRunner: ValidationRunner
 	private commitManager: CommitManager
+	private mergeManager: MergeManager
 
 	constructor(
 		gitHubService?: GitHubService,
 		gitWorktreeManager?: GitWorktreeManager,
 		validationRunner?: ValidationRunner,
-		commitManager?: CommitManager
+		commitManager?: CommitManager,
+		mergeManager?: MergeManager
 	) {
 		// Dependency injection for testing
 		this.gitHubService = gitHubService ?? new GitHubService()
 		this.gitWorktreeManager = gitWorktreeManager ?? new GitWorktreeManager()
 		this.validationRunner = validationRunner ?? new ValidationRunner()
 		this.commitManager = commitManager ?? new CommitManager()
+		this.mergeManager = mergeManager ?? new MergeManager()
 	}
 
 	/**
@@ -97,13 +101,21 @@ export class FinishCommand {
 				logger.debug('No uncommitted changes found')
 			}
 
-			// Step 6: Additional workflow steps (PLACEHOLDER - implemented in later sub-issues)
-			// Migration handling, rebasing, merging, etc.
-			if (input.options.dryRun) {
-				logger.info('[DRY RUN] Would proceed with finish workflow')
-			} else {
-				logger.info('Ready to proceed with finish workflow (not yet implemented)')
+			// Step 7: Rebase branch on main
+			logger.info('Rebasing branch on main...')
+
+			const mergeOptions: MergeOptions = {
+				dryRun: input.options.dryRun ?? false,
+				force: input.options.force ?? false,
 			}
+
+			await this.mergeManager.rebaseOnMain(worktree.path, mergeOptions)
+			logger.success('Branch rebased successfully')
+
+			// Step 8: Perform fast-forward merge
+			logger.info('Performing fast-forward merge...')
+			await this.mergeManager.performFastForwardMerge(worktree.branch, worktree.path, mergeOptions)
+			logger.success('Fast-forward merge completed successfully')
 		} catch (error) {
 			if (error instanceof Error) {
 				logger.error(`${error.message}`)

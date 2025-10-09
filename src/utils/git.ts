@@ -31,53 +31,69 @@ export async function executeGitCommand(
  */
 export function parseWorktreeList(output: string): GitWorktree[] {
   const worktrees: GitWorktree[] = []
-  const lines = output.trim().split('\n').filter(Boolean)
+  const lines = output.trim().split('\n')
 
-  for (let i = 0; i < lines.length; i += 3) {
+  let i = 0
+  while (i < lines.length) {
     const pathLine = lines[i]
-    const commitLine = lines[i + 1]
-    const branchLine = lines[i + 2]
-
-    if (!pathLine || !commitLine) continue
+    if (!pathLine?.startsWith('worktree ')) {
+      i++
+      continue
+    }
 
     // Parse path line: "worktree /path/to/worktree"
     const pathMatch = pathLine.match(/^worktree (.+)$/)
-    if (!pathMatch) continue
+    if (!pathMatch) {
+      i++
+      continue
+    }
 
-    // Parse commit line: "HEAD abc123def456 commit message"
-    const commitMatch = commitLine.match(/^HEAD ([a-f0-9]+)/)
-    if (!commitMatch) continue
-
-    // Parse branch line: "branch refs/heads/feature-branch" or "detached"
     let branch = ''
+    let commit = ''
     let detached = false
     let bare = false
     let locked = false
     let lockReason: string | undefined
 
-    if (branchLine) {
-      if (branchLine === 'detached') {
-        detached = true
-        branch = 'HEAD'
-      } else if (branchLine === 'bare') {
+    // Process subsequent lines for this worktree
+    i++
+    while (i < lines.length && !lines[i]?.startsWith('worktree ')) {
+      const line = lines[i]?.trim()
+      if (!line) {
+        i++
+        continue
+      }
+
+      if (line === 'bare') {
         bare = true
         branch = 'main' // Default assumption for bare repo
-      } else if (branchLine.startsWith('locked')) {
+      } else if (line === 'detached') {
+        detached = true
+        branch = 'HEAD'
+      } else if (line.startsWith('locked')) {
         locked = true
-        const lockMatch = branchLine.match(/^locked (.+)$/)
+        const lockMatch = line.match(/^locked (.+)$/)
         lockReason = lockMatch?.[1]
-        // Try to get branch from previous context or default
-        branch = 'unknown'
-      } else {
-        const branchMatch = branchLine.match(/^branch refs\/heads\/(.+)$/)
-        branch = branchMatch?.[1] ?? branchLine
+        branch = branch || 'unknown'
+      } else if (line.startsWith('HEAD ')) {
+        // Parse commit line: "HEAD abc123def456..."
+        const commitMatch = line.match(/^HEAD ([a-f0-9]+)/)
+        if (commitMatch) {
+          commit = commitMatch[1] ?? ''
+        }
+      } else if (line.startsWith('branch ')) {
+        // Parse branch line: "branch refs/heads/feature-branch"
+        const branchMatch = line.match(/^branch refs\/heads\/(.+)$/)
+        branch = branchMatch?.[1] ?? line.replace('branch ', '')
       }
+
+      i++
     }
 
     const worktree: GitWorktree = {
       path: pathMatch[1] ?? '',
       branch,
-      commit: commitMatch[1] ?? '',
+      commit,
       bare,
       detached,
       locked,
@@ -234,6 +250,30 @@ export async function getRepoRoot(path: string = process.cwd()): Promise<string 
     return result.trim()
   } catch {
     return null
+  }
+}
+
+/**
+ * Find the worktree path where main branch is checked out
+ * Copies bash script approach: parse git worktree list to find main
+ */
+export async function findMainWorktreePath(path: string = process.cwd()): Promise<string> {
+  try {
+    const output = await executeGitCommand(['worktree', 'list', '--porcelain'], { cwd: path })
+    const worktrees = parseWorktreeList(output)
+
+    // Find worktree with main branch
+    const mainWorktree = worktrees.find(wt => wt.branch === 'main')
+    if (!mainWorktree?.path) {
+      throw new Error(`No worktree found with main branch checked out. Available worktrees: ${worktrees.map(wt => `${wt.path} (${wt.branch})`).join(', ')}`)
+    }
+    return mainWorktree.path
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('No worktree found with main branch')) {
+      // Re-throw our specific error
+      throw error
+    }
+    throw new Error(`Failed to find main worktree: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 

@@ -62,18 +62,117 @@ describe('Git Utility Functions', () => {
       expect(result).toHaveLength(1)
       expect(result[0].detached).toBe(true)
       expect(result[0].branch).toBe('HEAD')
+      expect(result[0].commit).toBe('abc123def456789')
+      expect(result[0].bare).toBe(false)
     })
 
-    it('should handle bare repository correctly', () => {
-      const output = ['worktree /Users/dev/bare-repo', 'HEAD abc123def456789', 'bare', ''].join(
-        '\n'
-      )
+    it('should handle mixed worktree states correctly', () => {
+      // Test all worktree states together: bare, detached, locked, and regular
+      const output = [
+        'worktree /Users/dev/bare-repo',
+        'bare',
+        '',
+        'worktree /Users/dev/detached-worktree',
+        'HEAD abc123def456789',
+        'detached',
+        '',
+        'worktree /Users/dev/locked-worktree',
+        'HEAD def456abc123456',
+        'locked maintenance mode',
+        '',
+        'worktree /Users/dev/regular-worktree',
+        'HEAD 8617ccd434c3a08f1416e0bef4f49d826757035e',
+        'branch refs/heads/feature/amazing-feature',
+        '',
+      ].join('\n')
+
+      const result = parseWorktreeList(output)
+
+      expect(result).toHaveLength(4)
+
+      // Bare repository
+      expect(result[0].path).toBe('/Users/dev/bare-repo')
+      expect(result[0].bare).toBe(true)
+      expect(result[0].branch).toBe('main')
+      expect(result[0].commit).toBe('')
+      expect(result[0].detached).toBe(false)
+      expect(result[0].locked).toBe(false)
+
+      // Detached HEAD
+      expect(result[1].path).toBe('/Users/dev/detached-worktree')
+      expect(result[1].bare).toBe(false)
+      expect(result[1].detached).toBe(true)
+      expect(result[1].branch).toBe('HEAD')
+      expect(result[1].commit).toBe('abc123def456789')
+      expect(result[1].locked).toBe(false)
+
+      // Locked worktree
+      expect(result[2].path).toBe('/Users/dev/locked-worktree')
+      expect(result[2].bare).toBe(false)
+      expect(result[2].detached).toBe(false)
+      expect(result[2].locked).toBe(true)
+      expect(result[2].lockReason).toBe('maintenance mode')
+      expect(result[2].commit).toBe('def456abc123456')
+      expect(result[2].branch).toBe('unknown')
+
+      // Regular worktree
+      expect(result[3].path).toBe('/Users/dev/regular-worktree')
+      expect(result[3].bare).toBe(false)
+      expect(result[3].detached).toBe(false)
+      expect(result[3].locked).toBe(false)
+      expect(result[3].branch).toBe('feature/amazing-feature')
+      expect(result[3].commit).toBe('8617ccd434c3a08f1416e0bef4f49d826757035e')
+    })
+
+    it('should handle bare repository correctly (real format)', () => {
+      // Bare repositories don't have HEAD lines in git worktree list --porcelain output
+      const output = ['worktree /Users/dev/bare-repo', 'bare', ''].join('\n')
 
       const result = parseWorktreeList(output)
 
       expect(result).toHaveLength(1)
       expect(result[0].bare).toBe(true)
       expect(result[0].branch).toBe('main')
+      expect(result[0].commit).toBe('') // No commit for bare repos
+    })
+
+    it('should handle mixed bare and regular worktrees correctly', () => {
+      // This test covers the original bug scenario - bare repo followed by regular worktrees
+      const output = [
+        'worktree /Users/dev/bare-repo',
+        'bare',
+        '',
+        'worktree /Users/dev/feat-issue-51',
+        'HEAD 8617ccd434c3a08f1416e0bef4f49d826757035e',
+        'branch refs/heads/feat/issue-51',
+        '',
+        'worktree /Users/dev/main-repo',
+        'HEAD 8617ccd434c3a08f1416e0bef4f49d826757035e',
+        'branch refs/heads/main',
+        '',
+      ].join('\n')
+
+      const result = parseWorktreeList(output)
+
+      expect(result).toHaveLength(3)
+
+      // Bare repository
+      expect(result[0].path).toBe('/Users/dev/bare-repo')
+      expect(result[0].bare).toBe(true)
+      expect(result[0].branch).toBe('main')
+      expect(result[0].commit).toBe('')
+
+      // Regular worktree (the one that was failing to parse before)
+      expect(result[1].path).toBe('/Users/dev/feat-issue-51')
+      expect(result[1].bare).toBe(false)
+      expect(result[1].branch).toBe('feat/issue-51')
+      expect(result[1].commit).toBe('8617ccd434c3a08f1416e0bef4f49d826757035e')
+
+      // Another regular worktree
+      expect(result[2].path).toBe('/Users/dev/main-repo')
+      expect(result[2].bare).toBe(false)
+      expect(result[2].branch).toBe('main')
+      expect(result[2].commit).toBe('8617ccd434c3a08f1416e0bef4f49d826757035e')
     })
 
     it('should handle locked worktree correctly', () => {

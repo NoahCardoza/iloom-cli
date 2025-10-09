@@ -4,6 +4,7 @@ import { GitHubService } from '../lib/GitHubService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ValidationRunner } from '../lib/ValidationRunner.js'
 import { CommitManager } from '../lib/CommitManager.js'
+import { MergeManager } from '../lib/MergeManager.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import type { GitWorktree } from '../types/worktree.js'
 
@@ -12,6 +13,7 @@ vi.mock('../lib/GitHubService.js')
 vi.mock('../lib/GitWorktreeManager.js')
 vi.mock('../lib/ValidationRunner.js')
 vi.mock('../lib/CommitManager.js')
+vi.mock('../lib/MergeManager.js')
 
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
@@ -30,12 +32,14 @@ describe('FinishCommand', () => {
 	let mockGitWorktreeManager: GitWorktreeManager
 	let mockValidationRunner: ValidationRunner
 	let mockCommitManager: CommitManager
+	let mockMergeManager: MergeManager
 
 	beforeEach(() => {
 		mockGitHubService = new GitHubService()
 		mockGitWorktreeManager = new GitWorktreeManager()
 		mockValidationRunner = new ValidationRunner()
 		mockCommitManager = new CommitManager()
+		mockMergeManager = new MergeManager()
 
 		// Mock ValidationRunner.runValidations to always succeed by default
 		vi.mocked(mockValidationRunner.runValidations).mockResolvedValue({
@@ -57,11 +61,16 @@ describe('FinishCommand', () => {
 		// Mock CommitManager.commitChanges to succeed by default
 		vi.mocked(mockCommitManager.commitChanges).mockResolvedValue(undefined)
 
+		// Mock MergeManager methods to succeed by default
+		vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue(undefined)
+		vi.mocked(mockMergeManager.performFastForwardMerge).mockResolvedValue(undefined)
+
 		command = new FinishCommand(
 			mockGitHubService,
 			mockGitWorktreeManager,
 			mockValidationRunner,
-			mockCommitManager
+			mockCommitManager,
+			mockMergeManager
 		)
 	})
 
@@ -1296,6 +1305,82 @@ describe('FinishCommand', () => {
 		})
 
 		describe('workflow execution order', () => {
+			it('should execute complete workflow including merge steps', async () => {
+				// Test the complete workflow order: validate → detect → commit → rebase → merge
+				const executionOrder: string[] = []
+
+				// Mock ValidationRunner to track execution order
+				vi.mocked(mockValidationRunner.runValidations).mockImplementation(async () => {
+					executionOrder.push('validation')
+					return {
+						success: true,
+						steps: [],
+						totalDuration: 0,
+					}
+				})
+
+				// Mock CommitManager to track execution order
+				vi.mocked(mockCommitManager.detectUncommittedChanges).mockImplementation(async () => {
+					executionOrder.push('commit-detect')
+					return {
+						hasUncommittedChanges: true,
+						unstagedFiles: ['src/test.ts'],
+						stagedFiles: [],
+						currentBranch: 'feat/issue-123',
+						isAheadOfRemote: false,
+						isBehindRemote: false,
+					}
+				})
+
+				vi.mocked(mockCommitManager.commitChanges).mockImplementation(async () => {
+					executionOrder.push('commit-execute')
+				})
+
+				// Mock MergeManager to track execution order
+				vi.mocked(mockMergeManager.rebaseOnMain).mockImplementation(async () => {
+					executionOrder.push('rebase')
+				})
+
+				vi.mocked(mockMergeManager.performFastForwardMerge).mockImplementation(async () => {
+					executionOrder.push('merge')
+				})
+
+				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					rawInput: '123',
+				})
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
+					number: 123,
+					title: 'Test Issue',
+					state: 'open',
+					body: '',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/test/repo/issues/123',
+				} as Issue)
+				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
+					{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
+				] as GitWorktree[])
+
+				// This should succeed with the correct order
+				await expect(
+					command.execute({
+						identifier: '123',
+						options: {},
+					})
+				).resolves.not.toThrow()
+
+				// ✅ CORRECT: The implementation should follow this order
+				expect(executionOrder).toEqual([
+					'validation',     // ✅ First: Ensure code quality
+					'commit-detect',  // ✅ Second: Check if there are changes to commit
+					'commit-execute', // ✅ Third: Only commit if validation passed
+					'rebase',         // ✅ Fourth: Rebase branch on main
+					'merge'           // ✅ Fifth: Perform fast-forward merge
+				])
+			})
+
 			it('should run validation BEFORE detecting and committing changes', async () => {
 				// Test the correct workflow order: validate → detect → commit
 				const executionOrder: string[] = []
@@ -1423,6 +1508,77 @@ describe('FinishCommand', () => {
 				expect(mockCommitManager.detectUncommittedChanges).not.toHaveBeenCalled()
 				expect(mockCommitManager.commitChanges).not.toHaveBeenCalled()
 			})
+
+			it('should pass correct options to MergeManager', async () => {
+				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					rawInput: '123',
+				})
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
+					number: 123,
+					title: 'Test Issue',
+					state: 'open',
+					body: '',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/test/repo/issues/123',
+				} as Issue)
+				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
+					{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
+				] as GitWorktree[])
+
+				await command.execute({
+					identifier: '123',
+					options: { dryRun: true, force: true },
+				})
+
+				// Verify MergeManager was called with correct options
+				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith('/test/issue-123', {
+					dryRun: true,
+					force: true,
+				})
+				expect(mockMergeManager.performFastForwardMerge).toHaveBeenCalledWith('feat/issue-123', '/test/issue-123', {
+					dryRun: true,
+					force: true,
+				})
+			})
+
+			it('should handle rebase conflicts and stop workflow', async () => {
+				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					rawInput: '123',
+				})
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
+					number: 123,
+					title: 'Test Issue',
+					state: 'open',
+					body: '',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/test/repo/issues/123',
+				} as Issue)
+				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
+					{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
+				] as GitWorktree[])
+
+				// Mock rebase to fail with conflicts
+				vi.mocked(mockMergeManager.rebaseOnMain).mockRejectedValue(
+					new Error('Rebase failed: conflicts detected in src/test.ts')
+				)
+
+				await expect(
+					command.execute({
+						identifier: '123',
+						options: {},
+					})
+				).rejects.toThrow('Rebase failed: conflicts detected in src/test.ts')
+
+				// Verify merge was never called after rebase failure
+				expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
+			})
+
 		})
 
 		describe('dependency injection', () => {
@@ -1447,6 +1603,12 @@ describe('FinishCommand', () => {
 			it('should accept CommitManager via constructor', () => {
 				const customCommitManager = new CommitManager()
 				const cmd = new FinishCommand(undefined, undefined, undefined, customCommitManager)
+				expect(cmd).toBeDefined()
+			})
+
+			it('should accept MergeManager via constructor', () => {
+				const customMergeManager = new MergeManager()
+				const cmd = new FinishCommand(undefined, undefined, undefined, undefined, customMergeManager)
 				expect(cmd).toBeDefined()
 			})
 
