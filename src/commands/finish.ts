@@ -1,7 +1,8 @@
 import { logger } from '../utils/logger.js'
 import { GitHubService } from '../lib/GitHubService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
-import type { FinishOptions } from '../types/index.js'
+import { ValidationRunner } from '../lib/ValidationRunner.js'
+import type { FinishOptions, GitWorktree } from '../types/index.js'
 import path from 'path'
 
 export interface FinishCommandInput {
@@ -20,14 +21,17 @@ export interface ParsedFinishInput {
 export class FinishCommand {
 	private gitHubService: GitHubService
 	private gitWorktreeManager: GitWorktreeManager
+	private validationRunner: ValidationRunner
 
 	constructor(
 		gitHubService?: GitHubService,
-		gitWorktreeManager?: GitWorktreeManager
+		gitWorktreeManager?: GitWorktreeManager,
+		validationRunner?: ValidationRunner
 	) {
 		// Dependency injection for testing
 		this.gitHubService = gitHubService ?? new GitHubService()
 		this.gitWorktreeManager = gitWorktreeManager ?? new GitWorktreeManager()
+		this.validationRunner = validationRunner ?? new ValidationRunner()
 	}
 
 	/**
@@ -38,25 +42,41 @@ export class FinishCommand {
 			// Step 1: Parse input (or auto-detect from current directory)
 			const parsed = await this.parseInput(input.identifier, input.options)
 
-			// Step 2: Validate based on type
-			await this.validateInput(parsed, input.options)
+			// Step 2: Validate based on type and get worktrees
+			const worktrees = await this.validateInput(parsed, input.options)
 
 			// Step 3: Log success
-			logger.info(`✅ Validated input: ${this.formatParsedInput(parsed)}`)
+			logger.info(`Validated input: ${this.formatParsedInput(parsed)}`)
 
+			// Step 4: Run pre-merge validations (Sub-Issue #47)
+			if (!input.options.dryRun) {
+				const worktree = worktrees[0]
+				if (!worktree) {
+					throw new Error('No worktree found')
+				}
+
+				logger.info('Running pre-merge validations...')
+
+				await this.validationRunner.runValidations(worktree.path, {
+					dryRun: input.options.dryRun ?? false,
+				})
+				logger.success('All validations passed')
+			} else {
+				logger.info('[DRY RUN] Would run pre-merge validations')
+			}
+
+			// Step 5: Additional workflow steps (PLACEHOLDER - implemented in later sub-issues)
+			// Migration handling, rebasing, merging, etc.
 			if (input.options.dryRun) {
 				logger.info('[DRY RUN] Would proceed with finish workflow')
 			} else {
 				logger.info('Ready to proceed with finish workflow (not yet implemented)')
 			}
-
-			// Step 4: Execute workflow (PLACEHOLDER - implemented in later sub-issues)
-			// This is where Sub-Issue #45, #47, #49, etc. will add functionality
 		} catch (error) {
 			if (error instanceof Error) {
-				logger.error(`❌ ${error.message}`)
+				logger.error(`${error.message}`)
 			} else {
-				logger.error('❌ An unknown error occurred')
+				logger.error('An unknown error occurred')
 			}
 			throw error
 		}
@@ -226,7 +246,7 @@ export class FinishCommand {
 	private async validateInput(
 		parsed: ParsedFinishInput,
 		options: FinishOptions
-	): Promise<void> {
+	): Promise<GitWorktree[]> {
 		switch (parsed.type) {
 			case 'pr': {
 				if (!parsed.number) {
@@ -241,8 +261,7 @@ export class FinishCommand {
 				logger.debug(`Validated PR #${parsed.number} (state: ${pr.state})`)
 
 				// Find associated worktree
-				await this.findWorktreeForIdentifier(parsed)
-				break
+				return await this.findWorktreeForIdentifier(parsed)
 			}
 
 			case 'issue': {
@@ -263,8 +282,7 @@ export class FinishCommand {
 				logger.debug(`Validated issue #${parsed.number} (state: ${issue.state})`)
 
 				// Find associated worktree
-				await this.findWorktreeForIdentifier(parsed)
-				break
+				return await this.findWorktreeForIdentifier(parsed)
 			}
 
 			case 'branch': {
@@ -282,8 +300,7 @@ export class FinishCommand {
 				logger.debug(`Validated branch name: ${parsed.branchName}`)
 
 				// Find associated worktree
-				await this.findWorktreeForIdentifier(parsed)
-				break
+				return await this.findWorktreeForIdentifier(parsed)
 			}
 
 			default: {
@@ -299,7 +316,7 @@ export class FinishCommand {
 	 */
 	private async findWorktreeForIdentifier(
 		parsed: ParsedFinishInput
-	): Promise<void> {
+	): Promise<GitWorktree[]> {
 		let identifier: string
 
 		if (parsed.type === 'pr' || parsed.type === 'issue') {
@@ -335,6 +352,8 @@ export class FinishCommand {
 		if (worktree) {
 			logger.debug(`Found worktree: ${worktree.path}`)
 		}
+
+		return worktrees
 	}
 
 	/**

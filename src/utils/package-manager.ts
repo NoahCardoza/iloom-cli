@@ -128,11 +128,13 @@ export async function installDependencies(
  * @param scriptName The script name from package.json
  * @param cwd Working directory
  * @param args Additional arguments to pass to the script
+ * @param options Execution options
  */
 export async function runScript(
   scriptName: string,
   cwd: string,
-  args: string[] = []
+  args: string[] = [],
+  options: { quiet?: boolean } = {}
 ): Promise<void> {
   const packageManager = await detectPackageManager(cwd)
 
@@ -141,7 +143,7 @@ export async function runScript(
   try {
     await execa(packageManager, [...command, ...args], {
       cwd,
-      stdio: 'inherit',
+      stdio: options.quiet ? 'pipe' : 'inherit',
       timeout: 600000,  // 10 minute timeout for scripts
     })
   } catch (error) {

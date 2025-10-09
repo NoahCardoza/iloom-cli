@@ -157,3 +157,26 @@ export interface ColorData {
 }
 
 export type Platform = 'darwin' | 'linux' | 'win32' | 'unsupported'
+
+// Validation types
+export interface ValidationOptions {
+	dryRun?: boolean
+	skipTypecheck?: boolean
+	skipLint?: boolean
+	skipTests?: boolean
+}
+
+export interface ValidationStepResult {
+	step: 'typecheck' | 'lint' | 'test'
+	passed: boolean
+	skipped: boolean
+	output?: string
+	error?: string
+	duration?: number
+}
+
+export interface ValidationResult {
+	success: boolean
+	steps: ValidationStepResult[]
+	totalDuration: number
+}

@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { FinishCommand } from './finish.js'
 import { GitHubService } from '../lib/GitHubService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { ValidationRunner } from '../lib/ValidationRunner.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import type { GitWorktree } from '../types/worktree.js'
 
 // Mock dependencies
 vi.mock('../lib/GitHubService.js')
 vi.mock('../lib/GitWorktreeManager.js')
+vi.mock('../lib/ValidationRunner.js')
 
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
@@ -24,11 +26,25 @@ describe('FinishCommand', () => {
 	let command: FinishCommand
 	let mockGitHubService: GitHubService
 	let mockGitWorktreeManager: GitWorktreeManager
+	let mockValidationRunner: ValidationRunner
 
 	beforeEach(() => {
 		mockGitHubService = new GitHubService()
 		mockGitWorktreeManager = new GitWorktreeManager()
-		command = new FinishCommand(mockGitHubService, mockGitWorktreeManager)
+		mockValidationRunner = new ValidationRunner()
+
+		// Mock ValidationRunner.runValidations to always succeed by default
+		vi.mocked(mockValidationRunner.runValidations).mockResolvedValue({
+			success: true,
+			steps: [],
+			totalDuration: 0,
+		})
+
+		command = new FinishCommand(
+			mockGitHubService,
+			mockGitWorktreeManager,
+			mockValidationRunner
+		)
 	})
 
 	afterEach(() => {
@@ -1271,6 +1287,12 @@ describe('FinishCommand', () => {
 			it('should accept GitWorktreeManager via constructor', () => {
 				const customManager = new GitWorktreeManager()
 				const cmd = new FinishCommand(undefined, customManager)
+				expect(cmd).toBeDefined()
+			})
+
+			it('should accept ValidationRunner via constructor', () => {
+				const customRunner = new ValidationRunner()
+				const cmd = new FinishCommand(undefined, undefined, customRunner)
 				expect(cmd).toBeDefined()
 			})
 
