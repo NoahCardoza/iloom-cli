@@ -6,6 +6,8 @@ import { ValidationRunner } from '../lib/ValidationRunner.js'
 import { CommitManager } from '../lib/CommitManager.js'
 import { MergeManager } from '../lib/MergeManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
+import { ResourceCleanup } from '../lib/ResourceCleanup.js'
+import { ProcessManager } from '../lib/process/ProcessManager.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import type { GitWorktree } from '../types/worktree.js'
 
@@ -16,6 +18,8 @@ vi.mock('../lib/ValidationRunner.js')
 vi.mock('../lib/CommitManager.js')
 vi.mock('../lib/MergeManager.js')
 vi.mock('../utils/IdentifierParser.js')
+vi.mock('../lib/ResourceCleanup.js')
+vi.mock('../lib/process/ProcessManager.js')
 
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
@@ -36,6 +40,8 @@ describe('FinishCommand', () => {
 	let mockCommitManager: CommitManager
 	let mockMergeManager: MergeManager
 	let mockIdentifierParser: IdentifierParser
+	let mockResourceCleanup: ResourceCleanup
+	let mockProcessManager: ProcessManager
 
 	beforeEach(() => {
 		mockGitHubService = new GitHubService()
@@ -44,6 +50,12 @@ describe('FinishCommand', () => {
 		mockCommitManager = new CommitManager()
 		mockMergeManager = new MergeManager()
 		mockIdentifierParser = new IdentifierParser(mockGitWorktreeManager)
+		mockProcessManager = new ProcessManager()
+		mockResourceCleanup = new ResourceCleanup(
+			mockGitWorktreeManager,
+			mockProcessManager,
+			undefined
+		)
 
 		// Mock ValidationRunner.runValidations to always succeed by default
 		vi.mocked(mockValidationRunner.runValidations).mockResolvedValue({
@@ -69,6 +81,15 @@ describe('FinishCommand', () => {
 		vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue(undefined)
 		vi.mocked(mockMergeManager.performFastForwardMerge).mockResolvedValue(undefined)
 
+		// Mock ResourceCleanup.cleanupWorktree to succeed by default
+		vi.mocked(mockResourceCleanup.cleanupWorktree).mockResolvedValue({
+			identifier: 'test',
+			success: true,
+			operations: [],
+			errors: [],
+			rollbackRequired: false,
+		})
+
 		// Mock GitWorktreeManager specific finding methods (used by IdentifierParser and FinishCommand)
 		vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(null)
 		vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(null)
@@ -80,7 +101,8 @@ describe('FinishCommand', () => {
 			mockValidationRunner,
 			mockCommitManager,
 			mockMergeManager,
-			mockIdentifierParser
+			mockIdentifierParser,
+			mockResourceCleanup
 		)
 	})
 
@@ -124,6 +146,25 @@ describe('FinishCommand', () => {
 			expect(cmd['mergeManager']).toBe(customManager)
 		})
 
+		it('should accept ResourceCleanup via constructor', () => {
+			const customCleanup = new ResourceCleanup(
+				mockGitWorktreeManager,
+				mockProcessManager,
+				undefined
+			)
+			const cmd = new FinishCommand(
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				customCleanup
+			)
+
+			expect(cmd['resourceCleanup']).toBe(customCleanup)
+		})
+
 		it('should create default instances when not provided', () => {
 			const cmd = new FinishCommand()
 
@@ -133,6 +174,7 @@ describe('FinishCommand', () => {
 			expect(cmd['commitManager']).toBeInstanceOf(CommitManager)
 			expect(cmd['mergeManager']).toBeInstanceOf(MergeManager)
 			expect(cmd['identifierParser']).toBeInstanceOf(IdentifierParser)
+			expect(cmd['resourceCleanup']).toBeInstanceOf(ResourceCleanup)
 		})
 	})
 
@@ -2190,6 +2232,285 @@ describe('FinishCommand', () => {
 
 				const { logger } = await import('../utils/logger.js')
 				expect(logger.error).toHaveBeenCalledWith('An unknown error occurred')
+			})
+		})
+
+		describe('post-merge cleanup integration', () => {
+			const mockIssue: Issue = {
+				number: 123,
+				title: 'Test issue',
+				body: 'Test body',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://github.com/test/repo/issues/123',
+			}
+
+			const mockWorktree: GitWorktree = {
+				path: '/test/worktree',
+				branch: 'feat/issue-123',
+				commit: 'abc123',
+				isPR: false,
+				issueNumber: 123,
+			}
+
+			beforeEach(() => {
+				// Mock successful issue fetch
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+
+				// Mock successful worktree finding
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+				// Mock IdentifierParser to detect as issue
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					originalInput: '123',
+				})
+			})
+
+			it('should call ResourceCleanup.cleanupWorktree after successful merge', async () => {
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				// Verify cleanup was called
+				expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalled()
+
+				// Verify cleanup was called after merge
+				const mergeCallOrder = vi.mocked(mockMergeManager.performFastForwardMerge).mock.invocationCallOrder[0]
+				const cleanupCallOrder = vi.mocked(mockResourceCleanup.cleanupWorktree).mock.invocationCallOrder[0]
+				expect(cleanupCallOrder).toBeGreaterThan(mergeCallOrder)
+			})
+
+			it('should pass correct ParsedInput to cleanupWorktree (without autoDetected field)', async () => {
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				// Verify cleanupWorktree was called with ParsedInput (no autoDetected field)
+				expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
+					expect.objectContaining({
+						type: 'issue',
+						number: 123,
+						originalInput: '123',
+					}),
+					expect.any(Object)
+				)
+
+				// Verify autoDetected field is NOT present
+				const callArgs = vi.mocked(mockResourceCleanup.cleanupWorktree).mock.calls[0]
+				expect(callArgs[0]).not.toHaveProperty('autoDetected')
+			})
+
+			it('should pass correct cleanup options (deleteBranch: true, keepDatabase: false)', async () => {
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
+					expect.any(Object),
+					expect.objectContaining({
+						dryRun: false,
+						deleteBranch: true,
+						keepDatabase: false,
+						force: false,
+					})
+				)
+			})
+
+			it('should pass dryRun flag from options to cleanup', async () => {
+				await command.execute({
+					identifier: '123',
+					options: { dryRun: true },
+				})
+
+				expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
+					expect.any(Object),
+					expect.objectContaining({
+						dryRun: true,
+					})
+				)
+			})
+
+			it('should pass force flag from options to cleanup', async () => {
+				await command.execute({
+					identifier: '123',
+					options: { force: true },
+				})
+
+				expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
+					expect.any(Object),
+					expect.objectContaining({
+						force: true,
+					})
+				)
+			})
+
+			it('should handle partial cleanup failures gracefully without throwing', async () => {
+				// Mock partial cleanup failure
+				vi.mocked(mockResourceCleanup.cleanupWorktree).mockResolvedValue({
+					identifier: '123',
+					success: false,
+					operations: [
+						{ type: 'dev-server', success: true, message: 'Dev server terminated' },
+						{ type: 'worktree', success: false, message: 'Failed to remove worktree', error: 'Worktree is locked' },
+					],
+					errors: [new Error('Worktree is locked')],
+					rollbackRequired: false,
+				})
+
+				// Should not throw even though cleanup failed
+				await expect(
+					command.execute({
+						identifier: '123',
+						options: {},
+					})
+				).resolves.not.toThrow()
+
+				// Verify cleanup was still attempted
+				expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalled()
+			})
+
+			it('should handle cleanup exceptions gracefully without throwing', async () => {
+				// Mock cleanup throwing an error
+				vi.mocked(mockResourceCleanup.cleanupWorktree).mockRejectedValue(
+					new Error('Unexpected cleanup error')
+				)
+
+				// Should not throw even though cleanup threw an error
+				await expect(
+					command.execute({
+						identifier: '123',
+						options: {},
+					})
+				).resolves.not.toThrow()
+
+				// Verify cleanup was attempted
+				expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalled()
+			})
+
+			it('should NOT execute cleanup if validation fails', async () => {
+				// Mock validation failure
+				vi.mocked(mockValidationRunner.runValidations).mockRejectedValue(
+					new Error('Validation failed')
+				)
+
+				await expect(
+					command.execute({
+						identifier: '123',
+						options: {},
+					})
+				).rejects.toThrow('Validation failed')
+
+				// Verify cleanup was NOT called
+				expect(mockResourceCleanup.cleanupWorktree).not.toHaveBeenCalled()
+			})
+
+			it('should NOT execute cleanup if rebase fails', async () => {
+				// Mock rebase failure
+				vi.mocked(mockMergeManager.rebaseOnMain).mockRejectedValue(
+					new Error('Rebase failed')
+				)
+
+				await expect(
+					command.execute({
+						identifier: '123',
+						options: {},
+					})
+				).rejects.toThrow('Rebase failed')
+
+				// Verify cleanup was NOT called
+				expect(mockResourceCleanup.cleanupWorktree).not.toHaveBeenCalled()
+			})
+
+			it('should NOT execute cleanup if merge fails', async () => {
+				// Mock merge failure
+				vi.mocked(mockMergeManager.performFastForwardMerge).mockRejectedValue(
+					new Error('Merge failed')
+				)
+
+				await expect(
+					command.execute({
+						identifier: '123',
+						options: {},
+					})
+				).rejects.toThrow('Merge failed')
+
+				// Verify cleanup was NOT called
+				expect(mockResourceCleanup.cleanupWorktree).not.toHaveBeenCalled()
+			})
+
+			it('should work with PR identifiers', async () => {
+				const mockPR: PullRequest = {
+					number: 456,
+					title: 'Test PR',
+					body: 'Test body',
+					state: 'open',
+					branch: 'feat/test',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/456',
+					isDraft: false,
+				}
+
+				const mockPRWorktree: GitWorktree = {
+					path: '/test/worktree/feat-test_pr_456',
+					branch: 'feat/test',
+					commit: 'def456',
+					isPR: true,
+					prNumber: 456,
+				}
+
+				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+				vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockPRWorktree)
+
+				await command.execute({
+					identifier: 'pr/456',
+					options: {},
+				})
+
+				// Verify cleanup was called with PR type
+				expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
+					expect.objectContaining({
+						type: 'pr',
+						number: 456,
+					}),
+					expect.any(Object)
+				)
+			})
+
+			it('should work with branch identifiers', async () => {
+				const mockBranchWorktree: GitWorktree = {
+					path: '/test/worktree/custom-branch',
+					branch: 'custom-branch',
+					commit: 'ghi789',
+					isPR: false,
+				}
+
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'branch',
+					branchName: 'custom-branch',
+					originalInput: 'custom-branch',
+				})
+
+				vi.mocked(mockGitWorktreeManager.findWorktreeForBranch).mockResolvedValue(mockBranchWorktree)
+
+				await command.execute({
+					identifier: 'custom-branch',
+					options: {},
+				})
+
+				// Verify cleanup was called with branch type
+				expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
+					expect.objectContaining({
+						type: 'branch',
+						branchName: 'custom-branch',
+					}),
+					expect.any(Object)
+				)
 			})
 		})
 	})

@@ -5,7 +5,11 @@ import { ValidationRunner } from '../lib/ValidationRunner.js'
 import { CommitManager } from '../lib/CommitManager.js'
 import { MergeManager } from '../lib/MergeManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
+import { ResourceCleanup } from '../lib/ResourceCleanup.js'
+import { ProcessManager } from '../lib/process/ProcessManager.js'
 import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions } from '../types/index.js'
+import type { ResourceCleanupOptions, CleanupResult } from '../types/cleanup.js'
+import type { ParsedInput } from './start.js'
 import path from 'path'
 
 export interface FinishCommandInput {
@@ -28,6 +32,7 @@ export class FinishCommand {
 	private commitManager: CommitManager
 	private mergeManager: MergeManager
 	private identifierParser: IdentifierParser
+	private resourceCleanup: ResourceCleanup
 
 	constructor(
 		gitHubService?: GitHubService,
@@ -35,7 +40,8 @@ export class FinishCommand {
 		validationRunner?: ValidationRunner,
 		commitManager?: CommitManager,
 		mergeManager?: MergeManager,
-		identifierParser?: IdentifierParser
+		identifierParser?: IdentifierParser,
+		resourceCleanup?: ResourceCleanup
 	) {
 		// Dependency injection for testing
 		this.gitHubService = gitHubService ?? new GitHubService()
@@ -44,6 +50,9 @@ export class FinishCommand {
 		this.commitManager = commitManager ?? new CommitManager()
 		this.mergeManager = mergeManager ?? new MergeManager()
 		this.identifierParser = identifierParser ?? new IdentifierParser(this.gitWorktreeManager)
+		this.resourceCleanup =
+			resourceCleanup ??
+			new ResourceCleanup(this.gitWorktreeManager, new ProcessManager(), undefined)
 	}
 
 	/**
@@ -120,6 +129,9 @@ export class FinishCommand {
 			logger.info('Performing fast-forward merge...')
 			await this.mergeManager.performFastForwardMerge(worktree.branch, worktree.path, mergeOptions)
 			logger.success('Fast-forward merge completed successfully')
+
+			// Step 9: Post-merge cleanup
+			await this.performPostMergeCleanup(parsed, input.options, worktree)
 		} catch (error) {
 			if (error instanceof Error) {
 				logger.error(`${error.message}`)
@@ -430,5 +442,86 @@ export class FinishCommand {
 			default:
 				return 'Unknown input'
 		}
+	}
+
+	/**
+	 * Perform post-merge cleanup operations
+	 * Converts ParsedFinishInput to ParsedInput and calls ResourceCleanup
+	 * Handles failures gracefully without throwing
+	 */
+	private async performPostMergeCleanup(
+		parsed: ParsedFinishInput,
+		options: FinishOptions,
+		worktree: GitWorktree
+	): Promise<void> {
+		// Convert ParsedFinishInput to ParsedInput (drop autoDetected field)
+		const cleanupInput: ParsedInput = {
+			type: parsed.type,
+			originalInput: parsed.originalInput,
+			...(parsed.number !== undefined && { number: parsed.number }),
+			...(parsed.branchName !== undefined && { branchName: parsed.branchName }),
+		}
+
+		const cleanupOptions: ResourceCleanupOptions = {
+			dryRun: options.dryRun ?? false,
+			deleteBranch: true, // Delete branch after successful merge
+			keepDatabase: false, // Clean up database after merge
+			force: options.force ?? false,
+		}
+
+		try {
+			logger.info('Starting post-merge cleanup...')
+
+			const result = await this.resourceCleanup.cleanupWorktree(cleanupInput, cleanupOptions)
+
+			// Report cleanup results
+			this.reportCleanupResults(result)
+
+			if (!result.success) {
+				logger.warn('Some cleanup operations failed - manual cleanup may be required')
+				// Show helpful recovery message
+				this.showManualCleanupInstructions(worktree)
+			} else {
+				logger.success('Post-merge cleanup completed successfully')
+			}
+		} catch (error) {
+			// Catch cleanup errors to prevent finish command from failing
+			// (merge already succeeded - cleanup failures are non-fatal)
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			logger.warn(`Cleanup failed: ${errorMessage}`)
+			logger.warn('Merge completed successfully, but manual cleanup is required')
+			this.showManualCleanupInstructions(worktree)
+		}
+	}
+
+	/**
+	 * Report cleanup operation results to user
+	 */
+	private reportCleanupResults(result: CleanupResult): void {
+		if (result.operations.length === 0) {
+			return
+		}
+
+		logger.info('Cleanup operations:')
+		for (const op of result.operations) {
+			const status = op.success ? '✓' : '✗'
+			const message = op.error ? `${op.message}: ${op.error}` : op.message
+
+			if (op.success) {
+				logger.info(`  ${status} ${message}`)
+			} else {
+				logger.warn(`  ${status} ${message}`)
+			}
+		}
+	}
+
+	/**
+	 * Show manual cleanup instructions when cleanup fails
+	 */
+	private showManualCleanupInstructions(worktree: GitWorktree): void {
+		logger.info('\nManual cleanup commands:')
+		logger.info(`  1. Remove worktree: git worktree remove ${worktree.path}`)
+		logger.info(`  2. Delete branch: git branch -d ${worktree.branch}`)
+		logger.info(`  3. Check dev servers: lsof -i :PORT (and kill if needed)`)
 	}
 }
