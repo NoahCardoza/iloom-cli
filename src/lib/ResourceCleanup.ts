@@ -10,6 +10,7 @@ import type {
 	BranchDeleteOptions,
 } from '../types/cleanup.js'
 import type { GitWorktree } from '../types/worktree.js'
+import type { ParsedInput } from '../commands/start.js'
 
 /**
  * Manages resource cleanup for worktrees
@@ -25,18 +26,22 @@ export class ResourceCleanup {
 	/**
 	 * Cleanup a worktree and associated resources
 	 * Main orchestration method
+	 *
+	 * @param parsed - ParsedInput from IdentifierParser with type information
+	 * @param options - Cleanup options
 	 */
 	async cleanupWorktree(
-		identifier: string,
+		parsed: ParsedInput,
 		options: ResourceCleanupOptions = {}
 	): Promise<CleanupResult> {
 		const operations: OperationResult[] = []
 		const errors: Error[] = []
 
-		logger.info(`Starting cleanup for: ${identifier}`)
+		const displayIdentifier = parsed.branchName ?? parsed.number?.toString() ?? parsed.originalInput
+		logger.info(`Starting cleanup for: ${displayIdentifier}`)
 
-		// Parse identifier to determine type and extract number
-		const { number } = this.parseIdentifier(identifier)
+		// Extract number from ParsedInput for port calculation
+		const number = parsed.number
 
 		// Step 1: Terminate dev server if applicable
 		if (number !== undefined) {
@@ -71,27 +76,30 @@ export class ResourceCleanup {
 			}
 		}
 
-		// Step 2: Find worktree
+		// Step 2: Find worktree using specific methods based on type
 		let worktree: GitWorktree | null = null
 		try {
-			const worktrees = await this.gitWorktree.findWorktreesByIdentifier(identifier)
-			logger.debug(`Found ${worktrees.length} worktrees for identifier "${identifier}":`)
-			worktrees.forEach((wt, i) => {
-				logger.debug(`  ${i}: path="${wt.path}", branch="${wt.branch}"`)
-			})
-			worktree = worktrees[0] ?? null
-
-			if (!worktree) {
-				throw new Error(`No worktree found for identifier: ${identifier}`)
+			// Use specific finding methods based on parsed type for precision
+			if (parsed.type === 'pr' && parsed.number !== undefined) {
+				// For PRs, pass empty string for branchName since we're detecting from path pattern
+				worktree = await this.gitWorktree.findWorktreeForPR(parsed.number, '')
+			} else if (parsed.type === 'issue' && parsed.number !== undefined) {
+				worktree = await this.gitWorktree.findWorktreeForIssue(parsed.number)
+			} else if (parsed.type === 'branch' && parsed.branchName) {
+				worktree = await this.gitWorktree.findWorktreeForBranch(parsed.branchName)
 			}
 
-			logger.debug(`Selected worktree: path="${worktree.path}", branch="${worktree.branch}"`)
+			if (!worktree) {
+				throw new Error(`No worktree found for identifier: ${displayIdentifier}`)
+			}
+
+			logger.debug(`Found worktree: path="${worktree.path}", branch="${worktree.branch}"`)
 		} catch (error) {
 			const err = error instanceof Error ? error : new Error('Unknown error')
 			errors.push(err)
 
 			return {
-				identifier,
+				identifier: displayIdentifier,
 				success: false,
 				operations,
 				errors,
@@ -205,7 +213,7 @@ export class ResourceCleanup {
 		const success = errors.length === 0
 
 		return {
-			identifier,
+			identifier: displayIdentifier,
 			branchName: worktree?.branch,
 			success,
 			operations,
@@ -334,7 +342,9 @@ export class ResourceCleanup {
 		const results: CleanupResult[] = []
 
 		for (const identifier of identifiers) {
-			const result = await this.cleanupWorktree(identifier, options)
+			// Parse the identifier to get ParsedInput format
+			const parsed = this.parseIdentifier(identifier)
+			const result = await this.cleanupWorktree(parsed, options)
 			results.push(result)
 		}
 
@@ -386,30 +396,43 @@ export class ResourceCleanup {
 	 * Parse identifier to determine type and extract number
 	 * Helper method for port calculation
 	 */
-	private parseIdentifier(identifier: string): {
-		type: 'issue' | 'pr' | 'branch'
-		number?: number
-	} {
+	private parseIdentifier(identifier: string): ParsedInput {
 		// Check for issue pattern
 		const issueMatch = identifier.match(/issue-(\d+)/)
 		if (issueMatch?.[1]) {
-			return { type: 'issue', number: parseInt(issueMatch[1], 10) }
+			return {
+				type: 'issue',
+				number: parseInt(issueMatch[1], 10),
+				originalInput: identifier
+			}
 		}
 
 		// Check for PR pattern
 		const prMatch = identifier.match(/(?:pr|PR)[/-](\d+)/)
 		if (prMatch?.[1]) {
-			return { type: 'pr', number: parseInt(prMatch[1], 10) }
+			return {
+				type: 'pr',
+				number: parseInt(prMatch[1], 10),
+				originalInput: identifier
+			}
 		}
 
 		// Check for numeric identifier
 		const numericMatch = identifier.match(/^#?(\d+)$/)
 		if (numericMatch?.[1]) {
 			// Assume issue for numeric identifiers
-			return { type: 'issue', number: parseInt(numericMatch[1], 10) }
+			return {
+				type: 'issue',
+				number: parseInt(numericMatch[1], 10),
+				originalInput: identifier
+			}
 		}
 
 		// Treat as branch name
-		return { type: 'branch' }
+		return {
+			type: 'branch',
+			branchName: identifier,
+			originalInput: identifier
+		}
 	}
 }

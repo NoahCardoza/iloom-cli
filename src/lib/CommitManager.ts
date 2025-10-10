@@ -224,12 +224,12 @@ export class CommitManager {
 
       logger.debug('Raw Claude output received', {
         outputLength: result.length,
-        preview: result.substring(0, 100) + (result.length > 100 ? '...' : '')
+        preview: result.substring(0, 200) + (result.length > 100 ? '...' : '')
       })
 
       // Validate output doesn't contain error patterns (check raw output first)
       if (this.containsErrorPatterns(result)) {
-        logger.warn('Claude output contains error patterns, using fallback', { output: result.substring(0, 100) + '...' })
+        logger.warn('Claude output contains error patterns, using fallback', { output: result })
         return null
       }
 

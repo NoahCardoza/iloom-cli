@@ -4,6 +4,7 @@ import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ValidationRunner } from '../lib/ValidationRunner.js'
 import { CommitManager } from '../lib/CommitManager.js'
 import { MergeManager } from '../lib/MergeManager.js'
+import { IdentifierParser } from '../utils/IdentifierParser.js'
 import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions } from '../types/index.js'
 import path from 'path'
 
@@ -26,13 +27,15 @@ export class FinishCommand {
 	private validationRunner: ValidationRunner
 	private commitManager: CommitManager
 	private mergeManager: MergeManager
+	private identifierParser: IdentifierParser
 
 	constructor(
 		gitHubService?: GitHubService,
 		gitWorktreeManager?: GitWorktreeManager,
 		validationRunner?: ValidationRunner,
 		commitManager?: CommitManager,
-		mergeManager?: MergeManager
+		mergeManager?: MergeManager,
+		identifierParser?: IdentifierParser
 	) {
 		// Dependency injection for testing
 		this.gitHubService = gitHubService ?? new GitHubService()
@@ -40,6 +43,7 @@ export class FinishCommand {
 		this.validationRunner = validationRunner ?? new ValidationRunner()
 		this.commitManager = commitManager ?? new CommitManager()
 		this.mergeManager = mergeManager ?? new MergeManager()
+		this.identifierParser = identifierParser ?? new IdentifierParser(this.gitWorktreeManager)
 	}
 
 	/**
@@ -154,7 +158,8 @@ export class FinishCommand {
 	}
 
 	/**
-	 * Parse explicit identifier input
+	 * Parse explicit identifier input using pattern-based detection
+	 * (No GitHub API calls - uses IdentifierParser)
 	 */
 	private async parseExplicitInput(
 		identifier: string
@@ -171,41 +176,26 @@ export class FinishCommand {
 			}
 		}
 
-		// Check for numeric pattern (could be issue or PR)
-		const numericPattern = /^#?(\d+)$/
-		const numericMatch = identifier.match(numericPattern)
-		if (numericMatch?.[1]) {
-			const number = parseInt(numericMatch[1], 10)
+		// Use IdentifierParser for pattern-based detection
+		// (checks existing worktrees, no GitHub API calls)
+		const parsed = await this.identifierParser.parseForPatternDetection(identifier)
 
-			// Use GitHubService to detect if it's a PR or issue
-			const detection = await this.gitHubService.detectInputType(identifier)
-
-			if (detection.type === 'pr') {
-				return {
-					type: 'pr',
-					number: detection.number ?? number,
-					originalInput: identifier,
-					autoDetected: false,
-				}
-			} else if (detection.type === 'issue') {
-				return {
-					type: 'issue',
-					number: detection.number ?? number,
-					originalInput: identifier,
-					autoDetected: false,
-				}
-			} else {
-				throw new Error(`Could not find issue or PR #${number}`)
-			}
-		}
-
-		// Treat as branch name
-		return {
-			type: 'branch',
-			branchName: identifier,
-			originalInput: identifier,
+		// Convert ParsedInput to ParsedFinishInput (add autoDetected field)
+		const result: ParsedFinishInput = {
+			type: parsed.type,
+			originalInput: parsed.originalInput,
 			autoDetected: false,
 		}
+
+		// Add number or branchName based on type
+		if (parsed.number !== undefined) {
+			result.number = parsed.number
+		}
+		if (parsed.branchName !== undefined) {
+			result.branchName = parsed.branchName
+		}
+
+		return result
 	}
 
 	/**
@@ -355,49 +345,65 @@ export class FinishCommand {
 	}
 
 	/**
-	 * Find worktree for the given identifier
+	 * Find worktree for the given identifier using specific methods based on type
+	 * (uses precise pattern matching instead of broad substring matching)
 	 * Throws error if not found
 	 */
 	private async findWorktreeForIdentifier(
 		parsed: ParsedFinishInput
 	): Promise<GitWorktree[]> {
-		let identifier: string
+		let worktree: GitWorktree | null = null
 
-		if (parsed.type === 'pr' || parsed.type === 'issue') {
-			if (!parsed.number) {
-				throw new Error('Invalid number for PR or issue')
+		// Use specific finding methods based on parsed type
+		switch (parsed.type) {
+			case 'pr': {
+				if (!parsed.number) {
+					throw new Error('Invalid PR number')
+				}
+				// Pass empty string for branch name since we don't know it yet
+				worktree = await this.gitWorktreeManager.findWorktreeForPR(
+					parsed.number,
+					''
+				)
+				break
 			}
-			identifier = parsed.number.toString()
-		} else {
-			if (!parsed.branchName) {
-				throw new Error('Invalid branch name')
+
+			case 'issue': {
+				if (!parsed.number) {
+					throw new Error('Invalid issue number')
+				}
+				worktree = await this.gitWorktreeManager.findWorktreeForIssue(
+					parsed.number
+				)
+				break
 			}
-			identifier = parsed.branchName
+
+			case 'branch': {
+				if (!parsed.branchName) {
+					throw new Error('Invalid branch name')
+				}
+				worktree = await this.gitWorktreeManager.findWorktreeForBranch(
+					parsed.branchName
+				)
+				break
+			}
+
+			default: {
+				const unknownType = parsed as { type: string }
+				throw new Error(`Unknown input type: ${unknownType.type}`)
+			}
 		}
 
-		const worktrees =
-			await this.gitWorktreeManager.findWorktreesByIdentifier(identifier)
-
-		if (worktrees.length === 0) {
+		if (!worktree) {
 			throw new Error(
 				`No worktree found for ${this.formatParsedInput(parsed)}. ` +
 					`Use 'hb list' to see available worktrees.`
 			)
 		}
 
-		if (worktrees.length > 1) {
-			logger.warn(
-				`Multiple worktrees found for ${this.formatParsedInput(parsed)}. ` +
-					`Using first match: ${worktrees[0]?.path ?? 'unknown'}`
-			)
-		}
+		logger.debug(`Found worktree: ${worktree.path}`)
 
-		const worktree = worktrees[0]
-		if (worktree) {
-			logger.debug(`Found worktree: ${worktree.path}`)
-		}
-
-		return worktrees
+		return [worktree]
 	}
 
 	/**

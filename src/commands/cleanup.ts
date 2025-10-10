@@ -3,8 +3,10 @@ import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ResourceCleanup } from '../lib/ResourceCleanup.js'
 import { ProcessManager } from '../lib/process/ProcessManager.js'
 import { promptConfirmation } from '../utils/prompt.js'
+import { IdentifierParser } from '../utils/IdentifierParser.js'
 import type { CleanupOptions } from '../types/index.js'
 import type { CleanupResult } from '../types/cleanup.js'
+import type { ParsedInput } from './start.js'
 
 /**
  * Input structure for CleanupCommand.execute()
@@ -37,6 +39,7 @@ export interface ParsedCleanupInput {
 export class CleanupCommand {
   private readonly gitWorktreeManager: GitWorktreeManager
   private readonly resourceCleanup: ResourceCleanup
+  private readonly identifierParser: IdentifierParser
 
   constructor(
     gitWorktreeManager?: GitWorktreeManager,
@@ -50,6 +53,9 @@ export class CleanupCommand {
       new ProcessManager(),
       undefined // DatabaseManager optional
     )
+
+    // Initialize IdentifierParser for pattern-based detection
+    this.identifierParser = new IdentifierParser(this.gitWorktreeManager)
   }
 
   /**
@@ -228,6 +234,7 @@ export class CleanupCommand {
   /**
    * Execute cleanup for single worktree
    * Implements two-stage confirmation: worktree removal, then branch deletion
+   * Uses IdentifierParser for pattern-based detection without GitHub API calls
    */
   private async executeSingleCleanup(parsed: ParsedCleanupInput): Promise<void> {
     const identifier = parsed.branchName ?? parsed.identifier ?? ''
@@ -236,7 +243,10 @@ export class CleanupCommand {
     }
     const { force, dryRun } = parsed.options
 
-    // Step 1: Validate cleanup safety
+    // Step 1: Parse identifier using pattern-based detection
+    const parsedInput: ParsedInput = await this.identifierParser.parseForPatternDetection(identifier)
+
+    // Step 2: Validate cleanup safety (still uses string identifier for compatibility)
     const safety = await this.resourceCleanup.validateCleanupSafety(identifier)
 
     // Display blockers (fatal errors)
@@ -253,7 +263,7 @@ export class CleanupCommand {
     // Display worktree details
     logger.info(`Preparing to cleanup worktree: ${identifier}`)
 
-    // Step 2: First confirmation - worktree removal
+    // Step 3: First confirmation - worktree removal
     if (!force) {
       const confirmWorktree = await promptConfirmation('Remove this worktree?', true)
       if (!confirmWorktree) {
@@ -262,19 +272,19 @@ export class CleanupCommand {
       }
     }
 
-    // Step 3: Execute worktree cleanup
+    // Step 4: Execute worktree cleanup with ParsedInput
     // With --force, delete branch automatically; otherwise handle separately
-    const cleanupResult = await this.resourceCleanup.cleanupWorktree(identifier, {
+    const cleanupResult = await this.resourceCleanup.cleanupWorktree(parsedInput, {
       dryRun: dryRun ?? false,
       force: force ?? false,
       deleteBranch: force ?? false,  // Delete branch immediately if --force, otherwise prompt later
       keepDatabase: false,
     })
 
-    // Step 4: Report cleanup results
+    // Step 5: Report cleanup results
     this.reportCleanupResults(cleanupResult)
 
-    // Step 5: Second confirmation - branch deletion (only if not forced and worktree cleanup succeeded)
+    // Step 6: Second confirmation - branch deletion (only if not forced and worktree cleanup succeeded)
     if (cleanupResult.success && !force && cleanupResult.branchName) {
       const confirmBranch = await promptConfirmation('Also delete the branch?', true)
       if (confirmBranch) {
@@ -419,9 +429,12 @@ export class CleanupCommand {
       logger.info(`Processing branch: ${target.branchName}`)
 
       if (target.hasWorktree) {
-        // Cleanup worktree using ResourceCleanup
+        // Cleanup worktree using ResourceCleanup with ParsedInput
         try {
-          const result = await this.resourceCleanup.cleanupWorktree(target.branchName, {
+          // Parse the branch name using IdentifierParser
+          const parsedInput: ParsedInput = await this.identifierParser.parseForPatternDetection(target.branchName)
+
+          const result = await this.resourceCleanup.cleanupWorktree(parsedInput, {
             dryRun: dryRun ?? false,
             force: force ?? false,
             deleteBranch: false, // Handle branch deletion separately

@@ -27,7 +27,7 @@ Hatchbox AI is a TypeScript CLI tool that converts existing bash workflow script
 npm run build          # Build TypeScript to dist/
 npm test               # Run all tests with Vitest
 npm run test:watch     # Run tests in watch mode
-npm run test:coverage  # Generate coverage report (95% required)
+npm run test:coverage  # Generate coverage report (70% required)
 npm run lint           # Run ESLint
 npm run typecheck      # Run TypeScript compiler check
 ```
@@ -41,7 +41,7 @@ npm run test:single -- <test-file>  # Run specific test file
 
 ## Architecture Overview
 
-**Test-Driven Development (TDD)**: All code must be written test-first with >95% coverage. Use comprehensive mock factories for external dependencies (Git, GitHub CLI, Neon CLI, Claude CLI).
+**Test-Driven Development (TDD)**: All code must be written test-first with >70% coverage. Use comprehensive mock factories for external dependencies (Git, GitHub CLI, Neon CLI, Claude CLI).
 
 ### Core Module Structure
 

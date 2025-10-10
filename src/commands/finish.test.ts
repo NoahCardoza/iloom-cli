@@ -5,6 +5,7 @@ import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ValidationRunner } from '../lib/ValidationRunner.js'
 import { CommitManager } from '../lib/CommitManager.js'
 import { MergeManager } from '../lib/MergeManager.js'
+import { IdentifierParser } from '../utils/IdentifierParser.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import type { GitWorktree } from '../types/worktree.js'
 
@@ -14,6 +15,7 @@ vi.mock('../lib/GitWorktreeManager.js')
 vi.mock('../lib/ValidationRunner.js')
 vi.mock('../lib/CommitManager.js')
 vi.mock('../lib/MergeManager.js')
+vi.mock('../utils/IdentifierParser.js')
 
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
@@ -33,6 +35,7 @@ describe('FinishCommand', () => {
 	let mockValidationRunner: ValidationRunner
 	let mockCommitManager: CommitManager
 	let mockMergeManager: MergeManager
+	let mockIdentifierParser: IdentifierParser
 
 	beforeEach(() => {
 		mockGitHubService = new GitHubService()
@@ -40,6 +43,7 @@ describe('FinishCommand', () => {
 		mockValidationRunner = new ValidationRunner()
 		mockCommitManager = new CommitManager()
 		mockMergeManager = new MergeManager()
+		mockIdentifierParser = new IdentifierParser(mockGitWorktreeManager)
 
 		// Mock ValidationRunner.runValidations to always succeed by default
 		vi.mocked(mockValidationRunner.runValidations).mockResolvedValue({
@@ -65,12 +69,18 @@ describe('FinishCommand', () => {
 		vi.mocked(mockMergeManager.rebaseOnMain).mockResolvedValue(undefined)
 		vi.mocked(mockMergeManager.performFastForwardMerge).mockResolvedValue(undefined)
 
+		// Mock GitWorktreeManager specific finding methods (used by IdentifierParser and FinishCommand)
+		vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(null)
+		vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(null)
+		vi.mocked(mockGitWorktreeManager.findWorktreeForBranch).mockResolvedValue(null)
+
 		command = new FinishCommand(
 			mockGitHubService,
 			mockGitWorktreeManager,
 			mockValidationRunner,
 			mockCommitManager,
-			mockMergeManager
+			mockMergeManager,
+			mockIdentifierParser
 		)
 	})
 
@@ -78,1253 +88,103 @@ describe('FinishCommand', () => {
 		vi.clearAllMocks()
 	})
 
+	describe('dependency injection', () => {
+		it('should accept GitHubService via constructor', () => {
+			const customService = new GitHubService()
+			const cmd = new FinishCommand(customService)
+
+			expect(cmd['gitHubService']).toBe(customService)
+		})
+
+		it('should accept GitWorktreeManager via constructor', () => {
+			const customManager = new GitWorktreeManager()
+			const cmd = new FinishCommand(undefined, customManager)
+
+			expect(cmd['gitWorktreeManager']).toBe(customManager)
+		})
+
+		it('should accept ValidationRunner via constructor', () => {
+			const customRunner = new ValidationRunner()
+			const cmd = new FinishCommand(undefined, undefined, customRunner)
+
+			expect(cmd['validationRunner']).toBe(customRunner)
+		})
+
+		it('should accept CommitManager via constructor', () => {
+			const customManager = new CommitManager()
+			const cmd = new FinishCommand(undefined, undefined, undefined, customManager)
+
+			expect(cmd['commitManager']).toBe(customManager)
+		})
+
+		it('should accept MergeManager via constructor', () => {
+			const customManager = new MergeManager()
+			const cmd = new FinishCommand(undefined, undefined, undefined, undefined, customManager)
+
+			expect(cmd['mergeManager']).toBe(customManager)
+		})
+
+		it('should create default instances when not provided', () => {
+			const cmd = new FinishCommand()
+
+			expect(cmd['gitHubService']).toBeInstanceOf(GitHubService)
+			expect(cmd['gitWorktreeManager']).toBeInstanceOf(GitWorktreeManager)
+			expect(cmd['validationRunner']).toBeInstanceOf(ValidationRunner)
+			expect(cmd['commitManager']).toBeInstanceOf(CommitManager)
+			expect(cmd['mergeManager']).toBeInstanceOf(MergeManager)
+			expect(cmd['identifierParser']).toBeInstanceOf(IdentifierParser)
+		})
+	})
+
 	describe('execute', () => {
-		describe('input parsing - explicit identifier', () => {
-			it('should parse plain issue number (123)', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'issue',
-					number: 123,
-					rawInput: '123',
-				})
-				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-					number: 123,
-					title: 'Test Issue',
-					state: 'open',
-					body: '',
-					labels: [],
-					assignees: [],
-					url: 'https://github.com/test/repo/issues/123',
-				} as Issue)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: '123',
-						options: {},
-					})
-				).resolves.not.toThrow()
-
-				expect(mockGitHubService.detectInputType).toHaveBeenCalledWith('123')
-				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
-			})
-
-			it('should parse hash-prefixed issue number (#123)', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'issue',
-					number: 123,
-					rawInput: '#123',
-				})
-				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-					number: 123,
-					title: 'Test Issue',
-					state: 'open',
-					body: '',
-					labels: [],
-					assignees: [],
-					url: 'https://github.com/test/repo/issues/123',
-				} as Issue)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: '#123',
-						options: {},
-					})
-				).resolves.not.toThrow()
-
-				expect(mockGitHubService.detectInputType).toHaveBeenCalledWith('#123')
-			})
-
-			it('should parse PR-specific format (pr/123, PR-123, PR/123)', async () => {
-				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
-					number: 123,
-					title: 'Test PR',
-					state: 'open',
-					branch: 'feature-branch',
-					baseBranch: 'main',
-					body: '',
-					url: 'https://github.com/test/repo/pull/123',
-					isDraft: false,
-				} as PullRequest)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/pr-123', branch: 'pr/123', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				// Test pr/123
-				await expect(
-					command.execute({
-						identifier: 'pr/123',
-						options: {},
-					})
-				).resolves.not.toThrow()
-
-				// Should NOT call detectInputType for explicit PR format
-				expect(mockGitHubService.detectInputType).not.toHaveBeenCalled()
-				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(123)
-			})
-
-			it('should parse branch name as fallback', async () => {
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/my-branch', branch: 'feature/my-branch', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: 'feature/my-branch',
-						options: {},
-					})
-				).resolves.not.toThrow()
-
-				// Branch names should not trigger GitHub detection
-				expect(mockGitHubService.detectInputType).not.toHaveBeenCalled()
-			})
-
-			it('should trim whitespace from input', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'issue',
-					number: 123,
-					rawInput: '123',
-				})
-				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-					number: 123,
-					title: 'Test Issue',
-					state: 'open',
-					body: '',
-					labels: [],
-					assignees: [],
-					url: 'https://github.com/test/repo/issues/123',
-				} as Issue)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: '  123  ',
-						options: {},
-					})
-				).resolves.not.toThrow()
-
-				// Should be trimmed
-				expect(mockGitHubService.detectInputType).toHaveBeenCalledWith('123')
-			})
-		})
-
-		describe('PR flag handling', () => {
-			it('should use --pr flag value when provided', async () => {
-				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
-					number: 456,
-					title: 'Test PR',
-					state: 'open',
-					branch: 'feature-branch',
-					baseBranch: 'main',
-					body: '',
-					url: 'https://github.com/test/repo/pull/456',
-					isDraft: false,
-				} as PullRequest)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/pr-456', branch: 'pr/456', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: '123', // This should be ignored
-						options: { pr: 456 },
-					})
-				).resolves.not.toThrow()
-
-				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(456)
-				expect(mockGitHubService.detectInputType).not.toHaveBeenCalled()
-			})
-
-			it('should prioritize --pr flag over identifier', async () => {
-				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
-					number: 789,
-					title: 'Test PR',
-					state: 'open',
-					branch: 'feature-branch',
-					baseBranch: 'main',
-					body: '',
-					url: 'https://github.com/test/repo/pull/789',
-					isDraft: false,
-				} as PullRequest)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/pr-789', branch: 'pr/789', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: 'some-branch', // Should be ignored when --pr is set
-						options: { pr: 789 },
-					})
-				).resolves.not.toThrow()
-
-				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(789)
-			})
-		})
-
-		describe('GitHub API detection', () => {
-			it('should detect issue vs PR for numeric input via GitHub API', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'pr',
-					number: 123,
-					rawInput: '123',
-				})
-				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
-					number: 123,
-					title: 'Test PR',
-					state: 'open',
-					branch: 'feature-branch',
-					baseBranch: 'main',
-					body: '',
-					url: 'https://github.com/test/repo/pull/123',
-					isDraft: false,
-				} as PullRequest)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/pr-123', branch: 'pr/123', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: '123',
-						options: {},
-					})
-				).resolves.not.toThrow()
-
-				expect(mockGitHubService.detectInputType).toHaveBeenCalledWith('123')
-				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(123)
-			})
-
-			it('should throw error if number is neither issue nor PR', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'unknown',
-					number: null,
-					rawInput: '999',
-				})
-
-				await expect(
-					command.execute({
-						identifier: '999',
-						options: {},
-					})
-				).rejects.toThrow('Could not find issue or PR #999')
-			})
-		})
-
-		describe('auto-detection from current directory', () => {
-			const originalCwd = process.cwd
-
-			afterEach(() => {
-				// Restore original cwd
-				process.cwd = originalCwd
-			})
-
-			it('should auto-detect PR number from _pr_N worktree directory pattern', async () => {
-				process.cwd = vi.fn(() => '/repo/feat-issue-46_pr_123')
-
-				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
-					number: 123,
-					title: 'Test PR',
-					state: 'open',
-					branch: 'feature-branch',
-					baseBranch: 'main',
-					body: '',
-					url: 'https://github.com/test/repo/pull/123',
-					isDraft: false,
-				} as PullRequest)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/repo/feat-issue-46_pr_123', branch: 'pr/123', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: undefined, // No identifier - should auto-detect
-						options: {},
-					})
-				).resolves.not.toThrow()
-
-				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(123)
-			})
-
-			it('should auto-detect issue number from issue-N branch pattern', async () => {
-				process.cwd = vi.fn(() => '/repo/feat-issue-46-test')
-
-				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-					number: 46,
-					title: 'Test Issue',
-					state: 'open',
-					body: '',
-					labels: [],
-					assignees: [],
-					url: 'https://github.com/test/repo/issues/46',
-				} as Issue)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/repo/feat-issue-46-test', branch: 'feat/issue-46-test', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: undefined,
-						options: {},
-					})
-				).resolves.not.toThrow()
-
-				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(46)
-			})
-
-			it('should extract PR number from directory like "feat-issue-46_pr_123"', async () => {
-				process.cwd = vi.fn(() => '/repo/feat-issue-46_pr_789')
-
-				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
-					number: 789,
-					title: 'Test PR',
-					state: 'open',
-					branch: 'feature-branch',
-					baseBranch: 'main',
-					body: '',
-					url: 'https://github.com/test/repo/pull/789',
-					isDraft: false,
-				} as PullRequest)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/repo/feat-issue-46_pr_789', branch: 'pr/789', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: undefined,
-						options: {},
-					})
-				).resolves.not.toThrow()
-
-				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(789)
-			})
-
-			it('should detect when running in PR worktree without identifier argument', async () => {
-				process.cwd = vi.fn(() => '/repo/my-feature_pr_555')
-
-				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
-					number: 555,
-					title: 'Test PR',
-					state: 'open',
-					branch: 'feature-branch',
-					baseBranch: 'main',
-					body: '',
-					url: 'https://github.com/test/repo/pull/555',
-					isDraft: false,
-				} as PullRequest)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/repo/my-feature_pr_555', branch: 'pr/555', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: undefined,
-						options: {},
-					})
-				).resolves.not.toThrow()
-
-				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(555)
-			})
-
-			it('should fall back to branch name when no pattern matches', async () => {
-				process.cwd = vi.fn(() => '/repo/some-random-dir')
-
-				vi.mocked(mockGitWorktreeManager.getRepoInfo).mockResolvedValue({
-					root: '/repo',
-					defaultBranch: 'main',
-					currentBranch: 'my-feature-branch',
-				})
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/repo/some-random-dir', branch: 'my-feature-branch', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: undefined,
-						options: {},
-					})
-				).resolves.not.toThrow()
-
-				expect(mockGitWorktreeManager.getRepoInfo).toHaveBeenCalled()
-			})
-
-			it('should throw error when auto-detection fails completely', async () => {
-				process.cwd = vi.fn(() => '/repo/random-dir')
-
-				vi.mocked(mockGitWorktreeManager.getRepoInfo).mockResolvedValue({
-					root: '/repo',
-					defaultBranch: 'main',
-					currentBranch: null, // No current branch
-				})
-
-				await expect(
-					command.execute({
-						identifier: undefined,
-						options: {},
-					})
-				).rejects.toThrow('Could not auto-detect identifier')
-			})
-		})
-
-		describe('edge cases', () => {
-			it('should handle very large issue numbers (999999)', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'issue',
-					number: 999999,
-					rawInput: '999999',
-				})
-				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-					number: 999999,
-					title: 'Test Issue',
-					state: 'open',
-					body: '',
-					labels: [],
-					assignees: [],
-					url: 'https://github.com/test/repo/issues/999999',
-				} as Issue)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/issue-999999', branch: 'feat/issue-999999', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: '999999',
-						options: {},
-					})
-				).resolves.not.toThrow()
-			})
-
-			it('should handle leading zeros in numbers', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'issue',
-					number: 123,
-					rawInput: '0123',
-				})
-				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-					number: 123,
-					title: 'Test Issue',
-					state: 'open',
-					body: '',
-					labels: [],
-					assignees: [],
-					url: 'https://github.com/test/repo/issues/123',
-				} as Issue)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: '0123',
-						options: {},
-					})
-				).resolves.not.toThrow()
-			})
-
-			it('should reject invalid characters in branch names', async () => {
-				await expect(
-					command.execute({
-						identifier: 'feat@branch!',
-						options: {},
-					})
-				).rejects.toThrow('Invalid branch name')
-			})
-
-			it('should handle single-character branch names', async () => {
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/a', branch: 'a', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: 'a',
-						options: {},
-					})
-				).resolves.not.toThrow()
-			})
-
-			it('should handle very long branch names (255+ chars)', async () => {
-				const longBranchName = 'feature/' + 'a'.repeat(300)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/long-branch', branch: longBranchName, commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				await expect(
-					command.execute({
-						identifier: longBranchName,
-						options: {},
-					})
-				).resolves.not.toThrow()
-			})
-		})
-
-		describe('validation', () => {
-			describe('issue validation', () => {
-				it('should validate open issue exists on GitHub', async () => {
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 123,
-						rawInput: '123',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-						number: 123,
-						title: 'Test Issue',
-						state: 'open',
-						body: '',
-						labels: [],
-						assignees: [],
-						url: 'https://github.com/test/repo/issues/123',
-					} as Issue)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: '123',
-							options: {},
-						})
-					).resolves.not.toThrow()
-
-					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
-				})
-
-				it('should throw error for closed issue without --force', async () => {
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 123,
-						rawInput: '123',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-						number: 123,
-						title: 'Test Issue',
-						state: 'closed',
-						body: '',
-						labels: [],
-						assignees: [],
-						url: 'https://github.com/test/repo/issues/123',
-					} as Issue)
-
-					await expect(
-						command.execute({
-							identifier: '123',
-							options: {},
-						})
-					).rejects.toThrow('is closed')
-				})
-
-				it('should allow closed issue with --force flag', async () => {
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 123,
-						rawInput: '123',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-						number: 123,
-						title: 'Test Issue',
-						state: 'closed',
-						body: '',
-						labels: [],
-						assignees: [],
-						url: 'https://github.com/test/repo/issues/123',
-					} as Issue)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: '123',
-							options: { force: true },
-						})
-					).resolves.not.toThrow()
-
-					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
-				})
-
-				it('should throw error if issue not found on GitHub', async () => {
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 999,
-						rawInput: '999',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockRejectedValue(
-						new Error('Issue #999 not found')
-					)
-
-					await expect(
-						command.execute({
-							identifier: '999',
-							options: {},
-						})
-					).rejects.toThrow('Issue #999 not found')
-				})
-
-				it('should throw error if worktree not found for issue', async () => {
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 123,
-						rawInput: '123',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-						number: 123,
-						title: 'Test Issue',
-						state: 'open',
-						body: '',
-						labels: [],
-						assignees: [],
-						url: 'https://github.com/test/repo/issues/123',
-					} as Issue)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([])
-
-					await expect(
-						command.execute({
-							identifier: '123',
-							options: {},
-						})
-					).rejects.toThrow('No worktree found')
-				})
-			})
-
-			describe('PR validation', () => {
-				it('should validate open PR exists on GitHub', async () => {
-					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
-						number: 456,
-						title: 'Test PR',
-						state: 'open',
-						branch: 'feature-branch',
-						baseBranch: 'main',
-						body: '',
-						url: 'https://github.com/test/repo/pull/456',
-						isDraft: false,
-					} as PullRequest)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/pr-456', branch: 'pr/456', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: 'pr/456',
-							options: {},
-						})
-					).resolves.not.toThrow()
-
-					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(456)
-				})
-
-				it('should allow closed PR (cleanup-only mode)', async () => {
-					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
-						number: 456,
-						title: 'Test PR',
-						state: 'closed',
-						branch: 'feature-branch',
-						baseBranch: 'main',
-						body: '',
-						url: 'https://github.com/test/repo/pull/456',
-						isDraft: false,
-					} as PullRequest)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/pr-456', branch: 'pr/456', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: 'pr/456',
-							options: {},
-						})
-					).resolves.not.toThrow()
-
-					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(456)
-				})
-
-				it('should allow merged PR (cleanup-only mode)', async () => {
-					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
-						number: 456,
-						title: 'Test PR',
-						state: 'merged',
-						branch: 'feature-branch',
-						baseBranch: 'main',
-						body: '',
-						url: 'https://github.com/test/repo/pull/456',
-						isDraft: false,
-					} as PullRequest)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/pr-456', branch: 'pr/456', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: 'pr/456',
-							options: {},
-						})
-					).resolves.not.toThrow()
-
-					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(456)
-				})
-
-				it('should throw error if PR not found on GitHub', async () => {
-					vi.mocked(mockGitHubService.fetchPR).mockRejectedValue(
-						new Error('PR #999 not found')
-					)
-
-					await expect(
-						command.execute({
-							identifier: 'pr/999',
-							options: {},
-						})
-					).rejects.toThrow('PR #999 not found')
-				})
-			})
-
-			describe('branch validation', () => {
-				it('should validate branch name format (valid characters)', async () => {
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/my-branch', branch: 'feature/my-branch', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: 'feature/my-branch',
-							options: {},
-						})
-					).resolves.not.toThrow()
-				})
-
-				it('should throw error if branch not found', async () => {
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([])
-
-					await expect(
-						command.execute({
-							identifier: 'nonexistent-branch',
-							options: {},
-						})
-					).rejects.toThrow('No worktree found')
-				})
-			})
-
-			describe('worktree auto-detection', () => {
-				it('should warn if multiple worktrees match identifier', async () => {
-					const { logger } = await import('../utils/logger.js')
-
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 123,
-						rawInput: '123',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-						number: 123,
-						title: 'Test Issue',
-						state: 'open',
-						body: '',
-						labels: [],
-						assignees: [],
-						url: 'https://github.com/test/repo/issues/123',
-					} as Issue)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/issue-123-v1', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-						{ path: '/test/issue-123-v2', branch: 'fix/issue-123', commit: 'def456', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: '123',
-							options: {},
-						})
-					).resolves.not.toThrow()
-
-					expect(logger.warn).toHaveBeenCalledWith(
-						expect.stringContaining('Multiple worktrees found')
-					)
-				})
-
-				it('should use first matching worktree if multiple found', async () => {
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 123,
-						rawInput: '123',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-						number: 123,
-						title: 'Test Issue',
-						state: 'open',
-						body: '',
-						labels: [],
-						assignees: [],
-						url: 'https://github.com/test/repo/issues/123',
-					} as Issue)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/issue-123-v1', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-						{ path: '/test/issue-123-v2', branch: 'fix/issue-123', commit: 'def456', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: '123',
-							options: {},
-						})
-					).resolves.not.toThrow()
-
-					// Should proceed with first match
-					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
-				})
-			})
-		})
-
-		describe('options handling', () => {
-			describe('force flag', () => {
-				it('should accept --force flag', async () => {
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 123,
-						rawInput: '123',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-						number: 123,
-						title: 'Test Issue',
-						state: 'closed',
-						body: '',
-						labels: [],
-						assignees: [],
-						url: 'https://github.com/test/repo/issues/123',
-					} as Issue)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: '123',
-							options: { force: true },
-						})
-					).resolves.not.toThrow()
-				})
-
-				it('should skip confirmations when force=true', async () => {
-					// Tested via closed issue acceptance above
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 123,
-						rawInput: '123',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-						number: 123,
-						title: 'Closed Issue',
-						state: 'closed',
-						body: '',
-						labels: [],
-						assignees: [],
-						url: 'https://github.com/test/repo/issues/123',
-					} as Issue)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: '123',
-							options: { force: true },
-						})
-					).resolves.not.toThrow()
-				})
-			})
-
-			describe('dry-run flag', () => {
-				it('should accept --dry-run flag', async () => {
-					const { logger } = await import('../utils/logger.js')
-
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 123,
-						rawInput: '123',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-						number: 123,
-						title: 'Test Issue',
-						state: 'open',
-						body: '',
-						labels: [],
-						assignees: [],
-						url: 'https://github.com/test/repo/issues/123',
-					} as Issue)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: '123',
-							options: { dryRun: true },
-						})
-					).resolves.not.toThrow()
-
-					expect(logger.info).toHaveBeenCalledWith(
-						expect.stringContaining('[DRY RUN]')
-					)
-				})
-
-				it('should preview actions without executing when dryRun=true', async () => {
-					const { logger } = await import('../utils/logger.js')
-
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 123,
-						rawInput: '123',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-						number: 123,
-						title: 'Test Issue',
-						state: 'open',
-						body: '',
-						labels: [],
-						assignees: [],
-						url: 'https://github.com/test/repo/issues/123',
-					} as Issue)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await command.execute({
-						identifier: '123',
-						options: { dryRun: true },
-					})
-
-					// Should log dry-run message
-					expect(logger.info).toHaveBeenCalledWith(
-						expect.stringContaining('[DRY RUN]')
-					)
-				})
-
-				it('should prefix log messages with [DRY RUN]', async () => {
-					const { logger } = await import('../utils/logger.js')
-
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 123,
-						rawInput: '123',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-						number: 123,
-						title: 'Test Issue',
-						state: 'open',
-						body: '',
-						labels: [],
-						assignees: [],
-						url: 'https://github.com/test/repo/issues/123',
-					} as Issue)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await command.execute({
-						identifier: '123',
-						options: { dryRun: true },
-					})
-
-					expect(logger.info).toHaveBeenCalledWith(
-						expect.stringMatching(/\[DRY RUN\]/)
-					)
-				})
-
-				it('should perform GitHub API reads in dry-run mode', async () => {
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 123,
-						rawInput: '123',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-						number: 123,
-						title: 'Test Issue',
-						state: 'open',
-						body: '',
-						labels: [],
-						assignees: [],
-						url: 'https://github.com/test/repo/issues/123',
-					} as Issue)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await command.execute({
-						identifier: '123',
-						options: { dryRun: true },
-					})
-
-					// GitHub API should still be called in dry-run mode
-					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
-				})
-			})
-
-			describe('flag combinations', () => {
-				it('should handle --force and --dry-run together', async () => {
-					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-						type: 'issue',
-						number: 123,
-						rawInput: '123',
-					})
-					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-						number: 123,
-						title: 'Test Issue',
-						state: 'closed',
-						body: '',
-						labels: [],
-						assignees: [],
-						url: 'https://github.com/test/repo/issues/123',
-					} as Issue)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: '123',
-							options: { force: true, dryRun: true },
-						})
-					).resolves.not.toThrow()
-				})
-
-				it('should handle --pr with --force', async () => {
-					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
-						number: 456,
-						title: 'Test PR',
-						state: 'closed',
-						branch: 'feature-branch',
-						baseBranch: 'main',
-						body: '',
-						url: 'https://github.com/test/repo/pull/456',
-						isDraft: false,
-					} as PullRequest)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/pr-456', branch: 'pr/456', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: '123',
-							options: { pr: 456, force: true },
-						})
-					).resolves.not.toThrow()
-				})
-
-				it('should handle --pr with --dry-run', async () => {
-					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
-						number: 456,
-						title: 'Test PR',
-						state: 'open',
-						branch: 'feature-branch',
-						baseBranch: 'main',
-						body: '',
-						url: 'https://github.com/test/repo/pull/456',
-						isDraft: false,
-					} as PullRequest)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/pr-456', branch: 'pr/456', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: '123',
-							options: { pr: 456, dryRun: true },
-						})
-					).resolves.not.toThrow()
-				})
-
-				it('should handle all three flags together', async () => {
-					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue({
-						number: 456,
-						title: 'Test PR',
-						state: 'closed',
-						branch: 'feature-branch',
-						baseBranch: 'main',
-						body: '',
-						url: 'https://github.com/test/repo/pull/456',
-						isDraft: false,
-					} as PullRequest)
-					vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-						{ path: '/test/pr-456', branch: 'pr/456', commit: 'abc123', bare: false },
-					] as GitWorktree[])
-
-					await expect(
-						command.execute({
-							identifier: '123',
-							options: { pr: 456, force: true, dryRun: true },
-						})
-					).resolves.not.toThrow()
-				})
-			})
-		})
-
-		describe('error handling', () => {
-			it('should handle GitHub API timeout gracefully', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockRejectedValue(
-					new Error('Request timeout')
-				)
-
-				await expect(
-					command.execute({
-						identifier: '123',
-						options: {},
-					})
-				).rejects.toThrow('Request timeout')
-			})
-
-			it('should handle GitHub API rate limit errors', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockRejectedValue(
-					new Error('API rate limit exceeded')
-				)
-
-				await expect(
-					command.execute({
-						identifier: '123',
-						options: {},
-					})
-				).rejects.toThrow('API rate limit exceeded')
-			})
-
-			it('should handle GitHub authentication errors', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockRejectedValue(
-					new Error('Authentication required')
-				)
-
-				await expect(
-					command.execute({
-						identifier: '123',
-						options: {},
-					})
-				).rejects.toThrow('Authentication required')
-			})
-
-			it('should provide clear error message when API fails', async () => {
-				const { logger } = await import('../utils/logger.js')
-
-				vi.mocked(mockGitHubService.detectInputType).mockRejectedValue(
-					new Error('Network error')
-				)
-
-				await expect(
-					command.execute({
-						identifier: '123',
-						options: {},
-					})
-				).rejects.toThrow()
-
-				expect(logger.error).toHaveBeenCalled()
-			})
-
-			it('should handle Git command failures gracefully', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'issue',
-					number: 123,
-					rawInput: '123',
-				})
-				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-					number: 123,
-					title: 'Test Issue',
-					state: 'open',
-					body: '',
-					labels: [],
-					assignees: [],
-					url: 'https://github.com/test/repo/issues/123',
-				} as Issue)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockRejectedValue(
-					new Error('Git command failed')
-				)
-
-				await expect(
-					command.execute({
-						identifier: '123',
-						options: {},
-					})
-				).rejects.toThrow('Git command failed')
-			})
-
-			it('should throw error with helpful message for invalid input', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'unknown',
-					number: null,
-					rawInput: '999',
-				})
-
-				await expect(
-					command.execute({
-						identifier: '999',
-						options: {},
-					})
-				).rejects.toThrow(/Could not find/)
-			})
-
-			it('should include original input in error messages', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'unknown',
-					number: null,
-					rawInput: '999',
-				})
-
-				await expect(
-					command.execute({
-						identifier: '999',
-						options: {},
-					})
-				).rejects.toThrow(/999/)
-			})
-
-			it('should handle thrown strings gracefully', async () => {
-				const { logger } = await import('../utils/logger.js')
-
-				vi.mocked(mockGitHubService.detectInputType).mockRejectedValue(
-					'string error'
-				)
-
-				await expect(
-					command.execute({
-						identifier: '123',
-						options: {},
-					})
-				).rejects.toBeDefined()
-
-				expect(logger.error).toHaveBeenCalled()
-			})
-
-			it('should handle thrown null/undefined gracefully', async () => {
-				const { logger } = await import('../utils/logger.js')
-
-				vi.mocked(mockGitHubService.detectInputType).mockRejectedValue(null)
-
-				await expect(
-					command.execute({
-						identifier: '123',
-						options: {},
-					})
-				).rejects.toBeDefined()
-
-				expect(logger.error).toHaveBeenCalled()
-			})
-		})
-
 		describe('workflow execution order', () => {
+			const mockWorktree: GitWorktree = {
+				path: '/test/worktree',
+				branch: 'feat/issue-123',
+				commit: 'abc123',
+				isPR: false,
+				issueNumber: 123,
+			}
+
+			const mockIssue: Issue = {
+				number: 123,
+				title: 'Test issue',
+				body: 'Test body',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://github.com/test/repo/issues/123',
+			}
+
+			beforeEach(() => {
+				// Mock successful issue fetch
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+
+				// Mock successful worktree finding
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+				// Mock IdentifierParser to detect as issue
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					originalInput: '123',
+				})
+			})
+
 			it('should execute complete workflow including merge steps', async () => {
-				// Test the complete workflow order: validate → detect → commit → rebase → merge
+				// Track execution order
 				const executionOrder: string[] = []
 
-				// Mock ValidationRunner to track execution order
 				vi.mocked(mockValidationRunner.runValidations).mockImplementation(async () => {
 					executionOrder.push('validation')
-					return {
-						success: true,
-						steps: [],
-						totalDuration: 0,
-					}
+					return { success: true, steps: [], totalDuration: 0 }
 				})
 
-				// Mock CommitManager to track execution order
 				vi.mocked(mockCommitManager.detectUncommittedChanges).mockImplementation(async () => {
-					executionOrder.push('commit-detect')
+					executionOrder.push('detectChanges')
 					return {
-						hasUncommittedChanges: true,
-						unstagedFiles: ['src/test.ts'],
+						hasUncommittedChanges: false,
+						unstagedFiles: [],
 						stagedFiles: [],
 						currentBranch: 'feat/issue-123',
 						isAheadOfRemote: false,
@@ -1332,11 +192,6 @@ describe('FinishCommand', () => {
 					}
 				})
 
-				vi.mocked(mockCommitManager.commitChanges).mockImplementation(async () => {
-					executionOrder.push('commit-execute')
-				})
-
-				// Mock MergeManager to track execution order
 				vi.mocked(mockMergeManager.rebaseOnMain).mockImplementation(async () => {
 					executionOrder.push('rebase')
 				})
@@ -1345,62 +200,28 @@ describe('FinishCommand', () => {
 					executionOrder.push('merge')
 				})
 
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'issue',
-					number: 123,
-					rawInput: '123',
+				await command.execute({
+					identifier: '123',
+					options: {},
 				})
-				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-					number: 123,
-					title: 'Test Issue',
-					state: 'open',
-					body: '',
-					labels: [],
-					assignees: [],
-					url: 'https://github.com/test/repo/issues/123',
-				} as Issue)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-				] as GitWorktree[])
 
-				// This should succeed with the correct order
-				await expect(
-					command.execute({
-						identifier: '123',
-						options: {},
-					})
-				).resolves.not.toThrow()
-
-				// ✅ CORRECT: The implementation should follow this order
-				expect(executionOrder).toEqual([
-					'validation',     // ✅ First: Ensure code quality
-					'commit-detect',  // ✅ Second: Check if there are changes to commit
-					'commit-execute', // ✅ Third: Only commit if validation passed
-					'rebase',         // ✅ Fourth: Rebase branch on main
-					'merge'           // ✅ Fifth: Perform fast-forward merge
-				])
+				// Verify all steps executed in correct order
+				expect(executionOrder).toEqual(['validation', 'detectChanges', 'rebase', 'merge'])
 			})
 
 			it('should run validation BEFORE detecting and committing changes', async () => {
-				// Test the correct workflow order: validate → detect → commit
 				const executionOrder: string[] = []
 
-				// Mock ValidationRunner to track execution order
 				vi.mocked(mockValidationRunner.runValidations).mockImplementation(async () => {
 					executionOrder.push('validation')
-					return {
-						success: true,
-						steps: [],
-						totalDuration: 0,
-					}
+					return { success: true, steps: [], totalDuration: 0 }
 				})
 
-				// Mock CommitManager to track execution order
 				vi.mocked(mockCommitManager.detectUncommittedChanges).mockImplementation(async () => {
-					executionOrder.push('commit-detect')
+					executionOrder.push('detectChanges')
 					return {
 						hasUncommittedChanges: true,
-						unstagedFiles: ['src/test.ts'],
+						unstagedFiles: ['test.ts'],
 						stagedFiles: [],
 						currentBranch: 'feat/issue-123',
 						isAheadOfRemote: false,
@@ -1409,163 +230,27 @@ describe('FinishCommand', () => {
 				})
 
 				vi.mocked(mockCommitManager.commitChanges).mockImplementation(async () => {
-					executionOrder.push('commit-execute')
+					executionOrder.push('commit')
 				})
-
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'issue',
-					number: 123,
-					rawInput: '123',
-				})
-				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-					number: 123,
-					title: 'Test Issue',
-					state: 'open',
-					body: '',
-					labels: [],
-					assignees: [],
-					url: 'https://github.com/test/repo/issues/123',
-				} as Issue)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				// This should succeed with the correct order
-				await expect(
-					command.execute({
-						identifier: '123',
-						options: {},
-					})
-				).resolves.not.toThrow()
-
-				// ✅ CORRECT: The implementation should follow this order
-				expect(executionOrder).toEqual([
-					'validation',     // ✅ First: Ensure code quality
-					'commit-detect',  // ✅ Second: Check if there are changes to commit
-					'commit-execute'  // ✅ Third: Only commit if validation passed
-				])
-			})
-
-			it('should NOT commit if validation fails', async () => {
-				// Test that validation failure prevents committing
-				const executionOrder: string[] = []
-
-				// Mock ValidationRunner to simulate failure
-				vi.mocked(mockValidationRunner.runValidations).mockImplementation(async () => {
-					executionOrder.push('validation')
-					throw new Error('Validation failed: TypeScript errors found')
-				})
-
-				// Mock CommitManager - these should NOT be called if validation fails
-				vi.mocked(mockCommitManager.detectUncommittedChanges).mockImplementation(async () => {
-					executionOrder.push('commit-detect')
-					return {
-						hasUncommittedChanges: true,
-						unstagedFiles: ['src/test.ts'],
-						stagedFiles: [],
-						currentBranch: 'feat/issue-123',
-						isAheadOfRemote: false,
-						isBehindRemote: false,
-					}
-				})
-
-				vi.mocked(mockCommitManager.commitChanges).mockImplementation(async () => {
-					executionOrder.push('commit-execute')
-				})
-
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'issue',
-					number: 123,
-					rawInput: '123',
-				})
-				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-					number: 123,
-					title: 'Test Issue',
-					state: 'open',
-					body: '',
-					labels: [],
-					assignees: [],
-					url: 'https://github.com/test/repo/issues/123',
-				} as Issue)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				// This should fail at validation step
-				await expect(
-					command.execute({
-						identifier: '123',
-						options: {},
-					})
-				).rejects.toThrow('Validation failed: TypeScript errors found')
-
-				// ✅ CORRECT: Validation fails, so we never detect or commit changes
-				expect(executionOrder).toEqual([
-					'validation'  // ✅ Validation fails, workflow stops here
-				])
-
-				// Verify CommitManager methods were never called
-				expect(mockCommitManager.detectUncommittedChanges).not.toHaveBeenCalled()
-				expect(mockCommitManager.commitChanges).not.toHaveBeenCalled()
-			})
-
-			it('should pass correct options to MergeManager', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'issue',
-					number: 123,
-					rawInput: '123',
-				})
-				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-					number: 123,
-					title: 'Test Issue',
-					state: 'open',
-					body: '',
-					labels: [],
-					assignees: [],
-					url: 'https://github.com/test/repo/issues/123',
-				} as Issue)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-				] as GitWorktree[])
 
 				await command.execute({
 					identifier: '123',
-					options: { dryRun: true, force: true },
+					options: {},
 				})
 
-				// Verify MergeManager was called with correct options
-				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith('/test/issue-123', {
-					dryRun: true,
-					force: true,
-				})
-				expect(mockMergeManager.performFastForwardMerge).toHaveBeenCalledWith('feat/issue-123', '/test/issue-123', {
-					dryRun: true,
-					force: true,
-				})
+				// Verify validation happens before detection and commit
+				const validationIndex = executionOrder.indexOf('validation')
+				const detectIndex = executionOrder.indexOf('detectChanges')
+				const commitIndex = executionOrder.indexOf('commit')
+
+				expect(validationIndex).toBeLessThan(detectIndex)
+				expect(detectIndex).toBeLessThan(commitIndex)
 			})
 
-			it('should handle rebase conflicts and stop workflow', async () => {
-				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
-					type: 'issue',
-					number: 123,
-					rawInput: '123',
-				})
-				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
-					number: 123,
-					title: 'Test Issue',
-					state: 'open',
-					body: '',
-					labels: [],
-					assignees: [],
-					url: 'https://github.com/test/repo/issues/123',
-				} as Issue)
-				vi.mocked(mockGitWorktreeManager.findWorktreesByIdentifier).mockResolvedValue([
-					{ path: '/test/issue-123', branch: 'feat/issue-123', commit: 'abc123', bare: false },
-				] as GitWorktree[])
-
-				// Mock rebase to fail with conflicts
-				vi.mocked(mockMergeManager.rebaseOnMain).mockRejectedValue(
-					new Error('Rebase failed: conflicts detected in src/test.ts')
+			it('should NOT commit if validation fails', async () => {
+				// Mock validation failure
+				vi.mocked(mockValidationRunner.runValidations).mockRejectedValue(
+					new Error('Validation failed: TypeScript errors found')
 				)
 
 				await expect(
@@ -1573,48 +258,1938 @@ describe('FinishCommand', () => {
 						identifier: '123',
 						options: {},
 					})
-				).rejects.toThrow('Rebase failed: conflicts detected in src/test.ts')
+				).rejects.toThrow('Validation failed: TypeScript errors found')
 
-				// Verify merge was never called after rebase failure
+				// Verify commit was never called
+				expect(mockCommitManager.commitChanges).not.toHaveBeenCalled()
+				expect(mockCommitManager.detectUncommittedChanges).not.toHaveBeenCalled()
+			})
+
+			it('should pass correct options to MergeManager', async () => {
+				await command.execute({
+					identifier: '123',
+					options: {
+						dryRun: true,
+						force: true,
+					},
+				})
+
+				// Verify rebaseOnMain received correct options
+				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith(
+					mockWorktree.path,
+					{
+						dryRun: true,
+						force: true,
+					}
+				)
+
+				// Verify performFastForwardMerge received correct options
+				expect(mockMergeManager.performFastForwardMerge).toHaveBeenCalledWith(
+					mockWorktree.branch,
+					mockWorktree.path,
+					{
+						dryRun: true,
+						force: true,
+					}
+				)
+			})
+
+			it('should handle rebase conflicts and stop workflow', async () => {
+				const conflictError = new Error(
+					'Rebase failed - merge conflicts detected in:\n' +
+					'  • src/test.ts\n\n' +
+					'To resolve manually:\n' +
+					'  1. Fix conflicts in the files above\n' +
+					'  2. Stage resolved files: git add <files>\n' +
+					'  3. Continue rebase: git rebase --continue\n' +
+					'  4. Or abort rebase: git rebase --abort\n' +
+					'  5. Then re-run: hb finish <issue-number>'
+				)
+
+				vi.mocked(mockMergeManager.rebaseOnMain).mockRejectedValue(conflictError)
+
+				await expect(
+					command.execute({
+						identifier: '123',
+						options: {},
+					})
+				).rejects.toThrow('Rebase failed - merge conflicts detected')
+
+				// Verify rebase was called
+				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalled()
+
+				// Verify fast-forward merge was NOT called (workflow stopped)
 				expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
 			})
-
 		})
 
-		describe('dependency injection', () => {
-			it('should accept GitHubService via constructor', () => {
-				const customService = new GitHubService()
-				const cmd = new FinishCommand(customService)
-				expect(cmd).toBeDefined()
+		describe('input parsing - explicit identifier', () => {
+			it('should parse plain issue number (123)', async () => {
+				// Mock parseForPatternDetection to return issue type
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					originalInput: '123',
+				})
+
+				// Mock GitHub API to return a valid issue
+				const mockIssue: Issue = {
+					number: 123,
+					title: 'Test Issue',
+					body: 'Test body',
+					state: 'open',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/test/repo/issues/123',
+				}
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+
+				// Mock worktree finding
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree/issue-123',
+					branch: 'feat/issue-123',
+					prunable: 'no',
+					bare: false,
+					detached: false,
+					locked: '',
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(
+					mockWorktree
+				)
+
+				await command.execute({
+					identifier: '123',
+					options: { dryRun: true },
+				})
+
+				// Verify IdentifierParser was called with the plain number
+				expect(mockIdentifierParser.parseForPatternDetection).toHaveBeenCalledWith('123')
+
+				// Verify GitHub API was called to validate the issue
+				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
+
+				// Verify specific worktree finding method was used
+				expect(mockGitWorktreeManager.findWorktreeForIssue).toHaveBeenCalledWith(123)
 			})
 
-			it('should accept GitWorktreeManager via constructor', () => {
-				const customManager = new GitWorktreeManager()
-				const cmd = new FinishCommand(undefined, customManager)
-				expect(cmd).toBeDefined()
+			it('should parse hash-prefixed issue number (#123)', async () => {
+				// Mock parseForPatternDetection to strip # and return issue type
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					originalInput: '#123',
+				})
+
+				// Mock GitHub API to return a valid issue
+				const mockIssue: Issue = {
+					number: 123,
+					title: 'Test Issue',
+					body: 'Test body',
+					state: 'open',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/test/repo/issues/123',
+				}
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+
+				// Mock worktree finding
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree/issue-123',
+					branch: 'feat/issue-123',
+					prunable: 'no',
+					bare: false,
+					detached: false,
+					locked: '',
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(
+					mockWorktree
+				)
+
+				await command.execute({
+					identifier: '#123',
+					options: { dryRun: true },
+				})
+
+				// Verify IdentifierParser was called with hash-prefixed input
+				expect(mockIdentifierParser.parseForPatternDetection).toHaveBeenCalledWith('#123')
+
+				// Verify GitHub API was called to validate the issue
+				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
 			})
 
-			it('should accept ValidationRunner via constructor', () => {
-				const customRunner = new ValidationRunner()
-				const cmd = new FinishCommand(undefined, undefined, customRunner)
-				expect(cmd).toBeDefined()
+			it('should parse PR-specific format (pr/123)', async () => {
+				// PR format is handled directly in FinishCommand, NOT via IdentifierParser
+				// Mock GitHub API to return a valid PR
+				const mockPR: PullRequest = {
+					number: 123,
+					title: 'Test PR',
+					body: 'Test body',
+					state: 'open',
+					branch: 'feat/test',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/123',
+					isDraft: false,
+				}
+				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+
+				// Mock worktree finding
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree/feat-test_pr_123',
+					branch: 'feat/test',
+					prunable: 'no',
+					bare: false,
+					detached: false,
+					locked: '',
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+				await command.execute({
+					identifier: 'pr/123',
+					options: { dryRun: true },
+				})
+
+				// Verify IdentifierParser was NOT called (PR format handled directly)
+				expect(mockIdentifierParser.parseForPatternDetection).not.toHaveBeenCalled()
+
+				// Verify GitHub API was called to validate the PR
+				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(123)
+
+				// Verify specific worktree finding method was used
+				expect(mockGitWorktreeManager.findWorktreeForPR).toHaveBeenCalledWith(123, '')
 			})
 
-			it('should accept CommitManager via constructor', () => {
-				const customCommitManager = new CommitManager()
-				const cmd = new FinishCommand(undefined, undefined, undefined, customCommitManager)
-				expect(cmd).toBeDefined()
+			it('should parse PR-specific format (PR-123)', async () => {
+				// Test uppercase PR- format
+				const mockPR: PullRequest = {
+					number: 123,
+					title: 'Test PR',
+					body: 'Test body',
+					state: 'open',
+					branch: 'feat/test',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/123',
+					isDraft: false,
+				}
+				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree/feat-test_pr_123',
+					branch: 'feat/test',
+					prunable: 'no',
+					bare: false,
+					detached: false,
+					locked: '',
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+				await command.execute({
+					identifier: 'PR-123',
+					options: { dryRun: true },
+				})
+
+				expect(mockIdentifierParser.parseForPatternDetection).not.toHaveBeenCalled()
+				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(123)
 			})
 
-			it('should accept MergeManager via constructor', () => {
-				const customMergeManager = new MergeManager()
-				const cmd = new FinishCommand(undefined, undefined, undefined, undefined, customMergeManager)
-				expect(cmd).toBeDefined()
+			it('should parse PR-specific format (PR/123)', async () => {
+				// Test uppercase PR/ format
+				const mockPR: PullRequest = {
+					number: 123,
+					title: 'Test PR',
+					body: 'Test body',
+					state: 'open',
+					branch: 'feat/test',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/123',
+					isDraft: false,
+				}
+				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree/feat-test_pr_123',
+					branch: 'feat/test',
+					prunable: 'no',
+					bare: false,
+					detached: false,
+					locked: '',
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+				await command.execute({
+					identifier: 'PR/123',
+					options: { dryRun: true },
+				})
+
+				expect(mockIdentifierParser.parseForPatternDetection).not.toHaveBeenCalled()
+				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(123)
 			})
 
-			it('should create default instances when not provided', () => {
-				const cmd = new FinishCommand()
-				expect(cmd).toBeDefined()
+			it('should parse branch name as fallback', async () => {
+				// Mock parseForPatternDetection to return branch type
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'branch',
+					branchName: 'feat/custom-branch',
+					originalInput: 'feat/custom-branch',
+				})
+
+				// Mock worktree finding
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree/feat-custom-branch',
+					branch: 'feat/custom-branch',
+					prunable: 'no',
+					bare: false,
+					detached: false,
+					locked: '',
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForBranch).mockResolvedValue(
+					mockWorktree
+				)
+
+				await command.execute({
+					identifier: 'feat/custom-branch',
+					options: { dryRun: true },
+				})
+
+				// Verify IdentifierParser was called with the branch name
+				expect(mockIdentifierParser.parseForPatternDetection).toHaveBeenCalledWith(
+					'feat/custom-branch'
+				)
+
+				// Verify specific worktree finding method was used
+				expect(mockGitWorktreeManager.findWorktreeForBranch).toHaveBeenCalledWith(
+					'feat/custom-branch'
+				)
+
+				// GitHub API should NOT be called for branch names
+				expect(mockGitHubService.fetchIssue).not.toHaveBeenCalled()
+				expect(mockGitHubService.fetchPR).not.toHaveBeenCalled()
+			})
+
+			it('should trim whitespace from input', async () => {
+				// Mock parseForPatternDetection to return issue type
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					originalInput: '  123  ',
+				})
+
+				// Mock GitHub API to return a valid issue
+				const mockIssue: Issue = {
+					number: 123,
+					title: 'Test Issue',
+					body: 'Test body',
+					state: 'open',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/test/repo/issues/123',
+				}
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+
+				// Mock worktree finding
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree/issue-123',
+					branch: 'feat/issue-123',
+					prunable: 'no',
+					bare: false,
+					detached: false,
+					locked: '',
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(
+					mockWorktree
+				)
+
+				await command.execute({
+					identifier: '  123  ',
+					options: { dryRun: true },
+				})
+
+				// Verify IdentifierParser was called with trimmed input
+				expect(mockIdentifierParser.parseForPatternDetection).toHaveBeenCalledWith('123')
+			})
+		})
+
+		describe('PR flag handling', () => {
+			it('should use --pr flag value when provided', async () => {
+				// Mock GitHub API to return a valid PR
+				const mockPR: PullRequest = {
+					number: 456,
+					title: 'Test PR',
+					body: 'Test body',
+					state: 'open',
+					branch: 'feat/test',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/456',
+					isDraft: false,
+				}
+				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+
+				// Mock worktree finding
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree/feat-test_pr_456',
+					branch: 'feat/test',
+					prunable: 'no',
+					bare: false,
+					detached: false,
+					locked: '',
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+				await command.execute({
+					identifier: undefined,
+					options: { pr: 456, dryRun: true },
+				})
+
+				// Verify PR API was called with flag value
+				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(456)
+
+				// Verify IdentifierParser was NOT called (flag takes priority)
+				expect(mockIdentifierParser.parseForPatternDetection).not.toHaveBeenCalled()
+			})
+
+			it('should prioritize --pr flag over identifier', async () => {
+				// Mock GitHub API to return a valid PR
+				const mockPR: PullRequest = {
+					number: 789,
+					title: 'Test PR',
+					body: 'Test body',
+					state: 'open',
+					branch: 'feat/test',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/789',
+					isDraft: false,
+				}
+				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+
+				// Mock worktree finding
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree/feat-test_pr_789',
+					branch: 'feat/test',
+					prunable: 'no',
+					bare: false,
+					detached: false,
+					locked: '',
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+				await command.execute({
+					identifier: '123', // This should be ignored
+					options: { pr: 789, dryRun: true },
+				})
+
+				// Verify PR API was called with flag value (789), NOT identifier (123)
+				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(789)
+				expect(mockGitHubService.fetchIssue).not.toHaveBeenCalled()
+
+				// Verify IdentifierParser was NOT called (flag takes priority)
+				expect(mockIdentifierParser.parseForPatternDetection).not.toHaveBeenCalled()
+			})
+		})
+
+		describe('GitHub API detection', () => {
+			it('should detect issue vs PR for numeric input via GitHub API', async () => {
+				// Mock parseForPatternDetection to return issue type (based on worktree patterns)
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 42,
+					originalInput: '42',
+				})
+
+				// Mock GitHub API to return a valid issue
+				const mockIssue: Issue = {
+					number: 42,
+					title: 'Test Issue',
+					body: 'Test body',
+					state: 'open',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/test/repo/issues/42',
+				}
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+
+				// Mock worktree finding
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree/issue-42',
+					branch: 'feat/issue-42',
+					prunable: 'no',
+					bare: false,
+					detached: false,
+					locked: '',
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(
+					mockWorktree
+				)
+
+				await command.execute({
+					identifier: '42',
+					options: { dryRun: true },
+				})
+
+				// Verify pattern detection was used first
+				expect(mockIdentifierParser.parseForPatternDetection).toHaveBeenCalledWith('42')
+
+				// Verify GitHub API was called to validate the issue
+				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(42)
+			})
+
+			it('should throw error if number is neither issue nor PR', async () => {
+				// Mock parseForPatternDetection to throw (no worktree found)
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockRejectedValue(
+					new Error('No worktree found for identifier: 999')
+				)
+
+				await expect(
+					command.execute({
+						identifier: '999',
+						options: { dryRun: true },
+					})
+				).rejects.toThrow('No worktree found for identifier: 999')
+
+				// Verify parseForPatternDetection was called
+				expect(mockIdentifierParser.parseForPatternDetection).toHaveBeenCalledWith('999')
+
+				// GitHub API should not be called if pattern detection fails
+				expect(mockGitHubService.fetchIssue).not.toHaveBeenCalled()
+				expect(mockGitHubService.fetchPR).not.toHaveBeenCalled()
+			})
+		})
+
+		describe('auto-detection from current directory', () => {
+			it('should auto-detect PR number from _pr_N worktree directory pattern', async () => {
+				// Mock process.cwd() to return a directory with _pr_123 pattern
+				const originalCwd = process.cwd
+				process.cwd = vi.fn(() => '/path/to/worktrees/feat-issue-46_pr_123')
+
+				// Mock GitWorktreeManager.getRepoInfo for fallback branch detection
+				vi.mocked(mockGitWorktreeManager.getRepoInfo).mockResolvedValue({
+					mainBranch: 'main',
+					currentBranch: 'feat/issue-46',
+					rootPath: '/path/to/repo',
+				})
+
+				// Mock GitHub API to return a valid PR
+				const mockPR: PullRequest = {
+					number: 123,
+					title: 'Test PR',
+					state: 'open',
+					html_url: 'https://github.com/test/repo/pull/123',
+					head: { ref: 'feat/issue-46' },
+					base: { ref: 'main' },
+				}
+				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+
+				// Mock findWorktreeForPR to return a valid worktree
+				const mockWorktree: GitWorktree = {
+					path: '/path/to/worktrees/feat-issue-46_pr_123',
+					branch: 'feat/issue-46',
+					commit: 'abc123',
+					locked: false,
+					prunable: false,
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+				try {
+					await command.execute({
+						identifier: undefined, // No explicit identifier - should auto-detect
+						options: { dryRun: true },
+					})
+
+					// Verify PR was fetched with auto-detected number
+					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(123)
+					expect(mockGitWorktreeManager.findWorktreeForPR).toHaveBeenCalledWith(123, '')
+				} finally {
+					// Restore original cwd
+					process.cwd = originalCwd
+				}
+			})
+
+			it('should auto-detect issue number from issue-N branch pattern', async () => {
+				// Mock process.cwd() to return a directory with issue-66 pattern
+				const originalCwd = process.cwd
+				process.cwd = vi.fn(() => '/path/to/worktrees/feat-issue-66')
+
+				// Mock GitWorktreeManager.getRepoInfo for fallback branch detection
+				vi.mocked(mockGitWorktreeManager.getRepoInfo).mockResolvedValue({
+					mainBranch: 'main',
+					currentBranch: 'feat/issue-66',
+					rootPath: '/path/to/repo',
+				})
+
+				// Mock GitHub API to return a valid issue
+				const mockIssue: Issue = {
+					number: 66,
+					title: 'Test Issue',
+					state: 'open',
+					html_url: 'https://github.com/test/repo/issues/66',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/test/repo/issues/66',
+					body: '',
+				}
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+
+				// Mock findWorktreeForIssue to return a valid worktree
+				const mockWorktree: GitWorktree = {
+					path: '/path/to/worktrees/feat-issue-66',
+					branch: 'feat/issue-66',
+					commit: 'abc123',
+					locked: false,
+					prunable: false,
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+				try {
+					await command.execute({
+						identifier: undefined,
+						options: { dryRun: true },
+					})
+
+					// Verify issue was fetched with auto-detected number
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(66)
+					expect(mockGitWorktreeManager.findWorktreeForIssue).toHaveBeenCalledWith(66)
+				} finally {
+					// Restore original cwd
+					process.cwd = originalCwd
+				}
+			})
+
+			it('should extract PR number from directory like "feat-issue-46_pr_123"', async () => {
+				// Mock process.cwd() to return complex directory pattern
+				const originalCwd = process.cwd
+				process.cwd = vi.fn(() => '/path/to/worktrees/feat-issue-46_pr_123')
+
+				// Mock GitWorktreeManager.getRepoInfo for fallback
+				vi.mocked(mockGitWorktreeManager.getRepoInfo).mockResolvedValue({
+					mainBranch: 'main',
+					currentBranch: 'feat/issue-46',
+					rootPath: '/path/to/repo',
+				})
+
+				// Mock GitHub API to return a valid PR
+				const mockPR: PullRequest = {
+					number: 123,
+					title: 'Test PR',
+					state: 'open',
+					html_url: 'https://github.com/test/repo/pull/123',
+					head: { ref: 'feat/issue-46' },
+					base: { ref: 'main' },
+				}
+				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+
+				// Mock findWorktreeForPR to return a valid worktree
+				const mockWorktree: GitWorktree = {
+					path: '/path/to/worktrees/feat-issue-46_pr_123',
+					branch: 'feat/issue-46',
+					commit: 'abc123',
+					locked: false,
+					prunable: false,
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+				try {
+					await command.execute({
+						identifier: undefined,
+						options: { dryRun: true },
+					})
+
+					// Verify PR number 123 was extracted (not issue number 46)
+					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(123)
+					expect(mockGitHubService.fetchIssue).not.toHaveBeenCalled()
+				} finally {
+					// Restore original cwd
+					process.cwd = originalCwd
+				}
+			})
+
+			it('should detect when running in PR worktree without identifier argument', async () => {
+				// Mock process.cwd() to return PR worktree pattern
+				const originalCwd = process.cwd
+				process.cwd = vi.fn(() => '/path/to/worktrees/feature-branch_pr_456')
+
+				// Mock GitWorktreeManager.getRepoInfo
+				vi.mocked(mockGitWorktreeManager.getRepoInfo).mockResolvedValue({
+					mainBranch: 'main',
+					currentBranch: 'feature-branch',
+					rootPath: '/path/to/repo',
+				})
+
+				// Mock GitHub API to return a valid PR
+				const mockPR: PullRequest = {
+					number: 456,
+					title: 'Feature PR',
+					state: 'open',
+					html_url: 'https://github.com/test/repo/pull/456',
+					head: { ref: 'feature-branch' },
+					base: { ref: 'main' },
+				}
+				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+
+				// Mock findWorktreeForPR to return a valid worktree
+				const mockWorktree: GitWorktree = {
+					path: '/path/to/worktrees/feature-branch_pr_456',
+					branch: 'feature-branch',
+					commit: 'abc123',
+					locked: false,
+					prunable: false,
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+				try {
+					await command.execute({
+						identifier: undefined, // No identifier provided
+						options: { dryRun: true },
+					})
+
+					// Verify it auto-detected PR #456
+					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(456)
+				} finally {
+					// Restore original cwd
+					process.cwd = originalCwd
+				}
+			})
+
+			it('should fall back to branch name when no pattern matches', async () => {
+				// Mock process.cwd() with no recognizable pattern
+				const originalCwd = process.cwd
+				process.cwd = vi.fn(() => '/path/to/worktrees/my-custom-branch')
+
+				// Mock GitWorktreeManager.getRepoInfo to return the branch
+				vi.mocked(mockGitWorktreeManager.getRepoInfo).mockResolvedValue({
+					mainBranch: 'main',
+					currentBranch: 'my-custom-branch',
+					rootPath: '/path/to/repo',
+				})
+
+				// Mock findWorktreeForBranch to return a valid worktree
+				const mockWorktree: GitWorktree = {
+					path: '/path/to/worktrees/my-custom-branch',
+					branch: 'my-custom-branch',
+					commit: 'abc123',
+					locked: false,
+					prunable: false,
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForBranch).mockResolvedValue(mockWorktree)
+
+				try {
+					await command.execute({
+						identifier: undefined,
+						options: { dryRun: true },
+					})
+
+					// Verify it fell back to branch name
+					expect(mockGitWorktreeManager.findWorktreeForBranch).toHaveBeenCalledWith('my-custom-branch')
+					// Should not attempt to fetch issue or PR
+					expect(mockGitHubService.fetchIssue).not.toHaveBeenCalled()
+					expect(mockGitHubService.fetchPR).not.toHaveBeenCalled()
+				} finally {
+					// Restore original cwd
+					process.cwd = originalCwd
+				}
+			})
+
+			it('should throw error when auto-detection fails completely', async () => {
+				// Mock process.cwd() with no pattern
+				const originalCwd = process.cwd
+				process.cwd = vi.fn(() => '/path/to/worktrees/random-dir')
+
+				// Mock GitWorktreeManager.getRepoInfo to return null/undefined branch
+				vi.mocked(mockGitWorktreeManager.getRepoInfo).mockResolvedValue({
+					mainBranch: 'main',
+					currentBranch: null, // No current branch
+					rootPath: '/path/to/repo',
+				})
+
+				try {
+					await expect(
+						command.execute({
+							identifier: undefined,
+							options: { dryRun: true },
+						})
+					).rejects.toThrow(/Could not auto-detect identifier/)
+				} finally {
+					// Restore original cwd
+					process.cwd = originalCwd
+				}
+			})
+		})
+
+		describe('edge cases', () => {
+			it('should handle very large issue numbers (999999)', async () => {
+				// Mock IdentifierParser to return large number
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 999999,
+					originalInput: '999999',
+				})
+
+				// Mock GitHub API to return a valid issue with large number
+				const mockIssue: Issue = {
+					number: 999999,
+					title: 'Large Issue Number',
+					state: 'open',
+					html_url: 'https://github.com/test/repo/issues/999999',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/test/repo/issues/999999',
+					body: '',
+				}
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+
+				// Mock findWorktreeForIssue to return a valid worktree
+				const mockWorktree: GitWorktree = {
+					path: '/path/to/worktrees/issue-999999',
+					branch: 'issue-999999',
+					commit: 'abc123',
+					locked: false,
+					prunable: false,
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+				await command.execute({
+					identifier: '999999',
+					options: { dryRun: true },
+				})
+
+				// Verify it parsed and validated the large number correctly
+				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(999999)
+			})
+
+			it('should handle leading zeros in numbers', async () => {
+				// Mock IdentifierParser to handle leading zeros
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 42, // Leading zeros stripped
+					originalInput: '00042',
+				})
+
+				// Mock GitHub API to return a valid issue
+				const mockIssue: Issue = {
+					number: 42,
+					title: 'Issue with leading zeros',
+					state: 'open',
+					html_url: 'https://github.com/test/repo/issues/42',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/test/repo/issues/42',
+					body: '',
+				}
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+
+				// Mock findWorktreeForIssue to return a valid worktree
+				const mockWorktree: GitWorktree = {
+					path: '/path/to/worktrees/issue-42',
+					branch: 'issue-42',
+					commit: 'abc123',
+					locked: false,
+					prunable: false,
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+				await command.execute({
+					identifier: '00042',
+					options: { dryRun: true },
+				})
+
+				// Verify leading zeros were handled correctly (parsed as 42, not 42 with leading zeros)
+				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(42)
+			})
+
+			it('should reject invalid characters in branch names', async () => {
+				// Mock IdentifierParser to return a branch with invalid characters
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'branch',
+					branchName: 'invalid@branch#name',
+					originalInput: 'invalid@branch#name',
+				})
+
+				// Mock findWorktreeForBranch to return a worktree (validation happens after finding)
+				const mockWorktree: GitWorktree = {
+					path: '/path/to/worktrees/invalid-branch',
+					branch: 'invalid@branch#name',
+					commit: 'abc123',
+					locked: false,
+					prunable: false,
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForBranch).mockResolvedValue(mockWorktree)
+
+				// Should throw error due to invalid branch name format
+				await expect(
+					command.execute({
+						identifier: 'invalid@branch#name',
+						options: { dryRun: true },
+					})
+				).rejects.toThrow(/Invalid branch name/)
+			})
+
+			it('should handle single-character branch names', async () => {
+				// Mock IdentifierParser to return a single-character branch
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'branch',
+					branchName: 'x',
+					originalInput: 'x',
+				})
+
+				// Mock findWorktreeForBranch to return a valid worktree
+				const mockWorktree: GitWorktree = {
+					path: '/path/to/worktrees/x',
+					branch: 'x',
+					commit: 'abc123',
+					locked: false,
+					prunable: false,
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForBranch).mockResolvedValue(mockWorktree)
+
+				await command.execute({
+					identifier: 'x',
+					options: { dryRun: true },
+				})
+
+				// Verify single-character branch name is handled correctly
+				expect(mockGitWorktreeManager.findWorktreeForBranch).toHaveBeenCalledWith('x')
+			})
+
+			it('should handle very long branch names (255+ chars)', async () => {
+				// Create a branch name longer than 255 characters
+				const longBranchName = 'a'.repeat(300)
+
+				// Mock IdentifierParser to return the long branch name
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'branch',
+					branchName: longBranchName,
+					originalInput: longBranchName,
+				})
+
+				// Mock findWorktreeForBranch to return a valid worktree
+				const mockWorktree: GitWorktree = {
+					path: '/path/to/worktrees/long-branch',
+					branch: longBranchName,
+					commit: 'abc123',
+					locked: false,
+					prunable: false,
+				}
+				vi.mocked(mockGitWorktreeManager.findWorktreeForBranch).mockResolvedValue(mockWorktree)
+
+				await command.execute({
+					identifier: longBranchName,
+					options: { dryRun: true },
+				})
+
+				// Verify very long branch name is handled (Git may have its own limits, but we don't restrict it)
+				expect(mockGitWorktreeManager.findWorktreeForBranch).toHaveBeenCalledWith(longBranchName)
+			})
+		})
+
+		describe('validation', () => {
+			describe('issue validation', () => {
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree-issue-123',
+					branch: 'feat/issue-123-test',
+					commit: 'abc123',
+					isPR: false,
+					issueNumber: 123,
+				}
+
+				it('should validate open issue exists on GitHub', async () => {
+					// Mock parseForPatternDetection to return issue type
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						originalInput: '123',
+					})
+
+					// Mock open issue
+					const mockIssue: Issue = {
+						number: 123,
+						title: 'Test Issue',
+						body: 'Test description',
+						state: 'open',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
+				})
+
+				it('should throw error for closed issue without --force', async () => {
+					// Mock parseForPatternDetection to return issue type
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						originalInput: '123',
+					})
+
+					// Mock closed issue
+					const mockIssue: Issue = {
+						number: 123,
+						title: 'Test Issue',
+						body: 'Test description',
+						state: 'closed',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					await expect(
+						command.execute({
+							identifier: '123',
+							options: {},
+						})
+					).rejects.toThrow('Issue #123 is closed. Use --force to finish anyway.')
+
+					// Verify validation failed before detecting/committing changes
+					expect(mockCommitManager.detectUncommittedChanges).not.toHaveBeenCalled()
+					expect(mockCommitManager.commitChanges).not.toHaveBeenCalled()
+				})
+
+				it('should allow closed issue with --force flag', async () => {
+					// Mock parseForPatternDetection to return issue type
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						originalInput: '123',
+					})
+
+					// Mock closed issue
+					const mockIssue: Issue = {
+						number: 123,
+						title: 'Test Issue',
+						body: 'Test description',
+						state: 'closed',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: '123',
+						options: { force: true },
+					})
+
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
+					expect(mockValidationRunner.runValidations).toHaveBeenCalled()
+				})
+
+				it('should throw error if issue not found on GitHub', async () => {
+					// Mock parseForPatternDetection to return issue type
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 999,
+						originalInput: '999',
+					})
+
+					// Mock NOT_FOUND error
+					const { GitHubError, GitHubErrorCode } = await import('../types/github.js')
+					const notFoundError = new GitHubError(
+						GitHubErrorCode.NOT_FOUND,
+						'Issue #999 not found'
+					)
+
+					vi.mocked(mockGitHubService.fetchIssue).mockRejectedValue(notFoundError)
+
+					await expect(
+						command.execute({
+							identifier: '999',
+							options: {},
+						})
+					).rejects.toThrow('Issue #999 not found')
+
+					// Verify validation failed before detecting/committing changes
+					expect(mockCommitManager.detectUncommittedChanges).not.toHaveBeenCalled()
+					expect(mockCommitManager.commitChanges).not.toHaveBeenCalled()
+				})
+
+				it('should throw error if worktree not found for issue', async () => {
+					// Mock parseForPatternDetection to return issue type
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						originalInput: '123',
+					})
+
+					// Mock open issue
+					const mockIssue: Issue = {
+						number: 123,
+						title: 'Test Issue',
+						body: 'Test description',
+						state: 'open',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(null)
+
+					await expect(
+						command.execute({
+							identifier: '123',
+							options: {},
+						})
+					).rejects.toThrow("No worktree found for Issue #123. Use 'hb list' to see available worktrees.")
+
+					// Verify validation failed before detecting/committing changes
+					expect(mockCommitManager.detectUncommittedChanges).not.toHaveBeenCalled()
+					expect(mockCommitManager.commitChanges).not.toHaveBeenCalled()
+				})
+			})
+
+			describe('PR validation', () => {
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree-pr-456',
+					branch: 'feat/test-feature',
+					commit: 'def456',
+					isPR: true,
+					prNumber: 456,
+				}
+
+				it('should validate open PR exists on GitHub', async () => {
+					// Mock open PR
+					const mockPR: PullRequest = {
+						number: 456,
+						title: 'Test PR',
+						body: 'Test description',
+						state: 'open',
+						branch: 'feat/test-feature',
+						baseBranch: 'main',
+						url: 'https://github.com/test/repo/pull/456',
+						isDraft: false,
+					}
+
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: 'pr/456',
+						options: {},
+					})
+
+					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(456)
+				})
+
+				it('should allow closed PR (cleanup-only mode)', async () => {
+					// Mock closed PR
+					const mockPR: PullRequest = {
+						number: 456,
+						title: 'Test PR',
+						body: 'Test description',
+						state: 'closed',
+						branch: 'feat/test-feature',
+						baseBranch: 'main',
+						url: 'https://github.com/test/repo/pull/456',
+						isDraft: false,
+					}
+
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: 'pr/456',
+						options: {},
+					})
+
+					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(456)
+					expect(mockValidationRunner.runValidations).toHaveBeenCalled()
+				})
+
+				it('should allow merged PR (cleanup-only mode)', async () => {
+					// Mock merged PR
+					const mockPR: PullRequest = {
+						number: 456,
+						title: 'Test PR',
+						body: 'Test description',
+						state: 'merged',
+						branch: 'feat/test-feature',
+						baseBranch: 'main',
+						url: 'https://github.com/test/repo/pull/456',
+						isDraft: false,
+					}
+
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: 'pr/456',
+						options: {},
+					})
+
+					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(456)
+					expect(mockValidationRunner.runValidations).toHaveBeenCalled()
+				})
+
+				it('should throw error if PR not found on GitHub', async () => {
+					// Mock NOT_FOUND error
+					const { GitHubError, GitHubErrorCode } = await import('../types/github.js')
+					const notFoundError = new GitHubError(
+						GitHubErrorCode.NOT_FOUND,
+						'PR #999 not found'
+					)
+
+					vi.mocked(mockGitHubService.fetchPR).mockRejectedValue(notFoundError)
+
+					await expect(
+						command.execute({
+							identifier: 'pr/999',
+							options: {},
+						})
+					).rejects.toThrow('PR #999 not found')
+
+					// Verify validation failed before detecting/committing changes
+					expect(mockCommitManager.detectUncommittedChanges).not.toHaveBeenCalled()
+					expect(mockCommitManager.commitChanges).not.toHaveBeenCalled()
+				})
+			})
+
+			describe('branch validation', () => {
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree-custom-branch',
+					branch: 'custom-branch',
+					commit: 'ghi789',
+					isPR: false,
+				}
+
+				it('should validate branch name format (valid characters)', async () => {
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'branch',
+						branchName: 'feat/my-feature-branch',
+						originalInput: 'feat/my-feature-branch',
+					})
+
+					vi.mocked(mockGitWorktreeManager.findWorktreeForBranch).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: 'feat/my-feature-branch',
+						options: {},
+					})
+
+					expect(mockGitWorktreeManager.findWorktreeForBranch).toHaveBeenCalledWith('feat/my-feature-branch')
+				})
+
+				it('should throw error if branch not found', async () => {
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'branch',
+						branchName: 'nonexistent-branch',
+						originalInput: 'nonexistent-branch',
+					})
+
+					vi.mocked(mockGitWorktreeManager.findWorktreeForBranch).mockResolvedValue(null)
+
+					await expect(
+						command.execute({
+							identifier: 'nonexistent-branch',
+							options: {},
+						})
+					).rejects.toThrow("No worktree found for Branch 'nonexistent-branch'. Use 'hb list' to see available worktrees.")
+
+					// Verify validation failed before detecting/committing changes
+					expect(mockCommitManager.detectUncommittedChanges).not.toHaveBeenCalled()
+					expect(mockCommitManager.commitChanges).not.toHaveBeenCalled()
+				})
+			})
+
+			describe('worktree auto-detection', () => {
+				it('should warn if multiple worktrees match identifier', async () => {
+					// Note: The current implementation only returns a single worktree
+					// This test documents expected behavior if multiple worktrees are supported in the future
+					// For now, we'll test that the first worktree is used
+
+					// Mock parseForPatternDetection to return issue type
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						originalInput: '123',
+					})
+
+					const mockWorktree: GitWorktree = {
+						path: '/test/worktree-issue-123',
+						branch: 'feat/issue-123-test',
+						commit: 'abc123',
+						isPR: false,
+						issueNumber: 123,
+					}
+
+					const mockIssue: Issue = {
+						number: 123,
+						title: 'Test Issue',
+						body: 'Test description',
+						state: 'open',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					expect(mockValidationRunner.runValidations).toHaveBeenCalledWith(
+						mockWorktree.path,
+						expect.any(Object)
+					)
+				})
+
+				it('should use first matching worktree if multiple found', async () => {
+					// Similar to above - documents expected behavior
+
+					// Mock parseForPatternDetection to return issue type
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						originalInput: '123',
+					})
+
+					const mockWorktree: GitWorktree = {
+						path: '/test/worktree-issue-123-first',
+						branch: 'feat/issue-123-test',
+						commit: 'abc123',
+						isPR: false,
+						issueNumber: 123,
+					}
+
+					const mockIssue: Issue = {
+						number: 123,
+						title: 'Test Issue',
+						body: 'Test description',
+						state: 'open',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					// Verify the first worktree path is used
+					expect(mockValidationRunner.runValidations).toHaveBeenCalledWith(
+						'/test/worktree-issue-123-first',
+						expect.any(Object)
+					)
+				})
+			})
+		})
+
+		describe('options handling', () => {
+			describe('force flag', () => {
+				it('should accept --force flag', async () => {
+					// Setup: Closed issue that requires --force
+					const mockIssue: Issue = {
+						number: 123,
+						title: 'Closed Issue',
+						body: 'Test',
+						state: 'closed',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/owner/repo/issues/123',
+					}
+
+					const mockWorktree: GitWorktree = {
+						path: '/test/worktree',
+						branch: 'feat/issue-123',
+						commit: 'abc123',
+						isMain: false,
+					}
+
+					// Mock IdentifierParser to detect as issue
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						originalInput: '123',
+					})
+
+					// Mock GitHub API to return closed issue
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+
+					// Mock finding worktree
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					// Execute with --force flag
+					await expect(
+						command.execute({
+							identifier: '123',
+							options: { force: true },
+						})
+					).resolves.not.toThrow()
+
+					// Verify GitHub API was called
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
+				})
+
+				it('should skip confirmations when force=true', async () => {
+					// Setup: Closed issue
+					const mockIssue: Issue = {
+						number: 456,
+						title: 'Closed Issue',
+						body: 'Test',
+						state: 'closed',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/owner/repo/issues/456',
+					}
+
+					const mockWorktree: GitWorktree = {
+						path: '/test/worktree',
+						branch: 'feat/issue-456',
+						commit: 'abc456',
+						isMain: false,
+					}
+
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 456,
+						originalInput: '456',
+					})
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					// Execute with force=true
+					await command.execute({
+						identifier: '456',
+						options: { force: true },
+					})
+
+					// Should not throw and should complete workflow
+					expect(mockMergeManager.rebaseOnMain).toHaveBeenCalled()
+					expect(mockMergeManager.performFastForwardMerge).toHaveBeenCalled()
+				})
+			})
+
+			describe('dry-run flag', () => {
+				it('should accept --dry-run flag', async () => {
+					const mockIssue: Issue = {
+						number: 789,
+						title: 'Open Issue',
+						body: 'Test',
+						state: 'open',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/owner/repo/issues/789',
+					}
+
+					const mockWorktree: GitWorktree = {
+						path: '/test/worktree',
+						branch: 'feat/issue-789',
+						commit: 'abc789',
+						isMain: false,
+					}
+
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 789,
+						originalInput: '789',
+					})
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					await expect(
+						command.execute({
+							identifier: '789',
+							options: { dryRun: true },
+						})
+					).resolves.not.toThrow()
+
+					// GitHub API should still be called (reads allowed in dry-run)
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(789)
+				})
+
+				it('should preview actions without executing when dryRun=true', async () => {
+					const mockIssue: Issue = {
+						number: 100,
+						title: 'Test Issue',
+						body: 'Test',
+						state: 'open',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/owner/repo/issues/100',
+					}
+
+					const mockWorktree: GitWorktree = {
+						path: '/test/worktree',
+						branch: 'feat/issue-100',
+						commit: 'abc100',
+						isMain: false,
+					}
+
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 100,
+						originalInput: '100',
+					})
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: '100',
+						options: { dryRun: true },
+					})
+
+					// Validation should not be executed in dry-run
+					expect(mockValidationRunner.runValidations).not.toHaveBeenCalled()
+
+					// Merge operations should receive dryRun=true
+					expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith(
+						'/test/worktree',
+						expect.objectContaining({ dryRun: true })
+					)
+					expect(mockMergeManager.performFastForwardMerge).toHaveBeenCalledWith(
+						'feat/issue-100',
+						'/test/worktree',
+						expect.objectContaining({ dryRun: true })
+					)
+				})
+
+				it('should prefix log messages with [DRY RUN]', async () => {
+					const mockIssue: Issue = {
+						number: 200,
+						title: 'Test Issue',
+						body: 'Test',
+						state: 'open',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/owner/repo/issues/200',
+					}
+
+					const mockWorktree: GitWorktree = {
+						path: '/test/worktree',
+						branch: 'feat/issue-200',
+						commit: 'abc200',
+						isMain: false,
+					}
+
+					// Mock logger to capture calls
+					const { logger } = await import('../utils/logger.js')
+
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 200,
+						originalInput: '200',
+					})
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: '200',
+						options: { dryRun: true },
+					})
+
+					// Verify logger.info was called with [DRY RUN] prefix
+					expect(logger.info).toHaveBeenCalledWith(
+						expect.stringMatching(/\[DRY RUN\]/)
+					)
+				})
+
+				it('should perform GitHub API reads in dry-run mode', async () => {
+					const mockPR: PullRequest = {
+						number: 300,
+						title: 'Test PR',
+						body: 'Test',
+						state: 'open',
+						branch: 'feat/test',
+						baseBranch: 'main',
+						url: 'https://github.com/owner/repo/pull/300',
+						isDraft: false,
+					}
+
+					const mockWorktree: GitWorktree = {
+						path: '/test/worktree',
+						branch: 'feat/test',
+						commit: 'abc300',
+						isMain: false,
+					}
+
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'pr',
+						number: 300,
+						originalInput: 'pr/300',
+					})
+
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: 'pr/300',
+						options: { dryRun: true },
+					})
+
+					// GitHub API reads should still occur in dry-run
+					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(300)
+				})
+			})
+
+			describe('flag combinations', () => {
+				it('should handle --force and --dry-run together', async () => {
+					const mockIssue: Issue = {
+						number: 400,
+						title: 'Closed Issue',
+						body: 'Test',
+						state: 'closed',
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/owner/repo/issues/400',
+					}
+
+					const mockWorktree: GitWorktree = {
+						path: '/test/worktree',
+						branch: 'feat/issue-400',
+						commit: 'abc400',
+						isMain: false,
+					}
+
+					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+						type: 'issue',
+						number: 400,
+						originalInput: '400',
+					})
+
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: '400',
+						options: { force: true, dryRun: true },
+					})
+
+					// Both options should be passed to merge manager
+					expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith(
+						'/test/worktree',
+						expect.objectContaining({ dryRun: true, force: true })
+					)
+				})
+
+				it('should handle --pr with --force', async () => {
+					const mockPR: PullRequest = {
+						number: 500,
+						title: 'Test PR',
+						body: 'Test',
+						state: 'open',
+						branch: 'feat/test',
+						baseBranch: 'main',
+						url: 'https://github.com/owner/repo/pull/500',
+						isDraft: false,
+					}
+
+					const mockWorktree: GitWorktree = {
+						path: '/test/worktree',
+						branch: 'feat/test',
+						commit: 'abc500',
+						isMain: false,
+					}
+
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: '123', // This will be ignored
+						options: { pr: 500, force: true },
+					})
+
+					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(500)
+					expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith(
+						'/test/worktree',
+						expect.objectContaining({ force: true })
+					)
+				})
+
+				it('should handle --pr with --dry-run', async () => {
+					const mockPR: PullRequest = {
+						number: 600,
+						title: 'Test PR',
+						body: 'Test',
+						state: 'open',
+						branch: 'feat/test',
+						baseBranch: 'main',
+						url: 'https://github.com/owner/repo/pull/600',
+						isDraft: false,
+					}
+
+					const mockWorktree: GitWorktree = {
+						path: '/test/worktree',
+						branch: 'feat/test',
+						commit: 'abc600',
+						isMain: false,
+					}
+
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: '123', // This will be ignored
+						options: { pr: 600, dryRun: true },
+					})
+
+					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(600)
+					expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith(
+						'/test/worktree',
+						expect.objectContaining({ dryRun: true })
+					)
+				})
+
+				it('should handle all three flags together', async () => {
+					const mockPR: PullRequest = {
+						number: 700,
+						title: 'Test PR',
+						body: 'Test',
+						state: 'open',
+						branch: 'feat/test',
+						baseBranch: 'main',
+						url: 'https://github.com/owner/repo/pull/700',
+						isDraft: false,
+					}
+
+					const mockWorktree: GitWorktree = {
+						path: '/test/worktree',
+						branch: 'feat/test',
+						commit: 'abc700',
+						isMain: false,
+					}
+
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: '123', // This will be ignored
+						options: { pr: 700, force: true, dryRun: true },
+					})
+
+					expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(700)
+					expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith(
+						'/test/worktree',
+						expect.objectContaining({ dryRun: true, force: true })
+					)
+					expect(mockMergeManager.performFastForwardMerge).toHaveBeenCalledWith(
+						'feat/test',
+						'/test/worktree',
+						expect.objectContaining({ dryRun: true, force: true })
+					)
+				})
+			})
+		})
+
+		describe('error handling', () => {
+			it('should handle GitHub API timeout gracefully', async () => {
+				const timeoutError = new Error('Request timeout')
+				timeoutError.name = 'TimeoutError'
+
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					originalInput: '123',
+				})
+
+				vi.mocked(mockGitHubService.fetchIssue).mockRejectedValue(timeoutError)
+
+				await expect(
+					command.execute({
+						identifier: '123',
+						options: {},
+					})
+				).rejects.toThrow('Request timeout')
+
+				const { logger } = await import('../utils/logger.js')
+				expect(logger.error).toHaveBeenCalled()
+			})
+
+			it('should handle GitHub API rate limit errors', async () => {
+				const rateLimitError = new Error('API rate limit exceeded')
+				rateLimitError.name = 'RateLimitError'
+
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'pr',
+					number: 456,
+					originalInput: 'pr/456',
+				})
+
+				vi.mocked(mockGitHubService.fetchPR).mockRejectedValue(rateLimitError)
+
+				await expect(
+					command.execute({
+						identifier: 'pr/456',
+						options: {},
+					})
+				).rejects.toThrow('API rate limit exceeded')
+
+				const { logger } = await import('../utils/logger.js')
+				expect(logger.error).toHaveBeenCalled()
+			})
+
+			it('should handle GitHub authentication errors', async () => {
+				const authError = new Error('Authentication failed')
+				authError.name = 'AuthenticationError'
+
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 789,
+					originalInput: '789',
+				})
+
+				vi.mocked(mockGitHubService.fetchIssue).mockRejectedValue(authError)
+
+				await expect(
+					command.execute({
+						identifier: '789',
+						options: {},
+					})
+				).rejects.toThrow('Authentication failed')
+			})
+
+			it('should provide clear error message when API fails', async () => {
+				const apiError = new Error('GitHub API error: failed to fetch')
+
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 111,
+					originalInput: '111',
+				})
+
+				vi.mocked(mockGitHubService.fetchIssue).mockRejectedValue(apiError)
+
+				await expect(
+					command.execute({
+						identifier: '111',
+						options: {},
+					})
+				).rejects.toThrow('GitHub API error: failed to fetch')
+
+				const { logger } = await import('../utils/logger.js')
+				expect(logger.error).toHaveBeenCalledWith(
+					expect.stringContaining('GitHub API error')
+				)
+			})
+
+			it('should handle Git command failures gracefully', async () => {
+				const mockIssue: Issue = {
+					number: 222,
+					title: 'Test Issue',
+					body: 'Test',
+					state: 'open',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/owner/repo/issues/222',
+				}
+
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree',
+					branch: 'feat/issue-222',
+					commit: 'abc222',
+					isMain: false,
+				}
+
+				const gitError = new Error('Git rebase failed: merge conflicts')
+
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 222,
+					originalInput: '222',
+				})
+
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+				vi.mocked(mockMergeManager.rebaseOnMain).mockRejectedValue(gitError)
+
+				await expect(
+					command.execute({
+						identifier: '222',
+						options: {},
+					})
+				).rejects.toThrow('Git rebase failed: merge conflicts')
+			})
+
+			it('should throw error with helpful message for invalid input', async () => {
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockRejectedValue(
+					new Error('Invalid identifier format: @#$%')
+				)
+
+				await expect(
+					command.execute({
+						identifier: '@#$%',
+						options: {},
+					})
+				).rejects.toThrow('Invalid identifier format: @#$%')
+			})
+
+			it('should include original input in error messages', async () => {
+				const originalInput = 'invalid-123'
+
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					originalInput: originalInput,
+				})
+
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
+					number: 123,
+					title: 'Test',
+					body: 'Test',
+					state: 'open',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/owner/repo/issues/123',
+				})
+
+				// Mock worktree not found
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(null)
+
+				await expect(
+					command.execute({
+						identifier: originalInput,
+						options: {},
+					})
+				).rejects.toThrow(/Use 'hb list' to see available worktrees/)
+			})
+
+			it('should handle thrown strings gracefully', async () => {
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockRejectedValue(
+					'String error: something went wrong'
+				)
+
+				await expect(
+					command.execute({
+						identifier: '333',
+						options: {},
+					})
+				).rejects.toThrow()
+
+				const { logger } = await import('../utils/logger.js')
+				expect(logger.error).toHaveBeenCalledWith('An unknown error occurred')
+			})
+
+			it('should handle thrown null/undefined gracefully', async () => {
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockRejectedValue(null)
+
+				await expect(
+					command.execute({
+						identifier: '444',
+						options: {},
+					})
+				).rejects.toThrow()
+
+				const { logger } = await import('../utils/logger.js')
+				expect(logger.error).toHaveBeenCalledWith('An unknown error occurred')
 			})
 		})
 	})

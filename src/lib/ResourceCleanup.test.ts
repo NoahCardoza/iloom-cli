@@ -27,6 +27,11 @@ describe('ResourceCleanup', () => {
 		// Initialize ResourceCleanup with mocks
 		resourceCleanup = new ResourceCleanup(mockGitWorktree, mockProcessManager, mockDatabase)
 
+		// Add missing mock methods for GitWorktreeManager
+		mockGitWorktree.findWorktreeForIssue = vi.fn()
+		mockGitWorktree.findWorktreeForPR = vi.fn()
+		mockGitWorktree.findWorktreeForBranch = vi.fn()
+
 		vi.clearAllMocks()
 	})
 
@@ -45,8 +50,8 @@ describe('ResourceCleanup', () => {
 		}
 
 		it('should successfully cleanup complete worktree (dev server + worktree + branch + database)', async () => {
-			// Mock worktree exists
-			vi.mocked(mockGitWorktree.findWorktreesByIdentifier).mockResolvedValueOnce([mockWorktree])
+			// Mock specific worktree finding method for issue type
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
 
 			// Mock process detection (dev server found)
 			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
@@ -70,7 +75,13 @@ describe('ResourceCleanup', () => {
 			// Mock database cleanup (not implemented yet, should skip)
 			// No mock needed as it's optional
 
-			const result = await resourceCleanup.cleanupWorktree('issue-25', {
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
 				deleteBranch: true,
 				keepDatabase: false,
 			} as ResourceCleanupOptions)
@@ -86,12 +97,18 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should handle missing dev server gracefully', async () => {
-			vi.mocked(mockGitWorktree.findWorktreesByIdentifier).mockResolvedValueOnce([mockWorktree])
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
 			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
 			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
 
-			const result = await resourceCleanup.cleanupWorktree('issue-25', {
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
 				keepDatabase: true,
 			})
 
@@ -100,9 +117,15 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should handle missing worktree gracefully', async () => {
-			vi.mocked(mockGitWorktree.findWorktreesByIdentifier).mockResolvedValueOnce([])
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(null)
 
-			const result = await resourceCleanup.cleanupWorktree('issue-99', {})
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 99,
+				originalInput: 'issue-99'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {})
 
 			expect(result.success).toBe(false)
 			expect(result.errors.length).toBeGreaterThan(0)
@@ -113,12 +136,19 @@ describe('ResourceCleanup', () => {
 			// Create ResourceCleanup without database manager
 			const cleanupWithoutDB = new ResourceCleanup(mockGitWorktree, mockProcessManager)
 
-			vi.mocked(mockGitWorktree.findWorktreesByIdentifier).mockResolvedValueOnce([mockWorktree])
+			// Setup mocks for the new instance
+			mockGitWorktree.findWorktreeForIssue = vi.fn().mockResolvedValueOnce(mockWorktree)
 			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
 			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
 
-			const result = await cleanupWithoutDB.cleanupWorktree('issue-25', {
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await cleanupWithoutDB.cleanupWorktree(parsedInput, {
 				keepDatabase: false,
 			})
 
@@ -129,7 +159,7 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should continue cleanup on partial failures', async () => {
-			vi.mocked(mockGitWorktree.findWorktreesByIdentifier).mockResolvedValueOnce([mockWorktree])
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
 			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
 
 			// Dev server termination fails
@@ -147,7 +177,13 @@ describe('ResourceCleanup', () => {
 			// But worktree removal succeeds
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
 
-			const result = await resourceCleanup.cleanupWorktree('issue-25', {
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
 				keepDatabase: true,
 			})
 
@@ -158,12 +194,18 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should report all operations in CleanupResult', async () => {
-			vi.mocked(mockGitWorktree.findWorktreesByIdentifier).mockResolvedValueOnce([mockWorktree])
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
 			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
 			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
 
-			const result = await resourceCleanup.cleanupWorktree('issue-25', {
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
 				deleteBranch: false,
 				keepDatabase: true,
 			})
@@ -175,10 +217,16 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should support dry-run mode without executing changes', async () => {
-			vi.mocked(mockGitWorktree.findWorktreesByIdentifier).mockResolvedValueOnce([mockWorktree])
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
 			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
 
-			const result = await resourceCleanup.cleanupWorktree('issue-25', {
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
 				dryRun: true,
 				deleteBranch: true,
 				keepDatabase: false,
@@ -193,7 +241,7 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should log debug information about worktree discovery', async () => {
-			vi.mocked(mockGitWorktree.findWorktreesByIdentifier).mockResolvedValueOnce([mockWorktree])
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
 			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
 			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
@@ -202,14 +250,18 @@ describe('ResourceCleanup', () => {
 			const { logger } = await import('../utils/logger.js')
 			const debugSpy = vi.spyOn(logger, 'debug')
 
-			await resourceCleanup.cleanupWorktree('issue-25', {
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			await resourceCleanup.cleanupWorktree(parsedInput, {
 				keepDatabase: true,
 			})
 
-			// Verify debug information was logged
-			expect(debugSpy).toHaveBeenCalledWith('Found 1 worktrees for identifier "issue-25":')
-			expect(debugSpy).toHaveBeenCalledWith('  0: path="/path/to/worktree", branch="feat/issue-25"')
-			expect(debugSpy).toHaveBeenCalledWith('Selected worktree: path="/path/to/worktree", branch="feat/issue-25"')
+			// Verify debug information was logged (updated expected calls based on new implementation)
+			expect(debugSpy).toHaveBeenCalledWith('Found worktree: path="/path/to/worktree", branch="feat/issue-25"')
 		})
 	})
 
@@ -387,9 +439,9 @@ describe('ResourceCleanup', () => {
 		}
 
 		it('should cleanup multiple worktrees sequentially', async () => {
-			vi.mocked(mockGitWorktree.findWorktreesByIdentifier)
-				.mockResolvedValueOnce([mockWorktree1])
-				.mockResolvedValueOnce([mockWorktree2])
+			vi.mocked(mockGitWorktree.findWorktreeForIssue)
+				.mockResolvedValueOnce(mockWorktree1)
+				.mockResolvedValueOnce(mockWorktree2)
 
 			vi.mocked(mockProcessManager.calculatePort)
 				.mockReturnValueOnce(3001)
@@ -404,17 +456,19 @@ describe('ResourceCleanup', () => {
 			})
 
 			expect(results).toHaveLength(2)
-			expect(results[0]?.identifier).toBe('issue-1')
-			expect(results[1]?.identifier).toBe('issue-2')
+			expect(results[0]?.identifier).toBe('1')
+			expect(results[1]?.identifier).toBe('2')
 		})
 
 		it('should continue on individual failures', async () => {
-			// First worktree fails
-			vi.mocked(mockGitWorktree.findWorktreesByIdentifier)
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([mockWorktree2])
+			// First worktree fails (issue-99 returns null), second succeeds
+			vi.mocked(mockGitWorktree.findWorktreeForIssue)
+				.mockResolvedValueOnce(null)  // First call for 'issue-99' fails
+				.mockResolvedValueOnce(mockWorktree2)  // Second call for 'issue-2' succeeds
 
-			vi.mocked(mockProcessManager.calculatePort).mockReturnValueOnce(3002)
+			vi.mocked(mockProcessManager.calculatePort)
+				.mockReturnValueOnce(3099) // For issue-99
+				.mockReturnValueOnce(3002) // For issue-2
 			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValue(null)
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValue(undefined)
 
@@ -428,11 +482,13 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should aggregate results from all cleanup operations', async () => {
-			vi.mocked(mockGitWorktree.findWorktreesByIdentifier)
-				.mockResolvedValueOnce([mockWorktree1])
-				.mockResolvedValueOnce([mockWorktree2])
+			vi.mocked(mockGitWorktree.findWorktreeForIssue)
+				.mockResolvedValueOnce(mockWorktree1)
+				.mockResolvedValueOnce(mockWorktree2)
 
-			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3001)
+			vi.mocked(mockProcessManager.calculatePort)
+				.mockReturnValueOnce(3001)
+				.mockReturnValueOnce(3002)
 			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValue(null)
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValue(undefined)
 

@@ -105,7 +105,7 @@ Each workspace gets:
 
 This project is migrating from proven bash scripts to a robust TypeScript implementation with:
 
-- **Test-Driven Development** (95% coverage requirement)
+- **Test-Driven Development** (70% coverage requirement - 95% created too many tests that were brittle/hard to maintain)
 - **Type Safety** and better error handling
 - **Cross-platform compatibility**
 - **Enhanced Claude AI integration**
@@ -145,7 +145,7 @@ src/
 This project follows Test-Driven Development (TDD). All code must:
 
 - Be written test-first with comprehensive unit tests
-- Achieve >95% code coverage
+- Achieve >70% code coverage
 - Include regression tests against bash script behavior
 - Use mock factories for all external dependencies
 
