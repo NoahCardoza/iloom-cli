@@ -89,7 +89,7 @@ describe('openTerminalWindow', () => {
 		expect(execa).toHaveBeenCalledWith('osascript', ['-e', expect.any(String)])
 		const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
 		expect(applescript).toContain('tell application "Terminal"')
-		expect(applescript).toContain("cd '/Users/test/workspace'")
+		expect(applescript).toContain(" cd '/Users/test/workspace'") // Commands now start with space
 	})
 
 	it('should escape single quotes in paths', async () => {
@@ -101,8 +101,8 @@ describe('openTerminalWindow', () => {
 
 		const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
 		// Single quotes should be escaped as '\'' within the do script string
-		// The full pattern is: do script "cd '/Users/test/workspace'\''s/path'"
-		expect(applescript).toContain("cd '/Users/test/workspace'\\\\''s/path'")
+		// The full pattern is: do script " cd '/Users/test/workspace'\''s/path'" (note leading space)
+		expect(applescript).toContain(" cd '/Users/test/workspace'\\\\''s/path'")
 	})
 
 	it('should include environment setup when requested', async () => {
@@ -236,5 +236,19 @@ describe('openTerminalWindow', () => {
 		const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
 		// Backslashes should be escaped as \\
 		expect(applescript).toContain('echo \\\\$PATH')
+	})
+
+	it('should prefix commands with space to prevent shell history pollution', async () => {
+		vi.mocked(execa).mockResolvedValue({} as unknown)
+
+		await openTerminalWindow({
+			workspacePath: '/Users/test/workspace',
+			command: 'pnpm dev',
+		})
+
+		const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+		// The entire command sequence should start with a space
+		// This prevents commands from appearing in shell history when HISTCONTROL=ignorespace
+		expect(applescript).toMatch(/do script " [^"]+/)
 	})
 })

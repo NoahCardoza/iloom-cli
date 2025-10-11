@@ -91,9 +91,13 @@ function buildAppleScript(options: TerminalWindowOptions): string {
 	// Join with &&
 	const fullCommand = commands.join(' && ')
 
+	// Prefix with space to prevent shell history pollution
+	// Most shells (bash/zsh) ignore commands starting with space when HISTCONTROL=ignorespace
+	const historyFreeCommand = ` ${fullCommand}`
+
 	// Build AppleScript
 	let script = `tell application "Terminal"\n`
-	script += `  set newTab to do script "${escapeForAppleScript(fullCommand)}"\n`
+	script += `  set newTab to do script "${escapeForAppleScript(historyFreeCommand)}"\n`
 
 	// Apply background color if provided
 	if (backgroundColor) {
