@@ -21,6 +21,7 @@ vi.mock('../utils/github.js', async () => {
 		fetchGhPR: vi.fn(),
 		fetchProjectList: vi.fn(),
 		fetchProjectItems: vi.fn(),
+		fetchProjectFields: vi.fn(),
 		updateProjectItemField: vi.fn(),
 	}
 })
@@ -511,17 +512,7 @@ describe('GitHubService', () => {
 					number: 1,
 					id: 'project-1',
 					name: 'Main Project',
-					fields: [
-						{
-							id: 'field-1',
-							name: 'Status',
-							dataType: 'SINGLE_SELECT',
-							options: [
-								{ id: 'opt-1', name: 'Todo' },
-								{ id: 'opt-2', name: 'In Progress' },
-							],
-						},
-					],
+					fields: [], // Fields are now fetched separately
 				},
 			])
 			vi.mocked(githubUtils.fetchProjectItems).mockResolvedValueOnce([
@@ -534,6 +525,20 @@ describe('GitHubService', () => {
 					fieldValues: {},
 				},
 			])
+			// Mock the separate fields fetch
+			vi.mocked(githubUtils.fetchProjectFields).mockResolvedValueOnce({
+				fields: [
+					{
+						id: 'field-1',
+						name: 'Status',
+						dataType: 'SINGLE_SELECT',
+						options: [
+							{ id: 'opt-1', name: 'Todo' },
+							{ id: 'opt-2', name: 'In Progress' },
+						],
+					},
+				],
+			})
 			vi.mocked(githubUtils.updateProjectItemField).mockResolvedValueOnce(undefined)
 
 			await service.moveIssueToInProgress(123)
@@ -587,14 +592,7 @@ describe('GitHubService', () => {
 					number: 1,
 					id: 'project-1',
 					name: 'Main Project',
-					fields: [
-						{
-							id: 'field-1',
-							name: 'Priority', // Different field
-							dataType: 'SINGLE_SELECT',
-							options: [],
-						},
-					],
+					fields: [],
 				},
 			])
 			vi.mocked(githubUtils.fetchProjectItems).mockResolvedValueOnce([
@@ -607,6 +605,17 @@ describe('GitHubService', () => {
 					fieldValues: {},
 				},
 			])
+			// Mock fields fetch with no Status field
+			vi.mocked(githubUtils.fetchProjectFields).mockResolvedValueOnce({
+				fields: [
+					{
+						id: 'field-1',
+						name: 'Priority', // Different field
+						dataType: 'SINGLE_SELECT',
+						options: [],
+					},
+				],
+			})
 
 			await service.moveIssueToInProgress(123)
 
@@ -624,17 +633,7 @@ describe('GitHubService', () => {
 					number: 1,
 					id: 'project-1',
 					name: 'Main Project',
-					fields: [
-						{
-							id: 'field-1',
-							name: 'Status',
-							dataType: 'SINGLE_SELECT',
-							options: [
-								{ id: 'opt-1', name: 'Todo' },
-								{ id: 'opt-2', name: 'Done' }, // No "In Progress"
-							],
-						},
-					],
+					fields: [],
 				},
 			])
 			vi.mocked(githubUtils.fetchProjectItems).mockResolvedValueOnce([
@@ -647,6 +646,20 @@ describe('GitHubService', () => {
 					fieldValues: {},
 				},
 			])
+			// Mock fields fetch with Status field but no "In Progress" option
+			vi.mocked(githubUtils.fetchProjectFields).mockResolvedValueOnce({
+				fields: [
+					{
+						id: 'field-1',
+						name: 'Status',
+						dataType: 'SINGLE_SELECT',
+						options: [
+							{ id: 'opt-1', name: 'Todo' },
+							{ id: 'opt-2', name: 'Done' }, // No "In Progress"
+						],
+					},
+				],
+			})
 
 			await service.moveIssueToInProgress(123)
 

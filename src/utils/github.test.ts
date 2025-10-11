@@ -8,6 +8,7 @@ import {
 	fetchGhPR,
 	fetchProjectList,
 	fetchProjectItems,
+	fetchProjectFields,
 	updateProjectItemField,
 	SimpleBranchNameStrategy,
 	ClaudeBranchNameStrategy,
@@ -345,6 +346,48 @@ describe('github utils', () => {
 			const result = await fetchProjectItems(1, 'testowner')
 
 			expect(result).toEqual(itemsData.items)
+		})
+	})
+
+	describe('fetchProjectFields', () => {
+		it('should fetch project fields', async () => {
+			const fieldsData = {
+				fields: [
+					{
+						id: 'field-1',
+						name: 'Status',
+						dataType: 'SINGLE_SELECT',
+						options: [
+							{ id: 'option-1', name: 'Todo' },
+							{ id: 'option-2', name: 'In Progress' },
+							{ id: 'option-3', name: 'Done' },
+						],
+					},
+				],
+			}
+
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: JSON.stringify(fieldsData),
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await fetchProjectFields(1, 'testowner')
+
+			expect(result).toEqual(fieldsData)
+			expect(execa).toHaveBeenCalledWith(
+				'gh',
+				[
+					'project',
+					'field-list',
+					'1',
+					'--owner',
+					'testowner',
+					'--format',
+					'json',
+				],
+				expect.any(Object)
+			)
 		})
 	})
 

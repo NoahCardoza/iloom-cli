@@ -6,6 +6,7 @@ import type {
 	GitHubAuthStatus,
 	BranchNameStrategy,
 	ProjectItem,
+	ProjectField,
 } from '../types/github.js'
 import { logger } from './logger.js'
 
@@ -125,6 +126,23 @@ export async function fetchProjectItems(
 	])
 
 	return result?.items ?? []
+}
+
+export async function fetchProjectFields(
+	projectNumber: number,
+	owner: string
+): Promise<{ fields: ProjectField[] }> {
+	const result = await executeGhCommand<{ fields: ProjectField[] }>([
+		'project',
+		'field-list',
+		String(projectNumber),
+		'--owner',
+		owner,
+		'--format',
+		'json',
+	])
+
+	return result ?? { fields: [] }
 }
 
 export async function updateProjectItemField(

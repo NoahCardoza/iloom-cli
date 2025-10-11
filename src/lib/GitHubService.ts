@@ -7,6 +7,7 @@ import type {
 	BranchGenerationOptions,
 	BranchNameStrategy,
 	ProjectItem,
+	ProjectField,
 } from '../types/github.js'
 import { GitHubError, GitHubErrorCode } from '../types/github.js'
 import {
@@ -16,6 +17,7 @@ import {
 	fetchGhPR,
 	fetchProjectList,
 	fetchProjectItems,
+	fetchProjectFields,
 	updateProjectItemField,
 	SimpleBranchNameStrategy,
 	ClaudeBranchNameStrategy,
@@ -276,17 +278,28 @@ export class GitHubService {
 			return
 		}
 
+		// Fetch project fields separately (like bash script does)
+		let fieldsData: { fields: ProjectField[] }
+		try {
+			fieldsData = await fetchProjectFields(project.number, owner)
+		} catch (error) {
+			logger.debug('Could not fetch project fields', { project: project.number, error })
+			return
+		}
+
 		// Find Status field and In Progress option
-		const statusField = project.fields.find((f) => f.name === 'Status')
+		const statusField = fieldsData.fields.find((f) => f.name === 'Status')
 		if (!statusField) {
+			logger.debug('No Status field found in project', { projectNumber: project.number })
 			return
 		}
 
 		const inProgressOption = statusField.options?.find(
-			(o) => o.name === 'In Progress' || o.name === 'In progress'
+			(o: { id: string; name: string }) => o.name === 'In Progress' || o.name === 'In progress'
 		)
 
 		if (!inProgressOption) {
+			logger.debug('No In Progress option found in Status field', { projectNumber: project.number })
 			return
 		}
 
