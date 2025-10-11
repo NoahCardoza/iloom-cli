@@ -37,12 +37,13 @@ program
   .name('hatchbox')
   .description(packageJson.description)
   .version(packageJson.version)
-  .option('--debug', 'Enable debug output (default: true for now)') // Default to true for now
+  .option('--debug', 'Enable debug output (default: based on HATCHBOX_DEBUG env var)')
   .hook('preAction', (thisCommand) => {
-    // Set debug mode based on flag
+    // Set debug mode based on flag or environment variable
     const options = thisCommand.opts()
-    // Default to true for now during development
-    const debugEnabled = options.debug !== false
+    // Default to environment variable value, then false if not set
+    const envDebug = process.env.HATCHBOX_DEBUG === 'true'
+    const debugEnabled = options.debug !== undefined ? options.debug : envDebug
     logger.setDebug(debugEnabled)
   })
 
