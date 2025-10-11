@@ -9,6 +9,10 @@ import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { ResourceCleanup } from '../lib/ResourceCleanup.js'
 import { ProcessManager } from '../lib/process/ProcessManager.js'
 import { BuildRunner } from '../lib/BuildRunner.js'
+import { DatabaseManager } from '../lib/DatabaseManager.js'
+import { NeonProvider } from '../lib/providers/NeonProvider.js'
+import { EnvironmentManager } from '../lib/EnvironmentManager.js'
+import { loadEnvIntoProcess } from '../utils/env.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import type { GitWorktree } from '../types/worktree.js'
 
@@ -22,6 +26,10 @@ vi.mock('../utils/IdentifierParser.js')
 vi.mock('../lib/ResourceCleanup.js')
 vi.mock('../lib/process/ProcessManager.js')
 vi.mock('../lib/BuildRunner.js')
+vi.mock('../lib/DatabaseManager.js')
+vi.mock('../lib/providers/NeonProvider.js')
+vi.mock('../lib/EnvironmentManager.js')
+vi.mock('../utils/env.js')
 
 // Mock git utils module for pushBranchToRemote and findMainWorktreePath
 vi.mock('../utils/git.js', async () => {
@@ -42,6 +50,14 @@ vi.mock('../utils/logger.js', () => ({
 		debug: vi.fn(),
 		success: vi.fn(),
 	},
+	createLogger: vi.fn().mockReturnValue({
+		info: vi.fn(),
+		error: vi.fn(),
+		warn: vi.fn(),
+		debug: vi.fn(),
+		success: vi.fn(),
+		setDebug: vi.fn(),
+	}),
 }))
 
 describe('FinishCommand', () => {
@@ -70,6 +86,12 @@ describe('FinishCommand', () => {
 			undefined
 		)
 		mockBuildRunner = new BuildRunner()
+
+		// Mock loadEnvIntoProcess to succeed by default
+		vi.mocked(loadEnvIntoProcess).mockReturnValue({
+			parsed: { NEON_PROJECT_ID: 'test-project', NEON_PARENT_BRANCH: 'main' },
+			error: undefined
+		})
 
 		// Mock ValidationRunner.runValidations to always succeed by default
 		vi.mocked(mockValidationRunner.runValidations).mockResolvedValue({
@@ -198,6 +220,140 @@ describe('FinishCommand', () => {
 			expect(cmd['mergeManager']).toBeInstanceOf(MergeManager)
 			expect(cmd['identifierParser']).toBeInstanceOf(IdentifierParser)
 			expect(cmd['resourceCleanup']).toBeInstanceOf(ResourceCleanup)
+		})
+
+		it('should load environment variables during construction', () => {
+			const mockLoadEnv = vi.mocked(loadEnvIntoProcess)
+			mockLoadEnv.mockClear() // Clear previous calls
+			mockLoadEnv.mockReturnValue({
+				parsed: { NEON_PROJECT_ID: 'test-project', NEON_PARENT_BRANCH: 'main' },
+				error: undefined
+			})
+
+			new FinishCommand()
+
+			expect(mockLoadEnv).toHaveBeenCalledOnce()
+		})
+
+		it('should handle environment loading errors gracefully', () => {
+			const mockLoadEnv = vi.mocked(loadEnvIntoProcess)
+			mockLoadEnv.mockClear() // Clear previous calls
+			const mockError = new Error('Failed to load .env')
+			mockLoadEnv.mockReturnValue({
+				parsed: undefined,
+				error: mockError
+			})
+
+			// Should not throw
+			expect(() => new FinishCommand()).not.toThrow()
+			expect(mockLoadEnv).toHaveBeenCalledOnce()
+		})
+
+		it('should initialize ResourceCleanup with DatabaseManager when not provided', () => {
+			// Mock environment variables
+			const originalEnv = process.env
+			process.env = {
+				...originalEnv,
+				NEON_PROJECT_ID: 'test-project',
+				NEON_PARENT_BRANCH: 'main'
+			}
+
+			const cmd = new FinishCommand()
+
+			// Verify ResourceCleanup was created
+			expect(cmd['resourceCleanup']).toBeInstanceOf(ResourceCleanup)
+
+			// Verify it was called with the right arguments (including DatabaseManager)
+			expect(ResourceCleanup).toHaveBeenCalledWith(
+				expect.any(GitWorktreeManager),
+				expect.any(ProcessManager),
+				expect.any(DatabaseManager)
+			)
+
+			// Restore environment
+			process.env = originalEnv
+		})
+
+		it('should initialize DatabaseManager with correct Neon configuration', () => {
+			// Mock environment variables
+			const originalEnv = process.env
+			process.env = {
+				...originalEnv,
+				NEON_PROJECT_ID: 'test-project-123',
+				NEON_PARENT_BRANCH: 'develop'
+			}
+
+			new FinishCommand()
+
+			// Verify NeonProvider was created with correct config
+			expect(NeonProvider).toHaveBeenCalledWith({
+				projectId: 'test-project-123',
+				parentBranch: 'develop'
+			})
+
+			// Verify DatabaseManager was created with NeonProvider and EnvironmentManager
+			expect(DatabaseManager).toHaveBeenCalledWith(
+				expect.any(NeonProvider),
+				expect.any(EnvironmentManager)
+			)
+
+			// Restore environment
+			process.env = originalEnv
+		})
+
+		it('should verify database cleanup happens during post-merge cleanup', async () => {
+			// Mock IdentifierParser to return issue type
+			vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+				type: 'issue',
+				number: 123,
+				originalInput: '123',
+			})
+
+			// Mock worktree finding
+			const mockWorktree = {
+				path: '/test/worktree',
+				branch: 'feat/issue-123',
+				commit: 'abc123',
+				isPR: false,
+				issueNumber: 123,
+			}
+			vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+			// Mock issue API
+			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue({
+				number: 123,
+				title: 'Test issue',
+				body: 'Test body',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://github.com/test/repo/issues/123',
+			})
+
+			// Set up a successful cleanup scenario with database cleanup
+			vi.mocked(mockResourceCleanup.cleanupWorktree).mockResolvedValue({
+				success: true,
+				operations: [
+					{ type: 'worktree', success: true, message: 'Worktree removed' },
+					{ type: 'database', success: true, message: 'Database branch cleaned up' }
+				],
+				errors: [],
+				branchName: 'feat/issue-123'
+			})
+
+			await command.execute({
+				identifier: '123',
+				options: {},
+			})
+
+			// Verify ResourceCleanup was called with keepDatabase: false for post-merge cleanup
+			expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
+				expect.any(Object),
+				expect.objectContaining({
+					keepDatabase: false,
+					deleteBranch: true
+				})
+			)
 		})
 	})
 
