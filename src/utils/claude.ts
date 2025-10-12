@@ -53,7 +53,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, branchName, timeout = 1200000 } = options
+	const { model, permissionMode, addDir, headless = false, timeout = 1200000 } = options
 
 	// Build command arguments
 	const args: string[] = []
@@ -72,8 +72,9 @@ export async function launchClaude(
 
 	if (addDir) {
 		args.push('--add-dir', addDir)
-		args.push('--add-dir', '/tmp') //TODO: Won't work on Windows
 	}
+
+	args.push('--add-dir', '/tmp') //TODO: Won't work on Windows
 
 	try {
 		if (headless) {
@@ -86,40 +87,15 @@ export async function launchClaude(
 			})
 			return result.stdout.trim()
 		} else {
-			// Interactive mode: let user interact with Claude via AppleScript
+			// Simple interactive mode: run Claude in current terminal with stdio inherit
+			// Used for conflict resolution, error fixing, etc.
+			// This is the simple approach: claude -- "prompt"
 
-			// Import terminal launcher for new terminal window creation
-			const { openTerminalWindow } = await import('./terminal.js')
-
-			// Build Claude command using --append-system-prompt flag
-			// This is semantically correct for system instructions
-			const baseCommand = ['claude', ...args].join(' ')
-			const quotedSystemPrompt = `'${prompt.replace(/'/g, "'\\''")}'`
-			const claudeCommand = `${baseCommand} --append-system-prompt ${quotedSystemPrompt} -- 'Go!'`
-
-			// Apply terminal background color if branch name available
-			let backgroundColor: { r: number; g: number; b: number } | undefined
-			if (branchName) {
-				try {
-					const { generateColorFromBranchName } = await import('./color.js')
-					const colorData = generateColorFromBranchName(branchName)
-					backgroundColor = colorData.rgb
-				} catch (error) {
-					logger.warn(
-						`Failed to generate terminal color: ${error instanceof Error ? error.message : 'Unknown error'}`
-					)
-				}
-			}
-
-			// Check if .env file exists in workspace
-			const hasEnvFile = addDir ? existsSync(join(addDir, '.env')) : false
-
-			// Open new terminal window with Claude
-			await openTerminalWindow({
-				...(addDir && { workspacePath: addDir }),
-				command: claudeCommand,
-				...(backgroundColor && { backgroundColor }),
-				includeEnvSetup: hasEnvFile, // source .env only if it exists
+			// Execute in current terminal (blocking, inherits stdio)
+			await execa('claude', [...args, '--', prompt], {
+				...(addDir && { cwd: addDir }),
+				stdio: 'inherit', // Let user interact directly in current terminal
+				timeout,
 			})
 
 			return
@@ -136,6 +112,73 @@ export async function launchClaude(
 		const errorMessage = execaError.stderr ?? execaError.message ?? 'Unknown Claude CLI error'
 		throw new Error(`Claude CLI error: ${errorMessage}`)
 	}
+}
+
+/**
+ * Launch Claude in a new terminal window with rich context
+ * This is specifically for "end of hb start" workflow
+ * Ports the terminal window opening, coloring, and .env sourcing behavior
+ */
+export async function launchClaudeInNewTerminalWindow(
+	prompt: string,
+	options: ClaudeCliOptions & {
+		workspacePath: string // Required for terminal window launch
+	}
+): Promise<void> {
+	const { model, permissionMode, workspacePath, branchName } = options
+
+	// Verify required parameter
+	if (!workspacePath) {
+		throw new Error('workspacePath is required for terminal window launch')
+	}
+
+	// Build command arguments (same as launchClaude)
+	const args: string[] = []
+
+	if (model) {
+		args.push('--model', model)
+	}
+
+	if (permissionMode && permissionMode !== 'default') {
+		args.push('--permission-mode', permissionMode)
+	}
+
+	args.push('--add-dir', workspacePath)
+	args.push('--add-dir', '/tmp') //TODO: Won't work on Windows
+
+	// Import terminal launcher for new terminal window creation
+	const { openTerminalWindow } = await import('./terminal.js')
+
+	// Build Claude command using --append-system-prompt flag
+	// This is semantically correct for system instructions in terminal window mode
+	const baseCommand = ['claude', ...args].join(' ')
+	const quotedSystemPrompt = `'${prompt.replace(/'/g, "'\\''")}'`
+	const claudeCommand = `${baseCommand} --append-system-prompt ${quotedSystemPrompt} -- 'Go!'`
+
+	// Apply terminal background color if branch name available
+	let backgroundColor: { r: number; g: number; b: number } | undefined
+	if (branchName) {
+		try {
+			const { generateColorFromBranchName } = await import('./color.js')
+			const colorData = generateColorFromBranchName(branchName)
+			backgroundColor = colorData.rgb
+		} catch (error) {
+			logger.warn(
+				`Failed to generate terminal color: ${error instanceof Error ? error.message : 'Unknown error'}`
+			)
+		}
+	}
+
+	// Check if .env file exists in workspace
+	const hasEnvFile = existsSync(join(workspacePath, '.env'))
+
+	// Open new terminal window with Claude
+	await openTerminalWindow({
+		workspacePath,
+		command: claudeCommand,
+		...(backgroundColor && { backgroundColor }),
+		includeEnvSetup: hasEnvFile, // source .env only if it exists
+	})
 }
 
 /**

@@ -1,5 +1,6 @@
 import { executeGitCommand, findMainWorktreePath } from '../utils/git.js'
 import { logger } from '../utils/logger.js'
+import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import type { MergeOptions } from '../types/index.js'
 
 /**
@@ -107,7 +108,20 @@ export class MergeManager {
 			const conflictedFiles = await this.detectConflictedFiles(worktreePath)
 
 			if (conflictedFiles.length > 0) {
-				// Format conflict error with manual resolution instructions
+				// Try Claude-assisted resolution first
+				logger.info('Merge conflicts detected, attempting Claude-assisted resolution...')
+
+				const resolved = await this.attemptClaudeConflictResolution(
+					worktreePath,
+					conflictedFiles
+				)
+
+				if (resolved) {
+					logger.success('Conflicts resolved with Claude assistance, rebase completed')
+					return // Continue with successful rebase
+				}
+
+				// Claude couldn't resolve or not available - fail fast
 				const conflictError = this.formatConflictError(conflictedFiles)
 				throw new Error(conflictError)
 			}
@@ -284,5 +298,108 @@ export class MergeManager {
 			'  4. Or abort rebase: git rebase --abort\n' +
 			'  5. Then re-run: hb finish <issue-number>'
 		)
+	}
+
+	/**
+	 * Attempt to resolve conflicts using Claude
+	 * Ports bash/merge-and-clean.sh lines 839-894
+	 *
+	 * @param worktreePath - Path to the worktree
+	 * @param conflictedFiles - List of files with conflicts
+	 * @returns true if conflicts resolved, false otherwise
+	 * @private
+	 */
+	private async attemptClaudeConflictResolution(
+		worktreePath: string,
+		conflictedFiles: string[]
+	): Promise<boolean> {
+		// Check if Claude CLI is available
+		const isClaudeAvailable = await detectClaudeCli()
+		if (!isClaudeAvailable) {
+			logger.debug('Claude CLI not available, skipping conflict resolution')
+			return false
+		}
+
+		logger.info(`Launching Claude to resolve conflicts in ${conflictedFiles.length} file(s)...`)
+
+		// Hard-coded prompt matching bash script line 844
+		// No templates, no complexity - just the essential instruction
+		const prompt =
+			`Please help resolve the git rebase conflicts in this repository. ` +
+			`Analyze the conflicted files, understand the changes from both branches, ` +
+			`fix the conflicts, then run 'git add .' to stage the resolved files, ` +
+			`and finally run 'git rebase --continue' to continue the rebase process. ` +
+			`Handle the entire workflow for me.`
+
+		try {
+			// Launch Claude interactively in current terminal
+			// User will interact directly with Claude to resolve conflicts
+			await launchClaude(prompt, {
+				addDir: worktreePath,
+				headless: false, // Interactive - runs in current terminal with stdio: inherit
+			})
+
+			// After Claude interaction completes, check if conflicts resolved
+			const remainingConflicts = await this.detectConflictedFiles(worktreePath)
+
+			if (remainingConflicts.length > 0) {
+				logger.warn(
+					`Conflicts still exist in ${remainingConflicts.length} file(s) after Claude assistance`
+				)
+				return false
+			}
+
+			// Check if rebase completed or still in progress
+			const rebaseInProgress = await this.isRebaseInProgress(worktreePath)
+
+			if (rebaseInProgress) {
+				logger.warn('Rebase still in progress after Claude assistance')
+				return false
+			}
+
+			// Success: no conflicts, rebase completed
+			logger.success('Claude successfully resolved conflicts and completed rebase')
+			return true
+		} catch (error) {
+			logger.warn('Claude conflict resolution failed', {
+				error: error instanceof Error ? error.message : String(error),
+			})
+			return false
+		}
+	}
+
+	/**
+	 * Check if a git rebase is currently in progress
+	 * Checks for .git/rebase-merge or .git/rebase-apply directories
+	 * Ports bash script logic from lines 853-856
+	 *
+	 * @param worktreePath - Path to the worktree
+	 * @returns true if rebase in progress, false otherwise
+	 * @private
+	 */
+	private async isRebaseInProgress(worktreePath: string): Promise<boolean> {
+		const fs = await import('node:fs/promises')
+		const path = await import('node:path')
+
+		const rebaseMergePath = path.join(worktreePath, '.git', 'rebase-merge')
+		const rebaseApplyPath = path.join(worktreePath, '.git', 'rebase-apply')
+
+		// Check for rebase-merge directory
+		try {
+			await fs.access(rebaseMergePath)
+			return true
+		} catch {
+			// Directory doesn't exist, continue checking
+		}
+
+		// Check for rebase-apply directory
+		try {
+			await fs.access(rebaseApplyPath)
+			return true
+		} catch {
+			// Directory doesn't exist
+		}
+
+		return false
 	}
 }

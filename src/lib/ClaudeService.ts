@@ -1,4 +1,4 @@
-import { detectClaudeCli, launchClaude, ClaudeCliOptions, generateBranchName } from '../utils/claude.js'
+import { detectClaudeCli, launchClaude, launchClaudeInNewTerminalWindow, ClaudeCliOptions, generateBranchName } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables } from './PromptTemplateManager.js'
 import { logger } from '../utils/logger.js'
 
@@ -122,7 +122,21 @@ export class ClaudeService {
 			})
 
 			// Launch Claude
-			return await launchClaude(prompt, claudeOptions)
+			if (headless) {
+				// Headless mode: use simple launchClaude
+				return await launchClaude(prompt, claudeOptions)
+			} else {
+				// Interactive workflow mode: use terminal window launcher
+				// This is the "end of hb start" behavior
+				if (!claudeOptions.addDir) {
+					throw new Error('workspacePath required for interactive workflow launch')
+				}
+
+				return await launchClaudeInNewTerminalWindow(prompt, {
+					...claudeOptions,
+					workspacePath: claudeOptions.addDir,
+				})
+			}
 		} catch (error) {
 			logger.error('Failed to launch Claude for workflow', { error, options })
 			throw error

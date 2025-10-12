@@ -62,7 +62,8 @@ describe('ClaudeService', () => {
 
 				const prompt = 'Issue prompt with substitutions'
 				vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
-				vi.mocked(claudeUtils.launchClaude).mockResolvedValueOnce(undefined)
+				// Non-headless mode calls launchClaudeInNewTerminalWindow
+				vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
 
 				await service.launchForWorkflow(options)
 
@@ -73,9 +74,10 @@ describe('ClaudeService', () => {
 					PORT: 3123,
 				})
 
-				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(prompt, {
+				expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(prompt, {
 					model: 'claude-sonnet-4-20250514',
 					permissionMode: 'acceptEdits',
+					workspacePath: '/workspace/issue-123',
 					addDir: '/workspace/issue-123',
 					headless: false,
 				})
@@ -91,7 +93,7 @@ describe('ClaudeService', () => {
 
 				const prompt = 'Issue prompt'
 				vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
-				vi.mocked(claudeUtils.launchClaude).mockResolvedValueOnce(undefined)
+				vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
 
 				await service.launchForWorkflow(options)
 
@@ -111,7 +113,7 @@ describe('ClaudeService', () => {
 
 				const prompt = 'Issue prompt'
 				vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
-				vi.mocked(claudeUtils.launchClaude).mockResolvedValueOnce(undefined)
+				vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
 
 				await service.launchForWorkflow(options)
 
@@ -135,7 +137,7 @@ describe('ClaudeService', () => {
 
 				const prompt = 'PR prompt with substitutions'
 				vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
-				vi.mocked(claudeUtils.launchClaude).mockResolvedValueOnce(undefined)
+				vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
 
 				await service.launchForWorkflow(options)
 
@@ -147,8 +149,9 @@ describe('ClaudeService', () => {
 				})
 
 				// PR workflow should not set model (uses Claude default) and uses default permission mode
-				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(prompt, {
+				expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(prompt, {
 					addDir: '/workspace/pr-456',
+					workspacePath: '/workspace/pr-456',
 					headless: false,
 				})
 			})
@@ -164,7 +167,7 @@ describe('ClaudeService', () => {
 
 				const prompt = 'Regular prompt'
 				vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
-				vi.mocked(claudeUtils.launchClaude).mockResolvedValueOnce(undefined)
+				vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
 
 				await service.launchForWorkflow(options)
 
@@ -173,8 +176,9 @@ describe('ClaudeService', () => {
 				})
 
 				// Regular workflow should not set model (uses Claude default) and uses default permission mode
-				expect(claudeUtils.launchClaude).toHaveBeenCalledWith(prompt, {
+				expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(prompt, {
 					addDir: '/workspace/feature',
+					workspacePath: '/workspace/feature',
 					headless: false,
 				})
 			})
@@ -220,7 +224,7 @@ describe('ClaudeService', () => {
 				await expect(service.launchForWorkflow(options)).rejects.toThrow('Template not found')
 			})
 
-			it('should propagate errors from Claude launch', async () => {
+			it('should propagate errors from Claude launch in terminal window', async () => {
 				const options: ClaudeWorkflowOptions = {
 					type: 'issue',
 					issueNumber: 123,
@@ -230,7 +234,8 @@ describe('ClaudeService', () => {
 				const prompt = 'Issue prompt'
 				const error = new Error('Claude CLI error')
 				vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
-				vi.mocked(claudeUtils.launchClaude).mockRejectedValueOnce(error)
+				// Non-headless mode calls launchClaudeInNewTerminalWindow
+				vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockRejectedValueOnce(error)
 
 				await expect(service.launchForWorkflow(options)).rejects.toThrow('Claude CLI error')
 			})
