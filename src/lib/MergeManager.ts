@@ -47,35 +47,54 @@ export class MergeManager {
 			)
 		}
 
-		// Step 3: Show commits to be rebased
+		// Step 3: Check if rebase is needed by comparing merge-base with main HEAD
+		const mergeBase = await executeGitCommand(['merge-base', 'main', 'HEAD'], {
+			cwd: worktreePath,
+		})
+
+		const mainHead = await executeGitCommand(['rev-parse', 'main'], {
+			cwd: worktreePath,
+		})
+
+		const mergeBaseTrimmed = mergeBase.trim()
+		const mainHeadTrimmed = mainHead.trim()
+
+		// If merge-base matches main HEAD, branch is already up to date
+		if (mergeBaseTrimmed === mainHeadTrimmed) {
+			logger.success('Branch is already up to date with main. No rebase needed.')
+			return
+		}
+
+		// Step 4: Show commits to be rebased (for informational purposes)
 		const commitsOutput = await executeGitCommand(['log', '--oneline', 'main..HEAD'], {
 			cwd: worktreePath,
 		})
 
 		const commits = commitsOutput.trim()
+		const commitLines = commits ? commits.split('\n') : []
 
-		// If no commits, branch is already up to date
-		if (!commits) {
-			logger.success('Branch is already up to date with main. No rebase needed.')
-			return
+		if (commits) {
+			// Show commits that will be rebased
+			logger.info(`Found ${commitLines.length} commit(s) to rebase:`)
+			commitLines.forEach((commit) => logger.info(`  ${commit}`))
+		} else {
+			// Main has moved forward but branch has no new commits
+			logger.info('Main branch has moved forward. Rebasing to update branch...')
 		}
 
-		// Show commits that will be rebased
-		const commitLines = commits.split('\n')
-		logger.info(`Found ${commitLines.length} commit(s) to rebase:`)
-		commitLines.forEach((commit) => logger.info(`  ${commit}`))
-
-		// Step 4: User confirmation (unless force mode or dry-run)
+		// Step 5: User confirmation (unless force mode or dry-run)
 		if (!force && !dryRun) {
 			// TODO: Implement interactive prompt for confirmation
 			// For now, proceeding automatically (use --force to skip this message)
 			logger.info('Proceeding with rebase... (use --force to skip confirmations)')
 		}
 
-		// Step 5: Execute rebase (unless dry-run)
+		// Step 6: Execute rebase (unless dry-run)
 		if (dryRun) {
 			logger.info('[DRY RUN] Would execute: git rebase main')
-			logger.info(`[DRY RUN] This would rebase ${commitLines.length} commit(s)`)
+			if (commitLines.length > 0) {
+				logger.info(`[DRY RUN] This would rebase ${commitLines.length} commit(s)`)
+			}
 			return
 		}
 

@@ -49,6 +49,8 @@ describe('MergeManager', () => {
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('') // show-ref: main exists
 				.mockResolvedValueOnce('') // status --porcelain: clean
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1\ndef456 Commit 2') // log: commits to rebase
 				.mockResolvedValueOnce('') // rebase main: success
 
@@ -67,6 +69,8 @@ describe('MergeManager', () => {
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1\ndef456 Commit 2') // log
 				.mockResolvedValueOnce('') // rebase
 
@@ -84,6 +88,8 @@ describe('MergeManager', () => {
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
 				.mockResolvedValueOnce('') // rebase
 
@@ -91,7 +97,7 @@ describe('MergeManager', () => {
 			await manager.rebaseOnMain('/test/worktree', { force: true })
 
 			// Success - should complete without interaction
-			expect(git.executeGitCommand).toHaveBeenCalledTimes(4)
+			expect(git.executeGitCommand).toHaveBeenCalledTimes(6)
 		})
 
 		it('should fail immediately on rebase conflicts with clear error message', async () => {
@@ -99,6 +105,8 @@ describe('MergeManager', () => {
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts\nsrc/file2.ts') // conflicted files
@@ -114,13 +122,14 @@ describe('MergeManager', () => {
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
-				.mockResolvedValueOnce('') // log: empty (no commits)
+				.mockResolvedValueOnce('abc123') // merge-base
+      			.mockResolvedValueOnce('abc123') // rev-parse main (SAME = no rebase needed)
 
 			// Should succeed without attempting rebase
 			await manager.rebaseOnMain('/test/worktree', { force: true })
 
 			// Verify: rebase was NOT called (only 3 commands)
-			expect(git.executeGitCommand).toHaveBeenCalledTimes(3)
+			expect(git.executeGitCommand).toHaveBeenCalledTimes(4)
 		})
 
 		it('should detect and list all conflicted files on rebase failure', async () => {
@@ -128,6 +137,8 @@ describe('MergeManager', () => {
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts\nsrc/file2.ts\nsrc/file3.ts') // conflicted files
@@ -148,6 +159,8 @@ describe('MergeManager', () => {
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit') // log
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file1.ts') // conflicted files
@@ -387,6 +400,8 @@ describe('MergeManager', () => {
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1') // log
 
 			await manager.rebaseOnMain('/test/worktree', { dryRun: true })
@@ -421,6 +436,8 @@ describe('MergeManager', () => {
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit 1\ndef456 Commit 2') // log
 
 			await manager.rebaseOnMain('/test/worktree', { dryRun: true })
@@ -455,6 +472,8 @@ describe('MergeManager', () => {
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit') // log
 
 			await manager.rebaseOnMain('/test/worktree', { dryRun: true })
@@ -505,6 +524,8 @@ describe('MergeManager', () => {
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
 				.mockResolvedValueOnce('abc123 Commit') // log
 				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
 				.mockResolvedValueOnce('src/file.ts') // conflicted files
@@ -518,7 +539,7 @@ describe('MergeManager', () => {
 			}
 
 			// Verify: only rebase-related commands were called
-			expect(git.executeGitCommand).toHaveBeenCalledTimes(5)
+			expect(git.executeGitCommand).toHaveBeenCalledTimes(7)
 		})
 	})
 
