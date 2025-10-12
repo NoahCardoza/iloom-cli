@@ -12,6 +12,7 @@ export function createMockDatabaseProvider(
   return {
     isCliAvailable: vi.fn().mockResolvedValue(true),
     isAuthenticated: vi.fn().mockResolvedValue(true),
+    isConfigured: vi.fn().mockReturnValue(true),
     createBranch: vi.fn().mockResolvedValue('postgresql://test-connection-string'),
     deleteBranch: vi.fn().mockResolvedValue(undefined),
     sanitizeBranchName: vi.fn((name: string) => name.replace(/\//g, '_')),

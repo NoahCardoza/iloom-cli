@@ -54,6 +54,8 @@ export function validateNeonConfig(config: {
  * Ports functionality from bash/utils/neon-utils.sh
  */
 export class NeonProvider implements DatabaseProvider {
+  private _isConfigured: boolean = false
+
   constructor(private config: NeonConfig) {
     logger.debug('NeonProvider initialized with config:', {
       projectId: config.projectId,
@@ -62,11 +64,24 @@ export class NeonProvider implements DatabaseProvider {
       hasParentBranch: !!config.parentBranch,
     })
 
-    // Validate config early to catch empty values
+    // Validate config but don't throw - just mark as not configured
+    // This allows the provider to be instantiated even when Neon is not being used
     const validation = validateNeonConfig(config)
     if (!validation.valid) {
-      throw new Error(`NeonProvider validation failed: ${validation.error}`)
+      logger.debug(`NeonProvider not configured: ${validation.error}`)
+      logger.debug('Neon database branching will not be used')
+      this._isConfigured = false
+    } else {
+      this._isConfigured = true
     }
+  }
+
+  /**
+   * Check if provider is properly configured
+   * Returns true if NEON_PROJECT_ID and NEON_PARENT_BRANCH are set
+   */
+  isConfigured(): boolean {
+    return this._isConfigured
   }
 
   /**
@@ -74,15 +89,15 @@ export class NeonProvider implements DatabaseProvider {
    * Throws an error if the command fails
    */
   private async executeNeonCommand(args: string[]): Promise<string> {
+    // Check if provider is properly configured
+    if (!this._isConfigured) {
+      throw new Error('NeonProvider is not configured. Check NEON_PROJECT_ID and NEON_PARENT_BRANCH environment variables.')
+    }
+
     // Log the exact command being executed for debugging
     const command = `neon ${args.join(' ')}`
     logger.debug(`Executing Neon CLI command: ${command}`)
     logger.debug(`Project ID being used: ${this.config.projectId}`)
-
-    // Validate project ID if the command requires it
-    if (args.includes('--project-id') && !this.config.projectId) {
-      throw new Error('NEON_PROJECT_ID is required but not set or empty')
-    }
 
     try {
       const result = await execa('neon', args, {

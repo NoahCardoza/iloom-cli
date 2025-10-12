@@ -7,7 +7,7 @@ const logger = createLogger({ prefix: '🗂️' })
 /**
  * Database Manager - orchestrates database operations with conditional execution
  * Ports functionality from bash scripts with guard conditions:
- *   1. Required NEON environment variables must be present (NEON_PROJECT_ID, NEON_PARENT_BRANCH)
+ *   1. Database provider must be properly configured (provider.isConfigured())
  *   2. The worktree's .env file must contain DATABASE_URL or DATABASE_URI
  *
  * This ensures database branching only occurs for projects that actually use databases
@@ -21,14 +21,13 @@ export class DatabaseManager {
   /**
    * Check if database branching should be used
    * Requires BOTH conditions:
-   *   1. NEON env vars present (NEON_PROJECT_ID, NEON_PARENT_BRANCH)
+   *   1. Database provider is properly configured (checked via provider.isConfigured())
    *   2. .env file contains DATABASE_URL or DATABASE_URI
    */
   async shouldUseDatabaseBranching(envFilePath: string): Promise<boolean> {
-    // Check for NEON environment variables
-    const neonConfig = this.getNeonConfig()
-    if (!neonConfig) {
-      logger.debug('Skipping database branching: NEON environment variables not configured')
+    // Check for provider configuration
+    if (!this.provider.isConfigured()) {
+      logger.debug('Skipping database branching: Database provider not configured')
       return false
     }
 
@@ -97,13 +96,10 @@ export class DatabaseManager {
       return
     }
 
-    // If no envFilePath, check NEON env vars directly
-    if (!envFilePath) {
-      const neonConfig = this.getNeonConfig()
-      if (!neonConfig) {
-        logger.debug('Skipping database branch deletion: NEON environment variables not configured')
-        return
-      }
+    // If no envFilePath, check provider configuration directly
+    if (!envFilePath && !this.provider.isConfigured()) {
+      logger.debug('Skipping database branch deletion: Database provider not configured')
+      return
     }
 
     // Check CLI availability and authentication
@@ -125,21 +121,6 @@ export class DatabaseManager {
         `Failed to delete database branch: ${error instanceof Error ? error.message : String(error)}`
       )
     }
-  }
-
-  /**
-   * Read NEON env vars from process.env
-   * Returns null if not configured
-   */
-  private getNeonConfig(): { projectId: string; parentBranch: string } | null {
-    const projectId = process.env.NEON_PROJECT_ID?.trim()
-    const parentBranch = process.env.NEON_PARENT_BRANCH?.trim()
-
-    if (!projectId || !parentBranch) {
-      return null
-    }
-
-    return { projectId, parentBranch }
   }
 
   /**

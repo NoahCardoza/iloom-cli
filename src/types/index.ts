@@ -86,6 +86,9 @@ export interface DatabaseProvider {
   sanitizeBranchName(branchName: string): string
   isAuthenticated(): Promise<boolean>
   isCliAvailable(): Promise<boolean>
+
+  // Configuration validation
+  isConfigured(): boolean
 }
 
 // Configuration types

@@ -32,6 +32,7 @@ describe('DatabaseManager', () => {
     mockProvider = {
       isCliAvailable: vi.fn().mockResolvedValue(true),
       isAuthenticated: vi.fn().mockResolvedValue(true),
+      isConfigured: vi.fn().mockReturnValue(true),
       createBranch: vi.fn().mockResolvedValue('postgresql://test-connection-string'),
       deleteBranch: vi.fn().mockResolvedValue(undefined),
       sanitizeBranchName: vi.fn((name: string) => name.replace(/\//g, '_')),
@@ -97,6 +98,9 @@ describe('DatabaseManager', () => {
       // Only set NEON_PARENT_BRANCH
       process.env.NEON_PARENT_BRANCH = 'main'
 
+      // Mock provider as not configured
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
+
       // Mock .env file with DATABASE_URL
       vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
         new Map([['DATABASE_URL', 'postgresql://localhost/test']])
@@ -112,6 +116,9 @@ describe('DatabaseManager', () => {
     it('should return false when NEON_PARENT_BRANCH is missing', async () => {
       // Only set NEON_PROJECT_ID
       process.env.NEON_PROJECT_ID = 'test-project-id'
+
+      // Mock provider as not configured
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
       const result = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
 
@@ -162,6 +169,9 @@ describe('DatabaseManager', () => {
     it('should return null when database branching not configured', async () => {
       // Remove NEON env vars
       delete process.env.NEON_PROJECT_ID
+
+      // Mock provider as not configured
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
       const result = await databaseManager.createBranchIfConfigured('feature-branch', '/path/to/.env')
 
@@ -232,6 +242,9 @@ describe('DatabaseManager', () => {
       // Remove NEON env vars
       delete process.env.NEON_PROJECT_ID
 
+      // Mock provider as not configured
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
+
       await databaseManager.deleteBranchIfConfigured('feature-branch', '/path/to/.env')
 
       expect(mockProvider.deleteBranch).not.toHaveBeenCalled()
@@ -298,11 +311,17 @@ describe('DatabaseManager', () => {
         new Map([['DATABASE_URL', 'postgresql://localhost/test']])
       )
 
+      // Mock provider as configured
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
+
       const result1 = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
       expect(result1).toBe(true)
 
       // Test when one env var is missing
       delete process.env.NEON_PROJECT_ID
+
+      // Mock provider as not configured
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
       const result2 = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
       expect(result2).toBe(false)
@@ -341,6 +360,9 @@ describe('DatabaseManager', () => {
       process.env.NEON_PROJECT_ID = ''
       process.env.NEON_PARENT_BRANCH = 'main'
 
+      // Mock provider as not configured
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
+
       const result = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
 
       expect(result).toBe(false)
@@ -349,6 +371,9 @@ describe('DatabaseManager', () => {
     it('should handle whitespace-only NEON environment variables', async () => {
       process.env.NEON_PROJECT_ID = '   '
       process.env.NEON_PARENT_BRANCH = 'main'
+
+      // Mock provider as not configured
+      vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
       const result = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
 
