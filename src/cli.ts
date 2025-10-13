@@ -103,6 +103,20 @@ program
   })
 
 program
+  .command('ignite')
+  .description('Launch Claude with auto-detected workspace context')
+  .action(async () => {
+    try {
+      const { IgniteCommand } = await import('./commands/ignite.js')
+      const command = new IgniteCommand()
+      await command.execute()
+    } catch (error) {
+      logger.error(`Failed to ignite Claude: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
   .command('cleanup')
   .description('Remove workspaces')
   .argument('[identifier]', 'Branch name or issue number to cleanup (auto-detected)')

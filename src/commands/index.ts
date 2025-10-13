@@ -6,3 +6,5 @@ export type { CleanupCommandInput, ParsedCleanupInput } from './cleanup.js'
 
 export { FinishCommand } from './finish.js'
 export type { FinishCommandInput, ParsedFinishInput } from './finish.js'
+
+export { IgniteCommand } from './ignite.js'
