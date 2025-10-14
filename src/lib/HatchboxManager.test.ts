@@ -1178,6 +1178,87 @@ describe('HatchboxManager', () => {
       expect(mockGitWorktree.createWorktree).not.toHaveBeenCalled()
     })
 
+    it('should NOT copy .env file or set PORT when reusing existing worktree for issue', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'issue',
+        identifier: 39,
+        originalInput: '39',
+      }
+
+      const existingWorktree = {
+        path: '/test/worktree-issue-39',
+        branch: 'issue-39-test',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 39,
+        title: 'Test Issue',
+        body: 'Test description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/39',
+      })
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(existingWorktree)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: ['web'],
+        binEntries: {},
+      })
+
+      await manager.createHatchbox(input)
+
+      // BUG: These operations should NOT be called when reusing an existing worktree
+      // The .env file was already set up during initial worktree creation
+      expect(mockEnvironment.copyEnvFile).not.toHaveBeenCalled()
+      expect(mockEnvironment.setPortForWorkspace).not.toHaveBeenCalled()
+      expect(mockEnvironment.setEnvVar).not.toHaveBeenCalled()
+    })
+
+    it('should NOT copy .env file or set PORT when reusing existing worktree for PR', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'pr',
+        identifier: 42,
+        originalInput: 'pr/42',
+      }
+
+      const existingWorktree = {
+        path: '/test/worktree-feat-test_pr_42',
+        branch: 'feat/test-feature',
+        commit: 'def456',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitHub.fetchPR).mockResolvedValue({
+        number: 42,
+        title: 'Test PR',
+        body: 'Test description',
+        state: 'open',
+        branch: 'feat/test-feature',
+        baseBranch: 'main',
+        url: 'https://github.com/test/repo/pull/42',
+        isDraft: false,
+      })
+      vi.mocked(mockGitWorktree.findWorktreeForPR).mockResolvedValue(existingWorktree)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: ['web'],
+        binEntries: {},
+      })
+
+      await manager.createHatchbox(input)
+
+      // BUG: These operations should NOT be called when reusing an existing worktree
+      // The .env file was already set up during initial worktree creation
+      expect(mockEnvironment.copyEnvFile).not.toHaveBeenCalled()
+      expect(mockEnvironment.setPortForWorkspace).not.toHaveBeenCalled()
+      expect(mockEnvironment.setEnvVar).not.toHaveBeenCalled()
+    })
+
     it('should still call moveIssueToInProgress for issue reuse', async () => {
       const input: CreateHatchboxInput = {
         type: 'issue',

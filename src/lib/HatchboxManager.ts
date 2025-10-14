@@ -505,10 +505,11 @@ export class HatchboxManager {
     // 2. Detect capabilities (quick, no installation)
     const { capabilities, binEntries } = await this.capabilityDetector.detectCapabilities(worktreePath)
 
-    // 3. Setup environment for existing worktrees too (copy .env + set PORT)
+    // 3. Calculate port for existing worktree (but DON'T copy .env or set PORT)
+    // The .env file was already set up when the worktree was first created
     let port = 3000
     if (capabilities.includes('web')) {
-      port = await this.setupEnvironment(worktreePath, input)
+      port = this.calculatePort(input)
     }
 
     // 4. Skip database branch creation for existing worktrees
