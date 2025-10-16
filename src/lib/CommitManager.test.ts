@@ -560,7 +560,7 @@ describe('CommitManager', () => {
       )
     })
 
-    it('should use Haiku model for cost efficiency', async () => {
+    it('should the correct model', async () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Add feature')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
@@ -569,7 +569,7 @@ describe('CommitManager', () => {
       const claudeCall = vi.mocked(claude.launchClaude).mock.calls[0]
       expect(claudeCall[1]).toEqual(
         expect.objectContaining({
-          model: 'sonnet',
+          model: 'claude-haiku-4-5-20251001',
         })
       )
     })
