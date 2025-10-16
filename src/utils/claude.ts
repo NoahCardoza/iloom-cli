@@ -53,7 +53,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, timeout = 1200000 } = options
+	const { model, permissionMode, addDir, headless = false } = options
 
 	// Build command arguments
 	const args: string[] = []
@@ -81,7 +81,7 @@ export async function launchClaude(
 			// Headless mode: capture and return output
 			const result = await execa('claude', args, {
 				input: prompt,
-				timeout,
+				timeout: 0, // Disable timeout for long responses
 				...(addDir && { cwd: addDir }), // Run Claude in the worktree directory
 				// verbose: true,
 			})
@@ -95,7 +95,7 @@ export async function launchClaude(
 			await execa('claude', [...args, '--', prompt], {
 				...(addDir && { cwd: addDir }),
 				stdio: 'inherit', // Let user interact directly in current terminal
-				timeout,
+				timeout: 0, // Disable timeout
 			})
 
 			return

@@ -120,7 +120,7 @@ describe('claude utils', () => {
 					['-p', '--add-dir', '/tmp'],
 					expect.objectContaining({
 						input: prompt,
-						timeout: 1200000, // 20 minutes
+						timeout: 0, // Disabled timeout
 					})
 				)
 			})
@@ -220,7 +220,7 @@ describe('claude utils', () => {
 					['-p', '--add-dir', workspacePath, '--add-dir', '/tmp'],
 					expect.objectContaining({
 						input: prompt,
-						timeout: 1200000,
+						timeout: 0,
 						cwd: workspacePath,
 					})
 				)
@@ -242,7 +242,7 @@ describe('claude utils', () => {
 					['-p', '--add-dir', '/tmp'],
 					expect.objectContaining({
 						input: prompt,
-						timeout: 1200000,
+						timeout: 0,
 					})
 				)
 
@@ -294,7 +294,7 @@ describe('claude utils', () => {
 					['--add-dir', '/tmp', '--', prompt],
 					expect.objectContaining({
 						stdio: 'inherit',
-						timeout: 1200000
+						timeout: 0
 					})
 				)
 			})
