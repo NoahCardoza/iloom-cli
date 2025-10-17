@@ -430,7 +430,7 @@ export class CleanupCommand {
     // Step 5: Process each target sequentially
     let worktreesRemoved = 0
     let branchesDeleted = 0
-    let databaseBranchesDeleted = 0
+    const databaseBranchesDeletedList: string[] = []
     let failed = 0
 
     for (const target of targets) {
@@ -452,10 +452,12 @@ export class CleanupCommand {
           worktreesRemoved++
           logger.success(`  Worktree removed: ${target.branchName}`)
 
-          // Check if database cleanup occurred
+          // Check if database branch was actually deleted (use explicit deleted field)
           const dbOperation = result.operations.find(op => op.type === 'database')
-          if (dbOperation?.success && dbOperation.message.includes('cleaned up')) {
-            databaseBranchesDeleted++
+          if (dbOperation?.deleted) {
+            // Get branch name from result or use the target branch name
+            const deletedBranchName = target.branchName
+            databaseBranchesDeletedList.push(deletedBranchName)
           }
         } else {
           failed++
@@ -493,8 +495,9 @@ export class CleanupCommand {
     logger.success(`Completed cleanup for issue/PR #${issueNumber}:`)
     logger.info(`   📁 Worktrees removed: ${worktreesRemoved}`)
     logger.info(`   🌿 Branches deleted: ${branchesDeleted}`)
-    if (databaseBranchesDeleted > 0) {
-      logger.info(`   🗂️ Database branches deleted: ${databaseBranchesDeleted}`)
+    if (databaseBranchesDeletedList.length > 0) {
+      // Display branch names in the format requested
+      logger.info(`   🗂️ Database branches deleted: ${databaseBranchesDeletedList.join(', ')}`)
     }
     if (failed > 0) {
       logger.warn(`   ❌ Failed operations: ${failed}`)

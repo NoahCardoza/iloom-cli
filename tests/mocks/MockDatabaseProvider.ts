@@ -14,7 +14,12 @@ export function createMockDatabaseProvider(
     isAuthenticated: vi.fn().mockResolvedValue(true),
     isConfigured: vi.fn().mockReturnValue(true),
     createBranch: vi.fn().mockResolvedValue('postgresql://test-connection-string'),
-    deleteBranch: vi.fn().mockResolvedValue(undefined),
+    deleteBranch: vi.fn().mockResolvedValue({
+      success: true,
+      deleted: true,
+      notFound: false,
+      branchName: 'test-branch'
+    }),
     sanitizeBranchName: vi.fn((name: string) => name.replace(/\//g, '_')),
     branchExists: vi.fn().mockResolvedValue(false),
     listBranches: vi.fn().mockResolvedValue([]),
@@ -36,7 +41,12 @@ export function createMockDatabaseManager(
     createBranchIfConfigured: vi
       .fn()
       .mockResolvedValue('postgresql://test-connection-string'),
-    deleteBranchIfConfigured: vi.fn().mockResolvedValue(undefined),
+    deleteBranchIfConfigured: vi.fn().mockResolvedValue({
+      success: true,
+      deleted: true,
+      notFound: false,
+      branchName: 'test-branch'
+    }),
     shouldUseDatabaseBranching: vi.fn().mockResolvedValue(true),
     ...overrides,
   } as unknown as DatabaseManager

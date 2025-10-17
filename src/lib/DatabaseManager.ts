@@ -84,42 +84,72 @@ export class DatabaseManager {
 
   /**
    * Delete database branch only if configured
+   * Returns result object indicating what happened
    */
   async deleteBranchIfConfigured(
     branchName: string,
     envFilePath?: string,
     isPreview: boolean = false
-  ): Promise<void> {
+  ): Promise<import('../types/index.js').DatabaseDeletionResult> {
     // Guard condition: check if database branching should be used
     // If no envFilePath provided, skip the env file check (pre-determined config)
     if (envFilePath && !(await this.shouldUseDatabaseBranching(envFilePath))) {
-      return
+      return {
+        success: true,
+        deleted: false,
+        notFound: true,  // Treat "not configured" as "nothing to delete"
+        branchName
+      }
     }
 
     // If no envFilePath, check provider configuration directly
     if (!envFilePath && !this.provider.isConfigured()) {
       logger.debug('Skipping database branch deletion: Database provider not configured')
-      return
+      return {
+        success: true,
+        deleted: false,
+        notFound: true,
+        branchName
+      }
     }
 
     // Check CLI availability and authentication
     if (!(await this.provider.isCliAvailable())) {
       logger.debug('Skipping database branch deletion: Neon CLI not available')
-      return
+      return {
+        success: true,
+        deleted: false,
+        notFound: true,
+        branchName
+      }
     }
 
     if (!(await this.provider.isAuthenticated())) {
       logger.debug('Skipping database branch deletion: Not authenticated with Neon CLI')
-      return
+      return {
+        success: true,
+        deleted: false,
+        notFound: true,
+        branchName
+      }
     }
 
     try {
-      await this.provider.deleteBranch(branchName, isPreview)
+      // Call provider and return its result directly
+      const result = await this.provider.deleteBranch(branchName, isPreview)
+      return result
     } catch (error) {
-      // Log warning but don't throw - matches bash script behavior
+      // Unexpected error (shouldn't happen since provider returns result object)
       logger.warn(
-        `Failed to delete database branch: ${error instanceof Error ? error.message : String(error)}`
+        `Unexpected error in database deletion: ${error instanceof Error ? error.message : String(error)}`
       )
+      return {
+        success: false,
+        deleted: false,
+        notFound: false,
+        error: error instanceof Error ? error.message : String(error),
+        branchName
+      }
     }
   }
 

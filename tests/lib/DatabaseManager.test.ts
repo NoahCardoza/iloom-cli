@@ -34,7 +34,12 @@ describe('DatabaseManager', () => {
       isAuthenticated: vi.fn().mockResolvedValue(true),
       isConfigured: vi.fn().mockReturnValue(true),
       createBranch: vi.fn().mockResolvedValue('postgresql://test-connection-string'),
-      deleteBranch: vi.fn().mockResolvedValue(undefined),
+      deleteBranch: vi.fn().mockResolvedValue({
+        success: true,
+        deleted: true,
+        notFound: false,
+        branchName: 'test-branch'
+      }),
       sanitizeBranchName: vi.fn((name: string) => name.replace(/\//g, '_')),
       branchExists: vi.fn().mockResolvedValue(false),
       listBranches: vi.fn().mockResolvedValue([]),
@@ -280,25 +285,36 @@ describe('DatabaseManager', () => {
       expect(mockProvider.deleteBranch).toHaveBeenCalledWith('feature-branch', true)
     })
 
-    it('should not throw when deletion fails (should log warning instead)', async () => {
+    it('should return error result when deletion fails', async () => {
       const error = new Error('Failed to delete branch')
       vi.mocked(mockProvider.deleteBranch).mockRejectedValue(error)
 
-      // Should not throw
-      await expect(
-        databaseManager.deleteBranchIfConfigured('feature-branch', '/path/to/.env')
-      ).resolves.toBeUndefined()
+      // Should return error result object, not throw
+      const result = await databaseManager.deleteBranchIfConfigured('feature-branch', '/path/to/.env')
 
+      expect(result).toEqual({
+        success: false,
+        deleted: false,
+        notFound: false,
+        error: 'Failed to delete branch',
+        branchName: 'feature-branch'
+      })
       expect(mockProvider.deleteBranch).toHaveBeenCalled()
     })
 
     it('should handle non-Error exceptions during deletion', async () => {
       vi.mocked(mockProvider.deleteBranch).mockRejectedValue('String error')
 
-      // Should not throw
-      await expect(
-        databaseManager.deleteBranchIfConfigured('feature-branch', '/path/to/.env')
-      ).resolves.toBeUndefined()
+      // Should return error result object, not throw
+      const result = await databaseManager.deleteBranchIfConfigured('feature-branch', '/path/to/.env')
+
+      expect(result).toEqual({
+        success: false,
+        deleted: false,
+        notFound: false,
+        error: 'String error',
+        branchName: 'feature-branch'
+      })
     })
   })
 

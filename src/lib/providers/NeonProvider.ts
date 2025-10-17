@@ -299,7 +299,7 @@ export class NeonProvider implements DatabaseProvider {
    * Includes preview database protection with user confirmation
    * Ports: delete_neon_database_branch() from bash/utils/neon-utils.sh:204-259
    */
-  async deleteBranch(name: string, isPreview: boolean = false): Promise<void> {
+  async deleteBranch(name: string, isPreview: boolean = false): Promise<import('../../types/index.js').DatabaseDeletionResult> {
     // Sanitize branch name for Neon
     const sanitizedName = this.sanitizeBranchName(name)
 
@@ -317,19 +317,44 @@ export class NeonProvider implements DatabaseProvider {
         )
 
         if (confirmed) {
-          logger.info(`Deleting Vercel preview database: ${previewBranch}`)
-          await this.executeNeonCommand([
-            'branches',
-            'delete',
-            previewBranch,
-            '--project-id',
-            this.config.projectId,
-          ])
-          logger.success('Preview database deleted successfully')
-          return
+          // User confirmed - delete preview branch
+          try {
+            logger.info(`Deleting Vercel preview database: ${previewBranch}`)
+            await this.executeNeonCommand([
+              'branches',
+              'delete',
+              previewBranch,
+              '--project-id',
+              this.config.projectId,
+            ])
+            logger.success('Preview database deleted successfully')
+            return {
+              success: true,
+              deleted: true,
+              notFound: false,
+              branchName: previewBranch
+            }
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error)
+            logger.error(`Failed to delete preview database: ${errorMessage}`)
+            return {
+              success: false,
+              deleted: false,
+              notFound: false,
+              error: errorMessage,
+              branchName: previewBranch
+            }
+          }
         } else {
+          // User declined deletion
           logger.info('Skipping preview database deletion')
-          return
+          return {
+            success: true,
+            deleted: false,
+            notFound: false,
+            userDeclined: true,
+            branchName: previewBranch
+          }
         }
       }
       // If no preview database found, fall through to check regular branch
@@ -337,21 +362,48 @@ export class NeonProvider implements DatabaseProvider {
 
     // Check for regular branch
     logger.info(`Checking for Neon database branch: ${sanitizedName}`)
-    const exists = await this.branchExists(sanitizedName)
-    if (!exists) {
-      logger.info(`No database branch found for '${name}'`)
-      return
-    }
 
-    logger.info(`Deleting Neon database branch: ${sanitizedName}`)
-    await this.executeNeonCommand([
-      'branches',
-      'delete',
-      sanitizedName,
-      '--project-id',
-      this.config.projectId,
-    ])
-    logger.success('Database branch deleted successfully')
+    try {
+      const exists = await this.branchExists(sanitizedName)
+
+      if (!exists) {
+        logger.info(`No database branch found for '${name}'`)
+        return {
+          success: true,
+          deleted: false,
+          notFound: true,
+          branchName: sanitizedName
+        }
+      }
+
+      // Branch exists - delete it
+      logger.info(`Deleting Neon database branch: ${sanitizedName}`)
+      await this.executeNeonCommand([
+        'branches',
+        'delete',
+        sanitizedName,
+        '--project-id',
+        this.config.projectId,
+      ])
+      logger.success('Database branch deleted successfully')
+
+      return {
+        success: true,
+        deleted: true,
+        notFound: false,
+        branchName: sanitizedName
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logger.error(`Failed to delete database branch: ${errorMessage}`)
+      return {
+        success: false,
+        deleted: false,
+        notFound: false,
+        error: errorMessage,
+        branchName: sanitizedName
+      }
+    }
   }
 
   /**

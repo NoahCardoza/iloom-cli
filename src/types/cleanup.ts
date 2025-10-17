@@ -44,6 +44,8 @@ export interface OperationResult {
 	message: string
 	/** Error message if operation failed */
 	error?: string
+	/** For database operations: whether branch was actually deleted (vs not found) */
+	deleted?: boolean
 }
 
 /**

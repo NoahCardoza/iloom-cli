@@ -482,6 +482,142 @@ describe('NeonProvider', () => {
   })
 
   describe('deleteBranch', () => {
+    it('should return deleted=true when branch exists and is deleted', async () => {
+      const mockBranches = [
+        { name: 'feat-issue-5', id: 'br-feat-123' },
+      ]
+      // First call: check if branch exists
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: JSON.stringify(mockBranches),
+        stderr: '',
+      } as ExecaReturnValue<string>)
+      // Second call: delete branch
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'Branch deleted',
+        stderr: '',
+      } as ExecaReturnValue<string>)
+
+      const result = await provider.deleteBranch('feat-issue-5', false)
+
+      expect(vi.mocked(promptConfirmation)).not.toHaveBeenCalled()
+      expect(execa).toHaveBeenCalledWith(
+        'neon',
+        ['branches', 'delete', 'feat-issue-5', '--project-id', 'test-project-id'],
+        expect.any(Object)
+      )
+      expect(result).toEqual({
+        success: true,
+        deleted: true,
+        notFound: false,
+        branchName: 'feat-issue-5'
+      })
+    })
+
+    it('should return deleted=false and notFound=true when branch does not exist', async () => {
+      vi.mocked(execa).mockResolvedValue({
+        stdout: '[]',
+        stderr: '',
+      } as ExecaReturnValue<string>)
+
+      const result = await provider.deleteBranch('nonexistent-branch', false)
+
+      expect(result).toEqual({
+        success: true,
+        deleted: false,
+        notFound: true,
+        branchName: 'nonexistent-branch'
+      })
+    })
+
+    it('should return deleted=true when preview branch is deleted with user confirmation', async () => {
+      const mockBranches = [
+        { name: 'preview/feat-issue-5', id: 'br-preview-123' },
+      ]
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: JSON.stringify(mockBranches),
+        stderr: '',
+      } as ExecaReturnValue<string>)
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'Branch deleted',
+        stderr: '',
+      } as ExecaReturnValue<string>)
+      vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
+      provider = new NeonProvider({
+        projectId: 'test-project-id',
+        parentBranch: 'development'
+      })
+
+      const result = await provider.deleteBranch('feat-issue-5', true)
+
+      expect(vi.mocked(promptConfirmation)).toHaveBeenCalled()
+      expect(execa).toHaveBeenCalledWith(
+        'neon',
+        ['branches', 'delete', 'preview/feat-issue-5', '--project-id', 'test-project-id'],
+        expect.any(Object)
+      )
+      expect(result).toEqual({
+        success: true,
+        deleted: true,
+        notFound: false,
+        branchName: 'preview/feat-issue-5'
+      })
+    })
+
+    it('should return deleted=false when user declines preview branch deletion', async () => {
+      const mockBranches = [
+        { name: 'preview_feat_issue-5', id: 'br-preview-123' },
+      ]
+      // First call: listBranches for slash pattern
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '[]',
+        stderr: '',
+      } as ExecaReturnValue<string>)
+      // Second call: listBranches for underscore pattern
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: JSON.stringify(mockBranches),
+        stderr: '',
+      } as ExecaReturnValue<string>)
+      provider = new NeonProvider({
+        projectId: 'test-project-id',
+        parentBranch: 'development'
+      })
+
+      const result = await provider.deleteBranch('feat/issue-5', true)
+
+      // Should call listBranches twice (slash and underscore patterns), not delete
+      expect(execa).toHaveBeenCalledTimes(2)
+      expect(result).toEqual({
+        success: true,
+        deleted: false,
+        notFound: false,
+        userDeclined: true,
+        branchName: 'preview_feat_issue-5'
+      })
+    })
+
+    it('should return success=false with error when deletion fails', async () => {
+      const mockBranches = [
+        { name: 'feat-issue-5', id: 'br-feat-123' },
+      ]
+      // First call: check if branch exists
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: JSON.stringify(mockBranches),
+        stderr: '',
+      } as ExecaReturnValue<string>)
+      // Second call: delete branch fails
+      vi.mocked(execa).mockRejectedValueOnce(new Error('Neon CLI error: deletion failed'))
+
+      const result = await provider.deleteBranch('feat-issue-5', false)
+
+      expect(result).toEqual({
+        success: false,
+        deleted: false,
+        notFound: false,
+        error: 'Neon CLI command failed: Neon CLI error: deletion failed',
+        branchName: 'feat-issue-5'
+      })
+    })
+
     it('should detect preview database and prompt for confirmation', async () => {
       const mockBranches = [
         { name: 'preview/feat-issue-5', id: 'br-preview-123' },
@@ -501,94 +637,6 @@ describe('NeonProvider', () => {
       expect(vi.mocked(promptConfirmation)).toHaveBeenCalled()
       // Should call listBranches for preview check only
       expect(execa).toHaveBeenCalledTimes(1)
-    })
-
-    it('should skip deletion when user declines preview deletion', async () => {
-      const mockBranches = [
-        { name: 'preview_feat_issue-5', id: 'br-preview-123' },
-      ]
-      // First call: listBranches for slash pattern
-      vi.mocked(execa).mockResolvedValueOnce({
-        stdout: '[]',
-        stderr: '',
-      } as ExecaReturnValue<string>)
-      // Second call: listBranches for underscore pattern
-      vi.mocked(execa).mockResolvedValueOnce({
-        stdout: JSON.stringify(mockBranches),
-        stderr: '',
-      } as ExecaReturnValue<string>)
-      provider = new NeonProvider({
-        projectId: 'test-project-id',
-        parentBranch: 'development'
-      })
-
-      await provider.deleteBranch('feat/issue-5', true)
-
-      // Should call listBranches twice (slash and underscore patterns), not delete
-      expect(execa).toHaveBeenCalledTimes(2)
-    })
-
-    it('should delete preview database when user confirms', async () => {
-      const mockBranches = [
-        { name: 'preview/feat-issue-5', id: 'br-preview-123' },
-      ]
-      vi.mocked(execa).mockResolvedValueOnce({
-        stdout: JSON.stringify(mockBranches),
-        stderr: '',
-      } as ExecaReturnValue<string>)
-      vi.mocked(execa).mockResolvedValueOnce({
-        stdout: 'Branch deleted',
-        stderr: '',
-      } as ExecaReturnValue<string>)
-      vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
-      provider = new NeonProvider({
-        projectId: 'test-project-id',
-        parentBranch: 'development'
-      })
-
-      await provider.deleteBranch('feat-issue-5', true)
-
-      expect(vi.mocked(promptConfirmation)).toHaveBeenCalled()
-      expect(execa).toHaveBeenCalledWith(
-        'neon',
-        ['branches', 'delete', 'preview/feat-issue-5', '--project-id', 'test-project-id'],
-        expect.any(Object)
-      )
-    })
-
-    it('should delete regular branch without confirmation', async () => {
-      const mockBranches = [
-        { name: 'feat-issue-5', id: 'br-feat-123' },
-      ]
-      // First call: check if branch exists
-      vi.mocked(execa).mockResolvedValueOnce({
-        stdout: JSON.stringify(mockBranches),
-        stderr: '',
-      } as ExecaReturnValue<string>)
-      // Second call: delete branch
-      vi.mocked(execa).mockResolvedValueOnce({
-        stdout: 'Branch deleted',
-        stderr: '',
-      } as ExecaReturnValue<string>)
-
-      await provider.deleteBranch('feat-issue-5', false)
-
-      expect(vi.mocked(promptConfirmation)).not.toHaveBeenCalled()
-      expect(execa).toHaveBeenCalledWith(
-        'neon',
-        ['branches', 'delete', 'feat-issue-5', '--project-id', 'test-project-id'],
-        expect.any(Object)
-      )
-    })
-
-    it('should handle non-existent branch gracefully', async () => {
-      vi.mocked(execa).mockResolvedValue({
-        stdout: '[]',
-        stderr: '',
-      } as ExecaReturnValue<string>)
-
-      // Should not throw, just return silently
-      await expect(provider.deleteBranch('nonexistent-branch', false)).resolves.toBeUndefined()
     })
   })
 

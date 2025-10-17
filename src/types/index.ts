@@ -72,10 +72,30 @@ export interface PullRequest {
 }
 
 // Database types
+
+/**
+ * Result of database branch deletion operation
+ * Distinguishes between successful deletion, branch not found, and errors
+ */
+export interface DatabaseDeletionResult {
+  /** Overall operation succeeded (true even if branch didn't exist) */
+  success: boolean
+  /** True only if a branch was actually deleted */
+  deleted: boolean
+  /** True if branch didn't exist (not an error, just nothing to do) */
+  notFound: boolean
+  /** Error message if operation failed */
+  error?: string
+  /** User declined deletion (for preview databases) */
+  userDeclined?: boolean
+  /** Name of the branch that was processed */
+  branchName?: string
+}
+
 export interface DatabaseProvider {
   // Core operations
   createBranch(name: string, fromBranch?: string): Promise<string>
-  deleteBranch(name: string, isPreview?: boolean): Promise<void>
+  deleteBranch(name: string, isPreview?: boolean): Promise<DatabaseDeletionResult>
   getConnectionString(branch: string): Promise<string>
   listBranches(): Promise<string[]>
   branchExists(name: string): Promise<boolean>

@@ -260,29 +260,82 @@ export class ResourceCleanup {
 				})
 			} else {
 				try {
-					let cleaned = false
 					if (databaseConfig.shouldCleanup && this.database) {
 						try {
-							// Use the amended method without envFilePath to bypass env file reading
-							await this.database.deleteBranchIfConfigured(worktree.branch)
-							cleaned = true
-							logger.info(`Database branch cleaned up: ${worktree.branch}`)
-						} catch (error) {
-							// Log warning but don't throw - matches bash script behavior (non-fatal)
-							logger.warn(
-								`Database cleanup failed: ${error instanceof Error ? error.message : String(error)}`
-							)
-							cleaned = false
-						}
-					}
+							// Call database deletion and get detailed result
+							const deletionResult = await this.database.deleteBranchIfConfigured(worktree.branch)
 
-					operations.push({
-						type: 'database',
-						success: true,
-						message: cleaned
-							? `Database branch cleaned up`
-							: `Database cleanup skipped (not available)`,
-					})
+							// Create operation result based on what actually happened
+							if (deletionResult.deleted) {
+								// Branch was actually deleted
+								logger.info(`Database branch deleted: ${worktree.branch}`)
+								operations.push({
+									type: 'database',
+									success: true,
+									message: `Database branch deleted`,
+									deleted: true,
+								})
+							} else if (deletionResult.notFound) {
+								// Branch didn't exist - not an error, just nothing to delete
+								logger.debug(`No database branch found for: ${worktree.branch}`)
+								operations.push({
+									type: 'database',
+									success: true,
+									message: `No database branch found (skipped)`,
+									deleted: false,
+								})
+							} else if (deletionResult.userDeclined) {
+								// User declined preview database deletion
+								logger.info('Preview database deletion declined by user')
+								operations.push({
+									type: 'database',
+									success: true,
+									message: `Database cleanup skipped (user declined)`,
+									deleted: false,
+								})
+							} else if (!deletionResult.success) {
+								// Deletion failed with error
+								const errorMsg = deletionResult.error ?? 'Unknown error'
+								logger.warn(`Database cleanup failed: ${errorMsg}`)
+								operations.push({
+									type: 'database',
+									success: true, // Non-fatal, overall operation still succeeds
+									message: `Database cleanup skipped (error)`,
+									error: errorMsg,
+									deleted: false,
+								})
+							} else {
+								// Unexpected state - log for debugging
+								logger.debug('Database deletion returned unexpected result state')
+								operations.push({
+									type: 'database',
+									success: true,
+									message: `Database cleanup skipped (not available)`,
+									deleted: false,
+								})
+							}
+						} catch (error) {
+							// Unexpected exception (shouldn't happen with result object pattern)
+							logger.warn(
+								`Unexpected database cleanup exception: ${error instanceof Error ? error.message : String(error)}`
+							)
+							operations.push({
+								type: 'database',
+								success: true, // Non-fatal
+								message: `Database cleanup skipped (error)`,
+								error: error instanceof Error ? error.message : String(error),
+								deleted: false,
+							})
+						}
+					} else {
+						// Database manager not available or not configured
+						operations.push({
+							type: 'database',
+							success: true,
+							message: `Database cleanup skipped (not available)`,
+							deleted: false,
+						})
+					}
 				} catch (error) {
 					// This catch block is for any unexpected errors in the outer logic
 					const err = error instanceof Error ? error : new Error('Unknown error')
@@ -292,6 +345,7 @@ export class ResourceCleanup {
 						success: false,
 						message: `Database cleanup failed`,
 						error: err.message,
+						deleted: false,
 					})
 				}
 			}
@@ -417,13 +471,30 @@ export class ResourceCleanup {
 
 		try {
 			const envFilePath = path.join(worktreePath, '.env')
-			await this.database.deleteBranchIfConfigured(branchName, envFilePath)
-			logger.info(`Database branch cleaned up: ${branchName}`)
-			return true
+			const result = await this.database.deleteBranchIfConfigured(branchName, envFilePath)
+
+			// Only return true if deletion actually occurred
+			if (result.deleted) {
+				logger.info(`Database branch deleted: ${branchName}`)
+				return true
+			} else if (result.notFound) {
+				logger.debug(`No database branch found for: ${branchName}`)
+				return false
+			} else if (result.userDeclined) {
+				logger.info('Preview database deletion declined by user')
+				return false
+			} else if (!result.success) {
+				logger.warn(`Database cleanup failed: ${result.error ?? 'Unknown error'}`)
+				return false
+			} else {
+				// Unexpected state
+				logger.debug('Database deletion returned unexpected result')
+				return false
+			}
 		} catch (error) {
-			// Log warning but don't throw - matches bash script behavior
+			// Unexpected exception
 			logger.warn(
-				`Database cleanup failed: ${error instanceof Error ? error.message : String(error)}`
+				`Unexpected database cleanup error: ${error instanceof Error ? error.message : String(error)}`
 			)
 			return false
 		}
