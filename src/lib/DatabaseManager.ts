@@ -115,21 +115,23 @@ export class DatabaseManager {
 
     // Check CLI availability and authentication
     if (!(await this.provider.isCliAvailable())) {
-      logger.debug('Skipping database branch deletion: Neon CLI not available')
+      logger.info('Skipping database branch deletion: CLI tool not available')
       return {
-        success: true,
+        success: false,
         deleted: false,
         notFound: true,
+        error: "CLI tool not available",
         branchName
       }
     }
 
     if (!(await this.provider.isAuthenticated())) {
-      logger.debug('Skipping database branch deletion: Not authenticated with Neon CLI')
+      logger.warn('Skipping database branch deletion: Not authenticated with DB Provider')
       return {
-        success: true,
+        success: false,
         deleted: false,
-        notFound: true,
+        notFound: false,
+        error: "Not authenticated with DB Provider",
         branchName
       }
     }

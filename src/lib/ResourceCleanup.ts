@@ -299,18 +299,18 @@ export class ResourceCleanup {
 								logger.warn(`Database cleanup failed: ${errorMsg}`)
 								operations.push({
 									type: 'database',
-									success: true, // Non-fatal, overall operation still succeeds
-									message: `Database cleanup skipped (error)`,
+									success: false, // Non-fatal, but report error
+									message: `Database cleanup failed`,
 									error: errorMsg,
 									deleted: false,
 								})
 							} else {
 								// Unexpected state - log for debugging
-								logger.debug('Database deletion returned unexpected result state')
+								logger.warn('Database deletion returned unexpected result state')
 								operations.push({
 									type: 'database',
-									success: true,
-									message: `Database cleanup skipped (not available)`,
+									success: false,
+									message: `Database cleanup in an unknown state`,
 									deleted: false,
 								})
 							}
@@ -321,8 +321,8 @@ export class ResourceCleanup {
 							)
 							operations.push({
 								type: 'database',
-								success: true, // Non-fatal
-								message: `Database cleanup skipped (error)`,
+								success: false,
+								message: `Database cleanup failed`,
 								error: error instanceof Error ? error.message : String(error),
 								deleted: false,
 							})

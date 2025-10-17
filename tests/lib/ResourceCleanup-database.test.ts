@@ -205,8 +205,8 @@ describe('ResourceCleanup - Database Integration', () => {
       // THEN: Operation shows cleanup was skipped due to error
       const dbOperation = result.operations.find((op) => op.type === 'database')
       expect(dbOperation).toBeDefined()
-      expect(dbOperation?.success).toBe(true) // Non-fatal, overall success
-      expect(dbOperation?.message).toContain('Database cleanup skipped')
+      expect(dbOperation?.success).toBe(false) // Non-fatal, overall success
+      expect(dbOperation?.message).toContain('Database cleanup failed')
       expect(dbOperation?.deleted).toBe(false)
     })
 
@@ -257,8 +257,8 @@ describe('ResourceCleanup - Database Integration', () => {
       // THEN: Database operation shows skipped (because deleteBranchIfConfigured is called but returns false)
       const dbOperation = result.operations.find((op) => op.type === 'database')
       expect(dbOperation).toBeDefined()
-      expect(dbOperation?.success).toBe(true)
-      expect(dbOperation?.message).toContain('skipped')
+      expect(dbOperation?.success).toBe(false)
+      expect(dbOperation?.message).toContain('failed')
 
       const worktreeOperation = result.operations.find((op) => op.type === 'worktree')
       expect(worktreeOperation?.success).toBe(true)
