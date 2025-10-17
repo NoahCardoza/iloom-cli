@@ -532,4 +532,279 @@ describe('CLIIsolationManager', () => {
       )
     })
   })
+
+  describe('cleanupVersionedExecutables', () => {
+    it('should remove all symlinks matching the identifier', async () => {
+      const identifier = 42
+
+      // Mock readdir to return files in the bin directory
+      vi.mocked(fs.readdir).mockResolvedValueOnce([
+        'hb-42',
+        'hatchbox-42',
+        'other-tool-42',
+        'hb-37',
+        'some-other-file'
+      ] as unknown as string[])
+
+      // Mock unlink to track what gets removed
+      vi.mocked(fs.unlink).mockResolvedValue(undefined)
+
+      const removed = await manager.cleanupVersionedExecutables(identifier)
+
+      expect(removed).toEqual(['hb-42', 'hatchbox-42', 'other-tool-42'])
+      expect(fs.unlink).toHaveBeenCalledTimes(3)
+      expect(fs.unlink).toHaveBeenCalledWith(path.join(hatchboxBinDir, 'hb-42'))
+      expect(fs.unlink).toHaveBeenCalledWith(path.join(hatchboxBinDir, 'hatchbox-42'))
+      expect(fs.unlink).toHaveBeenCalledWith(path.join(hatchboxBinDir, 'other-tool-42'))
+    })
+
+    it('should handle string identifiers with special characters', async () => {
+      const identifier = 'feat/issue-42'
+
+      vi.mocked(fs.readdir).mockResolvedValueOnce([
+        'hb-feat/issue-42',
+        'hatchbox-feat/issue-42',
+        'hb-42'
+      ] as unknown as string[])
+
+      vi.mocked(fs.unlink).mockResolvedValue(undefined)
+
+      const removed = await manager.cleanupVersionedExecutables(identifier)
+
+      expect(removed).toEqual(['hb-feat/issue-42', 'hatchbox-feat/issue-42'])
+      expect(fs.unlink).toHaveBeenCalledTimes(2)
+    })
+
+    it('should return empty array if no matching symlinks found', async () => {
+      const identifier = 99
+
+      vi.mocked(fs.readdir).mockResolvedValueOnce([
+        'hb-42',
+        'hatchbox-37',
+        'other-tool'
+      ] as unknown as string[])
+
+      const removed = await manager.cleanupVersionedExecutables(identifier)
+
+      expect(removed).toEqual([])
+      expect(fs.unlink).not.toHaveBeenCalled()
+    })
+
+    it('should handle missing bin directory gracefully', async () => {
+      const identifier = 42
+
+      vi.mocked(fs.readdir).mockRejectedValueOnce(
+        Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' })
+      )
+
+      const removed = await manager.cleanupVersionedExecutables(identifier)
+
+      expect(removed).toEqual([])
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('No CLI executables directory found')
+      )
+    })
+
+    it('should continue on individual file deletion failures', async () => {
+      const identifier = 42
+
+      vi.mocked(fs.readdir).mockResolvedValueOnce([
+        'hb-42',
+        'hatchbox-42',
+        'tool-42'
+      ] as unknown as string[])
+
+      vi.mocked(fs.unlink)
+        .mockResolvedValueOnce(undefined) // hb-42 succeeds
+        .mockRejectedValueOnce(new Error('Permission denied')) // hatchbox-42 fails
+        .mockResolvedValueOnce(undefined) // tool-42 succeeds
+
+      const removed = await manager.cleanupVersionedExecutables(identifier)
+
+      expect(removed).toEqual(['hb-42', 'tool-42'])
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to remove symlink hatchbox-42')
+      )
+    })
+
+    it('should silently skip already-deleted symlinks (ENOENT)', async () => {
+      const identifier = 42
+
+      vi.mocked(fs.readdir).mockResolvedValueOnce(['hb-42'] as unknown as string[])
+
+      vi.mocked(fs.unlink).mockRejectedValueOnce(
+        Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' })
+      )
+
+      const removed = await manager.cleanupVersionedExecutables(identifier)
+
+      expect(removed).toEqual(['hb-42'])
+      expect(logger.warn).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('findOrphanedSymlinks', () => {
+    it('should detect symlinks pointing to non-existent targets', async () => {
+      vi.mocked(fs.readdir).mockResolvedValueOnce([
+        'hb-42',
+        'hatchbox-42',
+        'regular-file'
+      ] as unknown as string[])
+
+      // hb-42 is a symlink pointing to deleted worktree
+      vi.mocked(fs.lstat).mockResolvedValueOnce({
+        isSymbolicLink: () => true
+      } as unknown as fs.Stats)
+
+      vi.mocked(fs.readlink).mockResolvedValueOnce('/worktrees/issue-42/dist/cli.js')
+
+      vi.mocked(fs.access).mockRejectedValueOnce(
+        new Error('ENOENT: no such file or directory')
+      )
+
+      // hatchbox-42 is a symlink pointing to existing worktree
+      vi.mocked(fs.lstat).mockResolvedValueOnce({
+        isSymbolicLink: () => true
+      } as unknown as fs.Stats)
+
+      vi.mocked(fs.readlink).mockResolvedValueOnce('/worktrees/issue-37/dist/cli.js')
+
+      vi.mocked(fs.access).mockResolvedValueOnce(undefined)
+
+      // regular-file is not a symlink
+      vi.mocked(fs.lstat).mockResolvedValueOnce({
+        isSymbolicLink: () => false
+      } as unknown as fs.Stats)
+
+      const orphaned = await manager.findOrphanedSymlinks()
+
+      expect(orphaned).toHaveLength(1)
+      expect(orphaned[0]).toEqual({
+        name: 'hb-42',
+        path: path.join(hatchboxBinDir, 'hb-42'),
+        brokenTarget: '/worktrees/issue-42/dist/cli.js'
+      })
+    })
+
+    it('should return empty array if bin directory does not exist', async () => {
+      vi.mocked(fs.readdir).mockRejectedValueOnce(
+        Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' })
+      )
+
+      const orphaned = await manager.findOrphanedSymlinks()
+
+      expect(orphaned).toEqual([])
+    })
+
+    it('should handle permission errors gracefully', async () => {
+      vi.mocked(fs.readdir).mockRejectedValueOnce(new Error('EACCES: permission denied'))
+
+      await expect(manager.findOrphanedSymlinks()).rejects.toThrow('permission denied')
+    })
+
+    it('should find multiple orphaned symlinks', async () => {
+      vi.mocked(fs.readdir).mockResolvedValueOnce([
+        'hb-42',
+        'hb-37',
+        'hb-99'
+      ] as unknown as string[])
+
+      // All are symlinks pointing to non-existent targets
+      for (let i = 0; i < 3; i++) {
+        vi.mocked(fs.lstat).mockResolvedValueOnce({
+          isSymbolicLink: () => true
+        } as unknown as fs.Stats)
+
+        vi.mocked(fs.readlink).mockResolvedValueOnce(`/worktrees/issue-${i}/dist/cli.js`)
+
+        vi.mocked(fs.access).mockRejectedValueOnce(
+          new Error('ENOENT: no such file or directory')
+        )
+      }
+
+      const orphaned = await manager.findOrphanedSymlinks()
+
+      expect(orphaned).toHaveLength(3)
+      expect(orphaned.map(o => o.name)).toEqual(['hb-42', 'hb-37', 'hb-99'])
+    })
+  })
+
+  describe('cleanupOrphanedSymlinks', () => {
+    it('should remove all orphaned symlinks and return count', async () => {
+      vi.mocked(fs.readdir).mockResolvedValueOnce([
+        'hb-42',
+        'hatchbox-42'
+      ] as unknown as string[])
+
+      // Both are orphaned symlinks
+      for (let i = 0; i < 2; i++) {
+        vi.mocked(fs.lstat).mockResolvedValueOnce({
+          isSymbolicLink: () => true
+        } as unknown as fs.Stats)
+
+        vi.mocked(fs.readlink).mockResolvedValueOnce('/worktrees/deleted/dist/cli.js')
+
+        vi.mocked(fs.access).mockRejectedValueOnce(
+          new Error('ENOENT: no such file or directory')
+        )
+      }
+
+      vi.mocked(fs.unlink).mockResolvedValue(undefined)
+
+      const count = await manager.cleanupOrphanedSymlinks()
+
+      expect(count).toBe(2)
+      expect(fs.unlink).toHaveBeenCalledTimes(2)
+      expect(logger.success).toHaveBeenCalledWith('Removed orphaned symlink: hb-42')
+      expect(logger.success).toHaveBeenCalledWith('Removed orphaned symlink: hatchbox-42')
+    })
+
+    it('should return 0 if no orphaned symlinks found', async () => {
+      vi.mocked(fs.readdir).mockResolvedValueOnce(['hb-42'] as unknown as string[])
+
+      vi.mocked(fs.lstat).mockResolvedValueOnce({
+        isSymbolicLink: () => true
+      } as unknown as fs.Stats)
+
+      vi.mocked(fs.readlink).mockResolvedValueOnce('/worktrees/issue-42/dist/cli.js')
+
+      vi.mocked(fs.access).mockResolvedValueOnce(undefined) // Target exists
+
+      const count = await manager.cleanupOrphanedSymlinks()
+
+      expect(count).toBe(0)
+      expect(fs.unlink).not.toHaveBeenCalled()
+    })
+
+    it('should handle individual deletion failures gracefully', async () => {
+      vi.mocked(fs.readdir).mockResolvedValueOnce([
+        'hb-42',
+        'hb-37'
+      ] as unknown as string[])
+
+      // Both are orphaned
+      for (let i = 0; i < 2; i++) {
+        vi.mocked(fs.lstat).mockResolvedValueOnce({
+          isSymbolicLink: () => true
+        } as unknown as fs.Stats)
+
+        vi.mocked(fs.readlink).mockResolvedValueOnce('/worktrees/deleted/dist/cli.js')
+
+        vi.mocked(fs.access).mockRejectedValueOnce(
+          new Error('ENOENT: no such file or directory')
+        )
+      }
+
+      vi.mocked(fs.unlink)
+        .mockResolvedValueOnce(undefined) // hb-42 succeeds
+        .mockRejectedValueOnce(new Error('Permission denied')) // hb-37 fails
+
+      const count = await manager.cleanupOrphanedSymlinks()
+
+      expect(count).toBe(1)
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to remove orphaned symlink hb-37')
+      )
+    })
+  })
 })

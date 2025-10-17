@@ -15,6 +15,7 @@ import { EnvironmentManager } from '../lib/EnvironmentManager.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import type { GitWorktree } from '../types/worktree.js'
+import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 
 // Mock dependencies
 vi.mock('../lib/GitHubService.js')
@@ -263,11 +264,12 @@ describe('FinishCommand', () => {
 			// Verify ResourceCleanup was created
 			expect(cmd['resourceCleanup']).toBeInstanceOf(ResourceCleanup)
 
-			// Verify it was called with the right arguments (including DatabaseManager)
+			// Verify it was called with the right arguments (including DatabaseManager and CLIIsolationManager)
 			expect(ResourceCleanup).toHaveBeenCalledWith(
 				expect.any(GitWorktreeManager),
 				expect.any(ProcessManager),
-				expect.any(DatabaseManager)
+				expect.any(DatabaseManager),
+				expect.any(CLIIsolationManager) // CLIIsolationManager
 			)
 
 			// Restore environment

@@ -2,6 +2,7 @@ import path from 'path'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { DatabaseManager } from './DatabaseManager.js'
 import { ProcessManager } from './process/ProcessManager.js'
+import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { logger } from '../utils/logger.js'
 import type {
 	ResourceCleanupOptions,
@@ -21,7 +22,8 @@ export class ResourceCleanup {
 	constructor(
 		private gitWorktree: GitWorktreeManager,
 		private processManager: ProcessManager,
-		private database?: DatabaseManager
+		private database?: DatabaseManager,
+		private cliIsolation?: CLIIsolationManager
 	) {}
 
 	/**
@@ -208,6 +210,41 @@ export class ResourceCleanup {
 						success: false,
 						message: `Failed to delete branch`,
 						error: err.message,
+					})
+				}
+			}
+		}
+
+		// Step 5.5: Cleanup CLI symlinks if CLI isolation is available
+		// Derive identifier from parsed input (number for issue/PR, branchName for branch)
+		const cliIdentifier = parsed.number ?? parsed.branchName
+		if (this.cliIsolation && cliIdentifier !== undefined) {
+			if (options.dryRun) {
+				operations.push({
+					type: 'cli-symlinks',
+					success: true,
+					message: `[DRY RUN] Would cleanup CLI symlinks for: ${cliIdentifier}`,
+				})
+			} else {
+				try {
+					const removed = await this.cliIsolation.cleanupVersionedExecutables(cliIdentifier)
+					operations.push({
+						type: 'cli-symlinks',
+						success: true,
+						message: removed.length > 0
+							? `CLI symlinks removed: ${removed.length}`
+							: 'No CLI symlinks to cleanup',
+					})
+				} catch (error) {
+					// Log warning but don't fail
+					const err = error instanceof Error ? error : new Error('Unknown error')
+					logger.warn(
+						`CLI symlink cleanup failed: ${err.message}`
+					)
+					operations.push({
+						type: 'cli-symlinks',
+						success: false,
+						message: 'CLI symlink cleanup failed (non-fatal)',
 					})
 				}
 			}

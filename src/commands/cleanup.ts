@@ -5,6 +5,7 @@ import { ProcessManager } from '../lib/process/ProcessManager.js'
 import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { NeonProvider } from '../lib/providers/NeonProvider.js'
 import { EnvironmentManager } from '../lib/EnvironmentManager.js'
+import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { promptConfirmation } from '../utils/prompt.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
@@ -60,7 +61,7 @@ export class CleanupCommand {
 
     this.gitWorktreeManager = gitWorktreeManager ?? new GitWorktreeManager()
 
-    // Initialize ResourceCleanup with DatabaseManager
+    // Initialize ResourceCleanup with DatabaseManager and CLIIsolationManager
     if (!resourceCleanup) {
       const environmentManager = new EnvironmentManager()
       const neonProvider = new NeonProvider({
@@ -68,11 +69,13 @@ export class CleanupCommand {
         parentBranch: process.env.NEON_PARENT_BRANCH ?? '',
       })
       const databaseManager = new DatabaseManager(neonProvider, environmentManager)
+      const cliIsolationManager = new CLIIsolationManager()
 
       this.resourceCleanup = new ResourceCleanup(
         this.gitWorktreeManager,
         new ProcessManager(),
-        databaseManager  // Add database manager
+        databaseManager,  // Add database manager
+        cliIsolationManager  // Add CLI isolation manager
       )
     } else {
       this.resourceCleanup = resourceCleanup

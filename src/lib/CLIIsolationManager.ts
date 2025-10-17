@@ -165,4 +165,150 @@ export class CLIIsolationManager {
     }
     return rcFiles[shell] ?? '~/.bashrc'
   }
+
+  /**
+   * Cleanup versioned CLI executables for a specific identifier
+   * Removes all symlinks matching the pattern: {binName}-{identifier}
+   *
+   * @param identifier - Issue/PR number or branch identifier
+   * @returns Array of removed symlink names
+   */
+  async cleanupVersionedExecutables(identifier: string | number): Promise<string[]> {
+    const removed: string[] = []
+
+    try {
+      const files = await fs.readdir(this.hatchboxBinDir)
+
+      for (const file of files) {
+        if (this.matchesIdentifier(file, identifier)) {
+          const symlinkPath = path.join(this.hatchboxBinDir, file)
+
+          try {
+            await fs.unlink(symlinkPath)
+            removed.push(file)
+          } catch (error) {
+            // Silently skip if symlink already gone (ENOENT)
+            const isEnoent = error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'
+            if (isEnoent) {
+              removed.push(file)
+              continue
+            }
+
+            // Log warning for other errors but continue cleanup
+            logger.warn(
+              `Failed to remove symlink ${file}: ${error instanceof Error ? error.message : 'Unknown error'}`
+            )
+          }
+        }
+      }
+    } catch (error) {
+      // Handle missing bin directory gracefully
+      const isEnoent = error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'
+      if (isEnoent) {
+        logger.warn('No CLI executables directory found - nothing to cleanup')
+        return []
+      }
+
+      // Re-throw unexpected errors
+      throw error
+    }
+
+    if (removed.length > 0) {
+      logger.success(`Removed CLI executables: ${removed.join(', ')}`)
+    }
+
+    return removed
+  }
+
+  /**
+   * Find orphaned symlinks in ~/.hatchbox/bin
+   * Returns symlinks that point to non-existent targets
+   *
+   * @returns Array of orphaned symlink information
+   */
+  async findOrphanedSymlinks(): Promise<Array<{ name: string; path: string; brokenTarget: string }>> {
+    const orphaned: Array<{ name: string; path: string; brokenTarget: string }> = []
+
+    try {
+      const files = await fs.readdir(this.hatchboxBinDir)
+
+      for (const file of files) {
+        const symlinkPath = path.join(this.hatchboxBinDir, file)
+
+        try {
+          const stats = await fs.lstat(symlinkPath)
+
+          if (stats.isSymbolicLink()) {
+            const target = await fs.readlink(symlinkPath)
+
+            // Check if target exists
+            try {
+              await fs.access(target)
+            } catch {
+              // Target doesn't exist - this is an orphaned symlink
+              orphaned.push({
+                name: file,
+                path: symlinkPath,
+                brokenTarget: target
+              })
+            }
+          }
+        } catch (error) {
+          // Skip files we can't read
+          logger.warn(
+            `Failed to check symlink ${file}: ${error instanceof Error ? error.message : 'Unknown error'}`
+          )
+        }
+      }
+    } catch (error) {
+      // Handle missing bin directory
+      const isEnoent = error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'
+      if (isEnoent) {
+        return []
+      }
+
+      // Re-throw unexpected errors
+      throw error
+    }
+
+    return orphaned
+  }
+
+  /**
+   * Cleanup all orphaned symlinks
+   * Removes symlinks that point to non-existent targets
+   *
+   * @returns Number of symlinks removed
+   */
+  async cleanupOrphanedSymlinks(): Promise<number> {
+    const orphaned = await this.findOrphanedSymlinks()
+    let removedCount = 0
+
+    for (const symlink of orphaned) {
+      try {
+        await fs.unlink(symlink.path)
+        removedCount++
+        logger.success(`Removed orphaned symlink: ${symlink.name}`)
+      } catch (error) {
+        logger.warn(
+          `Failed to remove orphaned symlink ${symlink.name}: ${error instanceof Error ? error.message : 'Unknown error'}`
+        )
+      }
+    }
+
+    return removedCount
+  }
+
+  /**
+   * Check if a filename matches the versioned pattern for an identifier
+   * Pattern: {binName}-{identifier}
+   *
+   * @param fileName - Name of the file to check
+   * @param identifier - Issue/PR number or branch identifier
+   * @returns True if the filename matches the pattern
+   */
+  private matchesIdentifier(fileName: string, identifier: string | number): boolean {
+    const suffix = `-${identifier}`
+    return fileName.endsWith(suffix)
+  }
 }

@@ -11,6 +11,7 @@ import { BuildRunner } from '../lib/BuildRunner.js'
 import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { NeonProvider } from '../lib/providers/NeonProvider.js'
 import { EnvironmentManager } from '../lib/EnvironmentManager.js'
+import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { findMainWorktreePath } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions, PullRequest } from '../types/index.js'
@@ -68,7 +69,7 @@ export class FinishCommand {
 		this.mergeManager = mergeManager ?? new MergeManager()
 		this.identifierParser = identifierParser ?? new IdentifierParser(this.gitWorktreeManager)
 
-		// Initialize ResourceCleanup with DatabaseManager
+		// Initialize ResourceCleanup with DatabaseManager and CLIIsolationManager
 		if (!resourceCleanup) {
 			const environmentManager = new EnvironmentManager()
 			const neonProvider = new NeonProvider({
@@ -76,11 +77,13 @@ export class FinishCommand {
 				parentBranch: process.env.NEON_PARENT_BRANCH ?? '',
 			})
 			const databaseManager = new DatabaseManager(neonProvider, environmentManager)
+			const cliIsolationManager = new CLIIsolationManager()
 
 			this.resourceCleanup = new ResourceCleanup(
 				this.gitWorktreeManager,
 				new ProcessManager(),
-				databaseManager  // Add database manager
+				databaseManager,  // Add database manager
+				cliIsolationManager  // Add CLI isolation manager
 			)
 		} else {
 			this.resourceCleanup = resourceCleanup
