@@ -313,7 +313,7 @@ export class CleanupCommand {
 
     // Step 6: Second confirmation - branch deletion (only if not forced and worktree cleanup succeeded)
     if (cleanupResult.success && !force && cleanupResult.branchName) {
-      const confirmBranch = await promptConfirmation('Also delete the branch?', true)
+      const confirmBranch = await promptConfirmation('Also delete the git branch?', true)
       if (confirmBranch) {
         await this.deleteBranchForCleanup(cleanupResult.branchName, { force: force ?? false, dryRun: dryRun ?? false })
       }

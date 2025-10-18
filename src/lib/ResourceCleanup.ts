@@ -110,7 +110,8 @@ export class ResourceCleanup {
 			}
 		}
 
-		// Step 3: Pre-read database configuration before worktree removal
+		// Step 3: Pre-fetch database configuration before worktree removal
+		// This config is used AFTER worktree deletion when env file no longer exists
 		let databaseConfig: { shouldCleanup: boolean; envFilePath: string } | null = null
 		if (!options.keepDatabase && worktree) {
 			const envFilePath = path.join(worktree.path, '.env')
@@ -131,9 +132,9 @@ export class ResourceCleanup {
 			}
 		}
 
-		// Step 3.5: Find main worktree path before deletion (needed for branch deletion later)
+		// Step 3.5: Find main worktree path before deletion (needed for branch and database operations)
 		let mainWorktreePath: string | null = null
-		if (options.deleteBranch && !options.dryRun) {
+		if (!options.dryRun) {
 			try {
 				const { findMainWorktreePath } = await import('../utils/git.js')
 				mainWorktreePath = await findMainWorktreePath(worktree.path)
@@ -238,6 +239,7 @@ export class ResourceCleanup {
 				} catch (error) {
 					// Log warning but don't fail
 					const err = error instanceof Error ? error : new Error('Unknown error')
+					errors.push(err)
 					logger.warn(
 						`CLI symlink cleanup failed: ${err.message}`
 					)
@@ -262,8 +264,14 @@ export class ResourceCleanup {
 				try {
 					if (databaseConfig.shouldCleanup && this.database) {
 						try {
-							// Call database deletion and get detailed result
-							const deletionResult = await this.database.deleteBranchIfConfigured(worktree.branch)
+							// Call database deletion with pre-fetched shouldCleanup value and main worktree path
+							// This avoids reading the already-deleted env file and running commands from deleted directories
+							const deletionResult = await this.database.deleteBranchIfConfigured(
+								worktree.branch,
+								databaseConfig.shouldCleanup,
+								false, // isPreview
+								mainWorktreePath ?? undefined
+							)
 
 							// Create operation result based on what actually happened
 							if (deletionResult.deleted) {
@@ -296,6 +304,7 @@ export class ResourceCleanup {
 							} else if (!deletionResult.success) {
 								// Deletion failed with error
 								const errorMsg = deletionResult.error ?? 'Unknown error'
+								errors.push(new Error(errorMsg))
 								logger.warn(`Database cleanup failed: ${errorMsg}`)
 								operations.push({
 									type: 'database',
@@ -306,6 +315,7 @@ export class ResourceCleanup {
 								})
 							} else {
 								// Unexpected state - log for debugging
+								errors.push(new Error('Database cleanup in an unknown state'))
 								logger.warn('Database deletion returned unexpected result state')
 								operations.push({
 									type: 'database',
@@ -316,6 +326,7 @@ export class ResourceCleanup {
 							}
 						} catch (error) {
 							// Unexpected exception (shouldn't happen with result object pattern)
+							errors.push(error instanceof Error ? error : new Error(String(error)))
 							logger.warn(
 								`Unexpected database cleanup exception: ${error instanceof Error ? error.message : String(error)}`
 							)
@@ -462,6 +473,14 @@ export class ResourceCleanup {
 	/**
 	 * Cleanup database branch
 	 * Gracefully handles missing DatabaseManager
+	 *
+	 * @deprecated This method is deprecated and should not be used for post-deletion cleanup.
+	 * Use the pre-fetch mechanism in cleanupWorktree() instead.
+	 * This method will fail if called after worktree deletion because
+	 * it attempts to read the .env file which has been deleted.
+	 *
+	 * @param branchName - Name of the branch to delete
+	 * @param worktreePath - Path to worktree (must still exist with .env file)
 	 */
 	async cleanupDatabase(branchName: string, worktreePath: string): Promise<boolean> {
 		if (!this.database) {
@@ -470,8 +489,28 @@ export class ResourceCleanup {
 		}
 
 		try {
+			// Pre-fetch configuration before deletion
 			const envFilePath = path.join(worktreePath, '.env')
-			const result = await this.database.deleteBranchIfConfigured(branchName, envFilePath)
+			const shouldCleanup = await this.database.shouldUseDatabaseBranching(envFilePath)
+
+			// Find main worktree path to avoid running commands from potentially deleted directories
+			let cwd: string | undefined
+			try {
+				const { findMainWorktreePath } = await import('../utils/git.js')
+				cwd = await findMainWorktreePath(worktreePath)
+			} catch (error) {
+				// If we can't find main worktree, commands will run from current directory
+				logger.debug(
+					`Could not find main worktree path, using current directory: ${error instanceof Error ? error.message : String(error)}`
+				)
+			}
+
+			const result = await this.database.deleteBranchIfConfigured(
+				branchName,
+				shouldCleanup,
+				false, // isPreview
+				cwd
+			)
 
 			// Only return true if deletion actually occurred
 			if (result.deleted) {

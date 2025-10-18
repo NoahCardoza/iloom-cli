@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { execa, type ExecaReturnValue } from 'execa'
+import { execa, type ExecaReturnValue, type ExecaError } from 'execa'
 import { NeonProvider } from '../../../src/lib/providers/NeonProvider.js'
 import { promptConfirmation } from '../../../src/utils/prompt.js'
 
@@ -54,11 +54,15 @@ describe('NeonProvider', () => {
       expect(execa).toHaveBeenCalledWith('neon', ['me'], expect.any(Object))
     })
 
-    it('should return false when not authenticated', async () => {
+    it('should return false when not authenticated (genuine auth error)', async () => {
       // First call: CLI available
       vi.mocked(execa).mockResolvedValueOnce({ stdout: '', stderr: '' } as ExecaReturnValue<string>)
-      // Second call: neon me fails
-      vi.mocked(execa).mockRejectedValueOnce(new Error('not authenticated'))
+      // Second call: neon me fails with auth error
+      const authError = Object.assign(new Error('not authenticated'), {
+        stderr: 'Error: not authenticated',
+        exitCode: 1
+      }) as ExecaError
+      vi.mocked(execa).mockRejectedValueOnce(authError)
 
       const result = await provider.isAuthenticated()
 
@@ -67,6 +71,47 @@ describe('NeonProvider', () => {
 
     it('should return false when CLI not available', async () => {
       vi.mocked(execa).mockRejectedValue(new Error('command not found'))
+
+      const result = await provider.isAuthenticated()
+
+      expect(result).toBe(false)
+    })
+
+    it('should throw error for working directory issues instead of returning false', async () => {
+      // First call: CLI available
+      vi.mocked(execa).mockResolvedValueOnce({ stdout: '', stderr: '' } as ExecaReturnValue<string>)
+      // Second call: neon me fails with working directory error
+      const cwdError = Object.assign(new Error('ENOENT: no such file or directory'), {
+        stderr: 'ENOENT: no such file or directory, chdir',
+        exitCode: 127
+      }) as ExecaError
+      vi.mocked(execa).mockRejectedValueOnce(cwdError)
+
+      await expect(provider.isAuthenticated()).rejects.toThrow('ENOENT: no such file or directory')
+    })
+
+    it('should throw error for unexpected CLI failures instead of returning false', async () => {
+      // First call: CLI available
+      vi.mocked(execa).mockResolvedValueOnce({ stdout: '', stderr: '' } as ExecaReturnValue<string>)
+      // Second call: neon me fails with unexpected error
+      const unexpectedError = Object.assign(new Error('unexpected error'), {
+        stderr: 'Error: something unexpected happened',
+        exitCode: 2
+      }) as ExecaError
+      vi.mocked(execa).mockRejectedValueOnce(unexpectedError)
+
+      await expect(provider.isAuthenticated()).rejects.toThrow('unexpected error')
+    })
+
+    it('should return false when stderr contains "authentication required"', async () => {
+      // First call: CLI available
+      vi.mocked(execa).mockResolvedValueOnce({ stdout: '', stderr: '' } as ExecaReturnValue<string>)
+      // Second call: neon me fails with auth required
+      const authError = Object.assign(new Error('authentication required'), {
+        stderr: 'Error: authentication required',
+        exitCode: 1
+      }) as ExecaError
+      vi.mocked(execa).mockRejectedValueOnce(authError)
 
       const result = await provider.isAuthenticated()
 
@@ -133,10 +178,35 @@ describe('NeonProvider', () => {
       expect(result).toEqual(['branch1', 'branch2'])
     })
 
-    it('should throw error when CLI fails', async () => {
-      vi.mocked(execa).mockRejectedValue(new Error('CLI error'))
+    it('should throw error with details when CLI fails', async () => {
+      const cliError = Object.assign(new Error('command failed'), {
+        stderr: 'Error: branch not found',
+        exitCode: 1
+      }) as ExecaError
+      vi.mocked(execa).mockRejectedValue(cliError)
 
-      await expect(provider.listBranches()).rejects.toThrow('CLI error')
+      await expect(provider.listBranches()).rejects.toThrow('command failed')
+    })
+
+    it('should include exit code in error message when CLI fails', async () => {
+      const cliError = Object.assign(new Error('command failed'), {
+        stderr: 'Some error occurred',
+        exitCode: 127
+      }) as ExecaError
+      vi.mocked(execa).mockRejectedValue(cliError)
+
+      await expect(provider.listBranches()).rejects.toThrow('command failed')
+    })
+
+    it('should detect and categorize working directory errors', async () => {
+      const cwdError = Object.assign(new Error('ENOENT'), {
+        stderr: 'ENOENT: no such file or directory, chdir',
+        exitCode: 1,
+        cwd: '/nonexistent/path'
+      }) as ExecaError
+      vi.mocked(execa).mockRejectedValue(cwdError)
+
+      await expect(provider.listBranches()).rejects.toThrow('ENOENT')
     })
 
     it('should handle empty branch list', async () => {
@@ -613,7 +683,7 @@ describe('NeonProvider', () => {
         success: false,
         deleted: false,
         notFound: false,
-        error: 'Neon CLI command failed: Neon CLI error: deletion failed',
+        error: 'Neon CLI error: deletion failed',
         branchName: 'feat-issue-5'
       })
     })

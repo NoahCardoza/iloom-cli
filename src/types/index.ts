@@ -94,17 +94,17 @@ export interface DatabaseDeletionResult {
 
 export interface DatabaseProvider {
   // Core operations
-  createBranch(name: string, fromBranch?: string): Promise<string>
-  deleteBranch(name: string, isPreview?: boolean): Promise<DatabaseDeletionResult>
-  getConnectionString(branch: string): Promise<string>
-  listBranches(): Promise<string[]>
-  branchExists(name: string): Promise<boolean>
+  createBranch(name: string, fromBranch?: string, cwd?: string): Promise<string>
+  deleteBranch(name: string, isPreview?: boolean, cwd?: string): Promise<DatabaseDeletionResult>
+  getConnectionString(branch: string, cwd?: string): Promise<string>
+  listBranches(cwd?: string): Promise<string[]>
+  branchExists(name: string, cwd?: string): Promise<boolean>
 
   // Additional operations for Vercel integration and validation
-  findPreviewBranch(branchName: string): Promise<string | null>
-  getBranchNameFromEndpoint(endpointId: string): Promise<string | null>
+  findPreviewBranch(branchName: string, cwd?: string): Promise<string | null>
+  getBranchNameFromEndpoint(endpointId: string, cwd?: string): Promise<string | null>
   sanitizeBranchName(branchName: string): string
-  isAuthenticated(): Promise<boolean>
+  isAuthenticated(cwd?: string): Promise<boolean>
   isCliAvailable(): Promise<boolean>
 
   // Configuration validation

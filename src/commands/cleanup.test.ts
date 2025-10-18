@@ -508,7 +508,7 @@ describe('CleanupCommand', () => {
             keepDatabase: false
           }
         )
-        expect(promptConfirmation).toHaveBeenNthCalledWith(2, 'Also delete the branch?', true)
+        expect(promptConfirmation).toHaveBeenNthCalledWith(2, 'Also delete the git branch?', true)
         expect(mockResourceCleanup.deleteBranch).toHaveBeenCalled()
         expect(logger.success).toHaveBeenCalledWith('Cleanup completed successfully')
       })

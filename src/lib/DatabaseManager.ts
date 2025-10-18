@@ -46,10 +46,15 @@ export class DatabaseManager {
   /**
    * Create database branch only if configured
    * Returns connection string if branch was created, null if skipped
+   *
+   * @param branchName - Name of the branch to create
+   * @param envFilePath - Path to .env file for configuration checks
+   * @param cwd - Optional working directory to run commands from
    */
   async createBranchIfConfigured(
     branchName: string,
-    envFilePath: string
+    envFilePath: string,
+    cwd?: string
   ): Promise<string | null> {
     // Guard condition: check if database branching should be used
     if (!(await this.shouldUseDatabaseBranching(envFilePath))) {
@@ -63,15 +68,23 @@ export class DatabaseManager {
       return null
     }
 
-    if (!(await this.provider.isAuthenticated())) {
-      logger.warn('Skipping database branch creation: Not authenticated with Neon CLI')
-      logger.warn('Run: neon auth')
-      return null
+    try {
+      const isAuth = await this.provider.isAuthenticated(cwd)
+      if (!isAuth) {
+        logger.warn('Skipping database branch creation: Not authenticated with Neon CLI')
+        logger.warn('Run: neon auth')
+        return null
+      }
+    } catch (error) {
+      // Authentication check failed with an unexpected error - surface it
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logger.error(`Database authentication check failed: ${errorMessage}`)
+      throw error
     }
 
     try {
       // Create the branch (which checks for preview first)
-      const connectionString = await this.provider.createBranch(branchName)
+      const connectionString = await this.provider.createBranch(branchName, undefined, cwd)
       logger.success(`Database branch ready: ${this.provider.sanitizeBranchName(branchName)}`)
       return connectionString
     } catch (error) {
@@ -85,15 +98,20 @@ export class DatabaseManager {
   /**
    * Delete database branch only if configured
    * Returns result object indicating what happened
+   *
+   * @param branchName - Name of the branch to delete
+   * @param shouldCleanup - Boolean indicating if database cleanup should be performed (pre-fetched config)
+   * @param isPreview - Whether this is a preview database branch
+   * @param cwd - Optional working directory to run commands from (prevents issues with deleted directories)
    */
   async deleteBranchIfConfigured(
     branchName: string,
-    envFilePath?: string,
-    isPreview: boolean = false
+    shouldCleanup: boolean,
+    isPreview: boolean = false,
+    cwd?: string
   ): Promise<import('../types/index.js').DatabaseDeletionResult> {
-    // Guard condition: check if database branching should be used
-    // If no envFilePath provided, skip the env file check (pre-determined config)
-    if (envFilePath && !(await this.shouldUseDatabaseBranching(envFilePath))) {
+    // If shouldCleanup is explicitly false, skip immediately
+    if (shouldCleanup === false) {
       return {
         success: true,
         deleted: false,
@@ -102,8 +120,8 @@ export class DatabaseManager {
       }
     }
 
-    // If no envFilePath, check provider configuration directly
-    if (!envFilePath && !this.provider.isConfigured()) {
+    // If shouldCleanup is explicitly true, validate provider configuration
+    if (!this.provider.isConfigured()) {
       logger.debug('Skipping database branch deletion: Database provider not configured')
       return {
         success: true,
@@ -125,20 +143,34 @@ export class DatabaseManager {
       }
     }
 
-    if (!(await this.provider.isAuthenticated())) {
-      logger.warn('Skipping database branch deletion: Not authenticated with DB Provider')
+    try {
+      const isAuth = await this.provider.isAuthenticated(cwd)
+      if (!isAuth) {
+        logger.warn('Skipping database branch deletion: Not authenticated with DB Provider')
+        return {
+          success: false,
+          deleted: false,
+          notFound: false,
+          error: "Not authenticated with DB Provider",
+          branchName
+        }
+      }
+    } catch (error) {
+      // Authentication check failed with an unexpected error - surface it
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logger.error(`Database authentication check failed: ${errorMessage}`)
       return {
         success: false,
         deleted: false,
         notFound: false,
-        error: "Not authenticated with DB Provider",
+        error: `Authentication check failed: ${errorMessage}`,
         branchName
       }
     }
 
     try {
       // Call provider and return its result directly
-      const result = await this.provider.deleteBranch(branchName, isPreview)
+      const result = await this.provider.deleteBranch(branchName, isPreview, cwd)
       return result
     } catch (error) {
       // Unexpected error (shouldn't happen since provider returns result object)

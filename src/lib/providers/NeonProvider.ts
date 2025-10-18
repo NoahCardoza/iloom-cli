@@ -87,8 +87,11 @@ export class NeonProvider implements DatabaseProvider {
   /**
    * Execute a Neon CLI command and return stdout
    * Throws an error if the command fails
+   *
+   * @param args - Command arguments to pass to neon CLI
+   * @param cwd - Optional working directory to run the command from (defaults to current directory)
    */
-  private async executeNeonCommand(args: string[]): Promise<string> {
+  private async executeNeonCommand(args: string[], cwd?: string): Promise<string> {
     // Check if provider is properly configured
     if (!this._isConfigured) {
       throw new Error('NeonProvider is not configured. Check NEON_PROJECT_ID and NEON_PARENT_BRANCH environment variables.')
@@ -98,24 +101,17 @@ export class NeonProvider implements DatabaseProvider {
     const command = `neon ${args.join(' ')}`
     logger.debug(`Executing Neon CLI command: ${command}`)
     logger.debug(`Project ID being used: ${this.config.projectId}`)
-
-    try {
-      const result = await execa('neon', args, {
-        timeout: 30000,
-        encoding: 'utf8',
-        stdio: 'pipe',
-      })
-      return result.stdout
-    } catch (error) {
-      const execaError = error as ExecaError
-      const stderr = execaError.stderr ?? execaError.message ?? 'Unknown Neon CLI error'
-      logger.error(`Neon CLI command failed: ${command}`)
-      logger.error(`Error: ${stderr}`)
-      if (execaError.stdout) {
-        logger.error(`Stdout: ${execaError.stdout}`)
-      }
-      throw new Error(`Neon CLI command failed: ${stderr}`)
+    if (cwd) {
+      logger.debug(`Working directory: ${cwd}`)
     }
+
+    const result = await execa('neon', args, {
+      timeout: 30000,
+      encoding: 'utf8',
+      stdio: 'pipe',
+      ...(cwd && { cwd }),
+    })
+    return result.stdout
   }
 
   /**
@@ -137,8 +133,11 @@ export class NeonProvider implements DatabaseProvider {
   /**
    * Check if user is authenticated with Neon CLI
    * Ports: check_neon_auth() from bash/utils/neon-utils.sh:25-36
+   *
+   * @param cwd - Optional working directory to run the command from (prevents issues with deleted directories)
+   * @throws Error if authentication check fails for reasons other than not being authenticated
    */
-  async isAuthenticated(): Promise<boolean> {
+  async isAuthenticated(cwd?: string): Promise<boolean> {
     const cliAvailable = await this.isCliAvailable()
     if (!cliAvailable) {
       return false
@@ -148,10 +147,26 @@ export class NeonProvider implements DatabaseProvider {
       await execa('neon', ['me'], {
         timeout: 10000,
         stdio: 'pipe',
+        ...(cwd && { cwd }),
       })
       return true
-    } catch {
-      return false
+    } catch (error) {
+      const execaError = error as ExecaError
+      const stderr = execaError.stderr?.trim() ?? ''
+
+      // Check for authentication failure patterns (should return false, not throw)
+      const isAuthError =
+        stderr.toLowerCase().includes('not authenticated') ||
+        stderr.toLowerCase().includes('not logged in') ||
+        stderr.toLowerCase().includes('authentication required') ||
+        stderr.toLowerCase().includes('login required')
+
+      if (isAuthError) {
+        return false
+      }
+
+      // For any other error, let it bubble up
+      throw error
     }
   }
 
@@ -187,8 +202,10 @@ export class NeonProvider implements DatabaseProvider {
   /**
    * List all branches in the Neon project
    * Ports: list_neon_branches() from bash/utils/neon-utils.sh:63-74
+   *
+   * @param cwd - Optional working directory to run commands from
    */
-  async listBranches(): Promise<string[]> {
+  async listBranches(cwd?: string): Promise<string[]> {
     const output = await this.executeNeonCommand([
       'branches',
       'list',
@@ -196,7 +213,7 @@ export class NeonProvider implements DatabaseProvider {
       this.config.projectId,
       '--output',
       'json',
-    ])
+    ], cwd)
 
     const branches: NeonBranch[] = JSON.parse(output)
     return branches.map(branch => branch.name)
@@ -205,24 +222,30 @@ export class NeonProvider implements DatabaseProvider {
   /**
    * Check if a branch exists
    * Ports: check_neon_branch_exists() from bash/utils/neon-utils.sh:38-61
+   *
+   * @param name - Branch name to check
+   * @param cwd - Optional working directory to run commands from
    */
-  async branchExists(name: string): Promise<boolean> {
-    const branches = await this.listBranches()
+  async branchExists(name: string, cwd?: string): Promise<boolean> {
+    const branches = await this.listBranches(cwd)
     return branches.includes(name)
   }
 
   /**
    * Get connection string for a specific branch
    * Ports: get_neon_connection_string() from bash/utils/neon-utils.sh:76-90
+   *
+   * @param branch - Branch name to get connection string for
+   * @param cwd - Optional working directory to run commands from
    */
-  async getConnectionString(branch: string): Promise<string> {
+  async getConnectionString(branch: string, cwd?: string): Promise<string> {
     const connectionString = await this.executeNeonCommand([
       'connection-string',
       '--branch',
       branch,
       '--project-id',
       this.config.projectId,
-    ])
+    ], cwd)
     return connectionString.trim()
   }
 
@@ -230,11 +253,14 @@ export class NeonProvider implements DatabaseProvider {
    * Find Vercel preview database branch
    * Checks for both patterns: preview/<branch> and preview_<sanitized-branch>
    * Ports: find_preview_database_branch() from bash/utils/neon-utils.sh:92-124
+   *
+   * @param branchName - Branch name to find preview for
+   * @param cwd - Optional working directory to run commands from
    */
-  async findPreviewBranch(branchName: string): Promise<string | null> {
+  async findPreviewBranch(branchName: string, cwd?: string): Promise<string | null> {
     // Check for exact preview branch match with slash pattern
     const slashPattern = `preview/${branchName}`
-    if (await this.branchExists(slashPattern)) {
+    if (await this.branchExists(slashPattern, cwd)) {
       logger.info(`Found Vercel preview database: ${slashPattern}`)
       return slashPattern
     }
@@ -242,7 +268,7 @@ export class NeonProvider implements DatabaseProvider {
     // Check for underscore pattern variation
     const sanitized = this.sanitizeBranchName(branchName)
     const underscorePattern = `preview_${sanitized}`
-    if (await this.branchExists(underscorePattern)) {
+    if (await this.branchExists(underscorePattern, cwd)) {
       logger.info(`Found Vercel preview database: ${underscorePattern}`)
       return underscorePattern
     }
@@ -255,12 +281,16 @@ export class NeonProvider implements DatabaseProvider {
    * ALWAYS checks for Vercel preview database first
    * Returns connection string for the branch
    * Ports: create_neon_database_branch() from bash/utils/neon-utils.sh:126-187
+   *
+   * @param name - Name for the new branch
+   * @param fromBranch - Parent branch to create from (defaults to config.parentBranch)
+   * @param cwd - Optional working directory to run commands from
    */
-  async createBranch(name: string, fromBranch?: string): Promise<string> {
+  async createBranch(name: string, fromBranch?: string, cwd?: string): Promise<string> {
     // Always check for existing Vercel preview database first (lines 149-158)
-    const previewBranch = await this.findPreviewBranch(name)
+    const previewBranch = await this.findPreviewBranch(name, cwd)
     if (previewBranch) {
-      const connectionString = await this.getConnectionString(previewBranch)
+      const connectionString = await this.getConnectionString(previewBranch, cwd)
       logger.success(`Using existing Vercel preview database: ${previewBranch}`)
       return connectionString
     }
@@ -283,13 +313,13 @@ export class NeonProvider implements DatabaseProvider {
       parentBranch,
       '--project-id',
       this.config.projectId,
-    ])
+    ], cwd)
 
     logger.success('Database branch created successfully')
 
     // Get the connection string for the new branch
     logger.info('Getting connection string for new database branch...')
-    const connectionString = await this.getConnectionString(sanitizedName)
+    const connectionString = await this.getConnectionString(sanitizedName, cwd)
 
     return connectionString
   }
@@ -298,14 +328,18 @@ export class NeonProvider implements DatabaseProvider {
    * Delete a database branch
    * Includes preview database protection with user confirmation
    * Ports: delete_neon_database_branch() from bash/utils/neon-utils.sh:204-259
+   *
+   * @param name - Name of the branch to delete
+   * @param isPreview - Whether this is a preview database branch
+   * @param cwd - Optional working directory to run commands from (prevents issues with deleted directories)
    */
-  async deleteBranch(name: string, isPreview: boolean = false): Promise<import('../../types/index.js').DatabaseDeletionResult> {
+  async deleteBranch(name: string, isPreview: boolean = false, cwd?: string): Promise<import('../../types/index.js').DatabaseDeletionResult> {
     // Sanitize branch name for Neon
     const sanitizedName = this.sanitizeBranchName(name)
 
     // For preview contexts, check for preview databases first
     if (isPreview) {
-      const previewBranch = await this.findPreviewBranch(name)
+      const previewBranch = await this.findPreviewBranch(name, cwd)
       if (previewBranch) {
         logger.warn(`Found Vercel preview database: ${previewBranch}`)
         logger.warn('Preview databases are managed by Vercel and will be cleaned up automatically')
@@ -326,7 +360,7 @@ export class NeonProvider implements DatabaseProvider {
               previewBranch,
               '--project-id',
               this.config.projectId,
-            ])
+            ], cwd)
             logger.success('Preview database deleted successfully')
             return {
               success: true,
@@ -364,7 +398,7 @@ export class NeonProvider implements DatabaseProvider {
     logger.info(`Checking for Neon database branch: ${sanitizedName}`)
 
     try {
-      const exists = await this.branchExists(sanitizedName)
+      const exists = await this.branchExists(sanitizedName, cwd)
 
       if (!exists) {
         logger.info(`No database branch found for '${name}'`)
@@ -384,7 +418,7 @@ export class NeonProvider implements DatabaseProvider {
         sanitizedName,
         '--project-id',
         this.config.projectId,
-      ])
+      ], cwd)
       logger.success('Database branch deleted successfully')
 
       return {
@@ -410,13 +444,16 @@ export class NeonProvider implements DatabaseProvider {
    * Get branch name from endpoint ID (reverse lookup)
    * Searches all branches to find one with matching endpoint
    * Ports: get_neon_branch_name() from bash/utils/neon-utils.sh:262-308
+   *
+   * @param endpointId - Endpoint ID to search for
+   * @param cwd - Optional working directory to run commands from
    */
-  async getBranchNameFromEndpoint(endpointId: string): Promise<string | null> {
-    const branches = await this.listBranches()
+  async getBranchNameFromEndpoint(endpointId: string, cwd?: string): Promise<string | null> {
+    const branches = await this.listBranches(cwd)
 
     for (const branch of branches) {
       try {
-        const connectionString = await this.getConnectionString(branch)
+        const connectionString = await this.getConnectionString(branch, cwd)
         const branchEndpointId = this.extractEndpointId(connectionString)
 
         if (branchEndpointId === endpointId) {

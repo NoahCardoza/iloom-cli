@@ -13,6 +13,7 @@ vi.mock('../../src/lib/process/ProcessManager.js')
 vi.mock('../../src/utils/git.js', () => ({
   executeGitCommand: vi.fn().mockResolvedValue(undefined),
   hasUncommittedChanges: vi.fn().mockResolvedValue(false),
+  findMainWorktreePath: vi.fn().mockResolvedValue('/test/main-worktree'),
 }))
 
 describe('ResourceCleanup - Database Integration', () => {
@@ -42,15 +43,21 @@ describe('ResourceCleanup - Database Integration', () => {
       const worktreePath = '/test/worktree-issue-123'
       const deletionResult = { success: true, deleted: true, notFound: false, branchName: 'issue-123-test' }
       mockDatabase.deleteBranchIfConfigured = vi.fn().mockResolvedValue(deletionResult)
+      mockDatabase.shouldUseDatabaseBranching = vi.fn().mockResolvedValue(true)
 
       // WHEN: cleanupDatabase is called with branch name and worktree path
       const result = await resourceCleanup.cleanupDatabase(branchName, worktreePath)
 
-      // THEN: DatabaseManager.deleteBranchIfConfigured is called with branch name and .env path
-      expect(mockDatabase.deleteBranchIfConfigured).toHaveBeenCalledWith(
-        branchName,
-        `${worktreePath}/.env`
-      )
+      // THEN: shouldUseDatabaseBranching is called first to pre-fetch config
+      expect(mockDatabase.shouldUseDatabaseBranching).toHaveBeenCalledWith(`${worktreePath}/.env`)
+
+      // THEN: DatabaseManager.deleteBranchIfConfigured is called with branch name, shouldCleanup boolean, and isPreview
+      // Note: cwd parameter is optional and may be undefined in tests
+      const calls = vi.mocked(mockDatabase.deleteBranchIfConfigured).mock.calls
+      expect(calls).toHaveLength(1)
+      expect(calls[0][0]).toBe(branchName)
+      expect(calls[0][1]).toBe(true) // shouldCleanup
+      expect(calls[0][2]).toBe(false) // isPreview
 
       // THEN: Returns true when branch was deleted
       expect(result).toBe(true)
@@ -60,6 +67,7 @@ describe('ResourceCleanup - Database Integration', () => {
       // GIVEN: DatabaseManager.deleteBranchIfConfigured returns deleted=true
       const deletionResult = { success: true, deleted: true, notFound: false, branchName: 'issue-123-test' }
       mockDatabase.deleteBranchIfConfigured = vi.fn().mockResolvedValue(deletionResult)
+      mockDatabase.shouldUseDatabaseBranching = vi.fn().mockResolvedValue(true)
 
       const branchName = 'issue-123-test'
       const worktreePath = '/test/worktree-issue-123'
@@ -75,6 +83,7 @@ describe('ResourceCleanup - Database Integration', () => {
       // GIVEN: DatabaseManager.deleteBranchIfConfigured returns notFound=true
       const notFoundResult = { success: true, deleted: false, notFound: true, branchName: 'issue-123-test' }
       mockDatabase.deleteBranchIfConfigured = vi.fn().mockResolvedValue(notFoundResult)
+      mockDatabase.shouldUseDatabaseBranching = vi.fn().mockResolvedValue(true)
 
       const branchName = 'issue-123-test'
       const worktreePath = '/test/worktree-issue-123'
@@ -104,6 +113,7 @@ describe('ResourceCleanup - Database Integration', () => {
       // GIVEN: DatabaseManager.deleteBranchIfConfigured returns error result
       const errorResult = { success: false, deleted: false, notFound: false, error: 'Neon CLI error', branchName: 'issue-123-test' }
       mockDatabase.deleteBranchIfConfigured = vi.fn().mockResolvedValue(errorResult)
+      mockDatabase.shouldUseDatabaseBranching = vi.fn().mockResolvedValue(true)
 
       const branchName = 'issue-123-test'
       const worktreePath = '/test/worktree-issue-123'
@@ -119,6 +129,7 @@ describe('ResourceCleanup - Database Integration', () => {
       // GIVEN: DatabaseManager.deleteBranchIfConfigured throws unexpected error
       const dbError = new Error('Unexpected error')
       mockDatabase.deleteBranchIfConfigured = vi.fn().mockRejectedValue(dbError)
+      mockDatabase.shouldUseDatabaseBranching = vi.fn().mockResolvedValue(true)
 
       const branchName = 'issue-123-test'
       const worktreePath = '/test/worktree-issue-123'
@@ -158,13 +169,18 @@ describe('ResourceCleanup - Database Integration', () => {
       const deletionResult = { success: true, deleted: true, notFound: false, branchName: 'issue-123-test' }
       mockDatabase.deleteBranchIfConfigured = vi.fn().mockResolvedValue(deletionResult)
 
+      // Mock shouldUseDatabaseBranching to return true for pre-fetch
+      mockDatabase.shouldUseDatabaseBranching = vi.fn().mockResolvedValue(true)
+
       // WHEN: cleanupWorktree is called
       const result = await resourceCleanup.cleanupWorktree(parsedIssue, { keepDatabase: false })
 
-      // THEN: cleanupDatabase is called (without envFilePath since it's pre-read)
-      expect(mockDatabase.deleteBranchIfConfigured).toHaveBeenCalledWith(
-        'issue-123-test'
-      )
+      // THEN: deleteBranchIfConfigured is called with shouldCleanup = true and isPreview = false
+      const calls = vi.mocked(mockDatabase.deleteBranchIfConfigured).mock.calls
+      expect(calls).toHaveLength(1)
+      expect(calls[0][0]).toBe('issue-123-test')
+      expect(calls[0][1]).toBe(true) // shouldCleanup
+      expect(calls[0][2]).toBe(false) // isPreview
 
       // THEN: Operation result indicates branch was deleted
       const dbOperation = result.operations.find((op) => op.type === 'database')
@@ -249,10 +265,10 @@ describe('ResourceCleanup - Database Integration', () => {
       // WHEN: cleanupWorktree is called
       const result = await resourceCleanup.cleanupWorktree(parsedIssue, { keepDatabase: false })
 
-      // THEN: Database cleanup returns false and doesn't throw (non-fatal)
-      // The cleanupDatabase method catches errors and returns false instead of throwing
-      // This means the result should still be success=true since worktree cleanup succeeded
-      expect(result.success).toBe(true)
+      // THEN: Cleanup fails when database cleanup fails (errors are counted)
+      expect(result.success).toBe(false)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0].message).toBe('Database deletion failed')
 
       // THEN: Database operation shows skipped (because deleteBranchIfConfigured is called but returns false)
       const dbOperation = result.operations.find((op) => op.type === 'database')
@@ -303,14 +319,18 @@ describe('ResourceCleanup - Database Integration', () => {
       vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValue()
       const deletionResult = { success: true, deleted: true, notFound: false, branchName: 'feature-branch' }
       mockDatabase.deleteBranchIfConfigured = vi.fn().mockResolvedValue(deletionResult)
+      mockDatabase.shouldUseDatabaseBranching = vi.fn().mockResolvedValue(true)
 
       // WHEN: cleanupWorktree is called for PR
       const result = await resourceCleanup.cleanupWorktree(parsedPR, { keepDatabase: false })
 
-      // THEN: Database cleanup is called with PR branch name (without envFilePath since it's pre-read)
-      expect(mockDatabase.deleteBranchIfConfigured).toHaveBeenCalledWith(
-        'feature-branch'
-      )
+      // THEN: Database cleanup is called with shouldCleanup = true from pre-fetch
+      const calls = vi.mocked(mockDatabase.deleteBranchIfConfigured).mock.calls
+      expect(calls.length).toBeGreaterThanOrEqual(1)
+      const call = calls.find(c => c[0] === 'feature-branch')
+      expect(call).toBeDefined()
+      expect(call![1]).toBe(true) // shouldCleanup
+      expect(call![2]).toBe(false) // isPreview
 
       // THEN: Database operation succeeds
       const dbOperation = result.operations.find((op) => op.type === 'database')
@@ -339,14 +359,18 @@ describe('ResourceCleanup - Database Integration', () => {
       vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValue()
       const deletionResult = { success: true, deleted: true, notFound: false, branchName: 'feature-xyz' }
       mockDatabase.deleteBranchIfConfigured = vi.fn().mockResolvedValue(deletionResult)
+      mockDatabase.shouldUseDatabaseBranching = vi.fn().mockResolvedValue(true)
 
       // WHEN: cleanupWorktree is called for branch
       const result = await resourceCleanup.cleanupWorktree(parsedBranch, { keepDatabase: false })
 
-      // THEN: Database cleanup is called with branch name (without envFilePath since it's pre-read)
-      expect(mockDatabase.deleteBranchIfConfigured).toHaveBeenCalledWith(
-        'feature-xyz'
-      )
+      // THEN: Database cleanup is called with shouldCleanup = true from pre-fetch
+      const calls = vi.mocked(mockDatabase.deleteBranchIfConfigured).mock.calls
+      expect(calls.length).toBeGreaterThanOrEqual(1)
+      const call = calls.find(c => c[0] === 'feature-xyz')
+      expect(call).toBeDefined()
+      expect(call![1]).toBe(true) // shouldCleanup
+      expect(call![2]).toBe(false) // isPreview
 
       // THEN: Database operation succeeds
       const dbOperation = result.operations.find((op) => op.type === 'database')
@@ -385,20 +409,26 @@ describe('ResourceCleanup - Database Integration', () => {
       mockDatabase.deleteBranchIfConfigured = vi.fn()
         .mockResolvedValueOnce(deletionResult1)
         .mockResolvedValueOnce(deletionResult2)
+      mockDatabase.shouldUseDatabaseBranching = vi.fn().mockResolvedValue(true)
 
       // WHEN: cleanupMultipleWorktrees is called
       const results = await resourceCleanup.cleanupMultipleWorktrees(['123', '456'], {
         keepDatabase: false,
       })
 
-      // THEN: Database cleanup is called for both worktrees (without envFilePath since it's pre-read)
-      expect(mockDatabase.deleteBranchIfConfigured).toHaveBeenCalledTimes(2)
-      expect(mockDatabase.deleteBranchIfConfigured).toHaveBeenCalledWith(
-        'issue-123-test'
-      )
-      expect(mockDatabase.deleteBranchIfConfigured).toHaveBeenCalledWith(
-        'issue-456-test'
-      )
+      // THEN: Database cleanup is called for both worktrees with shouldCleanup = true
+      const calls = vi.mocked(mockDatabase.deleteBranchIfConfigured).mock.calls
+      expect(calls).toHaveLength(2)
+
+      const call1 = calls.find(c => c[0] === 'issue-123-test')
+      expect(call1).toBeDefined()
+      expect(call1![1]).toBe(true) // shouldCleanup
+      expect(call1![2]).toBe(false) // isPreview
+
+      const call2 = calls.find(c => c[0] === 'issue-456-test')
+      expect(call2).toBeDefined()
+      expect(call2![1]).toBe(true) // shouldCleanup
+      expect(call2![2]).toBe(false) // isPreview
 
       // THEN: Both results include database cleanup operations
       expect(results).toHaveLength(2)

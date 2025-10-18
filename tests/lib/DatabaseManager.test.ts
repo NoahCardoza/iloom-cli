@@ -211,7 +211,7 @@ describe('DatabaseManager', () => {
       expect(result).toBe(connectionString)
       expect(mockProvider.isCliAvailable).toHaveBeenCalled()
       expect(mockProvider.isAuthenticated).toHaveBeenCalled()
-      expect(mockProvider.createBranch).toHaveBeenCalledWith('feature-branch')
+      expect(mockProvider.createBranch).toHaveBeenCalledWith('feature-branch', undefined, undefined)
       expect(mockProvider.sanitizeBranchName).toHaveBeenCalledWith('feature-branch')
     })
 
@@ -244,13 +244,11 @@ describe('DatabaseManager', () => {
     })
 
     it('should return early when database branching not configured', async () => {
-      // Remove NEON env vars
-      delete process.env.NEON_PROJECT_ID
-
       // Mock provider as not configured
       vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
-      await databaseManager.deleteBranchIfConfigured('feature-branch', '/path/to/.env')
+      // Pre-fetched config says shouldCleanup = true, but provider not configured
+      await databaseManager.deleteBranchIfConfigured('feature-branch', true)
 
       expect(mockProvider.deleteBranch).not.toHaveBeenCalled()
     })
@@ -258,7 +256,7 @@ describe('DatabaseManager', () => {
     it('should return early when CLI not available', async () => {
       vi.mocked(mockProvider.isCliAvailable).mockResolvedValue(false)
 
-      await databaseManager.deleteBranchIfConfigured('feature-branch', '/path/to/.env')
+      await databaseManager.deleteBranchIfConfigured('feature-branch', true)
 
       expect(mockProvider.deleteBranch).not.toHaveBeenCalled()
     })
@@ -266,23 +264,23 @@ describe('DatabaseManager', () => {
     it('should return early when not authenticated', async () => {
       vi.mocked(mockProvider.isAuthenticated).mockResolvedValue(false)
 
-      await databaseManager.deleteBranchIfConfigured('feature-branch', '/path/to/.env')
+      await databaseManager.deleteBranchIfConfigured('feature-branch', true)
 
       expect(mockProvider.deleteBranch).not.toHaveBeenCalled()
     })
 
     it('should delete branch when fully configured', async () => {
-      await databaseManager.deleteBranchIfConfigured('feature-branch', '/path/to/.env')
+      await databaseManager.deleteBranchIfConfigured('feature-branch', true)
 
       expect(mockProvider.isCliAvailable).toHaveBeenCalled()
       expect(mockProvider.isAuthenticated).toHaveBeenCalled()
-      expect(mockProvider.deleteBranch).toHaveBeenCalledWith('feature-branch', false)
+      expect(mockProvider.deleteBranch).toHaveBeenCalledWith('feature-branch', false, undefined)
     })
 
     it('should pass isPreview flag to provider', async () => {
-      await databaseManager.deleteBranchIfConfigured('feature-branch', '/path/to/.env', true)
+      await databaseManager.deleteBranchIfConfigured('feature-branch', true, true)
 
-      expect(mockProvider.deleteBranch).toHaveBeenCalledWith('feature-branch', true)
+      expect(mockProvider.deleteBranch).toHaveBeenCalledWith('feature-branch', true, undefined)
     })
 
     it('should return error result when deletion fails', async () => {
@@ -290,7 +288,7 @@ describe('DatabaseManager', () => {
       vi.mocked(mockProvider.deleteBranch).mockRejectedValue(error)
 
       // Should return error result object, not throw
-      const result = await databaseManager.deleteBranchIfConfigured('feature-branch', '/path/to/.env')
+      const result = await databaseManager.deleteBranchIfConfigured('feature-branch', true)
 
       expect(result).toEqual({
         success: false,
@@ -306,7 +304,7 @@ describe('DatabaseManager', () => {
       vi.mocked(mockProvider.deleteBranch).mockRejectedValue('String error')
 
       // Should return error result object, not throw
-      const result = await databaseManager.deleteBranchIfConfigured('feature-branch', '/path/to/.env')
+      const result = await databaseManager.deleteBranchIfConfigured('feature-branch', true)
 
       expect(result).toEqual({
         success: false,
@@ -314,6 +312,104 @@ describe('DatabaseManager', () => {
         notFound: false,
         error: 'String error',
         branchName: 'feature-branch'
+      })
+    })
+
+    describe('with pre-fetched shouldCleanup parameter', () => {
+      it('should delete branch when shouldCleanup = true without reading env file', async () => {
+        // GIVEN: shouldCleanup = true passed directly
+        // WHEN: deleteBranchIfConfigured called with shouldCleanup = true
+        await databaseManager.deleteBranchIfConfigured('feature-branch', true)
+
+        // THEN: Provider deletion called without env file read
+        expect(mockEnvironment.readEnvFile).not.toHaveBeenCalled()
+        expect(mockProvider.isCliAvailable).toHaveBeenCalled()
+        expect(mockProvider.isAuthenticated).toHaveBeenCalled()
+        expect(mockProvider.deleteBranch).toHaveBeenCalledWith('feature-branch', false, undefined)
+      })
+
+      it('should skip deletion when shouldCleanup = false', async () => {
+        // GIVEN: shouldCleanup = false passed directly
+        // WHEN: deleteBranchIfConfigured called
+        const result = await databaseManager.deleteBranchIfConfigured('feature-branch', false)
+
+        // THEN: Returns early with notFound result
+        expect(result).toEqual({
+          success: true,
+          deleted: false,
+          notFound: true,
+          branchName: 'feature-branch'
+        })
+
+        // THEN: No provider methods called
+        expect(mockEnvironment.readEnvFile).not.toHaveBeenCalled()
+        expect(mockProvider.isCliAvailable).not.toHaveBeenCalled()
+        expect(mockProvider.deleteBranch).not.toHaveBeenCalled()
+      })
+
+      it('should check provider configuration when shouldCleanup = true but provider not configured', async () => {
+        // GIVEN: shouldCleanup = true
+        // GIVEN: Provider.isConfigured() = false
+        vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
+
+        // WHEN: deleteBranchIfConfigured called
+        const result = await databaseManager.deleteBranchIfConfigured('feature-branch', true)
+
+        // THEN: Returns early with notFound result
+        expect(result).toEqual({
+          success: true,
+          deleted: false,
+          notFound: true,
+          branchName: 'feature-branch'
+        })
+
+        // THEN: No deletion attempted
+        expect(mockProvider.deleteBranch).not.toHaveBeenCalled()
+      })
+
+      it('should handle CLI not available when shouldCleanup = true', async () => {
+        // GIVEN: shouldCleanup = true
+        // GIVEN: CLI not available
+        vi.mocked(mockProvider.isCliAvailable).mockResolvedValue(false)
+
+        // WHEN: deleteBranchIfConfigured called
+        const result = await databaseManager.deleteBranchIfConfigured('feature-branch', true)
+
+        // THEN: Returns error result
+        expect(result).toEqual({
+          success: false,
+          deleted: false,
+          notFound: true,
+          error: 'CLI tool not available',
+          branchName: 'feature-branch'
+        })
+      })
+
+      it('should handle not authenticated when shouldCleanup = true', async () => {
+        // GIVEN: shouldCleanup = true
+        // GIVEN: Not authenticated
+        vi.mocked(mockProvider.isAuthenticated).mockResolvedValue(false)
+
+        // WHEN: deleteBranchIfConfigured called
+        const result = await databaseManager.deleteBranchIfConfigured('feature-branch', true)
+
+        // THEN: Returns error result
+        expect(result).toEqual({
+          success: false,
+          deleted: false,
+          notFound: false,
+          error: 'Not authenticated with DB Provider',
+          branchName: 'feature-branch'
+        })
+      })
+
+      it('should pass isPreview flag with shouldCleanup = true', async () => {
+        // GIVEN: shouldCleanup = true and isPreview = true
+        // WHEN: deleteBranchIfConfigured called
+        await databaseManager.deleteBranchIfConfigured('feature-branch', true, true)
+
+        // THEN: Provider called with isPreview flag
+        expect(mockProvider.deleteBranch).toHaveBeenCalledWith('feature-branch', true, undefined)
       })
     })
   })
@@ -418,7 +514,7 @@ describe('DatabaseManager', () => {
       const branchName = 'feature/issue-123/fix'
       await databaseManager.createBranchIfConfigured(branchName, '/path/to/.env')
 
-      expect(mockProvider.createBranch).toHaveBeenCalledWith(branchName)
+      expect(mockProvider.createBranch).toHaveBeenCalledWith(branchName, undefined, undefined)
       expect(mockProvider.sanitizeBranchName).toHaveBeenCalledWith(branchName)
     })
   })

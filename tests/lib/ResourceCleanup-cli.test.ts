@@ -198,8 +198,10 @@ describe('ResourceCleanup - CLI Integration', () => {
 
       const result = await resourceCleanup.cleanupWorktree(parsed)
 
-      // Cleanup should still succeed overall
-      expect(result.success).toBe(true)
+      // Cleanup should fail overall when CLI cleanup fails (errors are counted)
+      expect(result.success).toBe(false)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0].message).toBe('Permission denied')
       expect(result.operations).toContainEqual({
         type: 'cli-symlinks',
         success: false,
