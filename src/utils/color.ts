@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import logger from './logger'
 
 /**
  * RGB color representation
@@ -133,7 +134,9 @@ export function generateColorFromBranchName(branchName: string): ColorData {
 	// Matches bash: local index=$(( 0x$hash % ${#colors[@]} ))
 	const hashPrefix = hash.slice(0, 8)
 	const palette = getColorPalette()
-	const index = parseInt(hashPrefix, 16) % palette.length
+	const hashAsInt = parseInt(hashPrefix, 16)
+	const index = hashAsInt % palette.length
+	logger.debug(`[generateColorFromBranchName] Branch name: ${branchName}, Hash: ${hash}, Hash prefix: ${hashPrefix}, Hash as int: ${hashAsInt}, Index: ${index}`)
 
 	// Get color from palette
 	const rgb = palette[index]
