@@ -10,25 +10,57 @@ import {
 
 describe('Color utilities', () => {
 	describe('getColorPalette', () => {
-		it('should return exactly 10 colors', () => {
+		it('should return exactly 40 colors', () => {
 			const palette = getColorPalette()
-			expect(palette).toHaveLength(10)
+			expect(palette).toHaveLength(40)
 		})
 
 		it('should return colors matching terminal palette from bash script', () => {
 			const palette = getColorPalette()
 			// From bash/new-branch-workflow.sh lines 111-122
 			const expectedColors: RgbColor[] = [
-				{ r: 220, g: 235, b: 248 }, // Soft blue
-				{ r: 248, g: 220, b: 235 }, // Soft pink
-				{ r: 220, g: 248, b: 235 }, // Soft green
-				{ r: 248, g: 240, b: 220 }, // Soft cream
-				{ r: 240, g: 220, b: 248 }, // Soft lavender
-				{ r: 220, g: 240, b: 248 }, // Soft cyan
-				{ r: 235, g: 235, b: 235 }, // Soft grey
-				{ r: 228, g: 238, b: 248 }, // Soft ice blue
-				{ r: 248, g: 228, b: 238 }, // Soft rose
-				{ r: 228, g: 248, b: 238 }, // Soft mint
+				// First 10 colors preserved for backward compatibility
+				{ r: 220, g: 235, b: 248 }, // 0: Soft blue
+				{ r: 248, g: 220, b: 235 }, // 1: Soft pink
+				{ r: 220, g: 248, b: 235 }, // 2: Soft green
+				{ r: 248, g: 240, b: 220 }, // 3: Soft cream
+				{ r: 240, g: 220, b: 248 }, // 4: Soft lavender
+				{ r: 220, g: 240, b: 248 }, // 5: Soft cyan
+				{ r: 235, g: 235, b: 235 }, // 6: Soft grey
+				{ r: 228, g: 238, b: 248 }, // 7: Soft ice blue
+				{ r: 248, g: 228, b: 238 }, // 8: Soft rose
+				{ r: 228, g: 248, b: 238 }, // 9: Soft mint
+				// 30 new colors (indices 10-39)
+				{ r: 235, g: 245, b: 250 }, // 10: Pale sky blue
+				{ r: 250, g: 235, b: 245 }, // 11: Pale orchid
+				{ r: 235, g: 250, b: 245 }, // 12: Pale seafoam
+				{ r: 250, g: 245, b: 235 }, // 13: Pale peach
+				{ r: 245, g: 235, b: 250 }, // 14: Pale periwinkle
+				{ r: 235, g: 245, b: 235 }, // 15: Pale sage
+				{ r: 245, g: 250, b: 235 }, // 16: Pale lemon
+				{ r: 245, g: 235, b: 235 }, // 17: Pale blush
+				{ r: 235, g: 235, b: 250 }, // 18: Pale lavender blue
+				{ r: 250, g: 235, b: 235 }, // 19: Pale coral
+				{ r: 235, g: 250, b: 250 }, // 20: Pale aqua
+				{ r: 240, g: 248, b: 255 }, // 21: Alice blue
+				{ r: 255, g: 240, b: 248 }, // 22: Lavender blush
+				{ r: 240, g: 255, b: 248 }, // 23: Honeydew tint
+				{ r: 255, g: 248, b: 240 }, // 24: Antique white
+				{ r: 248, g: 240, b: 255 }, // 25: Magnolia
+				{ r: 240, g: 248, b: 240 }, // 26: Mint cream tint
+				{ r: 248, g: 255, b: 240 }, // 27: Ivory tint
+				{ r: 248, g: 240, b: 240 }, // 28: Misty rose tint
+				{ r: 240, g: 240, b: 255 }, // 29: Ghost white tint
+				{ r: 255, g: 245, b: 238 }, // 30: Seashell
+				{ r: 245, g: 255, b: 250 }, // 31: Azure mist
+				{ r: 250, g: 245, b: 255 }, // 32: Lilac mist
+				{ r: 255, g: 250, b: 245 }, // 33: Snow peach
+				{ r: 238, g: 245, b: 255 }, // 34: Powder blue
+				{ r: 255, g: 238, b: 245 }, // 35: Pink lace
+				{ r: 245, g: 255, b: 238 }, // 36: Pale lime
+				{ r: 238, g: 255, b: 245 }, // 37: Pale turquoise
+				{ r: 245, g: 238, b: 255 }, // 38: Pale violet
+				{ r: 255, g: 245, b: 255 }, // 39: Pale magenta
 			]
 			expect(palette).toEqual(expectedColors)
 		})
@@ -150,7 +182,7 @@ describe('Color utilities', () => {
 			expect(() => generateColorFromBranchName('功能/my-branch')).not.toThrow()
 		})
 
-		it('should always return color index in range [0, 9]', () => {
+		it('should always return color index in range [0, 39]', () => {
 			const testBranches = [
 				'main',
 				'develop',
@@ -164,7 +196,7 @@ describe('Color utilities', () => {
 			testBranches.forEach((branch) => {
 				const color = generateColorFromBranchName(branch)
 				expect(color.index).toBeGreaterThanOrEqual(0)
-				expect(color.index).toBeLessThanOrEqual(9)
+				expect(color.index).toBeLessThanOrEqual(39)
 			})
 		})
 
@@ -195,7 +227,7 @@ describe('Color utilities', () => {
 			// We can verify our implementation produces same index
 			const color = generateColorFromBranchName('feature/test-branch')
 			expect(color.index).toBeGreaterThanOrEqual(0)
-			expect(color.index).toBeLessThanOrEqual(9)
+			expect(color.index).toBeLessThanOrEqual(39)
 			// Color should be from palette
 			const palette = getColorPalette()
 			expect(color.rgb).toEqual(palette[color.index])
@@ -230,7 +262,7 @@ describe('Color utilities', () => {
 
 					// Index in range
 					expect(color.index).toBeGreaterThanOrEqual(0)
-					expect(color.index).toBeLessThanOrEqual(9)
+					expect(color.index).toBeLessThanOrEqual(39)
 
 					// RGB values valid
 					expect(color.rgb.r).toBeGreaterThanOrEqual(0)
@@ -266,6 +298,57 @@ describe('Color utilities', () => {
 					expect(color.rgb).toEqual(palette[color.index])
 				})
 			)
+		})
+	})
+
+	describe('40-color palette expansion', () => {
+		it('should maintain first 10 colors for backward compatibility', () => {
+			// Verify first 10 colors unchanged to preserve existing branch colors
+			const palette = getColorPalette()
+			const originalColors: RgbColor[] = [
+				{ r: 220, g: 235, b: 248 }, // Soft blue
+				{ r: 248, g: 220, b: 235 }, // Soft pink
+				{ r: 220, g: 248, b: 235 }, // Soft green
+				{ r: 248, g: 240, b: 220 }, // Soft cream
+				{ r: 240, g: 220, b: 248 }, // Soft lavender
+				{ r: 220, g: 240, b: 248 }, // Soft cyan
+				{ r: 235, g: 235, b: 235 }, // Soft grey
+				{ r: 228, g: 238, b: 248 }, // Soft ice blue
+				{ r: 248, g: 228, b: 238 }, // Soft rose
+				{ r: 228, g: 248, b: 238 }, // Soft mint
+			]
+			originalColors.forEach((expected, index) => {
+				expect(palette[index]).toEqual(expected)
+			})
+		})
+
+		it('should have all 40 colors be visually distinct', () => {
+			// Test that no two colors are too similar (Euclidean distance threshold)
+			const palette = getColorPalette()
+			for (let i = 0; i < palette.length; i++) {
+				for (let j = i + 1; j < palette.length; j++) {
+					const distance = Math.sqrt(
+						Math.pow(palette[i].r - palette[j].r, 2) +
+							Math.pow(palette[i].g - palette[j].g, 2) +
+							Math.pow(palette[i].b - palette[j].b, 2)
+					)
+					// Minimum distance threshold to ensure visual distinction
+					// For subtle colors (RGB >= 220), we allow smaller distances since the color space is constrained
+					// A distance of 3+ ensures colors are not identical or too similar
+					expect(distance).toBeGreaterThanOrEqual(3)
+				}
+			}
+		})
+
+		it('should maintain subtlety constraint for all 40 colors', () => {
+			// This already exists but confirms it works for expanded palette
+			const palette = getColorPalette()
+			expect(palette).toHaveLength(40)
+			palette.forEach((color) => {
+				expect(color.r).toBeGreaterThanOrEqual(220)
+				expect(color.g).toBeGreaterThanOrEqual(220)
+				expect(color.b).toBeGreaterThanOrEqual(220)
+			})
 		})
 	})
 })

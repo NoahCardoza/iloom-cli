@@ -19,23 +19,55 @@ export interface ColorData {
 }
 
 /**
- * Get the predefined color palette (10 subtle, professional colors)
+ * Get the predefined color palette (40 subtle, professional colors)
  * Matches the terminal color palette from bash/new-branch-workflow.sh
  *
- * @returns Array of 10 RGB colors
+ * @returns Array of 40 RGB colors
  */
 export function getColorPalette(): RgbColor[] {
 	return [
-		{ r: 220, g: 235, b: 248 }, // Soft blue
-		{ r: 248, g: 220, b: 235 }, // Soft pink
-		{ r: 220, g: 248, b: 235 }, // Soft green
-		{ r: 248, g: 240, b: 220 }, // Soft cream
-		{ r: 240, g: 220, b: 248 }, // Soft lavender
-		{ r: 220, g: 240, b: 248 }, // Soft cyan
-		{ r: 235, g: 235, b: 235 }, // Soft grey
-		{ r: 228, g: 238, b: 248 }, // Soft ice blue
-		{ r: 248, g: 228, b: 238 }, // Soft rose
-		{ r: 228, g: 248, b: 238 }, // Soft mint
+		// First 10 colors preserved for backward compatibility
+		{ r: 220, g: 235, b: 248 }, // 0: Soft blue
+		{ r: 248, g: 220, b: 235 }, // 1: Soft pink
+		{ r: 220, g: 248, b: 235 }, // 2: Soft green
+		{ r: 248, g: 240, b: 220 }, // 3: Soft cream
+		{ r: 240, g: 220, b: 248 }, // 4: Soft lavender
+		{ r: 220, g: 240, b: 248 }, // 5: Soft cyan
+		{ r: 235, g: 235, b: 235 }, // 6: Soft grey
+		{ r: 228, g: 238, b: 248 }, // 7: Soft ice blue
+		{ r: 248, g: 228, b: 238 }, // 8: Soft rose
+		{ r: 228, g: 248, b: 238 }, // 9: Soft mint
+		// 30 new colors (indices 10-39)
+		{ r: 235, g: 245, b: 250 }, // 10: Pale sky blue
+		{ r: 250, g: 235, b: 245 }, // 11: Pale orchid
+		{ r: 235, g: 250, b: 245 }, // 12: Pale seafoam
+		{ r: 250, g: 245, b: 235 }, // 13: Pale peach
+		{ r: 245, g: 235, b: 250 }, // 14: Pale periwinkle
+		{ r: 235, g: 245, b: 235 }, // 15: Pale sage
+		{ r: 245, g: 250, b: 235 }, // 16: Pale lemon
+		{ r: 245, g: 235, b: 235 }, // 17: Pale blush
+		{ r: 235, g: 235, b: 250 }, // 18: Pale lavender blue
+		{ r: 250, g: 235, b: 235 }, // 19: Pale coral
+		{ r: 235, g: 250, b: 250 }, // 20: Pale aqua
+		{ r: 240, g: 248, b: 255 }, // 21: Alice blue
+		{ r: 255, g: 240, b: 248 }, // 22: Lavender blush
+		{ r: 240, g: 255, b: 248 }, // 23: Honeydew tint
+		{ r: 255, g: 248, b: 240 }, // 24: Antique white
+		{ r: 248, g: 240, b: 255 }, // 25: Magnolia
+		{ r: 240, g: 248, b: 240 }, // 26: Mint cream tint
+		{ r: 248, g: 255, b: 240 }, // 27: Ivory tint
+		{ r: 248, g: 240, b: 240 }, // 28: Misty rose tint
+		{ r: 240, g: 240, b: 255 }, // 29: Ghost white tint
+		{ r: 255, g: 245, b: 238 }, // 30: Seashell
+		{ r: 245, g: 255, b: 250 }, // 31: Azure mist
+		{ r: 250, g: 245, b: 255 }, // 32: Lilac mist
+		{ r: 255, g: 250, b: 245 }, // 33: Snow peach
+		{ r: 238, g: 245, b: 255 }, // 34: Powder blue
+		{ r: 255, g: 238, b: 245 }, // 35: Pink lace
+		{ r: 245, g: 255, b: 238 }, // 36: Pale lime
+		{ r: 238, g: 255, b: 245 }, // 37: Pale turquoise
+		{ r: 245, g: 238, b: 255 }, // 38: Pale violet
+		{ r: 255, g: 245, b: 255 }, // 39: Pale magenta
 	]
 }
 
@@ -97,7 +129,7 @@ export function generateColorFromBranchName(branchName: string): ColorData {
 	// Generate SHA256 hash of branch name
 	const hash = createHash('sha256').update(branchName).digest('hex')
 
-	// Take first 8 hex characters and convert to index (0-9)
+	// Take first 8 hex characters and convert to index (0-39)
 	// Matches bash: local index=$(( 0x$hash % ${#colors[@]} ))
 	const hashPrefix = hash.slice(0, 8)
 	const palette = getColorPalette()

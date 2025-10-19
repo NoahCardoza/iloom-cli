@@ -84,6 +84,8 @@ Color-coded VSCode windows mean you instantly know which issue you're working on
 
 No more "wait, which branch am I on?"
 
+Hatchbox uses a palette of 40 distinct pastel colors to ensure visual uniqueness across your workspaces.
+
 ### True Parallel Work
 Run 3-4 dev servers simultaneously:
 - Issue #25 on port 3025
