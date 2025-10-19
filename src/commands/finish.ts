@@ -14,6 +14,7 @@ import { EnvironmentManager } from '../lib/EnvironmentManager.js'
 import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { findMainWorktreePath } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
+import { installDependencies } from '../utils/package-manager.js'
 import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions, PullRequest } from '../types/index.js'
 import type { ResourceCleanupOptions, CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
@@ -500,7 +501,16 @@ export class FinishCommand {
 		await this.mergeManager.performFastForwardMerge(worktree.branch, worktree.path, mergeOptions)
 		logger.success('Fast-forward merge completed successfully')
 
-		// Step 5.5: Run post-merge build verification (CLI projects only)
+		// Step 5.5: Install dependencies in main worktree
+		if (options.dryRun) {
+			logger.info('[DRY RUN] Would install dependencies in main worktree')
+		} else {
+			logger.info('Installing dependencies in main worktree...')
+			const mainWorktreePath = await findMainWorktreePath(worktree.path)
+			await installDependencies(mainWorktreePath, true)
+		}
+
+		// Step 5.6: Run post-merge build verification (CLI projects only)
 		if (!options.skipBuild) {
 			await this.runPostMergeBuild(worktree.path, options)
 		} else {

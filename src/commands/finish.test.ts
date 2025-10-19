@@ -32,6 +32,13 @@ vi.mock('../lib/providers/NeonProvider.js')
 vi.mock('../lib/EnvironmentManager.js')
 vi.mock('../utils/env.js')
 
+// Mock package-manager utilities
+vi.mock('../utils/package-manager.js', () => ({
+	installDependencies: vi.fn().mockResolvedValue(undefined),
+	detectPackageManager: vi.fn().mockResolvedValue('pnpm'),
+	runScript: vi.fn().mockResolvedValue(undefined),
+}))
+
 // Mock git utils module for pushBranchToRemote and findMainWorktreePath
 vi.mock('../utils/git.js', async () => {
 	const actual = await vi.importActual<typeof import('../utils/git.js')>('../utils/git.js')
@@ -2698,6 +2705,222 @@ describe('FinishCommand', () => {
 					}),
 					expect.any(Object)
 				)
+			})
+		})
+
+		describe('post-merge dependency installation', () => {
+			const mockIssue: Issue = {
+				number: 123,
+				title: 'Test issue',
+				body: 'Test body',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://github.com/test/repo/issues/123',
+			}
+
+			const mockWorktree: GitWorktree = {
+				path: '/test/worktree',
+				branch: 'feat/issue-123',
+				commit: 'abc123',
+				isPR: false,
+				issueNumber: 123,
+			}
+
+			beforeEach(async () => {
+				// Import the mocked functions
+				const { installDependencies } = await import('../utils/package-manager.js')
+				const { findMainWorktreePath } = await import('../utils/git.js')
+
+				// Reset mocks
+				vi.mocked(installDependencies).mockClear()
+				vi.mocked(findMainWorktreePath).mockClear()
+
+				// Setup default mocks
+				vi.mocked(installDependencies).mockResolvedValue(undefined)
+				vi.mocked(findMainWorktreePath).mockResolvedValue('/test/main')
+
+				// Mock successful issue fetch
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+
+				// Mock successful worktree finding
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+				// Mock IdentifierParser to detect as issue
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					originalInput: '123',
+				})
+			})
+
+			it('should install dependencies in main worktree after merge', async () => {
+				const { installDependencies } = await import('../utils/package-manager.js')
+				const { findMainWorktreePath } = await import('../utils/git.js')
+
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				// Verify findMainWorktreePath was called
+				expect(findMainWorktreePath).toHaveBeenCalledWith(mockWorktree.path)
+
+				// Verify installDependencies was called with main worktree path and frozen=true
+				expect(installDependencies).toHaveBeenCalledWith('/test/main', true)
+			})
+
+			it('should install dependencies before running post-merge build', async () => {
+				const { installDependencies } = await import('../utils/package-manager.js')
+				const executionOrder: string[] = []
+
+				vi.mocked(installDependencies).mockImplementation(async () => {
+					executionOrder.push('install')
+				})
+
+				vi.mocked(mockBuildRunner.runBuild).mockImplementation(async () => {
+					executionOrder.push('build')
+					return {
+						success: true,
+						skipped: false,
+					}
+				})
+
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				// Verify install happens before build
+				const installIndex = executionOrder.indexOf('install')
+				const buildIndex = executionOrder.indexOf('build')
+
+				expect(installIndex).toBeGreaterThanOrEqual(0)
+				expect(buildIndex).toBeGreaterThanOrEqual(0)
+				expect(installIndex).toBeLessThan(buildIndex)
+			})
+
+			it('should skip dependency installation in dry-run mode', async () => {
+				const { installDependencies } = await import('../utils/package-manager.js')
+
+				await command.execute({
+					identifier: '123',
+					options: {
+						dryRun: true,
+					},
+				})
+
+				// Verify installDependencies was NOT called in dry-run mode
+				expect(installDependencies).not.toHaveBeenCalled()
+			})
+
+			it('should fail finish command if dependency installation fails', async () => {
+				const { installDependencies } = await import('../utils/package-manager.js')
+
+				// Mock installation failure
+				vi.mocked(installDependencies).mockRejectedValue(
+					new Error('Failed to install dependencies: Lockfile is out of date')
+				)
+
+				await expect(
+					command.execute({
+						identifier: '123',
+						options: {},
+					})
+				).rejects.toThrow('Failed to install dependencies')
+
+				// Verify cleanup was NOT called (error should prevent it)
+				expect(mockResourceCleanup.cleanupWorktree).not.toHaveBeenCalled()
+			})
+
+			it('should not install dependencies for PR workflow (open PR)', async () => {
+				const { installDependencies } = await import('../utils/package-manager.js')
+
+				const mockPR: PullRequest = {
+					number: 456,
+					title: 'Test PR',
+					body: 'Test body',
+					state: 'open',
+					headRef: 'feat/pr-456',
+					baseRef: 'main',
+					url: 'https://github.com/test/repo/pull/456',
+					labels: [],
+					assignees: [],
+					draft: false,
+					mergeable: true,
+				}
+
+				// Mock PR detection
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'pr',
+					number: 456,
+					originalInput: '456',
+				})
+
+				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+
+				const prWorktree: GitWorktree = {
+					path: '/test/worktree-pr',
+					branch: 'feat/pr-456',
+					commit: 'def456',
+					isPR: true,
+					prNumber: 456,
+				}
+
+				vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(prWorktree)
+
+				await command.execute({
+					identifier: '456',
+					options: {},
+				})
+
+				// PRs don't merge to main, so no installation should occur
+				expect(installDependencies).not.toHaveBeenCalled()
+			})
+
+			it('should not install dependencies for PR workflow (closed PR)', async () => {
+				const { installDependencies } = await import('../utils/package-manager.js')
+
+				const mockPR: PullRequest = {
+					number: 456,
+					title: 'Test PR',
+					body: 'Test body',
+					state: 'closed',
+					headRef: 'feat/pr-456',
+					baseRef: 'main',
+					url: 'https://github.com/test/repo/pull/456',
+					labels: [],
+					assignees: [],
+					draft: false,
+					mergeable: false,
+				}
+
+				// Mock PR detection
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'pr',
+					number: 456,
+					originalInput: '456',
+				})
+
+				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+
+				const prWorktree: GitWorktree = {
+					path: '/test/worktree-pr',
+					branch: 'feat/pr-456',
+					commit: 'def456',
+					isPR: true,
+					prNumber: 456,
+				}
+
+				vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(prWorktree)
+
+				await command.execute({
+					identifier: '456',
+					options: {},
+				})
+
+				// Closed PRs go to cleanup only, no installation
+				expect(installDependencies).not.toHaveBeenCalled()
 			})
 		})
 
