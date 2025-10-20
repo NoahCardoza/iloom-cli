@@ -1112,4 +1112,218 @@ describe('IgniteCommand', () => {
 			}
 		})
 	})
+
+	describe('settings integration', () => {
+		it('should load settings and pass to AgentManager', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
+				owner: 'testowner',
+				name: 'testrepo',
+			})
+
+			const mockSettings = {
+				agents: {
+					'test-agent': {
+						model: 'haiku',
+					},
+				},
+			}
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue(mockSettings),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({
+					'test-agent': {
+						description: 'Test agent',
+						prompt: 'Test prompt',
+						tools: ['Read'],
+						model: 'haiku', // Should be overridden
+					},
+				}),
+				formatForCli: vi.fn((agents) => agents),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-test')
+
+			const commandWithSettings = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await commandWithSettings.execute()
+
+				// Verify settings were loaded
+				expect(mockSettingsManager.loadSettings).toHaveBeenCalled()
+
+				// Verify settings were passed to loadAgents
+				expect(mockAgentManager.loadAgents).toHaveBeenCalledWith(mockSettings)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				getRepoInfoSpy.mockRestore()
+			}
+		})
+
+		it('should handle missing settings gracefully and continue', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
+				owner: 'testowner',
+				name: 'testrepo',
+			})
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({}), // Empty settings
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({
+					'test-agent': {
+						description: 'Test agent',
+						prompt: 'Test prompt',
+						tools: ['Read'],
+						model: 'sonnet',
+					},
+				}),
+				formatForCli: vi.fn((agents) => agents),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-test')
+
+			const commandWithSettings = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await commandWithSettings.execute()
+
+				// Should still execute successfully
+				expect(mockSettingsManager.loadSettings).toHaveBeenCalled()
+				expect(mockAgentManager.loadAgents).toHaveBeenCalledWith({})
+				expect(launchClaudeSpy).toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				getRepoInfoSpy.mockRestore()
+			}
+		})
+
+		it('should handle settings loading errors without crashing', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
+				owner: 'testowner',
+				name: 'testrepo',
+			})
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockRejectedValue(new Error('Failed to load settings')),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({
+					'test-agent': {
+						description: 'Test agent',
+						prompt: 'Test prompt',
+						tools: ['Read'],
+						model: 'sonnet',
+					},
+				}),
+				formatForCli: vi.fn((agents) => agents),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-test')
+
+			const commandWithSettings = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+			)
+
+			try {
+				// Should not throw - execution continues without settings
+				await commandWithSettings.execute()
+
+				expect(mockSettingsManager.loadSettings).toHaveBeenCalled()
+				// loadAgents should be called without settings (undefined)
+				expect(mockAgentManager.loadAgents).toHaveBeenCalled()
+				expect(launchClaudeSpy).toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				getRepoInfoSpy.mockRestore()
+			}
+		})
+
+		it('should pass merged agent configs to Claude CLI', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
+				owner: 'testowner',
+				name: 'testrepo',
+			})
+
+			const mockSettings = {
+				agents: {
+					'test-agent': {
+						model: 'haiku',
+					},
+				},
+			}
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue(mockSettings),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({
+					'test-agent': {
+						description: 'Test agent',
+						prompt: 'Test prompt',
+						tools: ['Read'],
+						model: 'haiku', // Overridden by settings
+					},
+				}),
+				formatForCli: vi.fn((agents) => agents),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-test')
+
+			const commandWithSettings = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await commandWithSettings.execute()
+
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				expect(launchClaudeCall[1]).toHaveProperty('agents')
+				expect(launchClaudeCall[1].agents).toEqual({
+					'test-agent': {
+						description: 'Test agent',
+						prompt: 'Test prompt',
+						tools: ['Read'],
+						model: 'haiku', // Should reflect the override
+					},
+				})
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				getRepoInfoSpy.mockRestore()
+			}
+		})
+	})
 })

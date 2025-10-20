@@ -6,6 +6,7 @@ import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables } from '../lib/PromptTemplateManager.js'
 import { getRepoInfo } from '../utils/github.js'
 import { AgentManager } from '../lib/AgentManager.js'
+import { SettingsManager } from '../lib/SettingsManager.js'
 
 /**
  * IgniteCommand: Auto-detect workspace context and launch Claude
@@ -23,15 +24,18 @@ export class IgniteCommand {
 	private templateManager: PromptTemplateManager
 	private gitWorktreeManager: GitWorktreeManager
 	private agentManager: AgentManager
+	private settingsManager: SettingsManager
 
 	constructor(
 		templateManager?: PromptTemplateManager,
 		gitWorktreeManager?: GitWorktreeManager,
-		agentManager?: AgentManager
+		agentManager?: AgentManager,
+		settingsManager?: SettingsManager
 	) {
 		this.templateManager = templateManager ?? new PromptTemplateManager()
 		this.gitWorktreeManager = gitWorktreeManager ?? new GitWorktreeManager()
 		this.agentManager = agentManager ?? new AgentManager()
+		this.settingsManager = settingsManager ?? new SettingsManager()
 	}
 
 	/**
@@ -107,10 +111,24 @@ export class IgniteCommand {
 				}
 			}
 
-			// Step 4.6: Load agent configurations
+			// Step 4.6: Load project settings and agent configurations
 			let agents: Record<string, unknown> | undefined
 			try {
-				const loadedAgents = await this.agentManager.loadAgents()
+				// Load project-level settings first
+				let settings
+				try {
+					settings = await this.settingsManager.loadSettings()
+					if (settings?.agents && Object.keys(settings.agents).length > 0) {
+						logger.debug('Loaded project settings', {
+							agentOverrides: Object.keys(settings.agents),
+						})
+					}
+				} catch (error) {
+					logger.warn(`Failed to load settings: ${error instanceof Error ? error.message : 'Unknown error'}`)
+				}
+
+				// Load agents with settings overrides
+				const loadedAgents = await this.agentManager.loadAgents(settings)
 				agents = this.agentManager.formatForCli(loadedAgents)
 				logger.debug('Loaded agent configurations', {
 					agentCount: Object.keys(agents).length,

@@ -55,9 +55,11 @@ export class AgentManager {
 
 	/**
 	 * Load all agent configuration files from markdown (.md) format
+	 * Optionally apply model overrides from settings
 	 * Throws error if agents directory doesn't exist or files are malformed
+	 * @param settings - Optional project settings with per-agent model overrides
 	 */
-	async loadAgents(): Promise<AgentConfigs> {
+	async loadAgents(settings?: { agents?: { [agentName: string]: { model?: string } } }): Promise<AgentConfigs> {
 		// Load all .md files from the agents directory
 		const { readdir } = await import('fs/promises')
 		const files = await readdir(this.agentDir)
@@ -86,6 +88,21 @@ export class AgentManager {
 				throw new Error(
 					`Failed to load agent from ${filename}: ${error instanceof Error ? error.message : 'Unknown error'}`,
 				)
+			}
+		}
+
+		// Apply settings overrides if provided
+		if (settings?.agents) {
+			for (const [agentName, agentSettings] of Object.entries(settings.agents)) {
+				if (agents[agentName] && agentSettings.model) {
+					logger.debug(`Overriding model for ${agentName}: ${agents[agentName].model} -> ${agentSettings.model}`)
+					agents[agentName] = {
+						...agents[agentName],
+						model: agentSettings.model,
+					}
+				} else if (!agents[agentName]) {
+					logger.warn(`Settings reference unknown agent: ${agentName}`)
+				}
 			}
 		}
 

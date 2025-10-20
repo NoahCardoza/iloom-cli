@@ -507,4 +507,306 @@ Prompt`
 			}
 		})
 	})
+
+	describe('loadAgents with settings overrides', () => {
+		it('should merge settings model overrides into agent configs', async () => {
+			vi.mocked(readdir).mockResolvedValueOnce([
+				'hatchbox-issue-analyzer.md',
+				'hatchbox-issue-planner.md',
+			] as string[])
+
+			const mockAnalyzerMd = `---
+name: hatchbox-issue-analyzer
+description: Analyzer agent
+tools: Read
+model: sonnet
+---
+
+Analyzer prompt`
+
+			const mockPlannerMd = `---
+name: hatchbox-issue-planner
+description: Planner agent
+tools: Write
+model: sonnet
+---
+
+Planner prompt`
+
+			vi.mocked(readFile)
+				.mockResolvedValueOnce(mockAnalyzerMd)
+				.mockResolvedValueOnce(mockPlannerMd)
+
+			const settings = {
+				agents: {
+					'hatchbox-issue-analyzer': {
+						model: 'haiku',
+					},
+				},
+			}
+
+			const result = await manager.loadAgents(settings)
+
+			// Analyzer should have overridden model
+			expect(result['hatchbox-issue-analyzer'].model).toBe('haiku')
+			// Planner should keep original model
+			expect(result['hatchbox-issue-planner'].model).toBe('sonnet')
+		})
+
+		it('should preserve template model when agent not in settings', async () => {
+			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+
+			const mockMd = `---
+name: test-agent
+description: Test
+tools: Read
+model: opus
+---
+
+Prompt`
+
+			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
+
+			const settings = {
+				agents: {},
+			}
+
+			const result = await manager.loadAgents(settings)
+
+			expect(result['test-agent'].model).toBe('opus')
+		})
+
+		it('should use settings model when agent is overridden', async () => {
+			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+
+			const mockMd = `---
+name: test-agent
+description: Test
+tools: Read
+model: sonnet
+---
+
+Prompt`
+
+			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
+
+			const settings = {
+				agents: {
+					'test-agent': {
+						model: 'haiku',
+					},
+				},
+			}
+
+			const result = await manager.loadAgents(settings)
+
+			expect(result['test-agent'].model).toBe('haiku')
+		})
+
+		it('should handle settings with extra agents not in templates', async () => {
+			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+
+			const mockMd = `---
+name: test-agent
+description: Test
+tools: Read
+model: sonnet
+---
+
+Prompt`
+
+			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
+
+			const settings = {
+				agents: {
+					'test-agent': {
+						model: 'opus',
+					},
+					'non-existent-agent': {
+						model: 'haiku',
+					},
+				},
+			}
+
+			const result = await manager.loadAgents(settings)
+
+			// Should apply override for existing agent
+			expect(result['test-agent'].model).toBe('opus')
+			// Should not create non-existent agent
+			expect(result['non-existent-agent']).toBeUndefined()
+		})
+
+		it('should handle settings with missing model field (use template default)', async () => {
+			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+
+			const mockMd = `---
+name: test-agent
+description: Test
+tools: Read
+model: sonnet
+---
+
+Prompt`
+
+			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
+
+			const settings = {
+				agents: {
+					'test-agent': {},
+				},
+			}
+
+			const result = await manager.loadAgents(settings)
+
+			// Should keep original model when settings doesn't have model field
+			expect(result['test-agent'].model).toBe('sonnet')
+		})
+
+		it('should maintain backward compatibility when settings is undefined', async () => {
+			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+
+			const mockMd = `---
+name: test-agent
+description: Test
+tools: Read
+model: sonnet
+---
+
+Prompt`
+
+			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
+
+			const result = await manager.loadAgents(undefined)
+
+			expect(result['test-agent'].model).toBe('sonnet')
+		})
+
+		it('should override multiple agents correctly', async () => {
+			vi.mocked(readdir).mockResolvedValueOnce([
+				'agent1.md',
+				'agent2.md',
+				'agent3.md',
+			] as string[])
+
+			const mock1 = `---
+name: agent1
+description: Test
+tools: Read
+model: sonnet
+---
+
+Prompt`
+
+			const mock2 = `---
+name: agent2
+description: Test
+tools: Write
+model: opus
+---
+
+Prompt`
+
+			const mock3 = `---
+name: agent3
+description: Test
+tools: Edit
+model: haiku
+---
+
+Prompt`
+
+			vi.mocked(readFile)
+				.mockResolvedValueOnce(mock1)
+				.mockResolvedValueOnce(mock2)
+				.mockResolvedValueOnce(mock3)
+
+			const settings = {
+				agents: {
+					'agent1': {
+						model: 'haiku',
+					},
+					'agent3': {
+						model: 'sonnet',
+					},
+				},
+			}
+
+			const result = await manager.loadAgents(settings)
+
+			expect(result['agent1'].model).toBe('haiku')
+			expect(result['agent2'].model).toBe('opus') // Not overridden
+			expect(result['agent3'].model).toBe('sonnet')
+		})
+	})
+
+	describe('model precedence with settings', () => {
+		it('should prioritize settings model over template model', async () => {
+			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+
+			const mockMd = `---
+name: test-agent
+description: Test
+tools: Read
+model: sonnet
+color: blue
+---
+
+Prompt`
+
+			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
+
+			const settings = {
+				agents: {
+					'test-agent': {
+						model: 'haiku',
+					},
+				},
+			}
+
+			const result = await manager.loadAgents(settings)
+
+			expect(result['test-agent']).toEqual({
+				description: 'Test',
+				prompt: 'Prompt',
+				tools: ['Read'],
+				model: 'haiku', // Settings value, not template value
+				color: 'blue',
+			})
+		})
+
+		it('should preserve all other agent config fields when overriding model', async () => {
+			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+
+			const mockMd = `---
+name: test-agent
+description: Test agent description
+tools: Read, Write, Edit
+model: sonnet
+color: pink
+---
+
+Complex prompt with multiple lines
+and various content.`
+
+			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
+
+			const settings = {
+				agents: {
+					'test-agent': {
+						model: 'opus',
+					},
+				},
+			}
+
+			const result = await manager.loadAgents(settings)
+
+			// All fields except model should remain unchanged
+			expect(result['test-agent'].description).toBe('Test agent description')
+			expect(result['test-agent'].prompt).toBe('Complex prompt with multiple lines\nand various content.')
+			expect(result['test-agent'].tools).toEqual(['Read', 'Write', 'Edit'])
+			expect(result['test-agent'].color).toBe('pink')
+			// Only model should be changed
+			expect(result['test-agent'].model).toBe('opus')
+		})
+	})
 })
