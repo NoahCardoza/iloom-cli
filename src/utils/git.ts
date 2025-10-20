@@ -1,6 +1,7 @@
 import path from 'path'
 import { execa, type ExecaError } from 'execa'
 import { type GitWorktree } from '../types/worktree.js'
+import type { SettingsManager } from '../lib/SettingsManager.js'
 
 /**
  * Execute a Git command and return the stdout result
@@ -257,24 +258,82 @@ export async function getRepoRoot(path: string = process.cwd()): Promise<string 
  * Find the worktree path where main branch is checked out
  * Copies bash script approach: parse git worktree list to find main
  */
-export async function findMainWorktreePath(path: string = process.cwd()): Promise<string> {
+export async function findMainWorktreePath(
+  path: string = process.cwd(),
+  options?: { mainBranch?: string }
+): Promise<string> {
   try {
     const output = await executeGitCommand(['worktree', 'list', '--porcelain'], { cwd: path })
     const worktrees = parseWorktreeList(output)
 
-    // Find worktree with main branch
-    const mainWorktree = worktrees.find(wt => wt.branch === 'main')
-    if (!mainWorktree?.path) {
-      throw new Error(`No worktree found with main branch checked out. Available worktrees: ${worktrees.map(wt => `${wt.path} (${wt.branch})`).join(', ')}`)
+    // Guard: empty worktree list
+    if (worktrees.length === 0) {
+      throw new Error('No worktrees found in repository')
     }
-    return mainWorktree.path
+
+    // Tier 1: Check for specified mainBranch in options
+    if (options?.mainBranch) {
+      const specified = worktrees.find(wt => wt.branch === options.mainBranch)
+      if (!specified?.path) {
+        throw new Error(
+          `No worktree found with branch '${options.mainBranch}' (specified in settings). Available worktrees: ${worktrees.map(wt => `${wt.path} (${wt.branch})`).join(', ')}`
+        )
+      }
+      return specified.path
+    }
+
+    // Tier 2: Look for "main" branch
+    const mainBranch = worktrees.find(wt => wt.branch === 'main')
+    if (mainBranch?.path) {
+      return mainBranch.path
+    }
+
+    // Tier 3: Use first worktree (primary worktree)
+    const firstWorktree = worktrees[0]
+    if (!firstWorktree?.path) {
+      throw new Error('Failed to determine primary worktree path')
+    }
+    return firstWorktree.path
   } catch (error) {
-    if (error instanceof Error && error.message.includes('No worktree found with main branch')) {
-      // Re-throw our specific error
+    if (
+      error instanceof Error &&
+      (error.message.includes('No worktree found with branch') ||
+        error.message.includes('No worktrees found') ||
+        error.message.includes('Failed to determine primary worktree'))
+    ) {
+      // Re-throw our specific errors
       throw error
     }
     throw new Error(`Failed to find main worktree: ${error instanceof Error ? error.message : String(error)}`)
   }
+}
+
+/**
+ * Find main worktree path with automatic settings loading
+ *
+ * This is a convenience wrapper that:
+ * 1. Loads project settings from .hatchbox/settings.json
+ * 2. Extracts mainBranch configuration if present
+ * 3. Calls findMainWorktreePath with appropriate options
+ *
+ * @param path - Path to search from (defaults to process.cwd())
+ * @param settingsManager - Optional SettingsManager instance (for DI/testing)
+ * @returns Path to main worktree
+ * @throws Error if main worktree cannot be found
+ */
+export async function findMainWorktreePathWithSettings(
+  path?: string,
+  settingsManager?: SettingsManager
+): Promise<string> {
+  // Lazy load SettingsManager to avoid circular dependencies
+  if (!settingsManager) {
+    const { SettingsManager: SM } = await import('../lib/SettingsManager.js')
+    settingsManager = new SM()
+  }
+
+  const settings = await settingsManager.loadSettings(path)
+  const findOptions = settings.mainBranch ? { mainBranch: settings.mainBranch } : undefined
+  return findMainWorktreePath(path, findOptions)
 }
 
 /**

@@ -14,6 +14,7 @@ export interface AgentSettings {
  * Structure of the Hatchbox settings file
  */
 export interface HatchboxSettings {
+	mainBranch?: string
 	agents?: {
 		[agentName: string]: AgentSettings
 	}
@@ -71,6 +72,18 @@ export class SettingsManager {
 	 * Validate settings structure and model names
 	 */
 	private validateSettings(settings: HatchboxSettings): void {
+		// Validate mainBranch if present
+		if (settings.mainBranch !== undefined) {
+			if (typeof settings.mainBranch !== 'string') {
+				throw new Error(
+					`Settings 'mainBranch' must be a string, got ${typeof settings.mainBranch}`,
+				)
+			}
+			if (settings.mainBranch.trim() === '') {
+				throw new Error(`Settings 'mainBranch' cannot be empty`)
+			}
+		}
+
 		if (settings.agents !== undefined && settings.agents !== null) {
 			if (typeof settings.agents !== 'object' || Array.isArray(settings.agents)) {
 				throw new Error(

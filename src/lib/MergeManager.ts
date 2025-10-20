@@ -1,6 +1,7 @@
-import { executeGitCommand, findMainWorktreePath } from '../utils/git.js'
+import { executeGitCommand, findMainWorktreePathWithSettings } from '../utils/git.js'
 import { logger } from '../utils/logger.js'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
+import { SettingsManager } from './SettingsManager.js'
 import type { MergeOptions } from '../types/index.js'
 
 /**
@@ -10,6 +11,12 @@ import type { MergeOptions } from '../types/index.js'
  * Ports bash/merge-and-clean.sh lines 781-1090
  */
 export class MergeManager {
+	private settingsManager: SettingsManager
+
+	constructor(settingsManager?: SettingsManager) {
+		this.settingsManager = settingsManager ?? new SettingsManager()
+	}
+
 	/**
 	 * Rebase current branch on main with fail-fast on conflicts
 	 * Ports bash/merge-and-clean.sh lines 781-913
@@ -191,12 +198,13 @@ export class MergeManager {
 
 		// Step 1: Find where main branch is checked out
 		// This copies the bash script approach: find main worktree, run commands from there
-		const mainWorktreePath = options.repoRoot ?? await findMainWorktreePath(worktreePath)
+		const mainWorktreePath = options.repoRoot ??
+			await findMainWorktreePathWithSettings(worktreePath, this.settingsManager)
 
-		// Step 2: No need to checkout main - it's already checked out in mainWorktreePath
+		// Step 3: No need to checkout main - it's already checked out in mainWorktreePath
 		logger.debug(`Using main branch location: ${mainWorktreePath}`)
 
-		// Step 3: Verify on main branch
+		// Step 4: Verify on main branch
 		const currentBranch = await executeGitCommand(['branch', '--show-current'], {
 			cwd: mainWorktreePath,
 		})
@@ -209,10 +217,10 @@ export class MergeManager {
 			)
 		}
 
-		// Step 4: Validate fast-forward is possible
+		// Step 5: Validate fast-forward is possible
 		await this.validateFastForwardPossible(branchName, mainWorktreePath)
 
-		// Step 5: Show commits to be merged
+		// Step 6: Show commits to be merged
 		const commitsOutput = await executeGitCommand(['log', '--oneline', `main..${branchName}`], {
 			cwd: mainWorktreePath,
 		})
@@ -230,14 +238,14 @@ export class MergeManager {
 		logger.info(`Found ${commitLines.length} commit(s) to merge:`)
 		commitLines.forEach((commit) => logger.info(`  ${commit}`))
 
-		// Step 6: User confirmation (unless force mode or dry-run)
+		// Step 7: User confirmation (unless force mode or dry-run)
 		if (!force && !dryRun) {
 			// TODO: Implement interactive prompt for confirmation
 			// For now, proceeding automatically (use --force to skip this message)
 			logger.info('Proceeding with fast-forward merge... (use --force to skip confirmations)')
 		}
 
-		// Step 7: Execute merge (unless dry-run)
+		// Step 8: Execute merge (unless dry-run)
 		if (dryRun) {
 			logger.info(`[DRY RUN] Would execute: git merge --ff-only ${branchName}`)
 			logger.info(`[DRY RUN] This would merge ${commitLines.length} commit(s)`)

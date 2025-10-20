@@ -12,7 +12,8 @@ import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { NeonProvider } from '../lib/providers/NeonProvider.js'
 import { EnvironmentManager } from '../lib/EnvironmentManager.js'
 import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
-import { findMainWorktreePath } from '../utils/git.js'
+import { SettingsManager } from '../lib/SettingsManager.js'
+import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { installDependencies } from '../utils/package-manager.js'
 import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions, PullRequest } from '../types/index.js'
@@ -42,6 +43,7 @@ export class FinishCommand {
 	private identifierParser: IdentifierParser
 	private resourceCleanup: ResourceCleanup
 	private buildRunner: BuildRunner
+	private settingsManager: SettingsManager
 
 	constructor(
 		gitHubService?: GitHubService,
@@ -51,7 +53,8 @@ export class FinishCommand {
 		mergeManager?: MergeManager,
 		identifierParser?: IdentifierParser,
 		resourceCleanup?: ResourceCleanup,
-		buildRunner?: BuildRunner
+		buildRunner?: BuildRunner,
+		settingsManager?: SettingsManager
 	) {
 		// Load environment variables first
 		const envResult = loadEnvIntoProcess()
@@ -91,6 +94,7 @@ export class FinishCommand {
 		}
 
 		this.buildRunner = buildRunner ?? new BuildRunner()
+		this.settingsManager = settingsManager ?? new SettingsManager()
 	}
 
 	/**
@@ -506,7 +510,7 @@ export class FinishCommand {
 			logger.info('[DRY RUN] Would install dependencies in main worktree')
 		} else {
 			logger.info('Installing dependencies in main worktree...')
-			const mainWorktreePath = await findMainWorktreePath(worktree.path)
+			const mainWorktreePath = await findMainWorktreePathWithSettings(worktree.path, this.settingsManager)
 			await installDependencies(mainWorktreePath, true)
 		}
 
@@ -644,7 +648,7 @@ export class FinishCommand {
 		options: FinishOptions
 	): Promise<void> {
 		// Find main worktree path
-		const mainWorktreePath = await findMainWorktreePath(worktreePath)
+		const mainWorktreePath = await findMainWorktreePathWithSettings(worktreePath, this.settingsManager)
 
 		// Check if dry-run
 		if (options.dryRun) {

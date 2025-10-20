@@ -3,6 +3,7 @@ import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { DatabaseManager } from './DatabaseManager.js'
 import { ProcessManager } from './process/ProcessManager.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
+import { SettingsManager } from './SettingsManager.js'
 import { logger } from '../utils/logger.js'
 import type {
 	ResourceCleanupOptions,
@@ -19,12 +20,17 @@ import type { ParsedInput } from '../commands/start.js'
  * Provides shared cleanup functionality for finish and cleanup commands
  */
 export class ResourceCleanup {
+	private settingsManager: SettingsManager
+
 	constructor(
 		private gitWorktree: GitWorktreeManager,
 		private processManager: ProcessManager,
 		private database?: DatabaseManager,
-		private cliIsolation?: CLIIsolationManager
-	) {}
+		private cliIsolation?: CLIIsolationManager,
+		settingsManager?: SettingsManager
+	) {
+		this.settingsManager = settingsManager ?? new SettingsManager()
+	}
 
 	/**
 	 * Cleanup a worktree and associated resources
@@ -136,8 +142,8 @@ export class ResourceCleanup {
 		let mainWorktreePath: string | null = null
 		if (!options.dryRun) {
 			try {
-				const { findMainWorktreePath } = await import('../utils/git.js')
-				mainWorktreePath = await findMainWorktreePath(worktree.path)
+				const { findMainWorktreePathWithSettings } = await import('../utils/git.js')
+				mainWorktreePath = await findMainWorktreePathWithSettings(worktree.path, this.settingsManager)
 			} catch (error) {
 				logger.warn(
 					`Failed to find main worktree path: ${error instanceof Error ? error.message : String(error)}`
@@ -434,12 +440,12 @@ export class ResourceCleanup {
 
 		// Use GitWorktreeManager's removeWorktree with removeBranch option
 		// Or execute git branch -D directly via executeGitCommand
-		const { executeGitCommand, findMainWorktreePath } = await import('../utils/git.js')
+		const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
 
 		try {
 			// Use provided cwd, or find main worktree path as fallback
 			// This ensures we're not running git commands from a deleted directory
-			const workingDir = cwd ?? await findMainWorktreePath()
+			let workingDir = cwd ?? await findMainWorktreePathWithSettings(undefined, this.settingsManager)			
 
 			// Use safe delete (-d) unless force is specified
 			const deleteFlag = options.force ? '-D' : '-d'
@@ -496,8 +502,8 @@ export class ResourceCleanup {
 			// Find main worktree path to avoid running commands from potentially deleted directories
 			let cwd: string | undefined
 			try {
-				const { findMainWorktreePath } = await import('../utils/git.js')
-				cwd = await findMainWorktreePath(worktreePath)
+				const { findMainWorktreePathWithSettings } = await import('../utils/git.js')
+				cwd = await findMainWorktreePathWithSettings(worktreePath, this.settingsManager)
 			} catch (error) {
 				// If we can't find main worktree, commands will run from current directory
 				logger.debug(

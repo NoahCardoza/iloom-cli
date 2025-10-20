@@ -3,6 +3,7 @@ import { ResourceCleanup } from './ResourceCleanup.js'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { DatabaseManager } from './DatabaseManager.js'
 import { ProcessManager } from './process/ProcessManager.js'
+import { SettingsManager } from './SettingsManager.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { ResourceCleanupOptions } from '../types/cleanup.js'
 
@@ -10,6 +11,7 @@ import type { ResourceCleanupOptions } from '../types/cleanup.js'
 vi.mock('./GitWorktreeManager.js')
 vi.mock('./DatabaseManager.js')
 vi.mock('./process/ProcessManager.js')
+vi.mock('./SettingsManager.js')
 vi.mock('../utils/git.js')
 
 describe('ResourceCleanup', () => {
@@ -17,15 +19,25 @@ describe('ResourceCleanup', () => {
 	let mockGitWorktree: GitWorktreeManager
 	let mockProcessManager: ProcessManager
 	let mockDatabase: DatabaseManager
+	let mockSettingsManager: SettingsManager
 
 	beforeEach(() => {
 		// Create mock instances
 		mockGitWorktree = new GitWorktreeManager()
 		mockProcessManager = new ProcessManager()
 		mockDatabase = new DatabaseManager()
+		mockSettingsManager = {
+			loadSettings: vi.fn().mockResolvedValue({}),
+		} as unknown as SettingsManager
 
 		// Initialize ResourceCleanup with mocks
-		resourceCleanup = new ResourceCleanup(mockGitWorktree, mockProcessManager, mockDatabase)
+		resourceCleanup = new ResourceCleanup(
+			mockGitWorktree,
+			mockProcessManager,
+			mockDatabase,
+			undefined,
+			mockSettingsManager
+		)
 
 		// Add missing mock methods for GitWorktreeManager
 		mockGitWorktree.findWorktreeForIssue = vi.fn()
@@ -69,8 +81,8 @@ describe('ResourceCleanup', () => {
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
 
 			// Mock branch deletion
-			const { executeGitCommand, findMainWorktreePath } = await import('../utils/git.js')
-			vi.mocked(findMainWorktreePath).mockResolvedValueOnce('/path/to/main')
+			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
 			vi.mocked(executeGitCommand).mockResolvedValueOnce('')
 
 			// Mock database cleanup (not implemented yet, should skip)
@@ -344,8 +356,8 @@ describe('ResourceCleanup', () => {
 
 	describe('deleteBranch', () => {
 		it('should delete local branch using git command', async () => {
-			const { executeGitCommand, findMainWorktreePath } = await import('../utils/git.js')
-			vi.mocked(findMainWorktreePath).mockResolvedValueOnce('/path/to/main')
+			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
 			vi.mocked(executeGitCommand).mockResolvedValueOnce('')
 
 			const result = await resourceCleanup.deleteBranch('feat/test-branch', {
@@ -370,8 +382,8 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should use safe delete (-d) by default', async () => {
-			const { executeGitCommand, findMainWorktreePath } = await import('../utils/git.js')
-			vi.mocked(findMainWorktreePath).mockResolvedValueOnce('/path/to/main')
+			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
 			vi.mocked(executeGitCommand).mockResolvedValueOnce('')
 
 			await resourceCleanup.deleteBranch('feat/test-branch')
@@ -383,8 +395,8 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should use force delete (-D) when force option enabled', async () => {
-			const { executeGitCommand, findMainWorktreePath } = await import('../utils/git.js')
-			vi.mocked(findMainWorktreePath).mockResolvedValueOnce('/path/to/main')
+			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
 			vi.mocked(executeGitCommand).mockResolvedValueOnce('')
 
 			await resourceCleanup.deleteBranch('feat/test-branch', { force: true })
@@ -396,8 +408,8 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should provide helpful error message for unmerged branches', async () => {
-			const { executeGitCommand, findMainWorktreePath } = await import('../utils/git.js')
-			vi.mocked(findMainWorktreePath).mockResolvedValueOnce('/path/to/main')
+			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
 			vi.mocked(executeGitCommand).mockRejectedValueOnce(new Error('branch not fully merged'))
 
 			await expect(resourceCleanup.deleteBranch('feat/unmerged-branch')).rejects.toThrow(

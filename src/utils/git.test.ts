@@ -1,11 +1,16 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   parseWorktreeList,
   isPRBranch,
   extractPRNumber,
   isWorktreePath,
   generateWorktreePath,
+  findMainWorktreePath,
 } from './git.js'
+import { execa } from 'execa'
+
+// Mock execa for findMainWorktreePath tests
+vi.mock('execa')
 
 describe('Git Utility Functions', () => {
   describe('parseWorktreeList', () => {
@@ -437,6 +442,182 @@ describe('Git Utility Regression Tests', () => {
 
       extractionCases.forEach(({ branch, expected }) => {
         expect(extractPRNumber(branch)).toBe(expected)
+      })
+    })
+  })
+
+  describe('findMainWorktreePath', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    describe('3-tier main branch detection', () => {
+      it('should use mainBranch from options when specified', async () => {
+        // Mock git worktree list output with multiple worktrees
+        const mockOutput = [
+          'worktree /Users/dev/repo',
+          'HEAD abc123',
+          'branch refs/heads/develop',
+          '',
+          'worktree /Users/dev/feature-worktree',
+          'HEAD def456',
+          'branch refs/heads/feature-1',
+          '',
+        ].join('\n')
+
+        vi.mocked(execa).mockResolvedValueOnce({
+          stdout: mockOutput,
+          stderr: '',
+        } as ReturnType<typeof execa>)
+
+        const result = await findMainWorktreePath('/Users/dev/repo', { mainBranch: 'develop' })
+
+        expect(result).toBe('/Users/dev/repo')
+      })
+
+      it('should fall back to "main" branch when options not specified', async () => {
+        const mockOutput = [
+          'worktree /Users/dev/main-repo',
+          'HEAD abc123',
+          'branch refs/heads/main',
+          '',
+          'worktree /Users/dev/feature-worktree',
+          'HEAD def456',
+          'branch refs/heads/feature-1',
+          '',
+        ].join('\n')
+
+        vi.mocked(execa).mockResolvedValueOnce({
+          stdout: mockOutput,
+          stderr: '',
+        } as ReturnType<typeof execa>)
+
+        const result = await findMainWorktreePath('/Users/dev/main-repo')
+
+        expect(result).toBe('/Users/dev/main-repo')
+      })
+
+      it('should use first worktree when options not specified and no "main" branch exists', async () => {
+        const mockOutput = [
+          'worktree /Users/dev/master-repo',
+          'HEAD abc123',
+          'branch refs/heads/master',
+          '',
+          'worktree /Users/dev/feature-worktree',
+          'HEAD def456',
+          'branch refs/heads/feature-1',
+          '',
+        ].join('\n')
+
+        vi.mocked(execa).mockResolvedValueOnce({
+          stdout: mockOutput,
+          stderr: '',
+        } as ReturnType<typeof execa>)
+
+        const result = await findMainWorktreePath('/Users/dev/master-repo')
+
+        expect(result).toBe('/Users/dev/master-repo') // First entry
+      })
+
+      it('should throw error when specified mainBranch not found in worktrees', async () => {
+        const mockOutput = [
+          'worktree /Users/dev/repo',
+          'HEAD abc123',
+          'branch refs/heads/main',
+          '',
+        ].join('\n')
+
+        vi.mocked(execa).mockResolvedValueOnce({
+          stdout: mockOutput,
+          stderr: '',
+        } as ReturnType<typeof execa>)
+
+        await expect(
+          findMainWorktreePath('/Users/dev/repo', { mainBranch: 'develop' }),
+        ).rejects.toThrow(/No worktree found with branch 'develop'/)
+      })
+
+      it('should handle repository with single worktree', async () => {
+        const mockOutput = [
+          'worktree /Users/dev/repo',
+          'HEAD abc123',
+          'branch refs/heads/trunk',
+          '',
+        ].join('\n')
+
+        vi.mocked(execa).mockResolvedValueOnce({
+          stdout: mockOutput,
+          stderr: '',
+        } as ReturnType<typeof execa>)
+
+        // First worktree should be returned when no main branch exists
+        const result = await findMainWorktreePath('/Users/dev/repo')
+        expect(result).toBe('/Users/dev/repo')
+      })
+
+      it('should handle bare repository (first worktree)', async () => {
+        const mockOutput = ['worktree /Users/dev/bare-repo', 'bare', ''].join('\n')
+
+        vi.mocked(execa).mockResolvedValueOnce({
+          stdout: mockOutput,
+          stderr: '',
+        } as ReturnType<typeof execa>)
+
+        const result = await findMainWorktreePath('/Users/dev/bare-repo')
+        expect(result).toBe('/Users/dev/bare-repo')
+      })
+
+      it('should prefer settings mainBranch over "main" branch', async () => {
+        const mockOutput = [
+          'worktree /Users/dev/develop-repo',
+          'HEAD abc123',
+          'branch refs/heads/develop',
+          '',
+          'worktree /Users/dev/main-repo',
+          'HEAD def456',
+          'branch refs/heads/main',
+          '',
+        ].join('\n')
+
+        vi.mocked(execa).mockResolvedValueOnce({
+          stdout: mockOutput,
+          stderr: '',
+        } as ReturnType<typeof execa>)
+
+        // When options specify develop, should use that instead of main
+        const result = await findMainWorktreePath('/Users/dev/repo', { mainBranch: 'develop' })
+        expect(result).toBe('/Users/dev/develop-repo')
+      })
+
+      it('should handle empty worktree list gracefully', async () => {
+        const mockOutput = ''
+
+        vi.mocked(execa).mockResolvedValueOnce({
+          stdout: mockOutput,
+          stderr: '',
+        } as ReturnType<typeof execa>)
+
+        await expect(findMainWorktreePath('/Users/dev/repo')).rejects.toThrow(/No worktrees found/)
+      })
+    })
+
+    describe('backward compatibility', () => {
+      it('should work without options parameter (existing behavior)', async () => {
+        const mockOutput = [
+          'worktree /Users/dev/main-repo',
+          'HEAD abc123',
+          'branch refs/heads/main',
+          '',
+        ].join('\n')
+
+        vi.mocked(execa).mockResolvedValueOnce({
+          stdout: mockOutput,
+          stderr: '',
+        } as ReturnType<typeof execa>)
+
+        // Should work when called without options (current usage pattern)
+        const result = await findMainWorktreePath('/Users/dev/main-repo')
+        expect(result).toBe('/Users/dev/main-repo')
       })
     })
   })

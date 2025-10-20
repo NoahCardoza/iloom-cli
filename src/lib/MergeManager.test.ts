@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MergeManager } from './MergeManager.js'
+import { SettingsManager } from './SettingsManager.js'
 import * as git from '../utils/git.js'
 
 // Mock dependencies
 vi.mock('../utils/git.js')
 vi.mock('../utils/claude.js')
+vi.mock('./SettingsManager.js')
 vi.mock('../utils/logger.js', () => ({
 	logger: {
 		info: vi.fn(),
@@ -17,9 +19,15 @@ vi.mock('../utils/logger.js', () => ({
 
 describe('MergeManager', () => {
 	let manager: MergeManager
+	let mockSettingsManager: SettingsManager
 
 	beforeEach(() => {
-		manager = new MergeManager()
+		// Create a mock SettingsManager
+		mockSettingsManager = {
+			loadSettings: vi.fn().mockResolvedValue({}),
+		} as unknown as SettingsManager
+
+		manager = new MergeManager(mockSettingsManager)
 	})
 
 	afterEach(() => {
@@ -251,7 +259,7 @@ describe('MergeManager', () => {
 	describe('Fast-Forward Merge Execution', () => {
 		it('should switch to main branch before merging', async () => {
 			// Mock: successful merge flow
-			vi.mocked(git.findMainWorktreePath).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // branch --show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -261,13 +269,13 @@ describe('MergeManager', () => {
 
 			await manager.performFastForwardMerge('feature-branch', '/test/worktree', { force: true })
 
-			// Verify: findMainWorktreePath was called
-			expect(git.findMainWorktreePath).toHaveBeenCalledWith('/test/worktree')
+			// Verify: findMainWorktreePathWithSettings was called with worktreePath and settingsManager
+			expect(git.findMainWorktreePathWithSettings).toHaveBeenCalledWith('/test/worktree', mockSettingsManager)
 		})
 
 		it('should verify currently on main branch after checkout', async () => {
 			// Mock: successful flow
-			vi.mocked(git.findMainWorktreePath).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -286,7 +294,7 @@ describe('MergeManager', () => {
 
 		it('should successfully perform fast-forward only merge', async () => {
 			// Mock: successful merge
-			vi.mocked(git.findMainWorktreePath).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -305,7 +313,7 @@ describe('MergeManager', () => {
 
 		it('should show commits to be merged before confirmation', async () => {
 			// Mock: successful flow
-			vi.mocked(git.findMainWorktreePath).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -324,7 +332,7 @@ describe('MergeManager', () => {
 
 		it('should skip confirmation when force flag is true', async () => {
 			// Mock: successful merge
-			vi.mocked(git.findMainWorktreePath).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -340,7 +348,7 @@ describe('MergeManager', () => {
 
 		it('should handle merge failure gracefully', async () => {
 			// Mock: merge command fails
-			vi.mocked(git.findMainWorktreePath).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -356,7 +364,7 @@ describe('MergeManager', () => {
 
 		it('should fail if finding main worktree fails', async () => {
 			// Mock: findMainWorktreePath fails
-			vi.mocked(git.findMainWorktreePath).mockRejectedValueOnce(
+			vi.mocked(git.findMainWorktreePathWithSettings).mockRejectedValueOnce(
 				new Error('No worktree found with main branch checked out')
 			)
 
@@ -368,7 +376,7 @@ describe('MergeManager', () => {
 
 		it('should fail if branch verification shows not on main', async () => {
 			// Mock: main worktree found but verification shows wrong branch
-			vi.mocked(git.findMainWorktreePath).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('feature-branch') // show-current: wrong branch!
 
@@ -380,7 +388,7 @@ describe('MergeManager', () => {
 
 		it('should handle case where branch is already merged', async () => {
 			// Mock: no commits to merge
-			vi.mocked(git.findMainWorktreePath).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -416,7 +424,7 @@ describe('MergeManager', () => {
 
 		it('should preview merge without executing when dryRun=true', async () => {
 			// Mock: dry-run checks only (no checkout in dry-run)
-			vi.mocked(git.findMainWorktreePath).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current (first call since checkout is skipped)
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -452,7 +460,7 @@ describe('MergeManager', () => {
 
 		it('should validate fast-forward possibility in dry-run', async () => {
 			// Mock: validation happens in dry-run (no checkout in dry-run)
-			vi.mocked(git.findMainWorktreePath).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current (first call since checkout is skipped)
 				.mockResolvedValueOnce('abc123') // merge-base

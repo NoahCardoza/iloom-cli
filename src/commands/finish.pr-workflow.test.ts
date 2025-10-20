@@ -10,13 +10,13 @@ import { ResourceCleanup } from '../../src/lib/ResourceCleanup.js'
 import { BuildRunner } from '../../src/lib/BuildRunner.js'
 import type { PullRequest, Issue, GitWorktree } from '../../src/types/index.js'
 
-// Mock git utils module for pushBranchToRemote and findMainWorktreePath
+// Mock git utils module for pushBranchToRemote and findMainWorktreePathWithSettings
 vi.mock('../../src/utils/git.js', async () => {
 	const actual = await vi.importActual<typeof import('../../src/utils/git.js')>('../../src/utils/git.js')
 	return {
 		...actual,
 		pushBranchToRemote: vi.fn().mockResolvedValue(undefined),
-		findMainWorktreePath: vi.fn().mockResolvedValue('/test/main'),
+		findMainWorktreePathWithSettings: vi.fn().mockResolvedValue('/test/main'),
 	}
 })
 

@@ -126,9 +126,76 @@ describe('SettingsManager', () => {
 			const result = await settingsManager.loadSettings()
 			expect(result).toEqual(validSettings)
 		})
+
+		it('should load settings with mainBranch field', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'develop',
+				agents: {},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.mainBranch).toBe('develop')
+		})
 	})
 
 	describe('validateSettings', () => {
+		describe('mainBranch setting validation', () => {
+			it('should accept valid mainBranch string setting', () => {
+				const settings = {
+					mainBranch: 'develop',
+				}
+				// Should not throw
+				expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+			})
+
+			it('should accept "main" as mainBranch', () => {
+				const settings = {
+					mainBranch: 'main',
+				}
+				expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+			})
+
+			it('should accept "master" as mainBranch', () => {
+				const settings = {
+					mainBranch: 'master',
+				}
+				expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+			})
+
+			it('should throw error when mainBranch is not a string', () => {
+				const settings = {
+					mainBranch: 123,
+				}
+				expect(() =>
+					settingsManager['validateSettings'](settings as never),
+				).toThrow(/mainBranch.*must be a string/i)
+			})
+
+			it('should throw error when mainBranch is empty string', () => {
+				const settings = {
+					mainBranch: '',
+				}
+				expect(() => settingsManager['validateSettings'](settings)).toThrow(
+					/mainBranch.*cannot be empty/i,
+				)
+			})
+
+			it('should accept settings with both mainBranch and agents', () => {
+				const settings = {
+					mainBranch: 'develop',
+					agents: {
+						'test-agent': {
+							model: 'sonnet',
+						},
+					},
+				}
+				expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+			})
+		})
+
 		it('should accept valid settings with all agents configured', () => {
 			const validSettings = {
 				agents: {

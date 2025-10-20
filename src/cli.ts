@@ -475,6 +475,24 @@ program
     }
   })
 
+// Test command for Git integration
+program
+  .command('test-git')
+  .description('Test Git integration - findMainWorktreePath() function (reads .hatchbox/settings.json)')
+  .action(async () => {
+    try {
+      const { TestGitCommand } = await import('./commands/test-git.js')
+      const command = new TestGitCommand()
+      await command.execute()
+    } catch (error) {
+      logger.error(`Test git failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      if (error instanceof Error && error.stack) {
+        logger.debug(error.stack)
+      }
+      process.exit(1)
+    }
+  })
+
 // Test command for Neon integration
 program
   .command('test-neon')

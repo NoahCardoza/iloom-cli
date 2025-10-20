@@ -3,6 +3,7 @@ import { ResourceCleanup } from '../../src/lib/ResourceCleanup.js'
 import { GitWorktreeManager } from '../../src/lib/GitWorktreeManager.js'
 import { ProcessManager } from '../../src/lib/process/ProcessManager.js'
 import { DatabaseManager } from '../../src/lib/DatabaseManager.js'
+import { SettingsManager } from '../../src/lib/SettingsManager.js'
 import { createMockDatabaseManager } from '../mocks/MockDatabaseProvider.js'
 import type { GitWorktree } from '../../src/types/worktree.js'
 import type { ParsedInput } from '../../src/commands/start.js'
@@ -10,6 +11,7 @@ import type { ParsedInput } from '../../src/commands/start.js'
 // Mock dependencies
 vi.mock('../../src/lib/GitWorktreeManager.js')
 vi.mock('../../src/lib/process/ProcessManager.js')
+vi.mock('../../src/lib/SettingsManager.js')
 vi.mock('../../src/utils/git.js', () => ({
   executeGitCommand: vi.fn().mockResolvedValue(undefined),
   hasUncommittedChanges: vi.fn().mockResolvedValue(false),
@@ -21,13 +23,23 @@ describe('ResourceCleanup - Database Integration', () => {
   let mockGitWorktree: vi.Mocked<GitWorktreeManager>
   let mockProcessManager: vi.Mocked<ProcessManager>
   let mockDatabase: DatabaseManager
+  let mockSettingsManager: SettingsManager
 
   beforeEach(() => {
     mockGitWorktree = new GitWorktreeManager() as vi.Mocked<GitWorktreeManager>
     mockProcessManager = new ProcessManager() as vi.Mocked<ProcessManager>
     mockDatabase = createMockDatabaseManager()
+    mockSettingsManager = {
+      loadSettings: vi.fn().mockResolvedValue({}),
+    } as unknown as SettingsManager
 
-    resourceCleanup = new ResourceCleanup(mockGitWorktree, mockProcessManager, mockDatabase)
+    resourceCleanup = new ResourceCleanup(
+      mockGitWorktree,
+      mockProcessManager,
+      mockDatabase,
+      undefined,
+      mockSettingsManager
+    )
 
     // Mock process manager methods
     vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3123)

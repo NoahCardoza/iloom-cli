@@ -39,13 +39,13 @@ vi.mock('../utils/package-manager.js', () => ({
 	runScript: vi.fn().mockResolvedValue(undefined),
 }))
 
-// Mock git utils module for pushBranchToRemote and findMainWorktreePath
+// Mock git utils module for pushBranchToRemote and findMainWorktreePathWithSettings
 vi.mock('../utils/git.js', async () => {
 	const actual = await vi.importActual<typeof import('../utils/git.js')>('../utils/git.js')
 	return {
 		...actual,
 		pushBranchToRemote: vi.fn().mockResolvedValue(undefined),
-		findMainWorktreePath: vi.fn().mockResolvedValue('/test/main'),
+		findMainWorktreePathWithSettings: vi.fn().mockResolvedValue('/test/main'),
 	}
 })
 
@@ -2730,15 +2730,15 @@ describe('FinishCommand', () => {
 			beforeEach(async () => {
 				// Import the mocked functions
 				const { installDependencies } = await import('../utils/package-manager.js')
-				const { findMainWorktreePath } = await import('../utils/git.js')
+				const { findMainWorktreePathWithSettings } = await import('../utils/git.js')
 
 				// Reset mocks
 				vi.mocked(installDependencies).mockClear()
-				vi.mocked(findMainWorktreePath).mockClear()
+				vi.mocked(findMainWorktreePathWithSettings).mockClear()
 
 				// Setup default mocks
 				vi.mocked(installDependencies).mockResolvedValue(undefined)
-				vi.mocked(findMainWorktreePath).mockResolvedValue('/test/main')
+				vi.mocked(findMainWorktreePathWithSettings).mockResolvedValue('/test/main')
 
 				// Mock successful issue fetch
 				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
@@ -2756,15 +2756,15 @@ describe('FinishCommand', () => {
 
 			it('should install dependencies in main worktree after merge', async () => {
 				const { installDependencies } = await import('../utils/package-manager.js')
-				const { findMainWorktreePath } = await import('../utils/git.js')
+				const { findMainWorktreePathWithSettings } = await import('../utils/git.js')
 
 				await command.execute({
 					identifier: '123',
 					options: {},
 				})
 
-				// Verify findMainWorktreePath was called
-				expect(findMainWorktreePath).toHaveBeenCalledWith(mockWorktree.path)
+				// Verify findMainWorktreePathWithSettings was called with worktree path and settingsManager
+				expect(findMainWorktreePathWithSettings).toHaveBeenCalledWith(mockWorktree.path, expect.any(Object))
 
 				// Verify installDependencies was called with main worktree path and frozen=true
 				expect(installDependencies).toHaveBeenCalledWith('/test/main', true)
