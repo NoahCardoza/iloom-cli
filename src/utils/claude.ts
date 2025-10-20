@@ -14,6 +14,7 @@ export interface ClaudeCliOptions {
 	mcpConfig?: Record<string, unknown>[] // Array of MCP server configurations
 	allowedTools?: string[] // Tools to allow via --allowed-tools flag
 	disallowedTools?: string[] // Tools to disallow via --disallowed-tools flag
+	agents?: Record<string, unknown> // Agent configurations for --agents flag
 }
 
 /**
@@ -57,7 +58,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools } = options
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents } = options
 
 	// Build command arguments
 	const args: string[] = []
@@ -100,6 +101,11 @@ export async function launchClaude(
 	// Add --disallowed-tools flags if provided
 	if (disallowedTools && disallowedTools.length > 0) {
 		args.push('--disallowed-tools', ...disallowedTools)
+	}
+
+	// Add --agents flag if provided
+	if (agents) {
+		args.push('--agents', JSON.stringify(agents))
 	}
 
 	try {

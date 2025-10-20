@@ -919,6 +919,205 @@ describe('claude utils', () => {
 				)
 			})
 		})
+
+		describe('agents parameter', () => {
+			it('should include --agents flag when agents provided', async () => {
+				const prompt = 'Test prompt'
+				const agents = {
+					'test-agent': {
+						description: 'Test agent',
+						prompt: 'You are a test agent',
+						tools: ['Read', 'Write'],
+						model: 'sonnet',
+					},
+				}
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: true,
+					agents,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--add-dir', '/tmp', '--agents', JSON.stringify(agents)],
+					expect.any(Object),
+				)
+			})
+
+			it('should omit --agents flag when agents not provided', async () => {
+				const prompt = 'Test prompt'
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, { headless: true })
+
+				const execaCall = vi.mocked(execa).mock.calls[0]
+				expect(execaCall[1]).not.toContain('--agents')
+			})
+
+			it('should properly JSON.stringify agents object', async () => {
+				const prompt = 'Test prompt'
+				const agents = {
+					'agent-1': {
+						description: 'First agent',
+						prompt: 'Agent 1 prompt',
+						tools: ['Read', 'Write'],
+						model: 'sonnet',
+						color: 'blue',
+					},
+					'agent-2': {
+						description: 'Second agent',
+						prompt: 'Agent 2 prompt',
+						tools: ['Edit', 'Bash'],
+						model: 'opus',
+						color: 'green',
+					},
+				}
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: true,
+					agents,
+				})
+
+				// Verify JSON.stringify was used
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--add-dir', '/tmp', '--agents', JSON.stringify(agents)],
+					expect.any(Object),
+				)
+			})
+
+			it('should handle large agent prompts without truncation', async () => {
+				const prompt = 'Test prompt'
+				const longPrompt = 'A'.repeat(5000) // 5000 character prompt
+				const agents = {
+					'large-agent': {
+						description: 'Agent with large prompt',
+						prompt: longPrompt,
+						tools: ['Read'],
+						model: 'sonnet',
+					},
+				}
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: true,
+					agents,
+				})
+
+				const execaCall = vi.mocked(execa).mock.calls[0]
+				const agentsArg = execaCall[1][execaCall[1].indexOf('--agents') + 1]
+				const parsedAgents = JSON.parse(agentsArg as string)
+
+				expect(parsedAgents['large-agent'].prompt).toBe(longPrompt)
+				expect(parsedAgents['large-agent'].prompt.length).toBe(5000)
+			})
+
+			it('should work with agents in interactive mode', async () => {
+				const prompt = 'Test prompt'
+				const agents = {
+					'test-agent': {
+						description: 'Test agent',
+						prompt: 'You are a test agent',
+						tools: ['Read'],
+						model: 'sonnet',
+					},
+				}
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: false,
+					agents,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['--add-dir', '/tmp', '--agents', JSON.stringify(agents), '--', prompt],
+					expect.objectContaining({
+						stdio: 'inherit',
+					}),
+				)
+			})
+
+			it('should combine agents with other options in correct order', async () => {
+				const prompt = 'Test prompt'
+				const mcpConfigs = [{ server: { command: 'node', args: ['s.js'] } }]
+				const allowedTools = ['mcp__github_comment__create_comment']
+				const disallowedTools = ['Bash(gh api:*)']
+				const agents = {
+					'test-agent': {
+						description: 'Test agent',
+						prompt: 'You are a test agent',
+						tools: ['Read'],
+						model: 'sonnet',
+					},
+				}
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: true,
+					model: 'opus',
+					permissionMode: 'plan',
+					addDir: '/workspace',
+					appendSystemPrompt: 'System instructions',
+					mcpConfig: mcpConfigs,
+					allowedTools,
+					disallowedTools,
+					agents,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					[
+						'-p',
+						'--model',
+						'opus',
+						'--permission-mode',
+						'plan',
+						'--add-dir',
+						'/workspace',
+						'--add-dir',
+						'/tmp',
+						'--append-system-prompt',
+						'System instructions',
+						'--mcp-config',
+						JSON.stringify(mcpConfigs[0]),
+						'--allowed-tools',
+						...allowedTools,
+						'--disallowed-tools',
+						...disallowedTools,
+						'--agents',
+						JSON.stringify(agents),
+					],
+					expect.any(Object),
+				)
+			})
+		})
 	})
 
 	describe('launchClaudeInNewTerminalWindow', () => {

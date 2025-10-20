@@ -5,6 +5,7 @@ import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables } from '../lib/PromptTemplateManager.js'
 import { getRepoInfo } from '../utils/github.js'
+import { AgentManager } from '../lib/AgentManager.js'
 
 /**
  * IgniteCommand: Auto-detect workspace context and launch Claude
@@ -21,13 +22,16 @@ import { getRepoInfo } from '../utils/github.js'
 export class IgniteCommand {
 	private templateManager: PromptTemplateManager
 	private gitWorktreeManager: GitWorktreeManager
+	private agentManager: AgentManager
 
 	constructor(
 		templateManager?: PromptTemplateManager,
-		gitWorktreeManager?: GitWorktreeManager
+		gitWorktreeManager?: GitWorktreeManager,
+		agentManager?: AgentManager
 	) {
 		this.templateManager = templateManager ?? new PromptTemplateManager()
 		this.gitWorktreeManager = gitWorktreeManager ?? new GitWorktreeManager()
+		this.agentManager = agentManager ?? new AgentManager()
 	}
 
 	/**
@@ -103,6 +107,20 @@ export class IgniteCommand {
 				}
 			}
 
+			// Step 4.6: Load agent configurations
+			let agents: Record<string, unknown> | undefined
+			try {
+				const loadedAgents = await this.agentManager.loadAgents()
+				agents = this.agentManager.formatForCli(loadedAgents)
+				logger.debug('Loaded agent configurations', {
+					agentCount: Object.keys(agents).length,
+					agentNames: Object.keys(agents),
+				})
+			} catch (error) {
+				// Log warning but continue without agents
+				logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			}
+
 			logger.debug('Launching Claude in current terminal', {
 				type: context.type,
 				model,
@@ -120,6 +138,7 @@ export class IgniteCommand {
 				...(mcpConfig && { mcpConfig }),
 				...(allowedTools && { allowedTools }),
 				...(disallowedTools && { disallowedTools }),
+				...(agents && { agents }),
 			})
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
