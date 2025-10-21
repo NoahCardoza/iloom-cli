@@ -315,4 +315,175 @@ describe('SettingsManager', () => {
 			expect(result).toBe('/test/project/.hatchbox/settings.json')
 		})
 	})
+
+	describe('workflows settings validation', () => {
+		it('should accept valid workflows configuration with issue and pr permission modes', () => {
+			const settings = {
+				workflows: {
+					issue: {
+						permissionMode: 'bypassPermissions',
+					},
+					pr: {
+						permissionMode: 'acceptEdits',
+					},
+				},
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should accept workflows with only issue configuration', () => {
+			const settings = {
+				workflows: {
+					issue: {
+						permissionMode: 'plan',
+					},
+				},
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should accept workflows with only pr configuration', () => {
+			const settings = {
+				workflows: {
+					pr: {
+						permissionMode: 'acceptEdits',
+					},
+				},
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should accept all valid permission mode values: plan, acceptEdits, bypassPermissions, default', () => {
+			const validModes = ['plan', 'acceptEdits', 'bypassPermissions', 'default']
+
+			validModes.forEach(mode => {
+				const settings = {
+					workflows: {
+						issue: {
+							permissionMode: mode,
+						},
+					},
+				}
+				expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+			})
+		})
+
+		it('should throw error for invalid permission mode value', () => {
+			const settings = {
+				workflows: {
+					issue: {
+						permissionMode: 'invalidMode',
+					},
+				},
+			}
+			expect(() =>
+				settingsManager['validateSettings'](settings as never),
+			).toThrow(/Invalid enum value/)
+		})
+
+		it('should throw error when permissionMode is not a string', () => {
+			const settings = {
+				workflows: {
+					issue: {
+						permissionMode: 123,
+					},
+				},
+			}
+			expect(() =>
+				settingsManager['validateSettings'](settings as never),
+			).toThrow(/received number/)
+		})
+
+		it('should accept settings with workflows, mainBranch, and agents combined', () => {
+			const settings = {
+				workflows: {
+					issue: {
+						permissionMode: 'bypassPermissions',
+					},
+				},
+				mainBranch: 'develop',
+				agents: {
+					'test-agent': {
+						model: 'sonnet',
+					},
+				},
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should accept empty workflows object', () => {
+			const settings = {
+				workflows: {},
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should accept regular workflow permission mode configuration', () => {
+			const settings = {
+				workflows: {
+					regular: {
+						permissionMode: 'plan',
+					},
+				},
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+	})
+
+	describe('loadSettings with workflows', () => {
+		it('should load settings with workflows configuration correctly', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				workflows: {
+					issue: {
+						permissionMode: 'bypassPermissions',
+					},
+					pr: {
+						permissionMode: 'acceptEdits',
+					},
+				},
+				mainBranch: 'develop',
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.workflows).toEqual(settings.workflows)
+			expect(result.mainBranch).toBe('develop')
+		})
+
+		it('should handle settings with partial workflows (issue only)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				workflows: {
+					issue: {
+						permissionMode: 'plan',
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.workflows?.issue?.permissionMode).toBe('plan')
+			expect(result.workflows?.pr).toBeUndefined()
+		})
+
+		it('should handle settings with partial workflows (pr only)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				workflows: {
+					pr: {
+						permissionMode: 'acceptEdits',
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.workflows?.pr?.permissionMode).toBe('acceptEdits')
+			expect(result.workflows?.issue).toBeUndefined()
+		})
+	})
 })

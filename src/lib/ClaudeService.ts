@@ -1,5 +1,6 @@
 import { detectClaudeCli, launchClaude, launchClaudeInNewTerminalWindow, ClaudeCliOptions, generateBranchName } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables } from './PromptTemplateManager.js'
+import { SettingsManager, HatchboxSettings } from './SettingsManager.js'
 import { logger } from '../utils/logger.js'
 
 export interface ClaudeWorkflowOptions {
@@ -15,9 +16,12 @@ export interface ClaudeWorkflowOptions {
 
 export class ClaudeService {
 	private templateManager: PromptTemplateManager
+	private settingsManager: SettingsManager
+	private settings?: HatchboxSettings
 
-	constructor(templateManager?: PromptTemplateManager) {
+	constructor(templateManager?: PromptTemplateManager, settingsManager?: SettingsManager) {
 		this.templateManager = templateManager ?? new PromptTemplateManager()
+		this.settingsManager = settingsManager ?? new SettingsManager()
 	}
 
 	/**
@@ -45,7 +49,21 @@ export class ClaudeService {
 	private getPermissionModeForWorkflow(
 		type: 'issue' | 'pr' | 'regular'
 	): ClaudeCliOptions['permissionMode'] {
-		// Issue workflows use acceptEdits mode
+		// Check settings for configured permission mode
+		if (this.settings?.workflows) {
+			const workflowConfig =
+				type === 'issue'
+					? this.settings.workflows.issue
+					: type === 'pr'
+						? this.settings.workflows.pr
+						: this.settings.workflows.regular
+
+			if (workflowConfig?.permissionMode) {
+				return workflowConfig.permissionMode
+			}
+		}
+
+		// Fall back to current defaults
 		if (type === 'issue') {
 			return 'acceptEdits'
 		}
@@ -60,6 +78,16 @@ export class ClaudeService {
 		const { type, issueNumber, prNumber, title, workspacePath, port, headless = false, branchName } = options
 
 		try {
+			// Load settings if not already cached
+			if (!this.settings) {
+				try {
+					this.settings = await this.settingsManager.loadSettings()
+				} catch (error) {
+					logger.warn('Failed to load settings, using defaults', { error })
+					this.settings = {}
+				}
+			}
+
 			// Build template variables
 			const variables: TemplateVariables = {
 				WORKSPACE_PATH: workspacePath,
@@ -91,6 +119,14 @@ export class ClaudeService {
 			// Determine model and permission mode
 			const model = this.getModelForWorkflow(type)
 			const permissionMode = this.getPermissionModeForWorkflow(type)
+
+			// Display warning if bypassPermissions mode is used
+			if (permissionMode === 'bypassPermissions') {
+				logger.warn(
+					'⚠️  WARNING: Using bypassPermissions mode - Claude will execute all tool calls without confirmation. ' +
+						'This can be dangerous. Use with caution.'
+				)
+			}
 
 			// Build Claude CLI options
 			const claudeOptions: ClaudeCliOptions = {

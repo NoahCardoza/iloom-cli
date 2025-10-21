@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ClaudeService, ClaudeWorkflowOptions } from './ClaudeService.js'
 import { PromptTemplateManager } from './PromptTemplateManager.js'
+import { SettingsManager, HatchboxSettings } from './SettingsManager.js'
 import * as claudeUtils from '../utils/claude.js'
+import { logger } from '../utils/logger.js'
 
 vi.mock('../utils/claude.js')
 vi.mock('../utils/logger.js', () => ({
@@ -274,6 +276,417 @@ describe('ClaudeService', () => {
 		})
 	})
 
+	describe('getPermissionModeForWorkflow with settings', () => {
+		it('should use configured permission mode for issue workflow when settings provided', async () => {
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					workflows: {
+						issue: {
+							permissionMode: 'bypassPermissions',
+						},
+					},
+				} as HatchboxSettings),
+			} as unknown as SettingsManager
+
+			const serviceWithSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
+			const options: ClaudeWorkflowOptions = {
+				type: 'issue',
+				issueNumber: 123,
+				workspacePath: '/workspace',
+				headless: false,
+			}
+
+			const prompt = 'Issue prompt'
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+			vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+			await serviceWithSettings.launchForWorkflow(options)
+
+			expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(
+				prompt,
+				expect.objectContaining({
+					permissionMode: 'bypassPermissions',
+				})
+			)
+		})
+
+		it('should use configured permission mode for pr workflow when settings provided', async () => {
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					workflows: {
+						pr: {
+							permissionMode: 'plan',
+						},
+					},
+				} as HatchboxSettings),
+			} as unknown as SettingsManager
+
+			const serviceWithSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
+			const options: ClaudeWorkflowOptions = {
+				type: 'pr',
+				prNumber: 456,
+				workspacePath: '/workspace',
+				headless: false,
+			}
+
+			const prompt = 'PR prompt'
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+			vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+			await serviceWithSettings.launchForWorkflow(options)
+
+			expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(
+				prompt,
+				expect.objectContaining({
+					permissionMode: 'plan',
+				})
+			)
+		})
+
+		it('should use configured permission mode for regular workflow when settings provided', async () => {
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					workflows: {
+						regular: {
+							permissionMode: 'acceptEdits',
+						},
+					},
+				} as HatchboxSettings),
+			} as unknown as SettingsManager
+
+			const serviceWithSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
+			const options: ClaudeWorkflowOptions = {
+				type: 'regular',
+				workspacePath: '/workspace',
+				headless: false,
+			}
+
+			const prompt = 'Regular prompt'
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+			vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+			await serviceWithSettings.launchForWorkflow(options)
+
+			expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(
+				prompt,
+				expect.objectContaining({
+					permissionMode: 'acceptEdits',
+				})
+			)
+		})
+
+		it('should fall back to acceptEdits for issue workflow when no settings', async () => {
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({} as HatchboxSettings),
+			} as unknown as SettingsManager
+
+			const serviceWithSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
+			const options: ClaudeWorkflowOptions = {
+				type: 'issue',
+				issueNumber: 123,
+				workspacePath: '/workspace',
+				headless: false,
+			}
+
+			const prompt = 'Issue prompt'
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+			vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+			await serviceWithSettings.launchForWorkflow(options)
+
+			expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(
+				prompt,
+				expect.objectContaining({
+					permissionMode: 'acceptEdits',
+				})
+			)
+		})
+
+		it('should fall back to default for pr workflow when no settings', async () => {
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({} as HatchboxSettings),
+			} as unknown as SettingsManager
+
+			const serviceWithSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
+			const options: ClaudeWorkflowOptions = {
+				type: 'pr',
+				prNumber: 456,
+				workspacePath: '/workspace',
+				headless: false,
+			}
+
+			const prompt = 'PR prompt'
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+			vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+			await serviceWithSettings.launchForWorkflow(options)
+
+			// Should not include permissionMode when it's 'default'
+			expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(
+				prompt,
+				expect.not.objectContaining({
+					permissionMode: expect.anything(),
+				})
+			)
+		})
+
+		it('should fall back to default when workflows section missing', async () => {
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					mainBranch: 'main',
+				} as HatchboxSettings),
+			} as unknown as SettingsManager
+
+			const serviceWithSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
+			const options: ClaudeWorkflowOptions = {
+				type: 'pr',
+				prNumber: 456,
+				workspacePath: '/workspace',
+				headless: false,
+			}
+
+			const prompt = 'PR prompt'
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+			vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+			await serviceWithSettings.launchForWorkflow(options)
+
+			// Should not include permissionMode when it's 'default'
+			expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(
+				prompt,
+				expect.not.objectContaining({
+					permissionMode: expect.anything(),
+				})
+			)
+		})
+
+		it('should fall back to default when specific workflow type not configured', async () => {
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					workflows: {
+						issue: {
+							permissionMode: 'bypassPermissions',
+						},
+					},
+				} as HatchboxSettings),
+			} as unknown as SettingsManager
+
+			const serviceWithSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
+			const options: ClaudeWorkflowOptions = {
+				type: 'pr',
+				prNumber: 456,
+				workspacePath: '/workspace',
+				headless: false,
+			}
+
+			const prompt = 'PR prompt'
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+			vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+			await serviceWithSettings.launchForWorkflow(options)
+
+			// Should not include permissionMode when it's 'default'
+			expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(
+				prompt,
+				expect.not.objectContaining({
+					permissionMode: expect.anything(),
+				})
+			)
+		})
+
+		it('should handle bypassPermissions mode from settings', async () => {
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					workflows: {
+						issue: {
+							permissionMode: 'bypassPermissions',
+						},
+					},
+				} as HatchboxSettings),
+			} as unknown as SettingsManager
+
+			const serviceWithSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
+			const options: ClaudeWorkflowOptions = {
+				type: 'issue',
+				issueNumber: 123,
+				workspacePath: '/workspace',
+				headless: false,
+			}
+
+			const prompt = 'Issue prompt'
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+			vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+			await serviceWithSettings.launchForWorkflow(options)
+
+			expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(
+				prompt,
+				expect.objectContaining({
+					permissionMode: 'bypassPermissions',
+				})
+			)
+		})
+	})
+
+	describe('bypassPermissions warning', () => {
+		it('should log warning when bypassPermissions mode is used for issue workflow', async () => {
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					workflows: {
+						issue: {
+							permissionMode: 'bypassPermissions',
+						},
+					},
+				} as HatchboxSettings),
+			} as unknown as SettingsManager
+
+			const serviceWithSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
+			const options: ClaudeWorkflowOptions = {
+				type: 'issue',
+				issueNumber: 123,
+				workspacePath: '/workspace',
+				headless: false,
+			}
+
+			const prompt = 'Issue prompt'
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+			vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+			await serviceWithSettings.launchForWorkflow(options)
+
+			expect(logger.warn).toHaveBeenCalledWith(
+				expect.stringContaining('WARNING: Using bypassPermissions mode')
+			)
+		})
+
+		it('should log warning when bypassPermissions mode is used for pr workflow', async () => {
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					workflows: {
+						pr: {
+							permissionMode: 'bypassPermissions',
+						},
+					},
+				} as HatchboxSettings),
+			} as unknown as SettingsManager
+
+			const serviceWithSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
+			const options: ClaudeWorkflowOptions = {
+				type: 'pr',
+				prNumber: 456,
+				workspacePath: '/workspace',
+				headless: false,
+			}
+
+			const prompt = 'PR prompt'
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+			vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+			await serviceWithSettings.launchForWorkflow(options)
+
+			expect(logger.warn).toHaveBeenCalledWith(
+				expect.stringContaining('WARNING: Using bypassPermissions mode')
+			)
+		})
+
+		it('should not log warning for acceptEdits mode', async () => {
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					workflows: {
+						issue: {
+							permissionMode: 'acceptEdits',
+						},
+					},
+				} as HatchboxSettings),
+			} as unknown as SettingsManager
+
+			const serviceWithSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
+			const options: ClaudeWorkflowOptions = {
+				type: 'issue',
+				issueNumber: 123,
+				workspacePath: '/workspace',
+				headless: false,
+			}
+
+			const prompt = 'Issue prompt'
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+			vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+			await serviceWithSettings.launchForWorkflow(options)
+
+			expect(logger.warn).not.toHaveBeenCalledWith(
+				expect.stringContaining('WARNING: Using bypassPermissions mode')
+			)
+		})
+
+		it('should not log warning for plan mode', async () => {
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					workflows: {
+						issue: {
+							permissionMode: 'plan',
+						},
+					},
+				} as HatchboxSettings),
+			} as unknown as SettingsManager
+
+			const serviceWithSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
+			const options: ClaudeWorkflowOptions = {
+				type: 'issue',
+				issueNumber: 123,
+				workspacePath: '/workspace',
+				headless: false,
+			}
+
+			const prompt = 'Issue prompt'
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+			vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+			await serviceWithSettings.launchForWorkflow(options)
+
+			expect(logger.warn).not.toHaveBeenCalledWith(
+				expect.stringContaining('WARNING: Using bypassPermissions mode')
+			)
+		})
+
+		it('should not log warning for default mode', async () => {
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({} as HatchboxSettings),
+			} as unknown as SettingsManager
+
+			const serviceWithSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
+			const options: ClaudeWorkflowOptions = {
+				type: 'pr',
+				prNumber: 456,
+				workspacePath: '/workspace',
+				headless: false,
+			}
+
+			const prompt = 'PR prompt'
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValueOnce(prompt)
+			vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
+
+			await serviceWithSettings.launchForWorkflow(options)
+
+			expect(logger.warn).not.toHaveBeenCalledWith(
+				expect.stringContaining('WARNING: Using bypassPermissions mode')
+			)
+		})
+	})
+
 	describe('constructor', () => {
 		it('should create default PromptTemplateManager if not provided', () => {
 			const serviceWithDefaults = new ClaudeService()
@@ -287,6 +700,14 @@ describe('ClaudeService', () => {
 			const serviceWithCustom = new ClaudeService(customManager)
 
 			expect(serviceWithCustom).toBeDefined()
+		})
+
+		it('should accept SettingsManager as second parameter', () => {
+			const customManager = new PromptTemplateManager('custom/path')
+			const mockSettingsManager = new SettingsManager()
+			const serviceWithBoth = new ClaudeService(customManager, mockSettingsManager)
+
+			expect(serviceWithBoth).toBeDefined()
 		})
 	})
 })

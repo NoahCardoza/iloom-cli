@@ -25,6 +25,7 @@ export class IgniteCommand {
 	private gitWorktreeManager: GitWorktreeManager
 	private agentManager: AgentManager
 	private settingsManager: SettingsManager
+	private settings?: import('../lib/SettingsManager.js').HatchboxSettings
 
 	constructor(
 		templateManager?: PromptTemplateManager,
@@ -62,9 +63,27 @@ export class IgniteCommand {
 			// User prompt to trigger the workflow (system instructions set behavior via appendSystemPrompt)
 			const userPrompt = 'Go!'
 
+			// Step 2.5: Load settings if not cached
+			if (!this.settings) {
+				try {
+					this.settings = await this.settingsManager.loadSettings()
+				} catch (error) {
+					logger.warn(`Failed to load settings: ${error instanceof Error ? error.message : 'Unknown error'}`)
+					this.settings = {}
+				}
+			}
+
 			// Step 3: Determine model and permission mode based on workflow type
 			const model = this.getModelForWorkflow(context.type)
 			const permissionMode = this.getPermissionModeForWorkflow(context.type)
+
+			// Display warning if bypassPermissions is used
+			if (permissionMode === 'bypassPermissions') {
+				logger.warn(
+					'⚠️  WARNING: Using bypassPermissions mode - Claude will execute all tool calls without confirmation. ' +
+						'This can be dangerous. Use with caution.'
+				)
+			}
 
 			// Step 4: Build Claude CLI options
 			const claudeOptions: ClaudeCliOptions = {
@@ -111,24 +130,18 @@ export class IgniteCommand {
 				}
 			}
 
-			// Step 4.6: Load project settings and agent configurations
+			// Step 4.6: Load agent configurations using cached settings
 			let agents: Record<string, unknown> | undefined
 			try {
-				// Load project-level settings first
-				let settings
-				try {
-					settings = await this.settingsManager.loadSettings()
-					if (settings?.agents && Object.keys(settings.agents).length > 0) {
-						logger.debug('Loaded project settings', {
-							agentOverrides: Object.keys(settings.agents),
-						})
-					}
-				} catch (error) {
-					logger.warn(`Failed to load settings: ${error instanceof Error ? error.message : 'Unknown error'}`)
+				// Use cached settings from Step 2.5
+				if (this.settings?.agents && Object.keys(this.settings.agents).length > 0) {
+					logger.debug('Loaded project settings', {
+						agentOverrides: Object.keys(this.settings.agents),
+					})
 				}
 
 				// Load agents with settings overrides
-				const loadedAgents = await this.agentManager.loadAgents(settings)
+				const loadedAgents = await this.agentManager.loadAgents(this.settings)
 				agents = this.agentManager.formatForCli(loadedAgents)
 				logger.debug('Loaded agent configurations', {
 					agentCount: Object.keys(agents).length,
@@ -237,7 +250,21 @@ export class IgniteCommand {
 	private getPermissionModeForWorkflow(
 		type: 'issue' | 'pr' | 'regular'
 	): ClaudeCliOptions['permissionMode'] {
-		// Issue workflows use acceptEdits mode
+		// Check settings for configured permission mode
+		if (this.settings?.workflows) {
+			const workflowConfig =
+				type === 'issue'
+					? this.settings.workflows.issue
+					: type === 'pr'
+						? this.settings.workflows.pr
+						: this.settings.workflows.regular
+
+			if (workflowConfig?.permissionMode) {
+				return workflowConfig.permissionMode
+			}
+		}
+
+		// Fall back to current defaults
 		if (type === 'issue') {
 			return 'acceptEdits'
 		}

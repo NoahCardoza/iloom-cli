@@ -15,6 +15,27 @@ export const AgentSettingsSchema = z.object({
 })
 
 /**
+ * Zod schema for workflow permission configuration
+ */
+export const WorkflowPermissionSchema = z.object({
+	permissionMode: z
+		.enum(['plan', 'acceptEdits', 'bypassPermissions', 'default'])
+		.optional()
+		.describe('Permission mode for Claude CLI in this workflow type'),
+})
+
+/**
+ * Zod schema for workflows settings
+ */
+export const WorkflowsSettingsSchema = z
+	.object({
+		issue: WorkflowPermissionSchema.optional(),
+		pr: WorkflowPermissionSchema.optional(),
+		regular: WorkflowPermissionSchema.optional(),
+	})
+	.optional()
+
+/**
  * Zod schema for Hatchbox settings
  */
 export const HatchboxSettingsSchema = z.object({
@@ -23,6 +44,7 @@ export const HatchboxSettingsSchema = z.object({
 		.min(1, "Settings 'mainBranch' cannot be empty")
 		.optional()
 		.describe('Name of the main/primary branch for the repository'),
+	workflows: WorkflowsSettingsSchema.describe('Per-workflow-type permission configurations'),
 	agents: z
 		.record(z.string(), AgentSettingsSchema)
 		.optional()
@@ -34,6 +56,16 @@ export const HatchboxSettingsSchema = z.object({
  * TypeScript type for agent settings derived from Zod schema
  */
 export type AgentSettings = z.infer<typeof AgentSettingsSchema>
+
+/**
+ * TypeScript type for workflow permission configuration derived from Zod schema
+ */
+export type WorkflowPermission = z.infer<typeof WorkflowPermissionSchema>
+
+/**
+ * TypeScript type for workflows settings derived from Zod schema
+ */
+export type WorkflowsSettings = z.infer<typeof WorkflowsSettingsSchema>
 
 /**
  * TypeScript type for Hatchbox settings derived from Zod schema
