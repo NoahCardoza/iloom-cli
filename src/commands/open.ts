@@ -3,6 +3,7 @@ import fs from 'fs-extra'
 import { execa } from 'execa'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
+import { DevServerManager } from '../lib/DevServerManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { openBrowser } from '../utils/browser.js'
 import { parseEnvFile, extractPort } from '../utils/env.js'
@@ -31,7 +32,8 @@ export class OpenCommand {
 	constructor(
 		private gitWorktreeManager = new GitWorktreeManager(),
 		private capabilityDetector = new ProjectCapabilityDetector(),
-		private identifierParser = new IdentifierParser(new GitWorktreeManager())
+		private identifierParser = new IdentifierParser(new GitWorktreeManager()),
+		private devServerManager = new DevServerManager()
 	) {}
 
 	async execute(input: OpenCommandInput): Promise<void> {
@@ -201,9 +203,22 @@ export class OpenCommand {
 
 	/**
 	 * Open web browser with workspace URL
+	 * Auto-starts dev server if not already running
 	 */
 	private async openWebBrowser(worktreePath: string): Promise<void> {
 		const port = await this.getWorkspacePort(worktreePath)
+
+		// Ensure dev server is running on the port
+		const serverReady = await this.devServerManager.ensureServerRunning(
+			worktreePath,
+			port
+		)
+
+		if (!serverReady) {
+			logger.warn(
+				`Dev server failed to start on port ${port}. Opening browser anyway...`
+			)
+		}
 
 		// Construct URL and open browser
 		const url = `http://localhost:${port}`

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { RunCommand } from './run.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
+import { DevServerManager } from '../lib/DevServerManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { ProjectCapabilities } from '../types/hatchbox.js'
@@ -12,6 +13,7 @@ import { execa } from 'execa'
 // Mock dependencies
 vi.mock('../lib/GitWorktreeManager.js')
 vi.mock('../lib/ProjectCapabilityDetector.js')
+vi.mock('../lib/DevServerManager.js')
 vi.mock('../utils/IdentifierParser.js')
 vi.mock('fs-extra')
 vi.mock('execa')
@@ -37,6 +39,7 @@ describe('RunCommand', () => {
 	let command: RunCommand
 	let mockGitWorktreeManager: GitWorktreeManager
 	let mockCapabilityDetector: ProjectCapabilityDetector
+	let mockDevServerManager: DevServerManager
 	let mockIdentifierParser: IdentifierParser
 
 	const mockWorktree: GitWorktree = {
@@ -49,12 +52,17 @@ describe('RunCommand', () => {
 	beforeEach(() => {
 		mockGitWorktreeManager = new GitWorktreeManager()
 		mockCapabilityDetector = new ProjectCapabilityDetector()
+		mockDevServerManager = new DevServerManager()
 		mockIdentifierParser = new IdentifierParser(mockGitWorktreeManager)
+
+		// Mock DevServerManager to always return true (server ready)
+		vi.mocked(mockDevServerManager.ensureServerRunning).mockResolvedValue(true)
 
 		command = new RunCommand(
 			mockGitWorktreeManager,
 			mockCapabilityDetector,
-			mockIdentifierParser
+			mockIdentifierParser,
+			mockDevServerManager
 		)
 
 		// Reset all mocks
@@ -539,6 +547,76 @@ describe('RunCommand', () => {
 					env: process.env,
 				}
 			)
+		})
+	})
+
+	describe('dev server auto-start (web fallback)', () => {
+		beforeEach(() => {
+			// Mock parseForPatternDetection
+			vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+				type: 'issue',
+				number: 87,
+				originalInput: '87',
+			})
+
+			// Mock worktree finding
+			vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(
+				mockWorktree
+			)
+
+			// Mock capability detection for web (fallback scenario)
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['web'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
+				mockCapabilities
+			)
+
+			// Mock .env file with PORT
+			vi.mocked(fs.pathExists).mockResolvedValue(true)
+			vi.mocked(fs.readFile).mockResolvedValue('PORT=3087\n')
+		})
+
+		it('should auto-start dev server when falling back to browser', async () => {
+			// Mock server not running, then started
+			vi.mocked(mockDevServerManager.ensureServerRunning).mockResolvedValue(true)
+
+			await command.execute({ identifier: '87' })
+
+			expect(mockDevServerManager.ensureServerRunning).toHaveBeenCalledWith(
+				mockWorktree.path,
+				3087
+			)
+		})
+
+		it('should open browser even if server fails to start', async () => {
+			// Mock server failed to start
+			vi.mocked(mockDevServerManager.ensureServerRunning).mockResolvedValue(false)
+
+			await command.execute({ identifier: '87' })
+
+			// Should still try to open browser
+			const { openBrowser } = await import('../utils/browser.js')
+			expect(openBrowser).toHaveBeenCalledWith('http://localhost:3087')
+		})
+
+		it('should not auto-start server for CLI-only projects', async () => {
+			// Mock CLI-only capability
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['cli'],
+				binEntries: { hb: './dist/cli.js' },
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
+				mockCapabilities
+			)
+
+			vi.mocked(fs.pathExists).mockResolvedValue(true)
+
+			await command.execute({ identifier: '87' })
+
+			// Should not call ensureServerRunning for CLI-only projects
+			expect(mockDevServerManager.ensureServerRunning).not.toHaveBeenCalled()
 		})
 	})
 })
