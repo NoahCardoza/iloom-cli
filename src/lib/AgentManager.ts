@@ -4,6 +4,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { MarkdownAgentParser } from '../utils/MarkdownAgentParser.js'
 import { logger } from '../utils/logger.js'
+import type { HatchboxSettings } from './SettingsManager.js'
 
 // Agent schema interface
 export interface AgentConfig {
@@ -59,7 +60,7 @@ export class AgentManager {
 	 * Throws error if agents directory doesn't exist or files are malformed
 	 * @param settings - Optional project settings with per-agent model overrides
 	 */
-	async loadAgents(settings?: { agents?: { [agentName: string]: { model?: string } } }): Promise<AgentConfigs> {
+	async loadAgents(settings?: HatchboxSettings): Promise<AgentConfigs> {
 		// Load all .md files from the agents directory
 		const { readdir } = await import('fs/promises')
 		const files = await readdir(this.agentDir)

@@ -84,7 +84,7 @@ describe('SettingsManager', () => {
 			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify('not an object'))
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
-				/Settings file must be a JSON object/,
+				/Settings validation failed[\s\S]*Expected object, received string/,
 			)
 		})
 
@@ -171,7 +171,7 @@ describe('SettingsManager', () => {
 				}
 				expect(() =>
 					settingsManager['validateSettings'](settings as never),
-				).toThrow(/mainBranch.*must be a string/i)
+				).toThrow(/mainBranch.*Expected string, received number/)
 			})
 
 			it('should throw error when mainBranch is empty string', () => {
@@ -247,7 +247,7 @@ describe('SettingsManager', () => {
 			}
 
 			expect(() => settingsManager['validateSettings'](invalidSettings)).toThrow(
-				/invalid model/i,
+				/Invalid enum value.*Expected 'sonnet' \| 'opus' \| 'haiku'/,
 			)
 		})
 
@@ -285,7 +285,7 @@ describe('SettingsManager', () => {
 
 			expect(() =>
 				settingsManager['validateSettings'](invalidSettings as never),
-			).toThrow(/agents.*must be an object/i)
+			).toThrow(/agents.*Expected object, received string/)
 		})
 	})
 
