@@ -1,6 +1,7 @@
 import { program, Command } from 'commander'
 import { logger } from './utils/logger.js'
 import { GitWorktreeManager } from './lib/GitWorktreeManager.js'
+import { ShellCompletion } from './lib/ShellCompletion.js'
 import type { StartOptions, CleanupOptions, FinishOptions } from './types/index.js'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
@@ -38,6 +39,7 @@ program
   .description(packageJson.description)
   .version(packageJson.version)
   .option('--debug', 'Enable debug output (default: based on HATCHBOX_DEBUG env var)')
+  .option('--completion', 'Output shell completion script for current shell')
   .hook('preAction', async (thisCommand) => {
     // Set debug mode based on flag or environment variable
     const options = thisCommand.opts()
@@ -45,6 +47,13 @@ program
     const envDebug = process.env.HATCHBOX_DEBUG === 'true'
     const debugEnabled = options.debug !== undefined ? options.debug : envDebug
     logger.setDebug(debugEnabled)
+
+    // Handle --completion flag
+    if (options.completion) {
+      const shellCompletion = new ShellCompletion()
+      shellCompletion.printCompletionScript()
+      process.exit(0)
+    }
 
     // Validate settings for all commands except help
     const commandName = thisCommand.name()
@@ -68,6 +77,10 @@ async function validateSettingsForCommand(): Promise<void> {
     process.exit(1)
   }
 }
+
+// Initialize shell completion (must be after program setup, before parseAsync)
+const shellCompletion = new ShellCompletion()
+shellCompletion.init()
 
 program
   .command('start')
@@ -245,6 +258,20 @@ program
       ['Workspace context management'],
       `cd $(git worktree list | grep ${identifier} | awk '{print $1}')`
     )
+  })
+
+program
+  .command('init')
+  .description('Initialize Hatchbox configuration and setup shell autocomplete')
+  .action(async () => {
+    try {
+      const { InitCommand } = await import('./commands/init.js')
+      const command = new InitCommand()
+      await command.execute()
+    } catch (error) {
+      logger.error(`Failed to initialize: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
   })
 
 // Test command for GitHub integration
