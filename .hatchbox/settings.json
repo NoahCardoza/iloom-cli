@@ -1,0 +1,8 @@
+{
+  "mainBranch": "main",
+  "workflows": {
+    "issue": {
+      "permissionMode": "bypassPermissions"
+    }
+  }
+}
