@@ -39,7 +39,7 @@ Workflow Comment Strategy:
    - [ ] for incomplete tasks
    - [x] for completed tasks
    
-   * Include relevant context (current step, progress, blockers) and an estiamted time to completion of this step and the whole task in each update after the comment's todo list
+   * Include relevant context (current step, progress, blockers) and a **very agressive** estimated time to completion of this step and the whole task in each update after the comment's todo list
 5. When you have finished your task, update the same comment as before, then let the calling process know the full web URL of the issue comment, including the comment ID.
 6. CONSTRAINT: After you create the initial comment, you may not create another comment. You must always update the initial comment instead.
 
