@@ -161,6 +161,7 @@ export class HatchboxManager {
     const enableClaude = input.options?.enableClaude !== false
     const enableCode = input.options?.enableCode !== false
     const enableDevServer = input.options?.enableDevServer !== false
+    const oneShot = input.options?.oneShot ?? 'default'
 
     // Only launch if at least one component is enabled
     if (enableClaude || enableCode || enableDevServer) {
@@ -178,6 +179,7 @@ export class HatchboxManager {
         workflowType: input.type === 'branch' ? 'regular' : input.type,
         identifier: input.identifier,
         ...(githubData?.title && { title: githubData.title }),
+        oneShot,
       })
     }
 
@@ -566,6 +568,7 @@ export class HatchboxManager {
     const enableClaude = input.options?.enableClaude !== false
     const enableCode = input.options?.enableCode !== false
     const enableDevServer = input.options?.enableDevServer !== false
+    const oneShot = input.options?.oneShot ?? 'default'
 
     if (enableClaude || enableCode || enableDevServer) {
       logger.info('Launching workspace components...')
@@ -583,6 +586,7 @@ export class HatchboxManager {
         workflowType: input.type === 'branch' ? 'regular' : input.type,
         identifier: input.identifier,
         ...(githubData?.title && { title: githubData.title }),
+        oneShot,
       })
     }
 

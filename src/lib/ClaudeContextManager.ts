@@ -9,6 +9,7 @@ export interface ClaudeContext {
 	workspacePath: string
 	port?: number
 	branchName?: string
+	oneShot?: import('../types/index.js').OneShotMode
 }
 
 export class ClaudeContextManager {
@@ -55,6 +56,7 @@ export class ClaudeContextManager {
 			workspacePath: context.workspacePath,
 			...(context.port !== undefined && { port: context.port }),
 			headless,
+			oneShot: context.oneShot ?? 'default',
 		}
 
 		// Add optional title if present

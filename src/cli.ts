@@ -1,4 +1,4 @@
-import { program, Command } from 'commander'
+import { program, Command, Option } from 'commander'
 import { logger } from './utils/logger.js'
 import { GitWorktreeManager } from './lib/GitWorktreeManager.js'
 import { ShellCompletion } from './lib/ShellCompletion.js'
@@ -94,6 +94,11 @@ program
   .option('--no-code', 'Disable VSCode')
   .option('--dev-server', 'Enable dev server in terminal (default: true)', true)
   .option('--no-dev-server', 'Disable dev server')
+  .addOption(
+    new Option('--one-shot <mode>', 'One-shot automation mode')
+      .choices(['default', 'noReview', 'bypassPermissions'])
+      .default('default')
+  )
   .action(async (identifier: string | undefined, options: StartOptions) => {
     try {
       let finalIdentifier = identifier
@@ -163,11 +168,16 @@ program
 program
   .command('ignite')
   .description('Launch Claude with auto-detected workspace context')
-  .action(async () => {
+  .addOption(
+    new Option('--one-shot <mode>', 'One-shot automation mode')
+      .choices(['default', 'noReview', 'bypassPermissions'])
+      .default('default')
+  )
+  .action(async (options: { oneShot?: import('./types/index.js').OneShotMode }) => {
     try {
       const { IgniteCommand } = await import('./commands/ignite.js')
       const command = new IgniteCommand()
-      await command.execute()
+      await command.execute(options.oneShot ?? 'default')
     } catch (error) {
       logger.error(`Failed to ignite Claude: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)

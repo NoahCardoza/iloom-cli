@@ -144,6 +144,7 @@ describe('ClaudeContextManager', () => {
 				workspacePath: '/workspace/issue-123',
 				port: 3123,
 				headless: false,
+				oneShot: 'default',
 			})
 		})
 
@@ -167,6 +168,7 @@ describe('ClaudeContextManager', () => {
 				workspacePath: '/workspace/pr-456',
 				port: 3456,
 				headless: false,
+				oneShot: 'default',
 			})
 		})
 
@@ -188,6 +190,7 @@ describe('ClaudeContextManager', () => {
 				workspacePath: '/workspace/feature',
 				port: 3000,
 				headless: false,
+				oneShot: 'default',
 			})
 		})
 
@@ -280,6 +283,7 @@ describe('ClaudeContextManager', () => {
 				workspacePath: '/workspace',
 				port: 3123,
 				headless: false,
+				oneShot: 'default',
 			})
 		})
 	})

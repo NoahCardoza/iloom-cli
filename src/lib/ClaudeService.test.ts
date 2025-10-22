@@ -88,6 +88,7 @@ describe('ClaudeService', () => {
 					workspacePath: '/workspace/issue-123',
 					addDir: '/workspace/issue-123',
 					headless: false,
+					oneShot: 'default',
 				})
 			})
 
@@ -161,6 +162,7 @@ describe('ClaudeService', () => {
 					addDir: '/workspace/pr-456',
 					workspacePath: '/workspace/pr-456',
 					headless: false,
+					oneShot: 'default',
 				})
 			})
 		})
@@ -188,6 +190,7 @@ describe('ClaudeService', () => {
 					addDir: '/workspace/feature',
 					workspacePath: '/workspace/feature',
 					headless: false,
+					oneShot: 'default',
 				})
 			})
 		})

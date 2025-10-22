@@ -12,6 +12,7 @@ export interface ClaudeWorkflowOptions {
 	port?: number
 	headless?: boolean
 	branchName?: string
+	oneShot?: import('../types/index.js').OneShotMode
 }
 
 export class ClaudeService {
@@ -75,7 +76,7 @@ export class ClaudeService {
 	 * Launch Claude for a specific workflow
 	 */
 	async launchForWorkflow(options: ClaudeWorkflowOptions): Promise<string | void> {
-		const { type, issueNumber, prNumber, title, workspacePath, port, headless = false, branchName } = options
+		const { type, issueNumber, prNumber, title, workspacePath, port, headless = false, branchName, oneShot = 'default' } = options
 
 		try {
 			// Load settings if not already cached
@@ -165,6 +166,7 @@ export class ClaudeService {
 				return await launchClaudeInNewTerminalWindow(prompt, {
 					...claudeOptions,
 					workspacePath: claudeOptions.addDir,
+					oneShot,
 				})
 			}
 		} catch (error) {

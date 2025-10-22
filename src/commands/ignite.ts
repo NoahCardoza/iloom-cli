@@ -42,7 +42,7 @@ export class IgniteCommand {
 	/**
 	 * Main entry point for ignite command
 	 */
-	async execute(): Promise<void> {
+	async execute(oneShot: import('../types/index.js').OneShotMode = 'default'): Promise<void> {
 		try {
 			logger.info('🚀 Your hatchbox is igniting, please wait...')
 
@@ -60,8 +60,8 @@ export class IgniteCommand {
 			const variables = this.buildTemplateVariables(context)
 			const systemInstructions = await this.templateManager.getPrompt(context.type, variables)
 
-			// User prompt to trigger the workflow (system instructions set behavior via appendSystemPrompt)
-			const userPrompt = 'Go!'
+			// User prompt to trigger the workflow (modified based on one-shot mode)
+			const userPrompt = this.buildUserPrompt(oneShot)
 
 			// Step 2.5: Load settings if not cached
 			// Settings are pre-validated at CLI startup, so no error handling needed here
@@ -69,7 +69,12 @@ export class IgniteCommand {
 
 			// Step 3: Determine model and permission mode based on workflow type
 			const model = this.getModelForWorkflow(context.type)
-			const permissionMode = this.getPermissionModeForWorkflow(context.type)
+			let permissionMode = this.getPermissionModeForWorkflow(context.type)
+
+			// Override permission mode if bypassPermissions oneShot mode
+			if (oneShot === 'bypassPermissions') {
+				permissionMode = 'bypassPermissions'
+			}
 
 			// Display warning if bypassPermissions is used
 			if (permissionMode === 'bypassPermissions') {
@@ -485,5 +490,15 @@ export class IgniteCommand {
 
 		// Return as array (user clarification: mcpConfig should be an array)
 		return [mcpServerConfig]
+	}
+
+	/**
+	 * Build user prompt based on one-shot mode
+	 */
+	private buildUserPrompt(oneShot: import('../types/index.js').OneShotMode): string {
+		if (oneShot === 'noReview' || oneShot === 'bypassPermissions') {
+			return 'Go! The user has requested you move through the workflow without awaiting confirmation. This supersedes any other guidance.'
+		}
+		return 'Go!'
 	}
 }

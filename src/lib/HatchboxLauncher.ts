@@ -19,6 +19,7 @@ export interface LaunchHatchboxOptions {
 	workflowType: 'issue' | 'pr' | 'regular'
 	identifier: string | number
 	title?: string
+	oneShot?: import('../types/index.js').OneShotMode
 }
 
 /**
@@ -89,6 +90,7 @@ export class HatchboxLauncher {
 			branchName: options.branchName,
 			...(options.title && { title: options.title }),
 			...(options.port !== undefined && { port: options.port }),
+			oneShot: options.oneShot ?? 'default',
 		})
 		logger.info('Claude terminal opened')
 	}

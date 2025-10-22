@@ -119,12 +119,17 @@ export interface Config {
   customWorkspaceRoot?: string
 }
 
+// One-shot automation mode type
+export type OneShotMode = 'default' | 'noReview' | 'bypassPermissions'
+
 // Command option types
 export interface StartOptions {
   // Individual component flags (can be combined)
   claude?: boolean
   code?: boolean
   devServer?: boolean
+  // One-shot automation mode
+  oneShot?: OneShotMode
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

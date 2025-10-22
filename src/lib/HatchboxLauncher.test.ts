@@ -72,6 +72,7 @@ describe('HatchboxLauncher', () => {
 					branchName: baseOptions.branchName,
 					title: baseOptions.title,
 					port: baseOptions.port,
+					oneShot: 'default',
 				})
 
 				// Should launch VSCode

@@ -15,6 +15,7 @@ export interface ClaudeCliOptions {
 	allowedTools?: string[] // Tools to allow via --allowed-tools flag
 	disallowedTools?: string[] // Tools to disallow via --disallowed-tools flag
 	agents?: Record<string, unknown> // Agent configurations for --agents flag
+	oneShot?: import('../types/index.js').OneShotMode // One-shot automation mode
 }
 
 /**
@@ -158,7 +159,7 @@ export async function launchClaudeInNewTerminalWindow(
 		workspacePath: string // Required for terminal window launch
 	}
 ): Promise<void> {
-	const { workspacePath, branchName } = options
+	const { workspacePath, branchName, oneShot = 'default' } = options
 
 	// Verify required parameter
 	if (!workspacePath) {
@@ -168,7 +169,11 @@ export async function launchClaudeInNewTerminalWindow(
 	// Import terminal launcher for new terminal window creation
 	const { openTerminalWindow } = await import('./terminal.js')
 
-	const launchCommand = "hb ignite"
+	// Build launch command with optional --one-shot flag
+	let launchCommand = "hb ignite"
+	if (oneShot !== 'default') {
+		launchCommand += ` --one-shot=${oneShot}`
+	}
 
 	// Apply terminal background color if branch name available
 	let backgroundColor: { r: number; g: number; b: number } | undefined

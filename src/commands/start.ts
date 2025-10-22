@@ -109,6 +109,19 @@ export class StartCommand {
 				parsed.number = issueNumber
 			}
 
+			// Step 2.7: Confirm bypassPermissions mode if applicable
+			if (input.options.oneShot === 'bypassPermissions') {
+				const { promptConfirmation } = await import('../utils/prompt.js')
+				const confirmed = await promptConfirmation(
+					'⚠️  WARNING: bypassPermissions mode will allow Claude to execute all tool calls without confirmation. ' +
+					'This can be dangerous. Do you want to proceed?'
+				)
+				if (!confirmed) {
+					logger.info('Operation cancelled by user')
+					process.exit(0)
+				}
+			}
+
 			// Step 3: Log success and create hatchbox
 			logger.info(`✅ Validated input: ${this.formatParsedInput(parsed)}`)
 
@@ -127,12 +140,16 @@ export class StartCommand {
 					enableClaude: input.options.claude !== false,
 					enableCode: input.options.code !== false,
 					enableDevServer: input.options.devServer !== false,
+					...(input.options.oneShot && { oneShot: input.options.oneShot }),
 				},
 			})
 
 			logger.success(`✅ Created hatchbox: ${hatchbox.id} at ${hatchbox.path}`)
 			logger.info(`   Branch: ${hatchbox.branch}`)
-			logger.info(`   Port: ${hatchbox.port}`)
+			// Only show port for web projects
+			if (hatchbox.capabilities?.includes('web')) {
+				logger.info(`   Port: ${hatchbox.port}`)
+			}
 			if (hatchbox.githubData?.title) {
 				logger.info(`   Title: ${hatchbox.githubData.title}`)
 			}

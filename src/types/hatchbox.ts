@@ -34,6 +34,8 @@ export interface CreateHatchboxInput {
     enableClaude?: boolean
     enableCode?: boolean
     enableDevServer?: boolean
+    // One-shot automation mode
+    oneShot?: import('./index.js').OneShotMode
   }
 }
 
