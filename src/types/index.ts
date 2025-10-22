@@ -127,6 +127,12 @@ export interface StartOptions {
   devServer?: boolean
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface AddIssueOptions {
+  // Reserved for future flags like --no-enhance, --no-browser
+  // Currently empty - command accepts no options
+}
+
 export interface FinishOptions {
   force?: boolean      // -f, --force - Skip confirmation prompts
   dryRun?: boolean    // -n, --dry-run - Preview actions without executing

@@ -207,7 +207,7 @@ export class GitHubService {
 		title: string,
 		body: string
 	): Promise<{ number: number; url: string }> {
-		logger.info('Creating GitHub issue', { title })
+		// logger.info('Creating GitHub issue', { title })
 		return createIssue(title, body)
 	}
 

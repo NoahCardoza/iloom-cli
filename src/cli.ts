@@ -120,6 +120,27 @@ program
   })
 
 program
+  .command('add-issue')
+  .alias('a')
+  .description('Create and enhance GitHub issue without starting workspace')
+  .argument('<description>', 'Natural language description of the issue (>50 chars, >2 spaces)')
+  .action(async (description: string) => {
+    try {
+      const { AddIssueCommand } = await import('./commands/add-issue.js')
+      const command = new AddIssueCommand()
+      const issueNumber = await command.execute({
+        description,
+        options: {}
+      })
+      logger.success(`Issue #${issueNumber} created successfully`)
+      process.exit(0)
+    } catch (error) {
+      logger.error(`Failed to create issue: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
   .command('finish')
   .alias('dn')
   .description('Merge work and cleanup workspace')

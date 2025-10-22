@@ -1,6 +1,9 @@
 export { StartCommand } from './start.js'
 export type { StartCommandInput, ParsedInput } from './start.js'
 
+export { AddIssueCommand } from './add-issue.js'
+export type { AddIssueCommandInput } from './add-issue.js'
+
 export { CleanupCommand } from './cleanup.js'
 export type { CleanupCommandInput, ParsedCleanupInput } from './cleanup.js'
 
