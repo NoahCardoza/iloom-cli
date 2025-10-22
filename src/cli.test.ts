@@ -66,6 +66,54 @@ describe('CLI', () => {
     expect(code).not.toBe(0)
     expect(stderr).toContain("unknown command 'invalid-command'")
   })
+
+  describe('Command aliases', () => {
+    describe('start command aliases', () => {
+      it('should support "create" as alias for "start"', async () => {
+        const { stdout, code } = await runCLI(['create', '--help'])
+        expect(code).toBe(0)
+        expect(stdout).toContain('Create isolated workspace for an issue/PR')
+        expect(stdout).toContain('[identifier]')
+      })
+
+      it('should support "up" as alias for "start"', async () => {
+        const { stdout, code } = await runCLI(['up', '--help'])
+        expect(code).toBe(0)
+        expect(stdout).toContain('Create isolated workspace for an issue/PR')
+        expect(stdout).toContain('[identifier]')
+      })
+    })
+
+    describe('finish command aliases', () => {
+      it('should support "dn" as alias for "finish"', async () => {
+        const { stdout, code } = await runCLI(['dn', '--help'])
+        expect(code).toBe(0)
+        expect(stdout).toContain('Merge work and cleanup workspace')
+        expect(stdout).toContain('[identifier]')
+      })
+    })
+
+    describe('help output', () => {
+      it('should show aliases in main help output', async () => {
+        const { stdout, code } = await runCLI(['--help'])
+        expect(code).toBe(0)
+        // Commander.js shows first alias in format: command|alias
+        expect(stdout).toMatch(/start\|create/)
+        expect(stdout).toMatch(/finish\|dn/)
+      })
+
+      it('should ensure original command names still work (regression test)', async () => {
+        // Verify original commands still work
+        const startHelp = await runCLI(['start', '--help'])
+        expect(startHelp.code).toBe(0)
+        expect(startHelp.stdout).toContain('Create isolated workspace')
+
+        const finishHelp = await runCLI(['finish', '--help'])
+        expect(finishHelp.code).toBe(0)
+        expect(finishHelp.stdout).toContain('Merge work and cleanup workspace')
+      })
+    })
+  })
 })
 
 describe('Settings validation on CLI startup', () => {

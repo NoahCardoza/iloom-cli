@@ -84,6 +84,8 @@ shellCompletion.init()
 
 program
   .command('start')
+  .alias('create')
+  .alias('up')
   .description('Create isolated workspace for an issue/PR')
   .argument('[identifier]', 'Issue number, PR number, or branch name (optional - will prompt if not provided)')
   .option('--claude', 'Enable Claude integration (default: true)', true)
@@ -119,6 +121,7 @@ program
 
 program
   .command('finish')
+  .alias('dn')
   .description('Merge work and cleanup workspace')
   .argument('[identifier]', 'Issue number, PR number, or branch name (auto-detected if omitted)')
   .option('-f, --force', 'Skip confirmation prompts')
