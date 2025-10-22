@@ -6,6 +6,7 @@ import { ClaudeContextManager } from './ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { VSCodeIntegration } from './VSCodeIntegration.js'
+import { SettingsManager } from './SettingsManager.js'
 import { branchExists, executeGitCommand } from '../utils/git.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName } from '../utils/color.js'
@@ -28,6 +29,7 @@ export class HatchboxManager {
     _claude: ClaudeContextManager, // Not stored - kept for DI compatibility, HatchboxLauncher creates its own
     private capabilityDetector: ProjectCapabilityDetector,
     private cliIsolation: CLIIsolationManager,
+    private settings: SettingsManager,
     private database?: DatabaseManager
   ) {}
 
@@ -67,9 +69,13 @@ export class HatchboxManager {
     const { capabilities, binEntries } = await this.capabilityDetector.detectCapabilities(worktreePath)
 
     // 6. Setup environment based on capabilities (copy .env + set PORT)
-    let port = 3000 // default
+    // Load base port from settings
+    const settingsData = await this.settings.loadSettings()
+    const basePort = settingsData.capabilities?.web?.basePort ?? 3000
+
+    let port = basePort // default
     if (capabilities.includes('web')) {
-      port = await this.setupEnvironment(worktreePath, input)
+      port = await this.setupEnvironment(worktreePath, input, basePort)
     }
 
     // 7. Install dependencies AFTER environment setup (like bash script line 757-769)
@@ -217,7 +223,7 @@ export class HatchboxManager {
    */
   async listHatchboxes(): Promise<Hatchbox[]> {
     const worktrees = await this.gitWorktree.listWorktrees()
-    return this.mapWorktreesToHatchboxes(worktrees)
+    return await this.mapWorktreesToHatchboxes(worktrees)
   }
 
   /**
@@ -352,7 +358,8 @@ export class HatchboxManager {
    */
   private async setupEnvironment(
     worktreePath: string,
-    input: CreateHatchboxInput
+    input: CreateHatchboxInput,
+    basePort: number
   ): Promise<number> {
     const envFilePath = path.join(worktreePath, '.env')
 
@@ -366,17 +373,21 @@ export class HatchboxManager {
       logger.warn(`Warning: Failed to copy main .env file: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
 
-    // Then set/update the PORT variable in the copied file
-    const issueNumber = input.type === 'issue' ? (input.identifier as number) : undefined
-    const prNumber = input.type === 'pr' ? (input.identifier as number) : undefined
-    const branchName = input.type === 'branch' ? (input.identifier as string) : undefined
+    // Then set/update the PORT variable in the copied file using configured base port
+    const options: { basePort: number; issueNumber?: number; prNumber?: number; branchName?: string } = { basePort }
 
-    return await this.environment.setPortForWorkspace(
-      envFilePath,
-      issueNumber,
-      prNumber,
-      branchName
-    )
+    if (input.type === 'issue') {
+      options.issueNumber = input.identifier as number
+    } else if (input.type === 'pr') {
+      options.prNumber = input.identifier as number
+    } else if (input.type === 'branch') {
+      options.branchName = input.identifier as string
+    }
+
+    const port = this.environment.calculatePort(options)
+
+    await this.environment.setEnvVar(envFilePath, 'PORT', String(port))
+    return port
   }
 
   /**
@@ -407,10 +418,12 @@ export class HatchboxManager {
 
   /**
    * Calculate port for the hatchbox
-   * Base port: 3000 + issue/PR number (or random for branches)
+   * Base port: configurable via settings.capabilities.web.basePort (default 3000) + issue/PR number (or deterministic hash for branches)
    */
-  private calculatePort(input: CreateHatchboxInput): number {
-    const basePort = 3000
+  private async calculatePort(input: CreateHatchboxInput): Promise<number> {
+    // Load base port from settings
+    const settingsData = await this.settings.loadSettings()
+    const basePort = settingsData.capabilities?.web?.basePort ?? 3000
 
     if (input.type === 'issue' && typeof input.identifier === 'number') {
       return this.environment.calculatePort({ basePort, issueNumber: input.identifier })
@@ -454,8 +467,8 @@ export class HatchboxManager {
    * Map worktrees to hatchbox objects
    * This is a simplified conversion - in production we'd store hatchbox metadata
    */
-  private mapWorktreesToHatchboxes(worktrees: GitWorktree[]): Hatchbox[] {
-    return worktrees.map(wt => {
+  private async mapWorktreesToHatchboxes(worktrees: GitWorktree[]): Promise<Hatchbox[]> {
+    return await Promise.all(worktrees.map(async (wt) => {
       // Extract identifier from branch name
       let type: 'issue' | 'pr' | 'branch' = 'branch'
       let identifier: string | number = wt.branch
@@ -474,11 +487,11 @@ export class HatchboxManager {
         branch: wt.branch,
         type,
         identifier,
-        port: this.calculatePort({ type, identifier, originalInput: '' }),
+        port: await this.calculatePort({ type, identifier, originalInput: '' }),
         createdAt: new Date(),
         lastAccessed: new Date(),
       }
-    })
+    }))
   }
 
   /**
@@ -521,9 +534,13 @@ export class HatchboxManager {
 
     // 3. Calculate port for existing worktree (but DON'T copy .env or set PORT)
     // The .env file was already set up when the worktree was first created
-    let port = 3000
+    // Load base port from settings
+    const settingsData = await this.settings.loadSettings()
+    const basePort = settingsData.capabilities?.web?.basePort ?? 3000
+
+    let port = basePort
     if (capabilities.includes('web')) {
-      port = this.calculatePort(input)
+      port = await this.calculatePort(input)
     }
 
     // 4. Skip database branch creation for existing worktrees

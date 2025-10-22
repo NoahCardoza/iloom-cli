@@ -4,5 +4,10 @@
     "issue": {
       "permissionMode": "default"
     }
+  },
+  "capabilities": {
+    "web": {
+      "basePort": 3000
+    }
   }
 }

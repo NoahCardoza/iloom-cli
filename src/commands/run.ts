@@ -4,6 +4,7 @@ import { execa } from 'execa'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { DevServerManager } from '../lib/DevServerManager.js'
+import { SettingsManager } from '../lib/SettingsManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { openBrowser } from '../utils/browser.js'
 import { parseEnvFile, extractPort } from '../utils/env.js'
@@ -33,7 +34,8 @@ export class RunCommand {
 		private gitWorktreeManager = new GitWorktreeManager(),
 		private capabilityDetector = new ProjectCapabilityDetector(),
 		private identifierParser = new IdentifierParser(new GitWorktreeManager()),
-		private devServerManager = new DevServerManager()
+		private devServerManager = new DevServerManager(),
+		private settingsManager = new SettingsManager()
 	) {}
 
 	async execute(input: RunCommandInput): Promise<void> {
@@ -273,7 +275,9 @@ export class RunCommand {
 	 * Get port for workspace - reads from .env or calculates based on workspace type
 	 */
 	private async getWorkspacePort(worktreePath: string): Promise<number> {
-		const basePort = 3000
+		// Load base port from settings
+		const settings = await this.settingsManager.loadSettings()
+		const basePort = settings.capabilities?.web?.basePort ?? 3000
 
 		// Try to read PORT from .env file (as override)
 		const envPath = path.join(worktreePath, '.env')

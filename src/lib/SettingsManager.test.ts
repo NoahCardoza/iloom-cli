@@ -486,4 +486,192 @@ describe('SettingsManager', () => {
 			expect(result.workflows?.issue).toBeUndefined()
 		})
 	})
+
+	describe('capabilities.web.basePort configuration', () => {
+		it('should accept valid basePort value (8080)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						basePort: 8080,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.basePort).toBe(8080)
+		})
+
+		it('should accept valid basePort value (3000)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						basePort: 3000,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.basePort).toBe(3000)
+		})
+
+		it('should accept valid basePort value (65535 - maximum)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						basePort: 65535,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.basePort).toBe(65535)
+		})
+
+		it('should accept valid basePort value (1 - minimum)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						basePort: 1,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.basePort).toBe(1)
+		})
+
+		it('should accept valid basePort value (80 - well-known port)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						basePort: 80,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.basePort).toBe(80)
+		})
+
+		it('should reject basePort < 1', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						basePort: 0,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
+				/Settings validation failed[\s\S]*capabilities\.web\.basePort[\s\S]*Base port must be >= 1/,
+			)
+		})
+
+		it('should reject basePort > 65535', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						basePort: 65536,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
+				/Settings validation failed[\s\S]*capabilities\.web\.basePort[\s\S]*Base port must be <= 65535/,
+			)
+		})
+
+		it('should reject basePort that is not a number', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				capabilities: {
+					web: {
+						basePort: '8080',
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
+				/Settings validation failed[\s\S]*capabilities\.web\.basePort[\s\S]*Expected number, received string/,
+			)
+		})
+
+		it('should accept missing capabilities.web.basePort (uses default)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'main',
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities?.web?.basePort).toBeUndefined()
+		})
+
+		it('should accept missing capabilities object entirely', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'main',
+				agents: {},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.capabilities).toBeUndefined()
+		})
+
+		it('should preserve other settings when basePort is added', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mainBranch: 'develop',
+				workflows: {
+					issue: {
+						permissionMode: 'bypassPermissions',
+					},
+				},
+				agents: {
+					'test-agent': {
+						model: 'sonnet',
+					},
+				},
+				capabilities: {
+					web: {
+						basePort: 8080,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.mainBranch).toBe('develop')
+			expect(result.workflows?.issue?.permissionMode).toBe('bypassPermissions')
+			expect(result.agents?.['test-agent']?.model).toBe('sonnet')
+			expect(result.capabilities?.web?.basePort).toBe(8080)
+		})
+	})
 })

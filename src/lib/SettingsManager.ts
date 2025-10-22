@@ -36,6 +36,24 @@ export const WorkflowsSettingsSchema = z
 	.optional()
 
 /**
+ * Zod schema for capabilities settings
+ */
+export const CapabilitiesSettingsSchema = z
+	.object({
+		web: z
+			.object({
+				basePort: z
+					.number()
+					.min(1, 'Base port must be >= 1')
+					.max(65535, 'Base port must be <= 65535')
+					.optional()
+					.describe('Base port for web workspace port calculations (default: 3000)'),
+			})
+			.optional(),
+	})
+	.optional()
+
+/**
  * Zod schema for Hatchbox settings
  */
 export const HatchboxSettingsSchema = z.object({
@@ -50,6 +68,7 @@ export const HatchboxSettingsSchema = z.object({
 		.optional()
 		.nullable()
 		.describe('Per-agent configuration overrides'),
+	capabilities: CapabilitiesSettingsSchema.describe('Project capability configurations'),
 })
 
 /**
@@ -66,6 +85,11 @@ export type WorkflowPermission = z.infer<typeof WorkflowPermissionSchema>
  * TypeScript type for workflows settings derived from Zod schema
  */
 export type WorkflowsSettings = z.infer<typeof WorkflowsSettingsSchema>
+
+/**
+ * TypeScript type for capabilities settings derived from Zod schema
+ */
+export type CapabilitiesSettings = z.infer<typeof CapabilitiesSettingsSchema>
 
 /**
  * TypeScript type for Hatchbox settings derived from Zod schema

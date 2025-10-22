@@ -6,6 +6,7 @@ import { EnvironmentManager } from './EnvironmentManager.js'
 import { ClaudeContextManager } from './ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
+import { SettingsManager } from './SettingsManager.js'
 import type { CreateHatchboxInput } from '../types/hatchbox.js'
 import { installDependencies } from '../utils/package-manager.js'
 
@@ -16,6 +17,7 @@ vi.mock('./EnvironmentManager.js')
 vi.mock('./ClaudeContextManager.js')
 vi.mock('./ProjectCapabilityDetector.js')
 vi.mock('./CLIIsolationManager.js')
+vi.mock('./SettingsManager.js')
 
 // Mock branchExists utility
 vi.mock('../utils/git.js', () => ({
@@ -48,6 +50,7 @@ describe('HatchboxManager', () => {
   let mockClaude: vi.Mocked<ClaudeContextManager>
   let mockCapabilityDetector: vi.Mocked<ProjectCapabilityDetector>
   let mockCLIIsolation: vi.Mocked<CLIIsolationManager>
+  let mockSettings: vi.Mocked<SettingsManager>
 
   beforeEach(() => {
     mockGitWorktree = new GitWorktreeManager() as vi.Mocked<GitWorktreeManager>
@@ -56,6 +59,7 @@ describe('HatchboxManager', () => {
     mockClaude = new ClaudeContextManager() as vi.Mocked<ClaudeContextManager>
     mockCapabilityDetector = new ProjectCapabilityDetector() as vi.Mocked<ProjectCapabilityDetector>
     mockCLIIsolation = new CLIIsolationManager() as vi.Mocked<CLIIsolationManager>
+    mockSettings = new SettingsManager() as vi.Mocked<SettingsManager>
 
     manager = new HatchboxManager(
       mockGitWorktree,
@@ -63,7 +67,8 @@ describe('HatchboxManager', () => {
       mockEnvironment,
       mockClaude,
       mockCapabilityDetector,
-      mockCLIIsolation
+      mockCLIIsolation,
+      mockSettings
     )
 
     // Default mock for capability detector (web-only) - can be overridden in tests
@@ -71,6 +76,16 @@ describe('HatchboxManager', () => {
       capabilities: ['web'],
       binEntries: {}
     })
+
+    // Default mock for settings - returns empty settings (uses default basePort 3000)
+    vi.mocked(mockSettings.loadSettings).mockResolvedValue({})
+
+    // Default mock for calculatePort - returns basePort (3000) by default
+    // Individual tests override this based on their specific port needs
+    vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3000)
+
+    // Default mock for setEnvVar - setupEnvironment now calls this directly
+    vi.mocked(mockEnvironment.setEnvVar).mockResolvedValue()
 
     vi.clearAllMocks()
   })
@@ -100,7 +115,7 @@ describe('HatchboxManager', () => {
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
 
       // Mock environment setup
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3123)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
 
       // Mock Claude launch with context
       vi.mocked(mockClaude.launchWithContext).mockResolvedValue()
@@ -144,7 +159,7 @@ describe('HatchboxManager', () => {
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
 
       // Mock environment setup
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3456)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3456)
 
       // Mock Claude launch with context
       vi.mocked(mockClaude.launchWithContext).mockResolvedValue()
@@ -173,7 +188,7 @@ describe('HatchboxManager', () => {
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
 
       // Mock environment setup
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3000)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3000)
 
       // Mock Claude launch with context
       vi.mocked(mockClaude.launchWithContext).mockResolvedValue()
@@ -203,7 +218,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-issue-42'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3042)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       const result = await manager.createHatchbox({
@@ -213,12 +228,10 @@ describe('HatchboxManager', () => {
       })
 
       expect(result.port).toBe(3042)
-      expect(mockEnvironment.setPortForWorkspace).toHaveBeenCalledWith(
-        expect.stringContaining('.env'),
-        42,
-        undefined,
-        undefined
-      )
+      expect(mockEnvironment.calculatePort).toHaveBeenCalledWith({
+        basePort: 3000,
+        issueNumber: 42
+      })
     })
 
     it('should throw when GitHub fetch fails', async () => {
@@ -260,7 +273,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/path'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockRejectedValue(
+      vi.mocked(mockEnvironment.setEnvVar).mockRejectedValue(
         new Error('Environment setup failed')
       )
 
@@ -284,7 +297,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/path'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3123)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       // Should not throw even if installDependencies fails
@@ -316,7 +329,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/path'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3123)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
 
       await manager.createHatchbox(inputWithSkipClaude)
 
@@ -425,7 +438,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-feature-123-test-issue'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3123)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       await manager.createHatchbox(input)
@@ -459,7 +472,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-existing-feature-branch'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3456)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3456)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       const result = await manager.createHatchbox(input)
@@ -479,7 +492,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-my-custom-branch'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3000)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3000)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       const result = await manager.createHatchbox(input)
@@ -561,7 +574,7 @@ describe('HatchboxManager', () => {
       vi.mocked(mockGitHub.fetchPR).mockResolvedValue(mockPR)
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/path')
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/path')
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3456)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3456)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       await manager.createHatchbox(input)
@@ -596,7 +609,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-feature-123-test'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3123)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       const result = await manager.createHatchbox(input)
@@ -634,7 +647,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-issue-42'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3042)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       // Mock CLI capability detection
@@ -682,7 +695,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-issue-42'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3042)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       // Mock web-only capability detection
@@ -695,12 +708,10 @@ describe('HatchboxManager', () => {
 
       expect(result.capabilities).toEqual(['web'])
       expect(result.port).toBe(3042)
-      expect(mockEnvironment.setPortForWorkspace).toHaveBeenCalledWith(
-        expectedPath + '/.env',
-        42,
-        undefined,
-        undefined
-      )
+      expect(mockEnvironment.calculatePort).toHaveBeenCalledWith({
+        basePort: 3000,
+        issueNumber: 42
+      })
       expect(mockCLIIsolation.setupCLIIsolation).not.toHaveBeenCalled()
     })
 
@@ -727,7 +738,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-issue-42'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3042)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       // Mock hybrid capability detection
@@ -743,7 +754,7 @@ describe('HatchboxManager', () => {
       expect(result.capabilities).toEqual(['cli', 'web'])
       expect(result.port).toBe(3042)
       expect(result.cliSymlinks).toEqual(['my-tool-42'])
-      expect(mockEnvironment.setPortForWorkspace).toHaveBeenCalled()
+      expect(mockEnvironment.calculatePort).toHaveBeenCalled()
       expect(mockCLIIsolation.setupCLIIsolation).toHaveBeenCalled()
     })
 
@@ -770,7 +781,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-issue-42'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3042)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       // Mock no capabilities
@@ -811,7 +822,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-issue-42'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3042)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       // Mock CLI capability detection
@@ -857,7 +868,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-issue-42'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3042)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
@@ -897,7 +908,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-issue-42'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3042)
       vi.mocked(mockClaude.prepareContext).mockResolvedValue()
 
       vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
@@ -931,7 +942,7 @@ describe('HatchboxManager', () => {
         capabilities: [],
         binEntries: {},
       })
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3000)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3000)
 
       await manager.createHatchbox(input)
 
@@ -960,7 +971,7 @@ describe('HatchboxManager', () => {
         capabilities: [],
         binEntries: {},
       })
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3000)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3000)
 
       await manager.createHatchbox(input)
 
@@ -987,7 +998,7 @@ describe('HatchboxManager', () => {
         capabilities: [],
         binEntries: {},
       })
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3000)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3000)
 
       await manager.createHatchbox(input)
 
@@ -1089,7 +1100,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-test-branch'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3000)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3000)
       vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
         capabilities: [],
         binEntries: {},
@@ -1124,7 +1135,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-issue-99'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3099)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3099)
       vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
         capabilities: ['web'],
         binEntries: {},
@@ -1213,10 +1224,12 @@ describe('HatchboxManager', () => {
 
       await manager.createHatchbox(input)
 
-      // BUG: These operations should NOT be called when reusing an existing worktree
-      // The .env file was already set up during initial worktree creation
+      // When reusing an existing worktree:
+      // - copyEnvFile should NOT be called (already exists)
+      // - calculatePort SHOULD be called (to return the correct port)
+      // - setEnvVar should NOT be called (.env already configured)
       expect(mockEnvironment.copyEnvFile).not.toHaveBeenCalled()
-      expect(mockEnvironment.setPortForWorkspace).not.toHaveBeenCalled()
+      expect(mockEnvironment.calculatePort).toHaveBeenCalled()
       expect(mockEnvironment.setEnvVar).not.toHaveBeenCalled()
     })
 
@@ -1254,10 +1267,12 @@ describe('HatchboxManager', () => {
 
       await manager.createHatchbox(input)
 
-      // BUG: These operations should NOT be called when reusing an existing worktree
-      // The .env file was already set up during initial worktree creation
+      // When reusing an existing worktree:
+      // - copyEnvFile should NOT be called (already exists)
+      // - calculatePort SHOULD be called (to return the correct port)
+      // - setEnvVar should NOT be called (.env already configured)
       expect(mockEnvironment.copyEnvFile).not.toHaveBeenCalled()
-      expect(mockEnvironment.setPortForWorkspace).not.toHaveBeenCalled()
+      expect(mockEnvironment.calculatePort).toHaveBeenCalled()
       expect(mockEnvironment.setEnvVar).not.toHaveBeenCalled()
     })
 
@@ -1440,7 +1455,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-issue-39'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3039)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3039)
       vi.mocked(mockGitHub.moveIssueToInProgress).mockResolvedValue()
       vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
         capabilities: [],
@@ -1474,7 +1489,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-feat-test'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3042)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3042)
       vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
         capabilities: [],
         binEntries: {},
@@ -1507,7 +1522,7 @@ describe('HatchboxManager', () => {
       const expectedPath = '/test/worktree-issue-39'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
-      vi.mocked(mockEnvironment.setPortForWorkspace).mockResolvedValue(3039)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3039)
       vi.mocked(mockGitHub.moveIssueToInProgress).mockRejectedValue(
         new Error('Missing project scope')
       )

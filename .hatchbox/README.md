@@ -82,6 +82,42 @@ Configure Claude model preferences for different agent types. This allows you to
 }
 ```
 
+#### capabilities.web.basePort (optional)
+Configure the base port number for web workspace port calculations. Each workspace gets a unique port calculated as `basePort + identifier`.
+
+**Default**: `3000`
+
+**Valid Range**: `1` to `65535` (ports 1-1023 are typically reserved by the system, but the validation allows them)
+
+**Port Calculation**:
+- **Issue workspaces**: `basePort + issueNumber`
+  - Example: basePort `8080` + issue `#42` = port `8122`
+- **PR workspaces**: `basePort + prNumber`
+  - Example: basePort `8080` + PR `#100` = port `8180`
+- **Branch workspaces**: `basePort + deterministic_hash(branchName) % 999 + 1`
+  - Example: basePort `8080` + hash offset (1-999) = port `8081-9079`
+
+**Example**:
+```json
+{
+  "capabilities": {
+    "web": {
+      "basePort": 8080
+    }
+  }
+}
+```
+
+**Port Limit Errors**:
+If the calculated port exceeds `65535`, workspace creation will fail with an error.
+- Example: `basePort: 60000` + `issue: 10000` = `70000` (EXCEEDS LIMIT)
+- Solution: Use a lower base port or work with lower-numbered issues/PRs
+
+**Use cases**:
+- **Avoid port conflicts**: If port `3000` is already in use by another application
+- **Project conventions**: Match your project's standard development port (e.g., `8080`, `5000`)
+- **Multiple projects**: Use different base ports for different projects to avoid conflicts
+
 ### Complete Example
 
 Here's a complete example showing all available options:
@@ -110,6 +146,11 @@ Here's a complete example showing all available options:
     "default": {
       "model": "sonnet"
     }
+  },
+  "capabilities": {
+    "web": {
+      "basePort": 8080
+    }
   }
 }
 ```
@@ -137,6 +178,7 @@ The settings file is validated when loaded. Common validation errors:
 - **Invalid permission mode**: Must be one of `plan`, `acceptEdits`, `bypassPermissions`, or `default`
 - **Invalid model**: Must be one of `sonnet`, `opus`, or `haiku`
 - **Empty mainBranch**: If provided, mainBranch cannot be an empty string
+- **Invalid basePort**: Must be a number between `1` and `65535`
 - **Invalid JSON**: The file must be valid JSON syntax
 
 ### Notes

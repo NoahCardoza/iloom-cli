@@ -53,6 +53,12 @@ describe('ClaudeService', () => {
 	describe('launchForWorkflow', () => {
 		describe('issue workflow', () => {
 			it('should launch Claude with opusplan model and plan permission mode', async () => {
+				// Create a service with a mocked SettingsManager to avoid loading real settings.json
+				const mockSettingsManager = {
+					loadSettings: vi.fn().mockResolvedValue({} as HatchboxSettings),
+				} as unknown as SettingsManager
+				const serviceWithMockedSettings = new ClaudeService(mockTemplateManager, mockSettingsManager)
+
 				const options: ClaudeWorkflowOptions = {
 					type: 'issue',
 					issueNumber: 123,
@@ -67,7 +73,7 @@ describe('ClaudeService', () => {
 				// Non-headless mode calls launchClaudeInNewTerminalWindow
 				vi.mocked(claudeUtils.launchClaudeInNewTerminalWindow).mockResolvedValueOnce(undefined)
 
-				await service.launchForWorkflow(options)
+				await serviceWithMockedSettings.launchForWorkflow(options)
 
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('issue', {
 					ISSUE_NUMBER: 123,
@@ -704,7 +710,10 @@ describe('ClaudeService', () => {
 
 		it('should accept SettingsManager as second parameter', () => {
 			const customManager = new PromptTemplateManager('custom/path')
-			const mockSettingsManager = new SettingsManager()
+			// Use a mocked SettingsManager instead of a real one to avoid filesystem access
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({} as HatchboxSettings),
+			} as unknown as SettingsManager
 			const serviceWithBoth = new ClaudeService(customManager, mockSettingsManager)
 
 			expect(serviceWithBoth).toBeDefined()
