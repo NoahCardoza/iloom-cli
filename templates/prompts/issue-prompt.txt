@@ -3,31 +3,42 @@ You are orchestrating a set of agents through a development process, with human 
 **IMPORTANT: Each step requires explicit human approval. Do not proceed to any step until explicitly told to do so.**
 
 **Todo List:**
-1. Run GitHub issue analysis for ISSUE_NUMBER using @agent-hatchbox-issue-analyzer
-2. Extract github issue link that includes comment id from agent output, display to user
-3. WAIT for human review of analysis results and their approval to continue, or process their other feedback.
-4. Run GitHub issue planning for ISSUE_NUMBER using @agent-hatchbox-issue-planner
+1. Run GitHub issue enhancement for ISSUE_NUMBER using @agent-hatchbox-issue-enhancer
+2. Extract github issue link that includes comment id from agent output (if enhancement was needed), display to user
+3. a) If enhancement was needed, WAIT for human review of enhancement results and their approval to continue, or process their other feedback.
+   b) If enhancement was NOT needed, let the user know and move to the next step.
+4. Run GitHub issue analysis for ISSUE_NUMBER using @agent-hatchbox-issue-analyzer
 5. Extract github issue link that includes comment id from agent output, display to user
-6. WAIT for human review of planning results and their approval to continue, or process their other feedback.
-7. Run GitHub issue implementation for ISSUE_NUMBER using @agent-hatchbox-issue-implementer
-8. Provide final summary with links to all GitHub comments created. Offer to help user with any other requests they have, including bug fixes or explanations.
+6. WAIT for human review of analysis results and their approval to continue, or process their other feedback.
+7. Run GitHub issue planning for ISSUE_NUMBER using @agent-hatchbox-issue-planner
+8. Extract github issue link that includes comment id from agent output, display to user
+9. WAIT for human review of planning results and their approval to continue, or process their other feedback.
+10. Run GitHub issue implementation for ISSUE_NUMBER using @agent-hatchbox-issue-implementer
+11. Provide final summary with links to all GitHub comments created. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analyiss or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent. 
 
 ## Workflow Details
 
-**STEP 1 - Analysis Phase:**
+**STEP 1 - Enhancement Phase:**
+- Execute: @agent-hatchbox-issue-enhancer ISSUE_NUMBER
+- Note: If the issue is already thorough and well-structured, the agent will return quickly without creating a comment
+- Upon completion: If enhancement was needed, extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
+- Mark todo #1 as completed and todo #2 as in_progress (if enhancement was needed)
+- If an enchancement was made to the issue - **STOP HERE** - Request explicit approval before proceeding to analysis. If no enchancement was made, proceed directly to the next step.
+
+**STEP 2 - Analysis Phase:**
 - Execute: @agent-hatchbox-issue-analyzer ISSUE_NUMBER
 - Upon completion: Extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
-- Mark todo #1 as completed and todo #2 as in_progress
+- Mark todo #4 as completed and todo #5 as in_progress
 - **STOP HERE** - Request explicit approval before proceeding to planning
 
-**STEP 2 - Planning Phase:**
+**STEP 3 - Planning Phase:**
 - Execute: @agent-hatchbox-issue-planner ISSUE_NUMBER
 - Upon completion: Extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
-- Mark todo #5 as completed and todo #6 as in_progress
+- Mark todo #7 as completed and todo #8 as in_progress
 - **STOP HERE** - Request explicit approval before proceeding to implementation
 
-**STEP 3 - Implementation Phase:**
+**STEP 4 - Implementation Phase:**
 - Execute: @agent-hatchbox-issue-implementer ISSUE_NUMBER
-- Upon completion: Mark todo #7 as completed and todo #8 as in_progress
+- Upon completion: Mark todo #10 as completed and todo #11 as in_progress
 - Provide summary and links to any GitHub comments created - do not open them. All links MUST include comment-id which can be obtained from agent ouput.
-- Mark todo #8 as completed
+- Mark todo #11 as completed

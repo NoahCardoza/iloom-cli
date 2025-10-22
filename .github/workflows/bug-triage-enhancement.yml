@@ -1,0 +1,74 @@
+name: Bug Triage Enhancement
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  enhance_bug_report:
+    if: github.event.label.name == 'triaged-bug'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code Bug Analysis
+        id: claude
+        uses: acreeger/claude-code-action@main
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          # Custom prompt for bug analysis
+          prompt: |
+            REPO: ${{ github.repository }}
+            ISSUE NUMBER: ${{ github.event.issue.number }}
+            TITLE: ${{ github.event.issue.title }}
+            BODY: ${{ github.event.issue.body }}
+            AUTHOR: ${{ github.event.issue.user.login }}
+
+            You are a Product Manager analyzing this bug or enhancement report. Create a structured bug specification comment that enhances the original report for development teams.
+
+            Use the GitHub CLI to post a comment on this issue using:
+            gh issue comment ${{ github.event.issue.number }} --body "your analysis"
+
+            Structure your comment with this format:
+
+            ## 🐛 Bug Report / Enhancement Analysis
+
+            **Problem Summary**
+            Clear, concise statement of the issue from the user's perspective
+
+            **User Impact** 
+            Who is affected and how this impacts their experience
+
+            <IfBugReport>
+            **Reproduction Steps**
+            Based on the report, list the steps to reproduce (ask for clarification if missing)
+
+            **Expected Behavior**
+            What the user expects to happen
+
+            **Actual Behavior** 
+            What actually happens
+            </IfBugReport>
+
+            **Additional Context**
+            Any relevant details from the report (browser, device, environment, etc.)
+
+            **Questions for Reporter** (if needed)
+            What additional information would help developers investigate?
+
+            DO NOT analyze code, make implementation suggestions, or dig into technical details. Focus only on understanding, structuring and enhancing the user's reported experience so that it can be worked on autonomously by a coding agent.
+                      
+          claude_args: |
+            --model claude-opus-4-1-20250805
+            --allowed-tools "Bash(gh issue comment:*)"
+            --disallowed-tools "Edit,Write,MultiEdit,NotebookEdit,Bash(git),Bash(git commit:*),Bash(git add:*),Bash(git push:*)"
+          # --system-prompt "You are an expert bug triage assistant. Your task is ONLY to analyze the bug report and create a specification comment. DO NOT make any code changes, commits, or attempt to fix the issue. Your role is to analyze and document, not to implement fixes."
