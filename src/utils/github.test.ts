@@ -13,6 +13,7 @@ import {
 	SimpleBranchNameStrategy,
 	ClaudeBranchNameStrategy,
 	TemplateBranchNameStrategy,
+	createIssue,
 	createIssueComment,
 	updateIssueComment,
 	createPRComment,
@@ -588,6 +589,106 @@ describe('github utils', () => {
 			})
 
 			await expect(executeGhCommand(['issue', 'list'])).rejects.toThrow('Unknown error')
+		})
+	})
+
+	describe('GitHub Issue Creation', () => {
+		it('should create GitHub issue with title and body', async () => {
+			const issueUrl = 'https://github.com/owner/repo/issues/123'
+
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: issueUrl,
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await createIssue('Test issue title', 'Test issue body')
+
+			expect(result).toEqual({
+				number: 123,
+				url: issueUrl
+			})
+			expect(execa).toHaveBeenCalledWith(
+				'gh',
+				[
+					'issue',
+					'create',
+					'--title',
+					'Test issue title',
+					'--body',
+					'Test issue body'
+				],
+				expect.any(Object)
+			)
+		})
+
+		it('should handle multiline issue body', async () => {
+			const issueUrl = 'https://github.com/owner/repo/issues/456'
+
+			const multilineBody = `## Summary
+This is a detailed description
+with multiple lines.
+
+- Bullet point 1
+- Bullet point 2`
+
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: issueUrl,
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await createIssue('Multi-line test', multilineBody)
+
+			expect(result).toEqual({
+				number: 456,
+				url: issueUrl
+			})
+			expect(execa).toHaveBeenCalledWith(
+				'gh',
+				expect.arrayContaining([
+					'--body',
+					multilineBody
+				]),
+				expect.any(Object)
+			)
+		})
+
+		it('should parse issue URL with trailing whitespace', async () => {
+			const issueUrl = 'https://github.com/owner/repo/issues/789'
+
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: `${issueUrl}\n`,
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await createIssue('Test', 'Body')
+
+			expect(result).toEqual({
+				number: 789,
+				url: issueUrl
+			})
+		})
+
+		it('should handle issue creation errors', async () => {
+			vi.mocked(execa).mockRejectedValueOnce({
+				stderr: 'API error',
+				message: 'Failed to create issue',
+				exitCode: 1,
+			})
+
+			await expect(createIssue('Test', 'Body')).rejects.toThrow('Failed to create issue')
+		})
+
+		it('should throw error if URL cannot be parsed', async () => {
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: 'Invalid output without URL',
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			await expect(createIssue('Test', 'Body')).rejects.toThrow('Failed to parse issue URL from gh output')
 		})
 	})
 

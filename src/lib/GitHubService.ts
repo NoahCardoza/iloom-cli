@@ -19,6 +19,7 @@ import {
 	fetchProjectItems,
 	fetchProjectFields,
 	updateProjectItemField,
+	createIssue,
 	SimpleBranchNameStrategy,
 	ClaudeBranchNameStrategy,
 } from '../utils/github.js'
@@ -199,6 +200,21 @@ export class GitHubService {
 		})
 
 		return nameStrategy.generate(issueNumber, title)
+	}
+
+	// Issue creation
+	public async createIssue(
+		title: string,
+		body: string
+	): Promise<{ number: number; url: string }> {
+		logger.info('Creating GitHub issue', { title })
+		return createIssue(title, body)
+	}
+
+	public async getIssueUrl(issueNumber: number): Promise<string> {
+		logger.debug('Fetching issue URL', { issueNumber })
+		const issue = await fetchGhIssue(issueNumber)
+		return issue.url
 	}
 
 	// GitHub Projects integration

@@ -189,6 +189,11 @@ export class FinishCommand {
 		// (checks existing worktrees, no GitHub API calls)
 		const parsed = await this.identifierParser.parseForPatternDetection(identifier)
 
+		// Description type should never reach finish command (converted in start)
+		if (parsed.type === 'description') {
+			throw new Error('Description input type is not supported in finish command')
+		}
+
 		// Convert ParsedInput to ParsedFinishInput (add autoDetected field)
 		const result: ParsedFinishInput = {
 			type: parsed.type,

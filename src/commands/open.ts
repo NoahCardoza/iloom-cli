@@ -75,6 +75,11 @@ export class OpenCommand {
 	private async parseExplicitInput(identifier: string): Promise<ParsedOpenInput> {
 		const parsed = await this.identifierParser.parseForPatternDetection(identifier)
 
+		// Description type should never reach open command (converted in start)
+		if (parsed.type === 'description') {
+			throw new Error('Description input type is not supported in open command')
+		}
+
 		const result: ParsedOpenInput = {
 			type: parsed.type,
 			originalInput: parsed.originalInput,

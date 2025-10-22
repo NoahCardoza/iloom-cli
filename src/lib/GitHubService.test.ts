@@ -23,6 +23,7 @@ vi.mock('../utils/github.js', async () => {
 		fetchProjectItems: vi.fn(),
 		fetchProjectFields: vi.fn(),
 		updateProjectItemField: vi.fn(),
+		createIssue: vi.fn(),
 	}
 })
 
@@ -460,6 +461,61 @@ describe('GitHubService', () => {
 			})
 
 			expect(branchName).toBe('mock/branch-789')
+		})
+	})
+
+	describe('createIssue', () => {
+		it('should create GitHub issue with title and body', async () => {
+			const issueData = {
+				number: 123,
+				url: 'https://github.com/owner/repo/issues/123'
+			}
+
+			vi.mocked(githubUtils.createIssue).mockResolvedValueOnce(issueData)
+
+			const result = await service.createIssue('Test title', 'Test body')
+
+			expect(result).toEqual(issueData)
+			expect(githubUtils.createIssue).toHaveBeenCalledWith('Test title', 'Test body')
+		})
+
+		it('should handle issue creation errors', async () => {
+			vi.mocked(githubUtils.createIssue).mockRejectedValueOnce(
+				new Error('Failed to create issue')
+			)
+
+			await expect(service.createIssue('Test', 'Body')).rejects.toThrow(
+				'Failed to create issue'
+			)
+		})
+	})
+
+	describe('getIssueUrl', () => {
+		it('should fetch and return issue URL', async () => {
+			const mockIssue = {
+				number: 123,
+				title: 'Test issue',
+				body: 'Test body',
+				url: 'https://github.com/owner/repo/issues/123',
+				state: 'open',
+				created_at: '2025-01-01T00:00:00Z',
+				updated_at: '2025-01-01T00:00:00Z'
+			}
+
+			vi.mocked(githubUtils.fetchGhIssue).mockResolvedValueOnce(mockIssue)
+
+			const url = await service.getIssueUrl(123)
+
+			expect(url).toBe('https://github.com/owner/repo/issues/123')
+			expect(githubUtils.fetchGhIssue).toHaveBeenCalledWith(123)
+		})
+
+		it('should handle fetch errors', async () => {
+			vi.mocked(githubUtils.fetchGhIssue).mockRejectedValueOnce(
+				new Error('Issue not found')
+			)
+
+			await expect(service.getIssueUrl(999)).rejects.toThrow('Issue not found')
 		})
 	})
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as readline from 'node:readline'
-import { promptConfirmation, promptInput } from './prompt.js'
+import { promptConfirmation, promptInput, waitForKeypress } from './prompt.js'
 
 vi.mock('node:readline')
 
@@ -200,6 +200,59 @@ describe('prompt utils', () => {
 				'Enter value: ',
 				expect.any(Function)
 			)
+		})
+	})
+
+	describe('waitForKeypress', () => {
+		it('should wait for any keypress and resolve', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback() // Simulate keypress
+			})
+
+			await waitForKeypress()
+
+			expect(mockRl.close).toHaveBeenCalled()
+		})
+
+		it('should display custom message when provided', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback()
+			})
+
+			await waitForKeypress('Press any key to continue...')
+
+			expect(mockRl.question).toHaveBeenCalledWith(
+				'Press any key to continue...',
+				expect.any(Function)
+			)
+		})
+
+		it('should display default message when no message provided', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback()
+			})
+
+			await waitForKeypress()
+
+			expect(mockRl.question).toHaveBeenCalledWith(
+				'Press any key to continue...',
+				expect.any(Function)
+			)
+		})
+
+		it('should resolve immediately after any keypress', async () => {
+			let callbackFn: (() => void) | undefined
+			mockRl.question.mockImplementation((_, callback) => {
+				callbackFn = callback as () => void
+			})
+
+			const promise = waitForKeypress()
+
+			// Simulate keypress
+			callbackFn?.()
+
+			await expect(promise).resolves.toBeUndefined()
+			expect(mockRl.close).toHaveBeenCalled()
 		})
 	})
 })

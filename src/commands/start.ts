@@ -7,10 +7,12 @@ import { ClaudeContextManager } from '../lib/ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
+import { AgentManager } from '../lib/AgentManager.js'
 import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { NeonProvider } from '../lib/providers/NeonProvider.js'
 import { branchExists } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
+import { launchClaude } from '../utils/claude.js'
 import type { StartOptions } from '../types/index.js'
 
 export interface StartCommandInput {
@@ -19,7 +21,7 @@ export interface StartCommandInput {
 }
 
 export interface ParsedInput {
-	type: 'issue' | 'pr' | 'branch'
+	type: 'issue' | 'pr' | 'branch' | 'description'
 	number?: number
 	branchName?: string
 	originalInput: string
@@ -28,9 +30,18 @@ export interface ParsedInput {
 export class StartCommand {
 	private gitHubService: GitHubService
 	private hatchboxManager: HatchboxManager
+	private agentManager: AgentManager
+	private settingsManager: SettingsManager
 
-	constructor(gitHubService?: GitHubService, hatchboxManager?: HatchboxManager) {
+	constructor(
+		gitHubService?: GitHubService,
+		hatchboxManager?: HatchboxManager,
+		agentManager?: AgentManager,
+		settingsManager?: SettingsManager
+	) {
 		this.gitHubService = gitHubService ?? new GitHubService()
+		this.agentManager = agentManager ?? new AgentManager()
+		this.settingsManager = settingsManager ?? new SettingsManager()
 
 		// Load environment variables first
 		const envResult = loadEnvIntoProcess()
@@ -84,6 +95,14 @@ export class StartCommand {
 			// Step 2: Validate based on type
 			await this.validateInput(parsed)
 
+			// Step 2.5: Handle description input - create GitHub issue
+			if (parsed.type === 'description') {
+				const issueNumber = await this.enhanceAndCreateIssue(parsed.originalInput)
+				// Update parsed to be an issue type with the new number
+				parsed.type = 'issue'
+				parsed.number = issueNumber
+			}
+
 			// Step 3: Log success and create hatchbox
 			logger.info(`✅ Validated input: ${this.formatParsedInput(parsed)}`)
 
@@ -129,6 +148,15 @@ export class StartCommand {
 		const trimmedIdentifier = identifier.trim()
 		if (!trimmedIdentifier) {
 			throw new Error('Missing required argument: identifier')
+		}
+
+		// Check for description: >50 chars AND >2 spaces
+		const spaceCount = (trimmedIdentifier.match(/ /g) ?? []).length
+		if (trimmedIdentifier.length > 50 && spaceCount > 2) {
+			return {
+				type: 'description',
+				originalInput: trimmedIdentifier,
+			}
 		}
 
 		// Check for PR-specific formats: pr/123, PR-123, PR/123
@@ -224,6 +252,14 @@ export class StartCommand {
 				break
 			}
 
+			case 'description': {
+				// Description inputs are valid - they will be converted to issues
+				logger.debug('Detected description input', {
+					length: parsed.originalInput.length
+				})
+				break
+			}
+
 			default: {
 				const unknownType = parsed as { type: string }
 				throw new Error(`Unknown input type: ${unknownType.type}`)
@@ -250,8 +286,93 @@ export class StartCommand {
 				return `Issue #${parsed.number}`
 			case 'branch':
 				return `Branch '${parsed.branchName}'`
+			case 'description':
+				return `Description: ${parsed.originalInput.slice(0, 50)}...`
 			default:
 				return 'Unknown input'
 		}
+	}
+
+	/**
+	 * Enhance description using Claude AI and create GitHub issue
+	 * Returns the new issue number
+	 */
+	private async enhanceAndCreateIssue(description: string): Promise<number> {
+		logger.info('Creating GitHub issue from description...')
+
+		// Step 1: Enhance description using Claude headless mode
+		const enhancedDescription = await this.enhanceDescription(description)
+
+		// Step 2: Create GitHub issue with enhanced description
+		const result = await this.gitHubService.createIssue(
+			description,  // Use original description as title
+			enhancedDescription  // Use enhanced description as body
+		)
+
+		logger.success(`Created issue #${result.number}: ${result.url}`)
+
+		// Step 3: Wait for keypress and open issue in browser for review
+		await this.waitForKeypressAndOpenIssue(result.number)
+
+		return result.number
+	}
+
+	/**
+	 * Enhance description using Claude AI in headless mode
+	 */
+	private async enhanceDescription(description: string): Promise<string> {
+		try {
+			logger.info('Enhancing description with Claude AI. This may take a moment...')
+
+			// Load agent configurations
+			const settings = await this.settingsManager.loadSettings()
+			const loadedAgents = await this.agentManager.loadAgents(settings)
+			const agents = this.agentManager.formatForCli(loadedAgents)
+
+			// Call Claude in headless mode with issue enhancer agent
+			const prompt = `Ask @agent-hatchbox-issue-enhancer to enhance this prompt: ${description}. Return only the description of the issue, nothing else`
+
+			const enhanced = await launchClaude(prompt, {
+				headless: true,
+				model: 'sonnet',
+				agents,
+			})
+
+			if (enhanced && typeof enhanced === 'string') {
+				logger.success('Description enhanced successfully')
+				return enhanced
+			}
+
+			// Fallback to original description
+			logger.warn('Claude enhancement returned empty result, using original description')
+			return description
+		} catch (error) {
+			logger.warn(`Failed to enhance description: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			return description
+		}
+	}
+
+	/**
+	 * Wait for keypress, open issue in browser, then wait for another keypress
+	 */
+	private async waitForKeypressAndOpenIssue(issueNumber: number): Promise<void> {
+		// Import waitForKeypress dynamically
+		const { waitForKeypress } = await import('../utils/prompt.js')
+		const { openBrowser } = await import('../utils/browser.js')
+
+		// Get issue URL
+		const issueUrl = await this.gitHubService.getIssueUrl(issueNumber)
+
+		// Display message and wait for first keypress
+		logger.info(`\nCreated issue #${issueNumber}. Press any key to open issue for editing...`)
+		await waitForKeypress('')
+
+		// Open issue in browser
+		await openBrowser(issueUrl)
+
+		// Wait for user to return
+		logger.info('Review and edit the issue in your browser if needed.')
+		logger.info('Press any key to continue with workspace creation...')
+		await waitForKeypress('')
 	}
 }

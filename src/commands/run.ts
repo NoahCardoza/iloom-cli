@@ -75,6 +75,11 @@ export class RunCommand {
 	private async parseExplicitInput(identifier: string): Promise<ParsedRunInput> {
 		const parsed = await this.identifierParser.parseForPatternDetection(identifier)
 
+		// Description type should never reach run command (converted in start)
+		if (parsed.type === 'description') {
+			throw new Error('Description input type is not supported in run command')
+		}
+
 		const result: ParsedRunInput = {
 			type: parsed.type,
 			originalInput: parsed.originalInput,

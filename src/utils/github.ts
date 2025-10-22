@@ -225,6 +225,53 @@ export class TemplateBranchNameStrategy implements BranchNameStrategy {
 	}
 }
 
+// GitHub Issue Operations
+
+interface IssueCreateResponse {
+	number: number
+	url: string
+}
+
+/**
+ * Create a new GitHub issue
+ * @param title - The issue title
+ * @param body - The issue body (markdown supported)
+ * @returns Issue metadata including number and URL
+ */
+export async function createIssue(
+	title: string,
+	body: string
+): Promise<IssueCreateResponse> {
+	logger.debug('Creating GitHub issue', { title })
+
+	const result = await execa('gh', [
+		'issue',
+		'create',
+		'--title',
+		title,
+		'--body',
+		body,
+	], {
+		cwd: process.cwd(),
+		timeout: 30000,
+		encoding: 'utf8',
+	})
+
+	// Parse the URL from the output (format: "https://github.com/owner/repo/issues/123")
+	const urlMatch = result.stdout.trim().match(/https:\/\/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/)
+	if (!urlMatch?.[1]) {
+		throw new Error(`Failed to parse issue URL from gh output: ${result.stdout}`)
+	}
+
+	const issueNumber = parseInt(urlMatch[1], 10)
+	const issueUrl = urlMatch[0]
+
+	return {
+		number: issueNumber,
+		url: issueUrl,
+	}
+}
+
 // GitHub Comment Operations
 
 interface CommentResponse {

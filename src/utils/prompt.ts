@@ -83,3 +83,24 @@ export async function promptInput(
 		})
 	})
 }
+
+/**
+ * Wait for the user to press any key
+ * @param message Optional message to display (default: "Press any key to continue...")
+ * @returns Promise<void> - resolves when key is pressed
+ */
+export async function waitForKeypress(
+	message = 'Press any key to continue...'
+): Promise<void> {
+	const rl = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+	})
+
+	return new Promise((resolve) => {
+		rl.question(message, () => {
+			rl.close()
+			resolve()
+		})
+	})
+}

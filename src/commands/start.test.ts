@@ -23,10 +23,29 @@ vi.mock('../lib/HatchboxManager.js', () => ({
 vi.mock('../lib/GitWorktreeManager.js')
 vi.mock('../lib/EnvironmentManager.js')
 vi.mock('../lib/ClaudeContextManager.js')
+vi.mock('../lib/AgentManager.js')
+vi.mock('../lib/SettingsManager.js')
 
 // Mock branchExists utility
 vi.mock('../utils/git.js', () => ({
 	branchExists: vi.fn().mockResolvedValue(false),
+}))
+
+// Mock claude utilities
+vi.mock('../utils/claude.js', () => ({
+	launchClaude: vi.fn().mockResolvedValue('Enhanced description from Claude AI'),
+}))
+
+// Mock browser utilities
+vi.mock('../utils/browser.js', () => ({
+	openBrowser: vi.fn().mockResolvedValue(undefined),
+}))
+
+// Mock prompt utilities
+vi.mock('../utils/prompt.js', () => ({
+	waitForKeypress: vi.fn().mockResolvedValue(undefined),
+	promptInput: vi.fn(),
+	promptConfirmation: vi.fn(),
 }))
 
 // Mock the logger to prevent console output during tests
@@ -182,6 +201,103 @@ describe('StartCommand', () => {
 						options: {},
 					})
 				).resolves.not.toThrow()
+			})
+
+			it('should detect description when >50 chars with >2 spaces', async () => {
+				const description = 'Users cannot filter the dashboard by date range making reports difficult'
+
+				// Mock GitHubService methods
+				mockGitHubService.createIssue.mockResolvedValueOnce({
+					number: 123,
+					url: 'https://github.com/owner/repo/issues/123'
+				})
+				mockGitHubService.getIssueUrl.mockResolvedValueOnce(
+					'https://github.com/owner/repo/issues/123'
+				)
+
+				await expect(
+					command.execute({
+						identifier: description,
+						options: {},
+					})
+				).resolves.not.toThrow()
+
+				// Should create issue with description
+				expect(mockGitHubService.createIssue).toHaveBeenCalled()
+			})
+
+			it('should NOT detect description for short text with spaces', async () => {
+				const shortText = 'fix auth bug'
+
+				// Should treat as branch name, but fail validation (spaces not allowed)
+				await expect(
+					command.execute({
+						identifier: shortText,
+						options: {},
+					})
+				).rejects.toThrow('Invalid branch name')
+
+				// Should NOT create issue
+				expect(mockGitHubService.createIssue).not.toHaveBeenCalled()
+				expect(mockGitHubService.detectInputType).not.toHaveBeenCalled()
+			})
+
+			it('should NOT detect description for long text without spaces', async () => {
+				const longBranchName = 'feat/add-comprehensive-user-authentication-system'
+
+				await expect(
+					command.execute({
+						identifier: longBranchName,
+						options: {},
+					})
+				).resolves.not.toThrow()
+
+				// Should treat as branch name, not create issue
+				expect(mockGitHubService.createIssue).not.toHaveBeenCalled()
+			})
+
+			it('should handle edge case: exactly 50 chars with exactly 2 spaces', async () => {
+				// Exactly at the boundary - should NOT trigger (needs > not >=)
+				const edgeCaseText = 'word1 word2 ' + 'x'.repeat(38)
+				expect(edgeCaseText.length).toBe(50)
+				expect((edgeCaseText.match(/ /g) || []).length).toBe(2)
+
+				// Should treat as branch name, but fail validation (spaces not allowed)
+				await expect(
+					command.execute({
+						identifier: edgeCaseText,
+						options: {},
+					})
+				).rejects.toThrow('Invalid branch name')
+
+				// Should NOT create issue (boundary conditions use >)
+				expect(mockGitHubService.createIssue).not.toHaveBeenCalled()
+			})
+
+			it('should detect description for 51 chars with 3 spaces', async () => {
+				// Just over the boundary - should trigger
+				const description = 'word1 word2 word3 ' + 'x'.repeat(33)
+				expect(description.length).toBe(51)
+				expect((description.match(/ /g) || []).length).toBe(3)
+
+				// Mock GitHubService methods
+				mockGitHubService.createIssue.mockResolvedValueOnce({
+					number: 456,
+					url: 'https://github.com/owner/repo/issues/456'
+				})
+				mockGitHubService.getIssueUrl.mockResolvedValueOnce(
+					'https://github.com/owner/repo/issues/456'
+				)
+
+				await expect(
+					command.execute({
+						identifier: description,
+						options: {},
+					})
+				).resolves.not.toThrow()
+
+				// Should create issue
+				expect(mockGitHubService.createIssue).toHaveBeenCalled()
 			})
 		})
 
