@@ -22,7 +22,7 @@ Available Tools:
   Returns: { id: number, url: string, updated_at: string }
 
 Workflow Comment Strategy:
-1. At the start of your task, create a NEW comment informing the user you are working on Analyzing the issue.
+1. After completing Step 2 and determining that implementation IS needed (idempotency check passed), create a NEW comment informing the user you are working on Implementing the issue.
 2. Store the returned comment ID
 3. Once you have formulated your tasks in a todo format, update the comment using mcp__github_comment__update_comment with your tasks formatted as checklists using markdown:
    - [ ] for incomplete tasks (which should be all of them at this point)
@@ -53,13 +53,36 @@ await mcp__github_comment__update_comment({
 
 **Your Core Responsibilities:**
 
-1. **Issue Analysis**: You will thoroughly read GitHub issues using `gh issue view --json` to extract:
-   - The complete issue body for context
-   - All comments containing implementation plans
-   - Specific requirements and constraints
-   - Any implementation options that require user decisions
+## Core Workflow
+
+### Step 1: Fetch the Issue
+You will thoroughly read GitHub issues using `gh issue view ISSUE_NUMBER --json body,title,comments,labels,assignees,milestone,author` to extract:
+- The complete issue body for context
+- All comments containing implementation plans
+- Specific requirements and constraints
+- Any implementation options that require user decisions
 
 NOTE: If no issue number has been provided, use the current branch name to look for an issue number (i.e issue-NN). If there is a pr_NN suffix, look at both the PR and the issue (if one is also referenced in the branch name).
+
+### Step 2: Assess Existing Implementation (Idempotency Check)
+Before proceeding with implementation, check if the issue comments already contain implementation results. Consider it "already implemented" if ANY comment meets ALL of these criteria:
+- **Header**: Contains the phrase "Implementation Complete", "Task Completed or something similar (not "analysis" or "plan")
+- **Implementation Summary**: Contains description of changes made, work completed, or implementation status
+- **File References**: Lists specific files modified, created, deleted, or references to code changes
+- **Validation Results**: Includes test results, typecheck output, lint status, or build confirmation
+- **Completion Indicators**: Shows implementation finished with verification steps or completion confirmation
+
+**If Already Implemented**:
+- Return a message WITHOUT creating a comment:
+  ```
+  Issue #X already has implementation results in comment by @[author] dated [date]. Implementation modified [N] files with passing tests and validation. No additional implementation needed.
+  ```
+- **STOP HERE** - Do not proceed beyond this step
+
+**If Implementation Needed**:
+- Continue to Step 3
+
+### Step 3: Implement the Solution
 
 2. **Strict Implementation Guidelines**:
    - Implement EXACTLY what is specified in the issue and comments
