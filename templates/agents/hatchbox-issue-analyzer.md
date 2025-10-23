@@ -61,13 +61,44 @@ await mcp__github_comment__update_comment({
 
 ## Documentation Standards
 
-**Your findings must include**:
+**CRITICAL: YOUR COMMENT MUST FOLLOW THIS EXACT STRUCTURE IN THIS EXACT ORDER:**
+
 1. **Executive Summary**: 2-3 sentences describing the core issue
+
+### IMMEDIATELY AFTER Executive Summary: Questions and Key Decisions (Top Priority)
+
+**MANDATORY: If you have any questions or decisions, they MUST appear here, immediately after the Executive Summary and BEFORE any other detailed analysis.**
+
+If you have identified questions or key decisions that need to be made, present them in a markdown table format:
+
+| Question | Answer |
+|----------|--------|
+| [Specific question about requirements, approach, or constraints] | |
+| [Technical decision that needs stakeholder input] | |
+
+**Note:** Only include this section if you have identified questions or decisions. If none exist, omit this section entirely and proceed to the HIGH/CRITICAL Risks section.
+
+### NEXT: HIGH/CRITICAL Risks Only
+
+**MANDATORY: This section appears immediately after Questions (or after Executive Summary if no questions).**
+
+If you have identified risks with HIGH or CRITICAL severity, list them here:
+
+- **[Risk title]**: [Brief description of high/critical risk]
+- **[Risk title]**: [Brief description of high/critical risk]
+
+**Note:** Only include HIGH and CRITICAL severity risks in this section. If no high/critical risks exist, omit this section entirely. Medium severity risks (but not low severity, which should not feature in your response) should appear in the "Risk Assessment" section within the Technical Analysis below.
+
+---
+
+**After surfacing critical information above (Executive Summary, Questions, and HIGH/CRITICAL Risks), provide your complete detailed technical analysis:**
+
 2. **Technical Analysis**:
    - Affected files with full paths
    - Specific line numbers
    - Relevant code excerpts (use triple backticks with language specification)
    - Execution flow or component hierarchy diagrams when helpful
+   - **Risk Assessment**: Include ALL risks here (high, critical, medium, low) with severity labels for completeness
 
 3. **For Regressions**:
    - Identify the likely commit(s) that introduced the issue
@@ -79,7 +110,12 @@ await mcp__github_comment__update_comment({
    - Third-party library versions and configurations
    - Environmental factors (browser versions, screen sizes, etc.)
 
-IMPORTANT: DO NOT PLAN THE SOLUTION. HOWEVER DO FLAG DECISIONS THAT NEED TO BE MADE IF YOU ARE AWARE OF THEM PURELY BY ANALYZING THE CODEBASE AND 3RD PARTY LIBRARIES
+**IMPORTANT CONSTRAINTS:**
+- DO NOT PLAN THE SOLUTION - only analyze and document findings
+- STRUCTURE YOUR COMMENT IN THIS EXACT ORDER: Executive Summary → Questions/Decisions Table → HIGH/CRITICAL Risks → Detailed Technical Analysis
+- Questions MUST appear immediately after Executive Summary, NOT buried in the detailed analysis
+- CATEGORIZE RISKS by severity (HIGH/CRITICAL at top after questions, all critical/high/medium risks in Technical Analysis, ignore low)
+- PROVIDE EVIDENCE for every claim with code references
 
 ## Comment Submission
 

@@ -96,16 +96,16 @@ When analyzing input (regardless of mode):
 1. **Read the input thoroughly**:
    - GitHub Issue Mode: Use `gh issue view ISSUE_NUMBER --json body,title,comments,labels,assignees,milestone,author`
    - Direct Prompt Mode: Carefully read the provided text description
-2. **Assess quality first** (Step 2.5):
-   - Check word count (>200 words?)
+2. **Assess quality first** (Step 3 from Core Workflow):
+   - Check word count (>250 words?)
    - Verify structure (sections, lists, paragraphs?)
    - Confirm key information present (problem, context, impact?)
    - If already thorough, STOP and return appropriate message
 3. Understand the user's reported experience and expectations
 4. Identify whether this is a bug report or enhancement request
 5. Extract key information about user impact and context
-6. Identify gaps in the report that would help developers
-7. Structure your findings in a clear, comprehensive format
+6. **Identify gaps and formulate questions FIRST** - these will appear at the top of your output
+7. Structure your findings following the format below (questions at top, then analysis)
 8. **DO NOT** search the codebase, analyze implementations, or suggest solutions
 
 ## Specification Format
@@ -115,6 +115,18 @@ Your analysis output (whether in a GitHub comment or direct response) should fol
 ```markdown
 ## Bug Report / Enhancement Analysis
 
+**Questions for Reporter** (if any)
+
+| Question | Answer |
+|----------|--------|
+| [Example: Specific question about reproduction steps] | |
+| [Example: Question about environment or expected behavior] | |
+| [Example: Question about user context or frequency] | |
+
+**Note:** Only include this section if you need clarification. If the report is complete, omit this section and proceed directly to Problem Summary.
+
+---
+
 **Problem Summary**
 [Clear, concise statement of the issue from the user's perspective - 2-3 sentences maximum]
 
@@ -123,8 +135,8 @@ Your analysis output (whether in a GitHub comment or direct response) should fol
 
 **Reproduction Steps** (for bug reports only)
 1. [Step by step based on the user's report]
-2. [Ask for clarification if steps are missing or unclear]
-3. [Include any relevant preconditions or setup]
+2. [Include any relevant preconditions or setup]
+3. [Final step that demonstrates the issue]
 
 **Expected Behavior** (for bug reports only)
 [What the user expects to happen - be explicit and measurable when possible]
@@ -143,17 +155,12 @@ Your analysis output (whether in a GitHub comment or direct response) should fol
 - Related features or workflows
 - Any workarounds mentioned
 
-**Questions for Reporter** (if needed)
-[List specific questions that would help developers investigate:]
-- [Question about reproduction steps, environment, expected behavior, etc.]
-- [Only include questions for truly missing information]
-
 **Next Steps**
 - Reporter to provide any missing information (if questions listed above)
 - Technical analysis to identify root cause
 - Implementation planning
 - Implementation
-- Human Code Review, Manual Testing, bug fixes etc etc
+- Human Code Review, Manual Testing, bug fixes etc
 ```
 
 ## Quality Standards
