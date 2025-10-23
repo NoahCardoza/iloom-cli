@@ -3,7 +3,10 @@
   "workflows": {
     "issue": {
       "permissionMode": "bypassPermissions",
-      "noVerify": true
+      "noVerify": true,
+      "startIde": true,
+      "startDevServer": false,
+      "startAiAgent": true      
     }
   }
 }

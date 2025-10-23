@@ -26,6 +26,18 @@ export const WorkflowPermissionSchema = z.object({
 		.boolean()
 		.optional()
 		.describe('Skip pre-commit hooks (--no-verify) when committing during finish workflow'),
+	startIde: z
+		.boolean()
+		.default(true)
+		.describe('Launch IDE (code) when starting this workflow type'),
+	startDevServer: z
+		.boolean()
+		.default(true)
+		.describe('Launch development server when starting this workflow type'),
+	startAiAgent: z
+		.boolean()
+		.default(true)
+		.describe('Launch Claude AI agent when starting this workflow type'),
 })
 
 /**

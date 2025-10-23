@@ -37,7 +37,11 @@ vi.mock('../lib/GitWorktreeManager.js')
 vi.mock('../lib/EnvironmentManager.js')
 vi.mock('../lib/ClaudeContextManager.js')
 vi.mock('../lib/AgentManager.js')
-vi.mock('../lib/SettingsManager.js')
+vi.mock('../lib/SettingsManager.js', () => ({
+	SettingsManager: vi.fn(() => ({
+		loadSettings: vi.fn().mockResolvedValue({}),
+	})),
+}))
 
 // Mock branchExists utility
 vi.mock('../utils/git.js', () => ({
@@ -922,6 +926,474 @@ describe('StartCommand', () => {
 
 				// branchExists is only called for branch-type inputs in validateInput
 				// Issues get their branch checked in HatchboxManager.createWorktree
+			})
+		})
+
+		describe('Configuration-Driven Component Launching', () => {
+			let mockHatchboxManager: {
+				createHatchbox: ReturnType<typeof vi.fn>
+			}
+			let mockSettingsManager: {
+				loadSettings: ReturnType<typeof vi.fn>
+			}
+
+			beforeEach(async () => {
+				// Re-import to get fresh mocked instances
+				const { HatchboxManager } = await import('../lib/HatchboxManager.js')
+				const { SettingsManager } = await import('../lib/SettingsManager.js')
+
+				mockHatchboxManager = new HatchboxManager()
+				mockSettingsManager = new SettingsManager()
+
+				// Mock settings manager loadSettings method
+				mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({})
+
+				// Create command with mocked dependencies
+				command = new StartCommand(
+					mockGitHubService,
+					mockHatchboxManager,
+					undefined,
+					mockSettingsManager
+				)
+			})
+
+			describe('Workflow-specific settings application', () => {
+				it('should use issue workflow config when starting issue workflow', async () => {
+					const mockIssue = {
+						number: 123,
+						title: 'Test Issue',
+						body: '',
+						state: 'open' as const,
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					// Mock settings with issue workflow config
+					mockSettingsManager.loadSettings.mockResolvedValue({
+						workflows: {
+							issue: {
+								startIde: false,
+								startDevServer: true,
+								startAiAgent: true,
+							},
+						},
+					})
+
+					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						rawInput: '123',
+					})
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
+
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					expect(mockHatchboxManager.createHatchbox).toHaveBeenCalledWith(
+						expect.objectContaining({
+							options: expect.objectContaining({
+								enableCode: false,
+								enableDevServer: true,
+								enableClaude: true,
+							}),
+						})
+					)
+				})
+
+				it('should use pr workflow config when starting PR workflow', async () => {
+					const mockPR = {
+						number: 456,
+						title: 'Test PR',
+						body: '',
+						state: 'open' as const,
+						branch: 'feature-branch',
+						baseBranch: 'main',
+						url: 'https://github.com/test/repo/pull/456',
+						isDraft: false,
+					}
+
+					// Mock settings with pr workflow config
+					mockSettingsManager.loadSettings.mockResolvedValue({
+						workflows: {
+							pr: {
+								startIde: true,
+								startDevServer: false,
+								startAiAgent: true,
+							},
+						},
+					})
+
+					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+						type: 'pr',
+						number: 456,
+						rawInput: 'pr/456',
+					})
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+					vi.mocked(mockGitHubService.validatePRState).mockResolvedValue()
+
+					await command.execute({
+						identifier: 'pr/456',
+						options: {},
+					})
+
+					expect(mockHatchboxManager.createHatchbox).toHaveBeenCalledWith(
+						expect.objectContaining({
+							options: expect.objectContaining({
+								enableCode: true,
+								enableDevServer: false,
+								enableClaude: true,
+							}),
+						})
+					)
+				})
+
+				it('should use regular workflow config when starting branch workflow', async () => {
+					const { branchExists } = await import('../utils/git.js')
+					vi.mocked(branchExists).mockResolvedValue(false)
+
+					// Mock settings with regular workflow config
+					mockSettingsManager.loadSettings.mockResolvedValue({
+						workflows: {
+							regular: {
+								startIde: true,
+								startDevServer: true,
+								startAiAgent: false,
+							},
+						},
+					})
+
+					await command.execute({
+						identifier: 'my-feature-branch',
+						options: {},
+					})
+
+					expect(mockHatchboxManager.createHatchbox).toHaveBeenCalledWith(
+						expect.objectContaining({
+							options: expect.objectContaining({
+								enableCode: true,
+								enableDevServer: true,
+								enableClaude: false,
+							}),
+						})
+					)
+				})
+			})
+
+			describe('Configuration precedence and defaults', () => {
+				it('should default to all components enabled when no config exists', async () => {
+					const mockIssue = {
+						number: 123,
+						title: 'Test Issue',
+						body: '',
+						state: 'open' as const,
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					// Mock empty settings (no workflow config)
+					mockSettingsManager.loadSettings.mockResolvedValue({})
+
+					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						rawInput: '123',
+					})
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
+
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					expect(mockHatchboxManager.createHatchbox).toHaveBeenCalledWith(
+						expect.objectContaining({
+							options: expect.objectContaining({
+								enableCode: true,
+								enableDevServer: true,
+								enableClaude: true,
+							}),
+						})
+					)
+				})
+
+				it('should default to all components enabled when workflow type not configured', async () => {
+					const mockPR = {
+						number: 456,
+						title: 'Test PR',
+						body: '',
+						state: 'open' as const,
+						branch: 'feature-branch',
+						baseBranch: 'main',
+						url: 'https://github.com/test/repo/pull/456',
+						isDraft: false,
+					}
+
+					// Mock settings with only issue workflow configured
+					mockSettingsManager.loadSettings.mockResolvedValue({
+						workflows: {
+							issue: {
+								startIde: false,
+								startDevServer: false,
+								startAiAgent: false,
+							},
+						},
+					})
+
+					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+						type: 'pr',
+						number: 456,
+						rawInput: 'pr/456',
+					})
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+					vi.mocked(mockGitHubService.validatePRState).mockResolvedValue()
+
+					await command.execute({
+						identifier: 'pr/456',
+						options: {},
+					})
+
+					// PR workflow not configured, should default to true
+					expect(mockHatchboxManager.createHatchbox).toHaveBeenCalledWith(
+						expect.objectContaining({
+							options: expect.objectContaining({
+								enableCode: true,
+								enableDevServer: true,
+								enableClaude: true,
+							}),
+						})
+					)
+				})
+
+				it('should allow CLI flags to override config settings', async () => {
+					const mockIssue = {
+						number: 123,
+						title: 'Test Issue',
+						body: '',
+						state: 'open' as const,
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					// Mock settings with issue.startIde: true
+					mockSettingsManager.loadSettings.mockResolvedValue({
+						workflows: {
+							issue: {
+								startIde: true,
+								startDevServer: true,
+								startAiAgent: true,
+							},
+						},
+					})
+
+					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						rawInput: '123',
+					})
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
+
+					// Pass CLI flag to override
+					await command.execute({
+						identifier: '123',
+						options: {
+							code: false,
+						},
+					})
+
+					expect(mockHatchboxManager.createHatchbox).toHaveBeenCalledWith(
+						expect.objectContaining({
+							options: expect.objectContaining({
+								enableCode: false, // CLI override
+								enableDevServer: true, // From config
+								enableClaude: true, // From config
+							}),
+						})
+					)
+				})
+
+				it('should apply CLI overrides for all component flags', async () => {
+					const mockIssue = {
+						number: 123,
+						title: 'Test Issue',
+						body: '',
+						state: 'open' as const,
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					// Mock settings with all components enabled
+					mockSettingsManager.loadSettings.mockResolvedValue({
+						workflows: {
+							issue: {
+								startIde: true,
+								startDevServer: true,
+								startAiAgent: true,
+							},
+						},
+					})
+
+					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						rawInput: '123',
+					})
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
+
+					// Pass all CLI flags to override
+					await command.execute({
+						identifier: '123',
+						options: {
+							code: false,
+							devServer: false,
+							claude: false,
+						},
+					})
+
+					expect(mockHatchboxManager.createHatchbox).toHaveBeenCalledWith(
+						expect.objectContaining({
+							options: expect.objectContaining({
+								enableCode: false,
+								enableDevServer: false,
+								enableClaude: false,
+							}),
+						})
+					)
+				})
+
+				it('should handle partial config (some flags set, others undefined)', async () => {
+					const mockIssue = {
+						number: 123,
+						title: 'Test Issue',
+						body: '',
+						state: 'open' as const,
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					// Mock settings with only startIde defined
+					mockSettingsManager.loadSettings.mockResolvedValue({
+						workflows: {
+							issue: {
+								startIde: false,
+							},
+						},
+					})
+
+					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						rawInput: '123',
+					})
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
+
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					expect(mockHatchboxManager.createHatchbox).toHaveBeenCalledWith(
+						expect.objectContaining({
+							options: expect.objectContaining({
+								enableCode: false, // From config
+								enableDevServer: true, // Default
+								enableClaude: true, // Default
+							}),
+						})
+					)
+				})
+			})
+
+			describe('Edge cases', () => {
+				it('should handle all components disabled via config', async () => {
+					const mockIssue = {
+						number: 123,
+						title: 'Test Issue',
+						body: '',
+						state: 'open' as const,
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					// Mock settings with all flags false
+					mockSettingsManager.loadSettings.mockResolvedValue({
+						workflows: {
+							issue: {
+								startIde: false,
+								startDevServer: false,
+								startAiAgent: false,
+							},
+						},
+					})
+
+					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						rawInput: '123',
+					})
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
+
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					expect(mockHatchboxManager.createHatchbox).toHaveBeenCalledWith(
+						expect.objectContaining({
+							options: expect.objectContaining({
+								enableCode: false,
+								enableDevServer: false,
+								enableClaude: false,
+							}),
+						})
+					)
+				})
+
+				it('should handle settings loading failure gracefully', async () => {
+					const mockIssue = {
+						number: 123,
+						title: 'Test Issue',
+						body: '',
+						state: 'open' as const,
+						labels: [],
+						assignees: [],
+						url: 'https://github.com/test/repo/issues/123',
+					}
+
+					// Mock settings loading to throw error
+					mockSettingsManager.loadSettings.mockRejectedValue(
+						new Error('Failed to load settings')
+					)
+
+					vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+						type: 'issue',
+						number: 123,
+						rawInput: '123',
+					})
+					vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+					vi.mocked(mockGitHubService.validateIssueState).mockResolvedValue()
+
+					// Should propagate the error (not catch it silently)
+					await expect(
+						command.execute({
+							identifier: '123',
+							options: {},
+						})
+					).rejects.toThrow('Failed to load settings')
+				})
 			})
 		})
 	})

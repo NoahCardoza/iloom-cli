@@ -545,7 +545,14 @@ describe('SettingsManager', () => {
 			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result.workflows).toEqual(settings.workflows)
+			expect(result.workflows?.issue?.permissionMode).toBe('bypassPermissions')
+			expect(result.workflows?.issue?.startIde).toBe(true) // Zod default
+			expect(result.workflows?.issue?.startDevServer).toBe(true) // Zod default
+			expect(result.workflows?.issue?.startAiAgent).toBe(true) // Zod default
+			expect(result.workflows?.pr?.permissionMode).toBe('acceptEdits')
+			expect(result.workflows?.pr?.startIde).toBe(true) // Zod default
+			expect(result.workflows?.pr?.startDevServer).toBe(true) // Zod default
+			expect(result.workflows?.pr?.startAiAgent).toBe(true) // Zod default
 			expect(result.mainBranch).toBe('develop')
 		})
 
@@ -769,6 +776,197 @@ describe('SettingsManager', () => {
 			expect(result.workflows?.issue?.permissionMode).toBe('bypassPermissions')
 			expect(result.agents?.['test-agent']?.model).toBe('sonnet')
 			expect(result.capabilities?.web?.basePort).toBe(8080)
+		})
+	})
+
+	describe('WorkflowPermissionSchema - Component Launch Configuration', () => {
+		it('should validate workflow config with all component flags enabled', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				workflows: {
+					issue: {
+						startIde: true,
+						startDevServer: true,
+						startAiAgent: true,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.workflows?.issue?.startIde).toBe(true)
+			expect(result.workflows?.issue?.startDevServer).toBe(true)
+			expect(result.workflows?.issue?.startAiAgent).toBe(true)
+		})
+
+		it('should validate workflow config with all component flags disabled', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				workflows: {
+					issue: {
+						startIde: false,
+						startDevServer: false,
+						startAiAgent: false,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.workflows?.issue?.startIde).toBe(false)
+			expect(result.workflows?.issue?.startDevServer).toBe(false)
+			expect(result.workflows?.issue?.startAiAgent).toBe(false)
+		})
+
+		it('should validate workflow config with mixed component flags', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				workflows: {
+					issue: {
+						startIde: true,
+						startDevServer: false,
+						startAiAgent: true,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.workflows?.issue?.startIde).toBe(true)
+			expect(result.workflows?.issue?.startDevServer).toBe(false)
+			expect(result.workflows?.issue?.startAiAgent).toBe(true)
+		})
+
+		it('should apply default true to component flags when not specified', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				workflows: {
+					issue: {
+						permissionMode: 'plan',
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.workflows?.issue?.startIde).toBe(true)
+			expect(result.workflows?.issue?.startDevServer).toBe(true)
+			expect(result.workflows?.issue?.startAiAgent).toBe(true)
+		})
+
+		it('should accept different workflow types (issue, pr, regular) with component configs', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				workflows: {
+					issue: {
+						startIde: true,
+						startDevServer: false,
+						startAiAgent: true,
+					},
+					pr: {
+						startIde: false,
+						startDevServer: true,
+						startAiAgent: false,
+					},
+					regular: {
+						startIde: true,
+						startDevServer: true,
+						startAiAgent: false,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.workflows?.issue?.startIde).toBe(true)
+			expect(result.workflows?.issue?.startDevServer).toBe(false)
+			expect(result.workflows?.issue?.startAiAgent).toBe(true)
+			expect(result.workflows?.pr?.startIde).toBe(false)
+			expect(result.workflows?.pr?.startDevServer).toBe(true)
+			expect(result.workflows?.pr?.startAiAgent).toBe(false)
+			expect(result.workflows?.regular?.startIde).toBe(true)
+			expect(result.workflows?.regular?.startDevServer).toBe(true)
+			expect(result.workflows?.regular?.startAiAgent).toBe(false)
+		})
+
+		it('should reject invalid types for component launch flags (non-boolean)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				workflows: {
+					issue: {
+						startIde: 'yes',
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
+				/Settings validation failed[\s\S]*workflows\.issue\.startIde[\s\S]*Expected boolean, received string/,
+			)
+		})
+
+		it('should reject invalid startDevServer type (number)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				workflows: {
+					issue: {
+						startDevServer: 1,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
+				/Settings validation failed[\s\S]*workflows\.issue\.startDevServer[\s\S]*Expected boolean, received number/,
+			)
+		})
+
+		it('should reject invalid startAiAgent type (null)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				workflows: {
+					issue: {
+						startAiAgent: null,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
+				/Settings validation failed[\s\S]*workflows\.issue\.startAiAgent[\s\S]*Expected boolean/,
+			)
+		})
+
+		it('should accept component flags alongside existing workflow settings', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				workflows: {
+					issue: {
+						permissionMode: 'bypassPermissions',
+						noVerify: true,
+						startIde: false,
+						startDevServer: true,
+						startAiAgent: false,
+					},
+				},
+			}
+
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.workflows?.issue?.permissionMode).toBe('bypassPermissions')
+			expect(result.workflows?.issue?.noVerify).toBe(true)
+			expect(result.workflows?.issue?.startIde).toBe(false)
+			expect(result.workflows?.issue?.startDevServer).toBe(true)
+			expect(result.workflows?.issue?.startAiAgent).toBe(false)
 		})
 	})
 })

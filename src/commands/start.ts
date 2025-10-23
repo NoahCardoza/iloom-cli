@@ -122,6 +122,11 @@ export class StartCommand {
 				}
 			}
 
+			// Step 2.8: Load workflow-specific settings
+			const settings = await this.settingsManager.loadSettings()
+			const workflowType = parsed.type === 'branch' ? 'regular' : parsed.type
+			const workflowConfig = settings.workflows?.[workflowType]
+
 			// Step 3: Log success and create hatchbox
 			logger.info(`✅ Validated input: ${this.formatParsedInput(parsed)}`)
 
@@ -131,15 +136,25 @@ export class StartCommand {
 					? parsed.branchName ?? ''
 					: parsed.number ?? 0
 
+			// Apply configuration precedence: CLI flags > workflow config > defaults (true)
+			const enableClaude = input.options.claude ?? workflowConfig?.startAiAgent ?? true
+			const enableCode = input.options.code ?? workflowConfig?.startIde ?? true
+			const enableDevServer = input.options.devServer ?? workflowConfig?.startDevServer ?? true
+
+			logger.debug('Final workflow config values:', {
+				enableClaude,
+				enableCode,
+				enableDevServer,
+			})
+			
 			const hatchbox = await this.hatchboxManager.createHatchbox({
 				type: parsed.type,
 				identifier,
 				originalInput: parsed.originalInput,
 				options: {
-					// Pass individual component flags (defaults to true if not specified)
-					enableClaude: input.options.claude !== false,
-					enableCode: input.options.code !== false,
-					enableDevServer: input.options.devServer !== false,
+					enableClaude,
+					enableCode,
+					enableDevServer,
 					...(input.options.oneShot && { oneShot: input.options.oneShot }),
 				},
 			})
