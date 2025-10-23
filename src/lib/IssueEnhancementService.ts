@@ -42,7 +42,22 @@ export class IssueEnhancementService {
 			const agents = this.agentManager.formatForCli(loadedAgents)
 
 			// Call Claude in headless mode with issue enhancer agent
-			const prompt = `Ask @agent-hatchbox-issue-enhancer to enhance this prompt: ${description}. Return only the description of the issue, nothing else`
+			const prompt = `@agent-hatchbox-issue-enhancer
+
+TASK: Enhance the following issue description for GitHub.
+
+INPUT:
+${description}
+
+OUTPUT REQUIREMENTS:
+- Return ONLY the enhanced description markdown text
+- NO meta-commentary (no "Here is...", "The enhanced...", "I have...", etc)
+- NO code block markers (\`\`\`)
+- NO conversational framing or acknowledgments
+- NO explanations of your work
+- Start your response immediately with the enhanced content
+
+Your response should be the raw markdown that will become the GitHub issue body.`
 
 			const enhanced = await launchClaude(prompt, {
 				headless: true,

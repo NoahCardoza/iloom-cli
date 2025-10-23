@@ -105,13 +105,20 @@ describe('IssueEnhancementService', () => {
 			await service.enhanceDescription(description)
 
 			expect(launchClaude).toHaveBeenCalledWith(
-				`Ask @agent-hatchbox-issue-enhancer to enhance this prompt: ${description}. Return only the description of the issue, nothing else`,
-				{
+				expect.stringContaining('@agent-hatchbox-issue-enhancer'),
+				expect.objectContaining({
 					headless: true,
 					model: 'sonnet',
 					agents: 'agent1=path1',
-				}
+				})
 			)
+
+			// Verify prompt structure
+			const calledPrompt = vi.mocked(launchClaude).mock.calls[0][0]
+			expect(calledPrompt).toContain('TASK:')
+			expect(calledPrompt).toContain('OUTPUT REQUIREMENTS:')
+			expect(calledPrompt).toContain('NO meta-commentary')
+			expect(calledPrompt).not.toMatch(/^ask @agent/i)
 		})
 
 		it('should load and pass agent configurations', async () => {
@@ -176,6 +183,36 @@ describe('IssueEnhancementService', () => {
 			vi.mocked(launchClaude).mockRejectedValue(new Error('Test error'))
 			await service.enhanceDescription(originalDescription)
 			expect(logger.warn).toHaveBeenCalledWith('Failed to enhance description: Test error')
+		})
+
+		it('should handle enhanced content that starts directly with markdown', async () => {
+			const { launchClaude } = await import('../utils/claude.js')
+			const enhancedContent = '## Enhancement Request\n\nAdd dark mode support'
+			vi.mocked(launchClaude).mockResolvedValue(enhancedContent)
+
+			const result = await service.enhanceDescription('need dark mode')
+
+			// Should start with the actual content, not conversational text
+			expect(result).toMatch(/^##/)
+			expect(result).not.toMatch(/^(here|the|i)/i)
+		})
+
+		it('should call launchClaude with non-conversational prompt', async () => {
+			const { launchClaude } = await import('../utils/claude.js')
+			vi.mocked(launchClaude).mockResolvedValue('Enhanced')
+
+			await service.enhanceDescription('Test description with enough length and spaces')
+
+			const calledPrompt = vi.mocked(launchClaude).mock.calls[0][0]
+
+			// Should NOT use conversational framing
+			expect(calledPrompt).not.toMatch(/^ask @agent/i)
+
+			// Should include explicit output constraints
+			expect(calledPrompt).toMatch(/ONLY|DO NOT|NO meta/i)
+
+			// Should reference the agent directly
+			expect(calledPrompt).toMatch(/@agent-hatchbox-issue-enhancer/)
 		})
 	})
 

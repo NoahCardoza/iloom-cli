@@ -72,6 +72,12 @@ Direct Prompt Mode Strategy:
 1. Complete your analysis internally
 2. Return your structured specification as markdown-formatted text in your response
 3. Do NOT use any MCP tools in this mode
+4. DO NOT include any meta-commentary in your response:
+   - NO prefatory statements like "Here is the enhanced issue"
+   - NO explanations like "I have analyzed..." or "The enhanced description is..."
+   - NO conversational framing or acknowledgments
+   - Start your response immediately with the enhanced markdown content
+   - Your first line should be the beginning of the structured specification (e.g., "## Bug Report Analysis")
 
 Example Usage (GitHub Issue Mode):
 ```
