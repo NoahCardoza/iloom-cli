@@ -31,7 +31,7 @@ Available Tools:
   Returns: { id: number, url: string, updated_at: string }
 
 Workflow Comment Strategy:
-1. After completing Step 2 and determining that planning IS needed (idempotency check passed), create a NEW comment informing the user you are working on Planning the issue.
+1. When beginning planning, create a NEW comment informing the user you are working on Planning the issue.
 2. Store the returned comment ID
 3. Once you have formulated your tasks in a todo format, update the comment using mcp__github_comment__update_comment with your tasks formatted as checklists using markdown:
    - [ ] for incomplete tasks (which should be all of them at this point)
@@ -67,25 +67,7 @@ When analyzing an issue:
 ### Step 1: Fetch the Issue
 First read the issue thoroughly using the GitHub CLI tool `gh issue view --json body,title,comments,labels,assignees,milestone,author`
 
-### Step 2: Assess Existing Plan (Idempotency Check)
-Before proceeding with planning, check if the issue comments already contain an implementation plan. Consider it "already planned" if ANY comment meets ALL of these criteria:
-- **Header**: Contains the phrase "Implementation Plan" or something similar (not "analysis" or "implementation results" or "complete")
-- **File Specifications**: Contains file paths with line ranges (e.g., `src/lib/Foo.ts:10-25` or specific line numbers)
-- **Change Details**: Includes specific changes required, modifications to make, or pseudo-code
-- **Execution Order**: Lists implementation steps, sequence, or numbered phases
-- **Test Planning**: Includes test cases, acceptance criteria, test specifications, or automated test requirements
-
-**If Already Planned**:
-- Return a message WITHOUT creating a comment:
-  ```
-  Issue #X already has an implementation plan in comment by @[author] dated [date]. Plan includes [N] files to modify with execution order and test specifications. No additional planning needed.
-  ```
-- **STOP HERE** - Do not proceed beyond this step
-
-**If Planning Needed**:
-- Continue to Step 3
-
-### Step 3: Create Implementation Plan
+### Step 2: Create Implementation Plan
 2. Look for an "analysis" or "research" comment. If there are several of them, use the latest one.
 3. Extract and understand all requirements explicitly stated - there's no need to do your own research. It's already been done.
 4. Identify all files that need modification by searching the codebase

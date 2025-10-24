@@ -3,42 +3,122 @@ You are orchestrating a set of agents through a development process, with human 
 **IMPORTANT: Each step requires explicit human approval. Do not proceed to any step until explicitly told to do so.**
 
 **Todo List:**
-1. Run GitHub issue enhancement for ISSUE_NUMBER using @agent-hatchbox-issue-enhancer
-2. Extract github issue link that includes comment id from agent output (if enhancement was needed), display to user
-3. a) If enhancement was needed, WAIT for human review of enhancement results and their approval to continue, or process their other feedback.
+1. Scan issue and determine workflow plan
+2. Run GitHub issue enhancement for ISSUE_NUMBER (if needed) using @agent-hatchbox-issue-enhancer
+3. Extract github issue link that includes comment id from agent output (if enhancement was needed), display to user
+4. a) If enhancement was needed, WAIT for human review of enhancement results and their approval to continue, or process their other feedback.
    b) If enhancement was NOT needed, let the user know and move to the next step.
-4. Run GitHub issue analysis for ISSUE_NUMBER using @agent-hatchbox-issue-analyzer
-5. Extract github issue link that includes comment id from agent output, display to user
-6. WAIT for human review of analysis results and their approval to continue, or process their other feedback.
-7. Run GitHub issue planning for ISSUE_NUMBER using @agent-hatchbox-issue-planner
-8. Extract github issue link that includes comment id from agent output, display to user
-9. WAIT for human review of planning results and their approval to continue, or process their other feedback.
-10. Run GitHub issue implementation for ISSUE_NUMBER using @agent-hatchbox-issue-implementer
-11. Provide final summary with links to all GitHub comments created. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analyiss or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent. 
+5. Run GitHub issue analysis for ISSUE_NUMBER (if needed) using @agent-hatchbox-issue-analyzer
+6. Extract github issue link that includes comment id from agent output, display to user
+7. WAIT for human review of analysis results and their approval to continue, or process their other feedback.
+8. Run GitHub issue planning for ISSUE_NUMBER (if needed) using @agent-hatchbox-issue-planner
+9. Extract github issue link that includes comment id from agent output, display to user
+10. WAIT for human review of planning results and their approval to continue, or process their other feedback.
+11. Run GitHub issue implementation for ISSUE_NUMBER (if needed) using @agent-hatchbox-issue-implementer
+12. Provide final summary with links to all GitHub comments created. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analyiss or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent.
 
 ## Workflow Details
 
+**STEP 0 - Workflow Planning (Upfront Scan):**
+
+Perform ONE comprehensive scan to determine which agents need to run:
+
+1. Fetch complete issue data using `gh issue view ISSUE_NUMBER --json body,title,comments`
+2. Analyze the issue body and ALL comments in a single pass to determine:
+
+   **Enhancement Decision:**
+   - Check if issue body meets ALL criteria:
+     * Word count > 250 words
+     * Has clear structure (sections, bullet points, numbered lists, or distinct paragraphs)
+     * Contains problem description, context, and impact/reproduction details
+   - Decision: NEEDS_ENHANCEMENT or SKIP_ENHANCEMENT
+   - If skipping, log: "Issue #ISSUE_NUMBER is already thorough ([word count] words with clear structure), skipping enhancement"
+
+   **Analysis Decision:**
+   - Search ALL comments for existing analysis. Consider "already analyzed" if ANY comment has ALL:
+     * Header containing "Analysis", "Research" or similar (not "plan" or "implementation")
+     * File references with line numbers (e.g., `src/lib/Foo.ts:42` or `Lines 10-25`)
+     * Code excerpts with triple-backtick formatting or specific code references
+     * Technical depth (root cause analysis, technical findings, or affected component identification)
+     * Clear structure (headings, sections, or bullet points)
+   - Decision: NEEDS_ANALYSIS or SKIP_ANALYSIS
+   - If skipping, log: "Issue #ISSUE_NUMBER already has technical analysis by @[author] from [date] with [N] file references, skipping analysis"
+
+   **Planning Decision:**
+   - Search ALL comments for existing plan. Consider "already planned" if ANY comment has ALL:
+     * Header containing "Implementation Plan" or similar (not "analysis", "implementation results", or "complete")
+     * File specifications with line ranges (e.g., `src/lib/Foo.ts:10-25` or specific line numbers)
+     * Change details (specific changes required, modifications to make, or pseudo-code)
+     * Execution order (implementation steps, sequence, or numbered phases)
+     * Test planning (test cases, acceptance criteria, test specifications, or automated test requirements)
+   - Decision: NEEDS_PLANNING or SKIP_PLANNING
+   - If skipping, log: "Issue #ISSUE_NUMBER already has implementation plan by @[author] from [date] with [N] files to modify, skipping planning"
+
+   **Implementation Decision:**
+   - Search ALL comments for implementation results. Consider "already implemented" if ANY comment has ALL:
+     * Header containing "Implementation Complete", "Task Completed" or similar (not "analysis" or "plan")
+     * Implementation summary (description of changes made, work completed, or implementation status)
+     * File references (specific files modified, created, deleted, or references to code changes)
+     * Validation results (test results, typecheck output, lint status, or build confirmation)
+     * Completion indicators (implementation finished with verification steps or completion confirmation)
+   - Decision: NEEDS_IMPLEMENTATION or SKIP_IMPLEMENTATION
+   - If skipping, log: "Issue #ISSUE_NUMBER already implemented by @[author] from [date], modified [N] files with passing validation, skipping implementation"
+
+3. Display workflow plan summary to user:
+   ```
+   Workflow Plan for Issue #ISSUE_NUMBER:
+   - Enhancement: [NEEDS_ENHANCEMENT/SKIP_ENHANCEMENT] ([reason])
+   - Analysis: [NEEDS_ANALYSIS/SKIP_ANALYSIS] ([reason])
+   - Planning: [NEEDS_PLANNING/SKIP_PLANNING] ([reason])
+   - Implementation: [NEEDS_IMPLEMENTATION/SKIP_IMPLEMENTATION] ([reason])
+   ```
+
+4. Mark todo #1 as completed and proceed to execute only the needed phases.
+
 **STEP 1 - Enhancement Phase:**
-- Execute: @agent-hatchbox-issue-enhancer ISSUE_NUMBER
-- Note: If the issue is already thorough and well-structured, the agent will return quickly without creating a comment
-- Upon completion: If enhancement was needed, extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
-- Mark todo #1 as completed and todo #2 as in_progress (if enhancement was needed)
-- If an enchancement was made to the issue - **STOP HERE** - Request explicit approval before proceeding to analysis. If no enchancement was made, proceed directly to the next step.
+
+Only execute if workflow plan determined NEEDS_ENHANCEMENT:
+1. Execute: @agent-hatchbox-issue-enhancer ISSUE_NUMBER
+2. Upon completion: Extract issue+comment link (including comment ID) from agent output and provide link to GitHub issue comment
+3. Mark todo #2 and #3 as completed
+4. **STOP HERE** - Request explicit approval before proceeding to analysis
+
+If workflow plan determined SKIP_ENHANCEMENT:
+1. Mark todos #2 and #3 as completed
+2. Proceed directly to Step 2 (Analysis Phase)
 
 **STEP 2 - Analysis Phase:**
-- Execute: @agent-hatchbox-issue-analyzer ISSUE_NUMBER
-- Upon completion: Extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
-- Mark todo #4 as completed and todo #5 as in_progress
-- **STOP HERE** - Request explicit approval before proceeding to planning
+
+Only execute if workflow plan determined NEEDS_ANALYSIS:
+1. Execute: @agent-hatchbox-issue-analyzer ISSUE_NUMBER
+2. Upon completion: Extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
+3. Mark todo #5 and #6 as completed
+4. **STOP HERE** - Request explicit approval before proceeding to planning
+
+If workflow plan determined SKIP_ANALYSIS:
+1. Mark todos #5 and #6 as completed
+2. Proceed directly to Step 3 (Planning Phase)
 
 **STEP 3 - Planning Phase:**
-- Execute: @agent-hatchbox-issue-planner ISSUE_NUMBER
-- Upon completion: Extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
-- Mark todo #7 as completed and todo #8 as in_progress
-- **STOP HERE** - Request explicit approval before proceeding to implementation
+
+Only execute if workflow plan determined NEEDS_PLANNING:
+1. Execute: @agent-hatchbox-issue-planner ISSUE_NUMBER
+2. Upon completion: Extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
+3. Mark todo #8 and #9 as completed
+4. **STOP HERE** - Request explicit approval before proceeding to implementation
+
+If workflow plan determined SKIP_PLANNING:
+1. Mark todos #8 and #9 as completed
+2. Proceed directly to Step 4 (Implementation Phase)
 
 **STEP 4 - Implementation Phase:**
-- Execute: @agent-hatchbox-issue-implementer ISSUE_NUMBER
-- Upon completion: Mark todo #10 as completed and todo #11 as in_progress
-- Provide summary and links to any GitHub comments created - do not open them. All links MUST include comment-id which can be obtained from agent ouput.
-- Mark todo #11 as completed
+
+Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
+1. Execute: @agent-hatchbox-issue-implementer ISSUE_NUMBER
+2. Upon completion: Mark todo #11 as completed
+3. Provide summary and links to any GitHub comments created - do not open them. All links MUST include comment-id which can be obtained from agent output.
+4. Mark todo #12 as completed
+
+If workflow plan determined SKIP_IMPLEMENTATION:
+1. Mark todos #11 and #12 as completed
+2. Provide final summary noting that all work was already completed
