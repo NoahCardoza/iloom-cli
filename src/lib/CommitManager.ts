@@ -316,13 +316,20 @@ Examine the staged changes in the git repository and generate a concise, meaning
 </Task>
 
 <Requirements>
+<Format>The first line must be a brief summary of the changes made as a full sentence. If it references an issue, include "Fixes #N" at the end of this line.
+
+Add 2 newlines, then add a bullet-point form description of the changes made, each change on a new line.</Format>
 <Mood>Use imperative mood (e.g., "Add feature" not "Added feature")</Mood>
 <Focus>Be specific about what was changed and why</Focus>
 <Conciseness>Keep message under 72 characters for subject line when possible</Conciseness>
 <NoMeta>CRITICAL: Do NOT include ANY explanatory text, analysis, or meta-commentary. Output ONLY the raw commit message.</NoMeta>
 <Examples>
-Good: "Add user authentication with JWT tokens"
-Good: "Fix navigation bug in sidebar menu"
+Good: "Add user authentication with JWT tokens. Fixes #42
+
+- Implement login and registration endpoints
+- Secure routes with JWT middleware
+- Update user model to store hashed passwords"
+Good: "Fix navigation bug in sidebar menu."
 Bad: "Based on the changes, I'll create: Add user authentication"
 Bad: "Looking at the files, this commit should be: Fix navigation bug"
 </Examples>

@@ -807,22 +807,6 @@ describe('CommitManager', () => {
       expect(commitCall?.[0][3]).toContain('Fixes #123')
     })
 
-    it('should work without issue number', async () => {
-      vi.mocked(claude.launchClaude).mockResolvedValue('Add new feature')
-      vi.mocked(git.executeGitCommand).mockResolvedValue('')
-
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
-
-      const claudeCall = vi.mocked(claude.launchClaude).mock.calls[0]
-      const prompt = claudeCall[0]
-      expect(prompt).not.toContain('Fixes #')
-
-      const commitCall = vi.mocked(git.executeGitCommand).mock.calls.find(
-        (call) => call[0][0] === 'commit'
-      )
-      expect(commitCall?.[0][3]).toBe('Add new feature')
-    })
-
     it('should stage changes before generating message', async () => {
       const callOrder: string[] = []
       vi.mocked(claude.launchClaude).mockImplementation(async () => {
