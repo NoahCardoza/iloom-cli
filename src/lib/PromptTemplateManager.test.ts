@@ -176,6 +176,72 @@ describe('PromptTemplateManager', () => {
 
 			expect(result).toBe('Issue ISSUE_NUMBER')
 		})
+
+		it('should include conditional section when ONE_SHOT_MODE is true', () => {
+			const template = 'Start{{#IF ONE_SHOT_MODE}} one-shot content {{/IF ONE_SHOT_MODE}}End'
+			const variables: TemplateVariables = { ONE_SHOT_MODE: true }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('Start one-shot content End')
+		})
+
+		it('should exclude conditional section when ONE_SHOT_MODE is false', () => {
+			const template = 'Start{{#IF ONE_SHOT_MODE}} one-shot content {{/IF ONE_SHOT_MODE}}End'
+			const variables: TemplateVariables = { ONE_SHOT_MODE: false }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('StartEnd')
+		})
+
+		it('should exclude conditional section when ONE_SHOT_MODE is undefined', () => {
+			const template = 'Start{{#IF ONE_SHOT_MODE}} one-shot content {{/IF ONE_SHOT_MODE}}End'
+			const variables: TemplateVariables = {}
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('StartEnd')
+		})
+
+		it('should handle multi-line conditional sections', () => {
+			const template = `Header
+{{#IF ONE_SHOT_MODE}}
+Line 1
+Line 2
+Line 3
+{{/IF ONE_SHOT_MODE}}
+Footer`
+			const variables: TemplateVariables = { ONE_SHOT_MODE: true }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe(`Header
+
+Line 1
+Line 2
+Line 3
+
+Footer`)
+		})
+
+		it('should process conditionals before variable substitution', () => {
+			const template = '{{#IF ONE_SHOT_MODE}}Issue ISSUE_NUMBER{{/IF ONE_SHOT_MODE}}'
+			const variables: TemplateVariables = { ONE_SHOT_MODE: true, ISSUE_NUMBER: 123 }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('Issue 123')
+		})
+
+		it('should handle multiple conditional sections in same template', () => {
+			const template = '{{#IF ONE_SHOT_MODE}}First{{/IF ONE_SHOT_MODE}} Middle {{#IF ONE_SHOT_MODE}}Second{{/IF ONE_SHOT_MODE}}'
+			const variables: TemplateVariables = { ONE_SHOT_MODE: true }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('First Middle Second')
+		})
 	})
 
 	describe('getPrompt', () => {
@@ -241,6 +307,34 @@ describe('PromptTemplateManager', () => {
 			expect(result).toBe(
 				'Issue 789 at /complex/path\nTitle: Complex feature\nPort: 3789'
 			)
+		})
+
+		it('should process conditional sections and variables together', async () => {
+			const template = 'Issue ISSUE_NUMBER{{#IF ONE_SHOT_MODE}} (one-shot mode){{/IF ONE_SHOT_MODE}}'
+			vi.mocked(readFile).mockResolvedValueOnce(template)
+
+			const variables: TemplateVariables = {
+				ISSUE_NUMBER: 123,
+				ONE_SHOT_MODE: true,
+			}
+
+			const result = await manager.getPrompt('issue', variables)
+
+			expect(result).toBe('Issue 123 (one-shot mode)')
+		})
+
+		it('should exclude conditional sections when ONE_SHOT_MODE is false', async () => {
+			const template = 'Issue ISSUE_NUMBER{{#IF ONE_SHOT_MODE}} (one-shot mode){{/IF ONE_SHOT_MODE}}'
+			vi.mocked(readFile).mockResolvedValueOnce(template)
+
+			const variables: TemplateVariables = {
+				ISSUE_NUMBER: 123,
+				ONE_SHOT_MODE: false,
+			}
+
+			const result = await manager.getPrompt('issue', variables)
+
+			expect(result).toBe('Issue 123')
 		})
 	})
 })

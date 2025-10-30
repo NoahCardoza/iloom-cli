@@ -1326,4 +1326,164 @@ describe('IgniteCommand', () => {
 			}
 		})
 	})
+
+	describe('One-Shot Mode User Prompt Generation', () => {
+		it('should use approval bypass prompt for oneShot=noReview mode', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-oneshot')
+
+			try {
+				// Execute with noReview one-shot mode
+				await command.execute('noReview')
+
+				// Verify the user prompt includes approval bypass instructions
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				const userPrompt = launchClaudeCall[0]
+
+				// Should include approval bypass text to override template requirements
+				expect(userPrompt).toContain('Go!')
+				expect(userPrompt).toContain('without awaiting confirmation')
+				expect(userPrompt).toContain('This supersedes any other guidance')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should use approval bypass prompt for oneShot=bypassPermissions mode', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-oneshot')
+
+			try {
+				// Execute with bypassPermissions one-shot mode
+				await command.execute('bypassPermissions')
+
+				// Verify the user prompt includes approval bypass instructions
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				const userPrompt = launchClaudeCall[0]
+
+				// Should include approval bypass text to override template requirements
+				expect(userPrompt).toContain('Go!')
+				expect(userPrompt).toContain('without awaiting confirmation')
+				expect(userPrompt).toContain('This supersedes any other guidance')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should use simple "Go!" prompt for default mode', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-regular')
+
+			try {
+				// Execute without one-shot mode (default)
+				await command.execute('default')
+
+				// Verify the user prompt is just "Go!"
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				const userPrompt = launchClaudeCall[0]
+
+				// Should be simple "Go!" without extra instructions
+				expect(userPrompt).toBe('Go!')
+				expect(userPrompt).not.toContain('Answer Table')
+				expect(userPrompt).not.toContain('one-shot mode')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should use simple "Go!" prompt when no oneShot option is provided', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-regular')
+
+			try {
+				// Execute without any oneShot option
+				await command.execute()
+
+				// Verify the user prompt is just "Go!"
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				const userPrompt = launchClaudeCall[0]
+
+				// Should be simple "Go!" without extra instructions
+				expect(userPrompt).toBe('Go!')
+				expect(userPrompt).not.toContain('Answer Table')
+				expect(userPrompt).not.toContain('one-shot mode')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should pass ONE_SHOT_MODE flag to template manager for noReview mode', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-oneshot')
+
+			try {
+				await command.execute('noReview')
+
+				// Verify template manager was called with ONE_SHOT_MODE=true
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						ONE_SHOT_MODE: true,
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should pass ONE_SHOT_MODE flag to template manager for bypassPermissions mode', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-oneshot')
+
+			try {
+				await command.execute('bypassPermissions')
+
+				// Verify template manager was called with ONE_SHOT_MODE=true
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						ONE_SHOT_MODE: true,
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should NOT pass ONE_SHOT_MODE flag for default mode', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-regular')
+
+			try {
+				await command.execute('default')
+
+				// Verify template manager was called without ONE_SHOT_MODE
+				const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]
+				expect(templateCall[1].ONE_SHOT_MODE).toBeUndefined()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+	})
 })

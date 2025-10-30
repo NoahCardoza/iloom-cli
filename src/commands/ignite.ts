@@ -57,10 +57,10 @@ export class IgniteCommand {
 			logger.info('📝 Loading prompt template and preparing Claude...')
 
 			// Step 2: Get prompt template with variable substitution
-			const variables = this.buildTemplateVariables(context)
+			const variables = this.buildTemplateVariables(context, oneShot)
 			const systemInstructions = await this.templateManager.getPrompt(context.type, variables)
 
-			// User prompt to trigger the workflow (modified based on one-shot mode)
+			// User prompt to trigger the workflow (includes one-shot bypass instructions if needed)
 			const userPrompt = this.buildUserPrompt(oneShot)
 
 			// Step 2.5: Load settings if not cached
@@ -201,7 +201,7 @@ export class IgniteCommand {
 	/**
 	 * Build template variables from context
 	 */
-	private buildTemplateVariables(context: ClaudeWorkflowOptions): TemplateVariables {
+	private buildTemplateVariables(context: ClaudeWorkflowOptions, oneShot: import('../types/index.js').OneShotMode): TemplateVariables {
 		const variables: TemplateVariables = {
 			WORKSPACE_PATH: context.workspacePath,
 		}
@@ -224,6 +224,11 @@ export class IgniteCommand {
 
 		if (context.port !== undefined) {
 			variables.PORT = context.port
+		}
+
+		// Set ONE_SHOT_MODE flag for template conditional sections
+		if (oneShot === 'noReview' || oneShot === 'bypassPermissions') {
+			variables.ONE_SHOT_MODE = true
 		}
 
 		return variables
@@ -495,10 +500,13 @@ export class IgniteCommand {
 	/**
 	 * Build user prompt based on one-shot mode
 	 */
-	private buildUserPrompt(oneShot: import('../types/index.js').OneShotMode): string {
+	private buildUserPrompt(oneShot: import('../types/index.js').OneShotMode = 'default'): string {
+		// For one-shot modes, add bypass instructions to override template approval requirements
 		if (oneShot === 'noReview' || oneShot === 'bypassPermissions') {
 			return 'Go! The user has requested you move through the workflow without awaiting confirmation. This supersedes any other guidance.'
 		}
+
+		// Default mode: simple "Go!" prompt
 		return 'Go!'
 	}
 }

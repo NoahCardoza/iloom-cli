@@ -11,6 +11,7 @@ export interface TemplateVariables {
 	PR_TITLE?: string
 	WORKSPACE_PATH?: string
 	PORT?: number
+	ONE_SHOT_MODE?: boolean
 }
 
 export class PromptTemplateManager {
@@ -78,6 +79,9 @@ export class PromptTemplateManager {
 	substituteVariables(template: string, variables: TemplateVariables): string {
 		let result = template
 
+		// Process conditional sections first
+		result = this.processConditionalSections(result, variables)
+
 		// Replace each variable if it exists
 		if (variables.ISSUE_NUMBER !== undefined) {
 			result = result.replace(/ISSUE_NUMBER/g, String(variables.ISSUE_NUMBER))
@@ -101,6 +105,29 @@ export class PromptTemplateManager {
 
 		if (variables.PORT !== undefined) {
 			result = result.replace(/PORT/g, String(variables.PORT))
+		}
+
+		return result
+	}
+
+	/**
+	 * Process conditional sections in template
+	 * Format: {{#IF ONE_SHOT_MODE}}content{{/IF ONE_SHOT_MODE}}
+	 * 
+	 * Note: /s flag allows . to match newlines
+	 */
+	private processConditionalSections(template: string, variables: TemplateVariables): string {
+		let result = template
+
+		// Process ONE_SHOT_MODE conditionals
+		const oneShotRegex = /\{\{#IF ONE_SHOT_MODE\}\}(.*?)\{\{\/IF ONE_SHOT_MODE\}\}/gs
+
+		if (variables.ONE_SHOT_MODE === true) {
+			// Include the content, remove the conditional markers
+			result = result.replace(oneShotRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(oneShotRegex, '')
 		}
 
 		return result
