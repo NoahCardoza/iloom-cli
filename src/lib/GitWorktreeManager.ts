@@ -58,11 +58,15 @@ export class GitWorktreeManager {
 
   /**
    * Check if a worktree is the main repository worktree
-   * The main worktree is the first one listed and cannot be removed
+   * The main worktree is the first one listed by git worktree list (Git guarantee)
+   * This cannot be determined by path comparison because --show-toplevel returns
+   * the same value for all worktrees.
    */
   async isMainWorktree(worktree: GitWorktree): Promise<boolean> {
-    const repoRoot = await getRepoRoot(this.repoPath)
-    return worktree.path === repoRoot
+    const worktrees = await this.listWorktrees()
+    // The first worktree is always the main worktree (Git design)
+    const mainWorktree = worktrees[0]
+    return mainWorktree !== undefined && mainWorktree.path === worktree.path
   }
 
   /**
@@ -446,11 +450,9 @@ export class GitWorktreeManager {
     const failures: Array<{ worktree: GitWorktree; error: string }> = []
     const skipped: Array<{ worktree: GitWorktree; reason: string }> = []
 
-    const repoRoot = await getRepoRoot(this.repoPath)
-
     for (const worktree of worktrees) {
       // Skip main worktree
-      if (worktree.path === repoRoot) {
+      if (await this.isMainWorktree(worktree)) {
         skipped.push({ worktree, reason: 'Cannot remove main worktree' })
         continue
       }

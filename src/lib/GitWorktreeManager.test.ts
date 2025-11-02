@@ -1045,6 +1045,187 @@ describe('GitWorktreeManager', () => {
     })
   })
 
+  describe('isMainWorktree', () => {
+    it('should identify the first worktree as the main worktree', async () => {
+      const mainWorktree = {
+        path: '/test/repo',
+        branch: 'main',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      const featureWorktree = {
+        path: '/test/worktree-feature',
+        branch: 'feature-branch',
+        commit: 'def456',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      const mockWorktrees = [mainWorktree, featureWorktree]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('mock output')
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+
+      const result = await manager.isMainWorktree(mainWorktree)
+
+      expect(result).toBe(true)
+    })
+
+    it('should NOT identify non-main worktrees (index > 0) as main', async () => {
+      const mainWorktree = {
+        path: '/test/repo',
+        branch: 'main',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      const featureWorktree = {
+        path: '/test/worktree-feature',
+        branch: 'feature-branch',
+        commit: 'def456',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      const bugfixWorktree = {
+        path: '/test/worktree-bugfix',
+        branch: 'bugfix-branch',
+        commit: 'ghi789',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      const mockWorktrees = [mainWorktree, featureWorktree, bugfixWorktree]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('mock output')
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+
+      const result1 = await manager.isMainWorktree(featureWorktree)
+      const result2 = await manager.isMainWorktree(bugfixWorktree)
+
+      expect(result1).toBe(false)
+      expect(result2).toBe(false)
+    })
+
+    it('should handle multiple worktrees correctly', async () => {
+      const worktrees = [
+        {
+          path: '/test/repo',
+          branch: 'main',
+          commit: 'abc123',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+        {
+          path: '/test/worktree-1',
+          branch: 'feature-1',
+          commit: 'def456',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+        {
+          path: '/test/worktree-2',
+          branch: 'feature-2',
+          commit: 'ghi789',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+      ]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('mock output')
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(worktrees)
+
+      // Only the first worktree should be main
+      const result0 = await manager.isMainWorktree(worktrees[0])
+      const result1 = await manager.isMainWorktree(worktrees[1])
+      const result2 = await manager.isMainWorktree(worktrees[2])
+
+      expect(result0).toBe(true)
+      expect(result1).toBe(false)
+      expect(result2).toBe(false)
+    })
+
+    it('should handle single worktree (main only) scenario', async () => {
+      const mainWorktree = {
+        path: '/test/repo',
+        branch: 'main',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      const mockWorktrees = [mainWorktree]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('mock output')
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+
+      const result = await manager.isMainWorktree(mainWorktree)
+
+      expect(result).toBe(true)
+    })
+
+    it('should work correctly regardless of worktree path', async () => {
+      // Test that classification is based on order, not path matching
+      const worktrees = [
+        {
+          path: '/custom/unusual/path',
+          branch: 'main',
+          commit: 'abc123',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+        {
+          path: '/var/project/feature',
+          branch: 'feature-branch',
+          commit: 'def456',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+      ]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('mock output')
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(worktrees)
+
+      const result0 = await manager.isMainWorktree(worktrees[0])
+      const result1 = await manager.isMainWorktree(worktrees[1])
+
+      expect(result0).toBe(true)
+      expect(result1).toBe(false)
+    })
+
+    it('should handle empty worktree list gracefully', async () => {
+      const someWorktree = {
+        path: '/test/worktree',
+        branch: 'feature-branch',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('')
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue([])
+
+      const result = await manager.isMainWorktree(someWorktree)
+
+      expect(result).toBe(false)
+    })
+  })
+
   describe('findWorktreeForPR', () => {
     it('should find worktree by PR branch name', async () => {
       const targetWorktree = {
