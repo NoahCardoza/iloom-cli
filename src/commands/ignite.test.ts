@@ -1427,6 +1427,10 @@ describe('IgniteCommand', () => {
 		it('should pass ONE_SHOT_MODE flag to template manager for noReview mode', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
+			// Mock template manager to return content with answer table instructions
+			const mockPromptContent = `Execute: @agent-hatchbox-issue-enhancer ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.`
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue(mockPromptContent)
+
 			const originalCwd = process.cwd
 			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-oneshot')
 
@@ -1440,6 +1444,10 @@ describe('IgniteCommand', () => {
 						ONE_SHOT_MODE: true,
 					})
 				)
+
+				// Verify answer table instructions are included in appendSystemPrompt
+				const callOptions = launchClaudeSpy.mock.calls[0][1]
+				expect(callOptions.appendSystemPrompt).toContain('instructing them to add their own answers to any questions')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -1448,6 +1456,10 @@ describe('IgniteCommand', () => {
 
 		it('should pass ONE_SHOT_MODE flag to template manager for bypassPermissions mode', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock template manager to return content with answer table instructions
+			const mockPromptContent = `Execute: @agent-hatchbox-issue-enhancer ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.`
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue(mockPromptContent)
 
 			const originalCwd = process.cwd
 			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-oneshot')
@@ -1462,6 +1474,10 @@ describe('IgniteCommand', () => {
 						ONE_SHOT_MODE: true,
 					})
 				)
+
+				// Verify answer table instructions are included in appendSystemPrompt
+				const callOptions = launchClaudeSpy.mock.calls[0][1]
+				expect(callOptions.appendSystemPrompt).toContain('instructing them to add their own answers to any questions')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -1470,6 +1486,10 @@ describe('IgniteCommand', () => {
 
 		it('should NOT pass ONE_SHOT_MODE flag for default mode', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock template manager to return content with answer table instructions
+			const mockPromptContent = `Execute: @agent-hatchbox-issue-enhancer ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.`
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue(mockPromptContent)
 
 			const originalCwd = process.cwd
 			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-regular')
@@ -1480,6 +1500,78 @@ describe('IgniteCommand', () => {
 				// Verify template manager was called without ONE_SHOT_MODE
 				const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]
 				expect(templateCall[1].ONE_SHOT_MODE).toBeUndefined()
+
+				// Verify answer table instructions are STILL included in appendSystemPrompt (proving unconditional behavior)
+				const callOptions = launchClaudeSpy.mock.calls[0][1]
+				expect(callOptions.appendSystemPrompt).toContain('instructing them to add their own answers to any questions')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+	})
+
+	describe('Answer Table Instructions - Universal Behavior', () => {
+		it('should include answer table instructions in default mode', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock template manager to return content with answer table instructions
+			const mockPromptContent = `Execute: @agent-hatchbox-issue-enhancer ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.`
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue(mockPromptContent)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-default')
+
+			try {
+				await command.execute('default')
+
+				// Verify appendSystemPrompt contains answer table instruction text
+				const callOptions = launchClaudeSpy.mock.calls[0][1]
+				expect(callOptions.appendSystemPrompt).toContain('instructing them to add their own answers to any questions')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should include answer table instructions in noReview mode', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock template manager to return content with answer table instructions
+			const mockPromptContent = `Execute: @agent-hatchbox-issue-enhancer ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.`
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue(mockPromptContent)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-noreview')
+
+			try {
+				await command.execute('noReview')
+
+				// Verify appendSystemPrompt contains answer table instruction text
+				const callOptions = launchClaudeSpy.mock.calls[0][1]
+				expect(callOptions.appendSystemPrompt).toContain('instructing them to add their own answers to any questions')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should include answer table instructions in bypassPermissions mode', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock template manager to return content with answer table instructions
+			const mockPromptContent = `Execute: @agent-hatchbox-issue-enhancer ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.`
+			vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue(mockPromptContent)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123-bypass')
+
+			try {
+				await command.execute('bypassPermissions')
+
+				// Verify appendSystemPrompt contains answer table instruction text
+				const callOptions = launchClaudeSpy.mock.calls[0][1]
+				expect(callOptions.appendSystemPrompt).toContain('instructing them to add their own answers to any questions')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
