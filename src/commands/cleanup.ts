@@ -273,24 +273,10 @@ export class CleanupCommand {
     // Step 1: Parse identifier using pattern-based detection
     const parsedInput: ParsedInput = await this.identifierParser.parseForPatternDetection(identifier)
 
-    // Step 2: Validate cleanup safety (still uses string identifier for compatibility)
-    const safety = await this.resourceCleanup.validateCleanupSafety(identifier)
-
-    // Display blockers (fatal errors)
-    if (!safety.isSafe) {
-      const blockerMessage = safety.blockers.join(', ')
-      throw new Error(`Cannot cleanup: ${blockerMessage}`)
-    }
-
-    // Display warnings (non-fatal)
-    if (safety.warnings.length > 0) {
-      safety.warnings.forEach(warning => logger.warn(warning))
-    }
-
-    // Display worktree details
+    // Step 2: Display worktree details
     logger.info(`Preparing to cleanup worktree: ${identifier}`)
 
-    // Step 3: First confirmation - worktree removal
+    // Step 3: Confirmation - worktree removal
     if (!force) {
       const confirmWorktree = await promptConfirmation('Remove this worktree?', true)
       if (!confirmWorktree) {
@@ -299,7 +285,7 @@ export class CleanupCommand {
       }
     }
 
-    // Step 4: Execute worktree cleanup with ParsedInput
+    // Step 4: Execute worktree cleanup (includes safety validation)
     // With --force, delete branch automatically; otherwise handle separately
     const cleanupResult = await this.resourceCleanup.cleanupWorktree(parsedInput, {
       dryRun: dryRun ?? false,

@@ -116,6 +116,24 @@ export class ResourceCleanup {
 			}
 		}
 
+		// Step 2.5: Validate safety before proceeding with cleanup (unless force flag is set)
+		if (!options.force) {
+			const safety = await this.validateWorktreeSafety(worktree, parsed.originalInput)
+
+			if (!safety.isSafe) {
+				// Format blocker messages for error output
+				const blockerMessage = safety.blockers.join('\n\n')
+				throw new Error(`Cannot cleanup:\n\n${blockerMessage}`)
+			}
+
+			// Log warnings if any
+			if (safety.warnings.length > 0) {
+				safety.warnings.forEach(warning => {
+					logger.warn(warning)
+				})
+			}
+		}
+
 		// Step 3: Pre-fetch database configuration before worktree removal
 		// This config is used AFTER worktree deletion when env file no longer exists
 		let databaseConfig: { shouldCleanup: boolean; envFilePath: string } | null = null
@@ -566,6 +584,45 @@ export class ResourceCleanup {
 	}
 
 	/**
+	 * Validate worktree safety given a worktree object
+	 * Private method used internally when worktree is already known
+	 */
+	private async validateWorktreeSafety(
+		worktree: GitWorktree,
+		identifier: string
+	): Promise<SafetyCheck> {
+		const warnings: string[] = []
+		const blockers: string[] = []
+
+		// Check if main worktree
+		const isMain = await this.gitWorktree.isMainWorktree(worktree)
+		if (isMain) {
+			blockers.push('Cannot cleanup main worktree')
+		}
+
+		// Check for uncommitted changes
+		const { hasUncommittedChanges } = await import('../utils/git.js')
+		const hasChanges = await hasUncommittedChanges(worktree.path)
+		if (hasChanges) {
+			// Create simple blocker message with actionable guidance
+			const blockerMessage =
+				`Worktree has uncommitted changes.\n\n` +
+				`Please resolve before cleanup - you have some options:\n` +
+				`  • Commit changes: cd ${worktree.path} && git commit -am "message"\n` +
+				`  • Stash changes: cd ${worktree.path} && git stash\n` +
+				`  • Force cleanup: hb cleanup ${identifier} --force (WARNING: will discard changes)`
+
+			blockers.push(blockerMessage)
+		}
+
+		return {
+			isSafe: blockers.length === 0,
+			warnings,
+			blockers,
+		}
+	}
+
+	/**
 	 * Validate cleanup safety
 	 */
 	async validateCleanupSafety(identifier: string): Promise<SafetyCheck> {
@@ -586,24 +643,8 @@ export class ResourceCleanup {
 			return { isSafe: false, warnings, blockers }
 		}
 
-		// Check if main worktree
-		const isMain = await this.gitWorktree.isMainWorktree(worktree)
-		if (isMain) {
-			blockers.push('Cannot cleanup main worktree')
-		}
-
-		// Check for uncommitted changes
-		const { hasUncommittedChanges } = await import('../utils/git.js')
-		const hasChanges = await hasUncommittedChanges(worktree.path)
-		if (hasChanges) {
-			warnings.push('Worktree has uncommitted changes')
-		}
-
-		return {
-			isSafe: blockers.length === 0,
-			warnings,
-			blockers,
-		}
+		// Delegate to private method that validates the worktree
+		return await this.validateWorktreeSafety(worktree, identifier)
 	}
 
 	/**

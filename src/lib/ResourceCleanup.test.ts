@@ -712,7 +712,7 @@ describe('ResourceCleanup', () => {
 			locked: false,
 		}
 
-		it('should check for uncommitted changes and add warning', async () => {
+		it('should check for uncommitted changes and add blocker', async () => {
 			vi.mocked(mockGitWorktree.findWorktreesByIdentifier).mockResolvedValueOnce([mockWorktree])
 			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
 
@@ -721,8 +721,11 @@ describe('ResourceCleanup', () => {
 
 			const result = await resourceCleanup.validateCleanupSafety('issue-25')
 
-			expect(result.isSafe).toBe(true)
-			expect(result.warnings).toContain('Worktree has uncommitted changes')
+			expect(result.isSafe).toBe(false)
+			expect(result.blockers.length).toBeGreaterThan(0)
+			expect(result.blockers[0]).toContain('Worktree has uncommitted changes')
+			expect(result.blockers[0]).toContain('Please resolve before cleanup')
+			expect(result.blockers[0]).toContain('Force cleanup: hb cleanup issue-25 --force')
 		})
 
 		it('should block cleanup of main worktree', async () => {

@@ -471,10 +471,6 @@ describe('CleanupCommand', () => {
         const mockWorktree = { path: '/path/to/worktree', branch: 'feat/issue-45', commit: 'abc123', bare: false, detached: false, locked: false }
         mockGitWorktreeManager.findWorktreeForBranch = vi.fn().mockResolvedValue(mockWorktree)
 
-        // Mock safety validation returns safe
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
-
         // Mock user confirms both prompts
         vi.mocked(promptConfirmation)
           .mockResolvedValueOnce(true) // Confirm worktree removal
@@ -497,7 +493,6 @@ describe('CleanupCommand', () => {
         await command.execute({ identifier: 'feat/issue-45', options: {} })
 
         // Verify execution flow
-        expect(mockResourceCleanup.validateCleanupSafety).toHaveBeenCalledWith('feat/issue-45')
         expect(promptConfirmation).toHaveBeenNthCalledWith(1, 'Remove this worktree?', true)
         expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
           expect.objectContaining({ type: 'branch', branchName: 'feat/issue-45' }),
@@ -586,40 +581,39 @@ describe('CleanupCommand', () => {
         const mockWorktree = { path: '/repo', branch: 'main', commit: 'abc123', bare: true, detached: false, locked: false }
         mockGitWorktreeManager.findWorktreeForBranch = vi.fn().mockResolvedValue(mockWorktree)
 
-        const mockSafety: SafetyCheck = {
-          isSafe: false,
-          warnings: [],
-          blockers: ['Cannot cleanup main worktree']
-        }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
+        // Mock cleanupWorktree to throw an error (simulating validation failure)
+        mockResourceCleanup.cleanupWorktree = vi.fn().mockRejectedValue(
+          new Error('Cannot cleanup:\n\nCannot cleanup main worktree')
+        )
+
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true) // User confirms
 
         await expect(command.execute({ identifier: 'main', options: {} }))
-          .rejects.toThrow('Cannot cleanup: Cannot cleanup main worktree')
+          .rejects.toThrow('Cannot cleanup:\n\nCannot cleanup main worktree')
 
-        // No prompts or cleanup attempted
-        expect(promptConfirmation).not.toHaveBeenCalled()
-        expect(mockResourceCleanup.cleanupWorktree).not.toHaveBeenCalled()
+        // Cleanup was attempted (but failed due to validation)
+        expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalled()
       })
 
-      it('should display warnings but continue when isSafe=true with warnings', async () => {
+      it('should continue cleanup flow when validation passes', async () => {
         // Setup worktree mock
         setupBranchWorktreeMock('feat/branch')
 
-        const mockSafety: SafetyCheck = {
-          isSafe: true,
-          warnings: ['Worktree has uncommitted changes'],
-          blockers: []
-        }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
+        // Mock successful cleanup
+        mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue({
+          identifier: 'feat/branch',
+          success: true,
+          operations: [],
+          errors: []
+        })
 
-        vi.mocked(promptConfirmation).mockResolvedValueOnce(false)
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
 
         await command.execute({ identifier: 'feat/branch', options: {} })
 
-        // Warning should be logged
-        expect(logger.warn).toHaveBeenCalledWith('Worktree has uncommitted changes')
-        // Prompt still shown
+        // Prompt shown and cleanup proceeded
         expect(promptConfirmation).toHaveBeenCalled()
+        expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalled()
       })
 
       it('should handle missing worktree gracefully', async () => {
@@ -630,6 +624,85 @@ describe('CleanupCommand', () => {
           .rejects.toThrow('No worktree found for identifier: nonexistent')
 
         expect(mockResourceCleanup.cleanupWorktree).not.toHaveBeenCalled()
+      })
+    })
+
+    describe('Uncommitted Changes Handling', () => {
+      it('should block cleanup when worktree has uncommitted changes without --force', async () => {
+        // Setup: worktree with uncommitted changes
+        setupBranchWorktreeMock('feat/issue-45')
+
+        // Mock cleanupWorktree to throw validation error
+        mockResourceCleanup.cleanupWorktree = vi.fn().mockRejectedValue(
+          new Error(
+            'Cannot cleanup:\n\n' +
+            'Worktree has uncommitted changes.\n\n' +
+            'Please resolve before cleanup (choose one):\n' +
+            '  • Commit changes: cd /path/to/worktree && git commit -am "message"\n' +
+            '  • Stash changes: cd /path/to/worktree && git stash\n' +
+            '  • Force cleanup: hb cleanup feat/issue-45 --force (WARNING: will discard changes)'
+          )
+        )
+
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true) // User confirms
+
+        // Execute and expect error
+        await expect(command.execute({ identifier: 'feat/issue-45', options: {} }))
+          .rejects.toThrow(/Worktree has uncommitted changes/)
+
+        // Cleanup was attempted (but failed validation)
+        expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalled()
+      })
+
+      it('should include simple uncommitted changes message', async () => {
+        // Setup: worktree with uncommitted changes
+        setupBranchWorktreeMock('feat/issue-45')
+
+        const errorMessage =
+          'Cannot cleanup:\n\n' +
+          'Worktree has uncommitted changes.\n\n' +
+          'Please resolve before cleanup (choose one):\n' +
+          '  • Commit changes: cd /path/to/worktree && git commit -am "message"\n' +
+          '  • Stash changes: cd /path/to/worktree && git stash\n' +
+          '  • Force cleanup: hb cleanup feat/issue-45 --force (WARNING: will discard changes)'
+
+        mockResourceCleanup.cleanupWorktree = vi.fn().mockRejectedValue(new Error(errorMessage))
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
+
+        // Verify error contains general uncommitted changes message
+        try {
+          await command.execute({ identifier: 'feat/issue-45', options: {} })
+        } catch (error) {
+          expect((error as Error).message).toContain('Worktree has uncommitted changes')
+          expect((error as Error).message).toContain('Please resolve before cleanup')
+        }
+      })
+
+      it('should allow cleanup with --force when uncommitted changes exist', async () => {
+        // Setup: worktree with uncommitted changes
+        setupBranchWorktreeMock('feat/issue-45')
+
+        // Mock successful cleanup with force
+        const mockResult: CleanupResult = {
+          identifier: 'feat/issue-45',
+          branchName: 'feat/issue-45',
+          success: true,
+          operations: [
+            { type: 'worktree', success: true, message: 'Worktree removed (forced)' }
+          ],
+          errors: []
+        }
+        mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
+
+        // Execute with --force (force skips confirmation)
+        await command.execute({ identifier: 'feat/issue-45', options: { force: true } })
+
+        // Verify cleanup proceeded
+        expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'branch', branchName: 'feat/issue-45' }),
+          expect.objectContaining({ force: true })
+        )
+        expect(logger.success).toHaveBeenCalledWith('Cleanup completed successfully')
       })
     })
 
@@ -893,13 +966,17 @@ describe('CleanupCommand', () => {
         // Setup mocks for this custom command instance
         mockGitWorktreeManager.findWorktreeForBranch = vi.fn().mockResolvedValue({ path: '/path', branch: 'feat/branch', commit: 'abc', bare: false, detached: false, locked: false })
 
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        customCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
-        vi.mocked(promptConfirmation).mockResolvedValueOnce(false)
+        customCleanup.cleanupWorktree = vi.fn().mockResolvedValue({
+          identifier: 'feat/branch',
+          success: true,
+          operations: [],
+          errors: []
+        })
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true) // Confirm cleanup
 
         await cmd.execute({ identifier: 'feat/branch', options: {} })
 
-        expect(customCleanup.validateCleanupSafety).toHaveBeenCalled()
+        expect(customCleanup.cleanupWorktree).toHaveBeenCalled()
       })
 
       it('should instantiate ResourceCleanup if not injected', async () => {
