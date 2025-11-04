@@ -1,17 +1,21 @@
 # Hatchbox AI
 
 <div align="center">
-  <img width="327" height="328" alt="hatchbox-ai-logo-again" src="https://github.com/user-attachments/assets/2129e04d-9ae3-43be-894d-48324f7d4e02" />
+  <img width="327" height="328" alt="hatchbox-ai-logo" src="https://github.com/user-attachments/assets/2129e04d-9ae3-43be-894d-48324f7d4e02" />
   <div>Scale understanding, not just output.</div>
 </div>
 
+
 ## A Very Modern Problem
 
-The promise of AI-assisted development is profound: write more code, ship features faster, handle complexity at scale. But there's a hidden cost that most tools ignore.
+### Links to key sections
+[How It Works](#how-it-works) • [Installation](#installation) • [Commands](#commands) • [Configuration](#configuration)
 
-**AI agents are incredibly powerful at generating code. They're remarkably poor at staying in sync with their human collaborator.**
+The promise of AI-assisted development is profound: write more code, ship features faster, handle complexity at scale. But there's a hidden cost that many tools ignore.
 
-When you're juggling multiple issues simultaneously, the real challenge isn't the mechanics of branch switching or port conflicts. It's cognitive: **keeping yourself and your AI aligned on what you're trying to accomplish**.
+**AI agents are incredibly powerful at generating code. They're remarkably poor at staying in sync with their human collaborators.**
+
+When you're juggling multiple issues simultaneously, and even when working on just one, the real challenge isn't the mechanics of branch switching or port conflicts. It's cognitive: **keeping yourself and your AI aligned on what you're trying to accomplish**.
 
 The friction compounds quickly:
 
@@ -19,13 +23,13 @@ Work on 10 GitHub issues a day, 3 at a time, and you and your AI lose track. It'
 
 Hidden assumptions make it worse: your AI assumes you want to use Axios when your team standardizes on fetch, or picks the wrong authentication pattern because it never learned your team's conventions. Hit the context window limit mid-conversation, and suddenly your AI shamelessly forgets the problem you were solving.
 
-The result: more time spent briefing AI than building, more time fixing AI's work than deploying. Solutions that technically work but miss the actual intent.
+The result: more time spent briefing AI than building, more time fixing AI's work than deploying. Solutions that appear to work but are shrouded in mystery.
 
 **The bottleneck isn't output velocity. It's maintaining shared understanding between human and AI at scale.**
 
 ## How Hatchbox Solves This
 
-Hatchbox takes what context you already have, and works with you to build a shared mental model of the problem you're working on.
+Hatchbox takes what context you already have, and works with you to build a shared mental model of the task at hand.
 
 ```bash
 npm -g install hatchbox-cli
@@ -44,9 +48,9 @@ hb start 34 # grabs context from this PR and its original issue, then iterates o
 
 # then
 
-hb finish # it knows which hatchbox you're in, runs vaidation, and merges your code back to your primary branch.
+hb finish # it knows which hatchbox you're in, runs validation, and merges your code back to your primary branch.
           # If you hit compilation/lint/test failures or merge conflicts along the way,
-          # Claude will help resolve them automaticaly.
+          # Claude will help resolve them automatically.
 ```
 
 
@@ -56,10 +60,12 @@ Hatchbox treats context as a first-class concern. It's not a tool for managing b
 
 ### One Command, Parallel Work, Predictable Flow
 
+Each Hatchbox follows the same workflow — structured, visible, repeatable.
+
 `hb start` doesn't just create a hatchbox. Here's what happens:
 
 - Fetches the full GitHub issue (or PR) including all comments and requirements - or not, if they don't exist.
-- Creates an isolated environment (Git worktree, database branch, web server on determinstic, unique port)
+- Creates an isolated environment (Git worktree, database branch, web server on deterministic, unique port)
 - Enhances the GitHub issue with better issue descriptions, structured analysis and planning. Asking questions and stating assumptions along the way, all in GitHub comments.
 - Launches Claude with this context pre-loaded from the issue, guides you through a structured workflow. You can stop at any time, pick up where you left off.
 - Each hatchbox is color coded - from terminal windows to VSCode, so you visually know which context you're in
@@ -84,20 +90,18 @@ This isn't just convenience automation. You know you're merging the correct code
 ### You Stop Babysitting Your AI, Start Collaborating With It
 
 Traditional approach:
-1. Start working on a feature
-2. Explain context to Claude
-3. Review Claude's generated code, discover mistakes and misunderstanding
-4. Get asked to fix an urgent bug - stash or WIP commit, switch branch, spin up new Claude
-5. Lose context on your progress, face all the same issues with your urgent bug fix
+1. Start a feature, brief Claude on context.
+2. Review code, fix misunderstandings. Argue with Claude.
+3. Get pulled into a bug - stash or WIP commit, switch branches, start a new Claude chat.
+4. Lose context on both tasks, repeat the same explanations.
 
 Hatchbox approach:
-1. `hb start 45` - feature work in progress
-2. Review Hatchbox's analysis in Github, correct an assumption, move to the planning phase
-2. `hb start 99` - urgent bug, Claude already has the context from the issue
-3. You can switch between them as they work - color coding makes it easy to tell each hatchbox apart.
-3. `hb finish` - urgent bug fixed and merged
-4. Switch back to the feature hatchbox - you and Claude pick up exactly where you left off - you can simply re-read the issue's comments to get on the same page as Claude.
-5. `hb finish` - Issue #45 is in the bag too.
+1. `hb start 45` - begin the feature.
+2. Review Hatchbox's structured analysis in GitHub, clarify assumptions.
+3. `hb start 99` - urgent bug; Claude already knows the issue context from the GitHub issue.
+4. Switch between Hatchboxes freely - color coding and context persistence keep everything clear.
+5. `hb finish` - work validated, merged, cleaned up.
+6. Return to your feature Hatchbox - context, reasoning, and AI alignment all intact.
 
 **The difference**: Your AI becomes a persistent collaborator rather than a tool you're constantly playing catch-up with.
 
@@ -108,7 +112,7 @@ The AI analysis gets posted as GitHub comments, so anyone on your team can see t
 
 Without Hatchbox, adding AI to your workflow increases code production but also increases cognitive load. You're managing what the AI knows, correcting misaligned suggestions, and second-guessing its understanding. Not to mention managing its context window.
 
-With Hatchbox, the cognitive load stays constant as you scale. Each hatchbox is a bounded context where you and your AI share complete understanding. Work on ten issues simultaneously, and each one maintains perfect clarity about its own purpose.
+With Hatchbox, the cognitive load stays constant as you scale. Each hatchbox holds a complete shared understanding between you and your AI. Five issues in flight feel (almost) as calm and clear as one.
 
 **This is how you achieve sustainable velocity with AI assistance.**
 
@@ -117,7 +121,7 @@ With Hatchbox, the cognitive load stays constant as you scale. Each hatchbox is 
 When you and your AI are in lock step:
 - Features get built right the first time because you spot when the AI is going off course, way before it writes a line of code.
 - Reviews focus on the quality of the AI's thinking, not just its code.
-- Fewer suprises thanks to AI agents invetning requirements or inconsistently implementing existing patterns
+- Fewer surprises caused by AI agents invetning requirements or inconsistently implementing existing patterns
 - If the AI takes a wrong turn - you don't spend hours arguing with Claude and playing context window Tetris. You just start the process again with better issue descriptions, different assumptions and better context for your AI assistant.
 
 ### The Power of Predictable Flow
@@ -378,7 +382,7 @@ For development guidelines and testing strategy, see [CLAUDE.md](./CLAUDE.md).
 
 ## Roadmap
 
-**Currently in Development** - Actively developing this CLI tool, with the intent of support more workflow flexibility and different tech stacks, task management tools and db providers.
+**Currently in Development** - Actively developing this CLI tool, with the intent to support more workflow flexibility and different tech stacks, task management tools and db providers.
 
 ### Understanding Git Worktrees
 
