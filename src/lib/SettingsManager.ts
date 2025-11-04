@@ -78,6 +78,40 @@ export const HatchboxSettingsSchema = z.object({
 		.min(1, "Settings 'mainBranch' cannot be empty")
 		.optional()
 		.describe('Name of the main/primary branch for the repository'),
+	worktreePrefix: z
+		.string()
+		.optional()
+		.refine(
+			(val) => {
+				if (val === undefined) return true // undefined = use default calculation
+				if (val === '') return true // empty string = no prefix mode
+
+				// Allowlist: only alphanumeric, hyphens, underscores, and forward slashes
+				const allowedChars = /^[a-zA-Z0-9\-_/]+$/
+				if (!allowedChars.test(val)) return false
+
+				// Reject if only special characters (no alphanumeric content)
+				if (/^[-_/]+$/.test(val)) return false
+
+				// Check each segment (split by /) contains at least one alphanumeric character
+				const segments = val.split('/')
+				for (const segment of segments) {
+					if (segment && /^[-_]+$/.test(segment)) {
+						// Segment exists but contains only hyphens/underscores
+						return false
+					}
+				}
+
+				return true
+			},
+			{
+				message:
+					"worktreePrefix contains invalid characters. Only alphanumeric characters, hyphens (-), underscores (_), and forward slashes (/) are allowed. Use forward slashes for nested directories.",
+			},
+		)
+		.describe(
+			'Prefix for worktree directories. Empty string disables prefix. Defaults to <repo-name>-hatchboxes if not set.',
+		),
 	protectedBranches: z
 		.array(z.string().min(1, 'Protected branch name cannot be empty'))
 		.optional()

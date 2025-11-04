@@ -20,6 +20,51 @@ Specifies the name of your main/primary branch. This is used by Hatchbox to dete
 }
 ```
 
+#### worktreePrefix (optional)
+Configures the directory prefix used when creating worktrees. This allows you to customize where and how worktree directories are named.
+
+**Default**: `<repo-folder-name>-hatchboxes` (e.g., if your repo is in `/Users/dev/my-project`, the default prefix is `my-project-hatchboxes`)
+
+**Allowed characters**: Alphanumeric, hyphens (`-`), underscores (`_`), and forward slashes (`/`)
+
+**Prefix Behavior Examples**:
+
+| Configuration | Worktree Path Result | Explanation |
+|---------------|---------------------|-------------|
+| `"hatchboxes"` | `hatchboxes-issue-123` | Auto-append hyphen |
+| `"hatchboxes-"` | `hatchboxes-issue-123` | Preserve explicit separator |
+| `"hatchboxes/"` | `hatchboxes/issue-123` | Explicit folder mode |
+| `"temp/hatchbox"` | `temp/hatchbox-issue-123` | Auto-append hyphen to last part |
+| `"temp/hatchbox-"` | `temp/hatchbox-issue-123` | Preserve explicit separator |
+| `"temp/hatchboxes/"` | `temp/hatchboxes/issue-123` | Explicit nested folder mode |
+| `""` (empty string) | `issue-123` | No prefix mode |
+| `undefined` (not set) | `<repo-name>-hatchboxes/issue-123` | Use calculated default |
+
+**Key Rules**:
+- Only an explicit trailing `/` creates a subfolder
+- Otherwise, the last part is always treated as a prefix with auto-appended `-` (if not already present)
+- Backslashes are not allowed (use forward slashes for cross-platform compatibility)
+- Spaces and special characters (`*?"<>|:`) are not allowed
+
+**Examples**:
+```json
+{
+  "worktreePrefix": "worktrees"
+}
+```
+
+```json
+{
+  "worktreePrefix": "temp/branches/"
+}
+```
+
+```json
+{
+  "worktreePrefix": ""
+}
+```
+
 #### workflows (optional)
 Configure per-workflow permission modes for Claude CLI. This allows you to control how Claude interacts with your code in different workflow contexts.
 
@@ -125,6 +170,7 @@ Here's a complete example showing all available options:
 ```json
 {
   "mainBranch": "main",
+  "worktreePrefix": "temp/branches",
   "workflows": {
     "issue": {
       "permissionMode": "acceptEdits"
@@ -178,6 +224,7 @@ The settings file is validated when loaded. Common validation errors:
 - **Invalid permission mode**: Must be one of `plan`, `acceptEdits`, `bypassPermissions`, or `default`
 - **Invalid model**: Must be one of `sonnet`, `opus`, or `haiku`
 - **Empty mainBranch**: If provided, mainBranch cannot be an empty string
+- **Invalid worktreePrefix**: Only alphanumeric characters, hyphens (`-`), underscores (`_`), and forward slashes (`/`) are allowed. Backslashes and spaces are rejected.
 - **Invalid basePort**: Must be a number between `1` and `65535`
 - **Invalid JSON**: The file must be valid JSON syntax
 

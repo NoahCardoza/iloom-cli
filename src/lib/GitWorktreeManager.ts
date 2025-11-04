@@ -313,7 +313,7 @@ export class GitWorktreeManager {
   generateWorktreePath(
     branchName: string,
     customRoot?: string,
-    options?: { isPR?: boolean; prNumber?: number }
+    options?: { isPR?: boolean; prNumber?: number; prefix?: string }
   ): string {
     const root = customRoot ?? this.repoPath
     return generateWorktreePath(branchName, root, options)

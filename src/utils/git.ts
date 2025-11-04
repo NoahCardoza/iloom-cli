@@ -176,7 +176,7 @@ export function isWorktreePath(path: string): boolean {
 export function generateWorktreePath(
   branchName: string,
   rootDir: string = process.cwd(),
-  options?: { isPR?: boolean; prNumber?: number }
+  options?: { isPR?: boolean; prNumber?: number; prefix?: string }
 ): string {
   // Replace slashes with dashes (matches bash line 593)
   let sanitized = branchName.replace(/\//g, '-')
@@ -187,8 +187,60 @@ export function generateWorktreePath(
   }
 
   const parentDir = path.dirname(rootDir)
-  // Don't add 'worktree-' prefix, use sanitized name directly (matches bash line 598)
-  return path.join(parentDir, sanitized)
+
+  // Handle prefix logic
+  let prefix: string
+
+  if (options?.prefix === undefined) {
+    // No prefix in options - calculate default: <basename>-hatchboxes
+    const mainFolderName = path.basename(rootDir)
+    prefix = mainFolderName ? `${mainFolderName}-hatchboxes/` : 'hatchboxes/'
+  } else if (options.prefix === '') {
+    // Empty string = no prefix mode
+    prefix = ''
+  } else {
+    // Custom prefix provided
+    prefix = options.prefix
+
+    // Check if prefix contains forward slashes (nested directory structure)
+    const hasNestedPath = prefix.includes('/')
+
+    if (hasNestedPath) {
+      // Check if it ends with a separator character (dash, underscore, or slash)
+      const endsWithSeparator = /[-_/]$/.test(prefix)
+
+      if (!endsWithSeparator) {
+        // Has nested path but no trailing separator: auto-append hyphen
+        // Example: "temp/hatchboxes" becomes "temp/hatchboxes-"
+        prefix = `${prefix}-`
+      }
+      // If it already ends with -, _, or /, keep as-is
+    } else {
+      // Single-level prefix: auto-append separator if it doesn't end with one
+      const endsWithSeparator = /[-_]$/.test(prefix)
+      if (!endsWithSeparator) {
+        prefix = `${prefix}-`
+      }
+    }
+  }
+
+  // Apply prefix (or not, if empty)
+  if (prefix === '') {
+    return path.join(parentDir, sanitized)
+  } else if (prefix.endsWith('/')) {
+    // Forward slash = nested directory, use path.join for proper handling
+    return path.join(parentDir, prefix, sanitized)
+  } else if (prefix.includes('/')) {
+    // Contains slash but doesn't end with slash = nested with separator (e.g., "hatchboxes/myprefix-")
+    // Split and handle: last part is prefix with separator, rest is directory path
+    const lastSlashIndex = prefix.lastIndexOf('/')
+    const dirPath = prefix.substring(0, lastSlashIndex)
+    const prefixWithSeparator = prefix.substring(lastSlashIndex + 1)
+    return path.join(parentDir, dirPath, `${prefixWithSeparator}${sanitized}`)
+  } else {
+    // Dash/underscore separator = single directory name
+    return path.join(parentDir, `${prefix}${sanitized}`)
+  }
 }
 
 /**

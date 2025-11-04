@@ -378,7 +378,7 @@ describe('Git Utility Functions', () => {
   })
 
   describe('generateWorktreePath', () => {
-    it('should generate valid worktree paths', () => {
+    it('should generate valid worktree paths with empty prefix (legacy behavior)', () => {
       const testCases = [
         {
           branch: 'feature-branch',
@@ -398,11 +398,11 @@ describe('Git Utility Functions', () => {
       ]
 
       testCases.forEach(({ branch, root, expected }) => {
-        expect(generateWorktreePath(branch, root)).toBe(expected)
+        expect(generateWorktreePath(branch, root, { prefix: '' })).toBe(expected)
       })
     })
 
-    it('should sanitize branch names properly', () => {
+    it('should sanitize branch names properly with empty prefix', () => {
       const testCases = [
         {
           branch: 'feature/with@special#characters',
@@ -422,24 +422,178 @@ describe('Git Utility Functions', () => {
       ]
 
       testCases.forEach(({ branch, root, expected }) => {
-        expect(generateWorktreePath(branch, root)).toBe(expected)
+        expect(generateWorktreePath(branch, root, { prefix: '' })).toBe(expected)
       })
     })
 
-    it('should add PR suffix when options provided', () => {
+    it('should add PR suffix when options provided with empty prefix', () => {
       const result = generateWorktreePath('feature/branch', '/project', {
         isPR: true,
-        prNumber: 123
+        prNumber: 123,
+        prefix: ''
       })
       expect(result).toBe('/feature-branch_pr_123')
     })
 
-    it('should not add PR suffix when isPR is false', () => {
+    it('should not add PR suffix when isPR is false with empty prefix', () => {
       const result = generateWorktreePath('feature/branch', '/project', {
         isPR: false,
-        prNumber: 123
+        prNumber: 123,
+        prefix: ''
       })
       expect(result).toBe('/feature-branch')
+    })
+
+    describe('with prefix support', () => {
+      describe('custom prefix scenarios', () => {
+        it('should apply custom prefix before branch name with auto-appended separator', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/project', {
+            prefix: 'worktrees'
+          })
+          expect(result).toBe('/Users/dev/worktrees-issue-123')
+        })
+
+        it('should preserve prefix ending with dash separator', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/project', {
+            prefix: 'worktrees-'
+          })
+          expect(result).toBe('/Users/dev/worktrees-issue-123')
+        })
+
+        it('should preserve prefix ending with underscore separator', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/project', {
+            prefix: 'worktrees_'
+          })
+          expect(result).toBe('/Users/dev/worktrees_issue-123')
+        })
+
+        it('should handle nested directory prefix with forward slashes', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/project', {
+            prefix: 'temp/hatchboxes'
+          })
+          expect(result).toBe('/Users/dev/temp/hatchboxes-issue-123')
+        })
+
+        it('should handle prefix ending with forward slash', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/project', {
+            prefix: 'worktrees/'
+          })
+          expect(result).toBe('/Users/dev/worktrees/issue-123')
+        })
+
+        it('should handle empty string prefix (no prefix mode)', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/project', {
+            prefix: ''
+          })
+          expect(result).toBe('/Users/dev/issue-123')
+        })
+
+        it('should handle prefix with multiple levels of nesting', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/project', {
+            prefix: 'workspace/temp/hatchboxes'
+          })
+          expect(result).toBe('/Users/dev/workspace/temp/hatchboxes-issue-123')
+        })
+
+        it('should handle nested directory with custom prefix separator (trailing hyphen)', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/project', {
+            prefix: 'hatchboxes/myprefix-'
+          })
+          expect(result).toBe('/Users/dev/hatchboxes/myprefix-issue-123')
+        })
+
+        it('should handle nested directory with custom prefix separator (trailing underscore)', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/project', {
+            prefix: 'hatchboxes/myprefix_'
+          })
+          expect(result).toBe('/Users/dev/hatchboxes/myprefix_issue-123')
+        })
+      })
+
+      describe('default prefix calculation', () => {
+        it('should calculate default prefix from repo basename when prefix undefined', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/my-awesome-project', {})
+          expect(result).toBe('/Users/dev/my-awesome-project-hatchboxes/issue-123')
+        })
+
+        it('should use default when no options provided', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/my-project')
+          expect(result).toBe('/Users/dev/my-project-hatchboxes/issue-123')
+        })
+
+        it('should handle repo names with special characters in default calculation', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/my.project-v2')
+          expect(result).toBe('/Users/dev/my.project-v2-hatchboxes/issue-123')
+        })
+
+        it('should handle single-character repo name', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/p')
+          expect(result).toBe('/Users/dev/p-hatchboxes/issue-123')
+        })
+
+        it('should fallback to "hatchboxes" when basename is empty', () => {
+          const result = generateWorktreePath('issue-123', '/')
+          expect(result).toBe('/hatchboxes/issue-123')
+        })
+      })
+
+      describe('PR suffix with prefix', () => {
+        it('should apply both custom prefix and PR suffix', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/project', {
+            isPR: true,
+            prNumber: 456,
+            prefix: 'work'
+          })
+          expect(result).toBe('/Users/dev/work-issue-123_pr_456')
+        })
+
+        it('should apply both default prefix and PR suffix', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/project', {
+            isPR: true,
+            prNumber: 456
+          })
+          expect(result).toBe('/Users/dev/project-hatchboxes/issue-123_pr_456')
+        })
+
+        it('should handle PR suffix with empty prefix', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/project', {
+            isPR: true,
+            prNumber: 456,
+            prefix: ''
+          })
+          expect(result).toBe('/Users/dev/issue-123_pr_456')
+        })
+
+        it('should handle nested prefix with PR suffix', () => {
+          const result = generateWorktreePath('issue-123', '/Users/dev/project', {
+            isPR: true,
+            prNumber: 456,
+            prefix: 'temp/work/'
+          })
+          expect(result).toBe('/Users/dev/temp/work/issue-123_pr_456')
+        })
+      })
+
+      describe('branch name sanitization with prefix', () => {
+        it('should sanitize branch slashes and apply custom prefix', () => {
+          const result = generateWorktreePath('feature/add-login', '/Users/dev/project', {
+            prefix: 'work'
+          })
+          expect(result).toBe('/Users/dev/work-feature-add-login')
+        })
+
+        it('should sanitize branch slashes and apply default prefix', () => {
+          const result = generateWorktreePath('feature/add-login', '/Users/dev/project')
+          expect(result).toBe('/Users/dev/project-hatchboxes/feature-add-login')
+        })
+
+        it('should sanitize branch slashes with nested directory prefix', () => {
+          const result = generateWorktreePath('feature/add-login', '/Users/dev/project', {
+            prefix: 'temp/work/'
+          })
+          expect(result).toBe('/Users/dev/temp/work/feature-add-login')
+        })
+      })
     })
   })
 })

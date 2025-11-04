@@ -639,6 +639,24 @@ program
     }
   })
 
+// Test command for worktree prefix configuration
+program
+  .command('test-prefix')
+  .description('Test worktree prefix configuration - preview worktree paths (reads .hatchbox/settings.json)')
+  .action(async () => {
+    try {
+      const { TestPrefixCommand } = await import('./commands/test-prefix.js')
+      const command = new TestPrefixCommand()
+      await command.execute()
+    } catch (error) {
+      logger.error(`Test prefix failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      if (error instanceof Error && error.stack) {
+        logger.debug(error.stack)
+      }
+      process.exit(1)
+    }
+  })
+
 // Test command for Neon integration
 program
   .command('test-neon')

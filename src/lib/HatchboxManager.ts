@@ -296,12 +296,24 @@ export class HatchboxManager {
     input: CreateHatchboxInput,
     branchName: string
   ): Promise<string> {
+    // Load worktree prefix from settings
+    const settingsData = await this.settings.loadSettings()
+    const worktreePrefix = settingsData.worktreePrefix
+
+    // Build options object, only including prefix if it's defined
+    const pathOptions: { isPR?: boolean; prNumber?: number; prefix?: string } =
+      input.type === 'pr'
+        ? { isPR: true, prNumber: input.identifier as number }
+        : {}
+
+    if (worktreePrefix !== undefined) {
+      pathOptions.prefix = worktreePrefix
+    }
+
     const worktreePath = this.gitWorktree.generateWorktreePath(
       branchName,
       undefined,
-      input.type === 'pr'
-        ? { isPR: true, prNumber: input.identifier as number }
-        : undefined
+      pathOptions
     )
 
     // Fetch all remote branches to ensure we have latest refs (especially for PRs)

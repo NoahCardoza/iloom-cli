@@ -196,6 +196,166 @@ describe('SettingsManager', () => {
 			})
 		})
 
+	describe('worktreePrefix setting validation', () => {
+		it('should accept valid custom prefix with alphanumeric and hyphens', () => {
+			const settings = {
+				worktreePrefix: 'my-custom-prefix',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should accept valid custom prefix with underscores', () => {
+			const settings = {
+				worktreePrefix: 'my_custom_prefix',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should accept valid custom prefix with forward slashes for nested directories', () => {
+			const settings = {
+				worktreePrefix: 'temp/worktrees',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should accept empty string prefix (no prefix mode)', () => {
+			const settings = {
+				worktreePrefix: '',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should accept undefined/omitted prefix (use default calculation)', () => {
+			const settings = {}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should reject prefix containing backslash characters', () => {
+			const settings = {
+				worktreePrefix: 'prefix\\subdir',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).toThrow(
+				/worktreePrefix.*invalid.*character/i,
+			)
+		})
+
+		it('should reject prefix containing spaces', () => {
+			const settings = {
+				worktreePrefix: 'my prefix',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).toThrow(
+				/worktreePrefix.*invalid.*character/i,
+			)
+		})
+
+		it('should reject prefix containing colon', () => {
+			const settings = {
+				worktreePrefix: 'prefix:name',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).toThrow(
+				/worktreePrefix.*invalid.*character/i,
+			)
+		})
+
+		it('should reject prefix containing asterisk', () => {
+			const settings = {
+				worktreePrefix: 'prefix*name',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).toThrow(
+				/worktreePrefix.*invalid.*character/i,
+			)
+		})
+
+		it('should reject prefix containing question mark', () => {
+			const settings = {
+				worktreePrefix: 'prefix?name',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).toThrow(
+				/worktreePrefix.*invalid.*character/i,
+			)
+		})
+
+		it('should reject prefix that is only special characters', () => {
+			const settings = {
+				worktreePrefix: '---',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).toThrow(
+				/worktreePrefix.*invalid.*character/i,
+			)
+		})
+
+		it('should accept prefix with trailing dash separator', () => {
+			const settings = {
+				worktreePrefix: 'prefix-',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should accept prefix with trailing underscore separator', () => {
+			const settings = {
+				worktreePrefix: 'prefix_',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should accept prefix with trailing forward slash', () => {
+			const settings = {
+				worktreePrefix: 'prefix/',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should reject prefix with segment containing only hyphens', () => {
+			const settings = {
+				worktreePrefix: 'hatchboxes/-',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).toThrow(
+				/worktreePrefix.*invalid.*character/i,
+			)
+		})
+
+		it('should reject prefix with segment containing only underscores', () => {
+			const settings = {
+				worktreePrefix: 'temp/_/branches',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).toThrow(
+				/worktreePrefix.*invalid.*character/i,
+			)
+		})
+
+		it('should reject prefix with first segment containing only hyphens', () => {
+			const settings = {
+				worktreePrefix: '-/hatchboxes',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).toThrow(
+				/worktreePrefix.*invalid.*character/i,
+			)
+		})
+
+		it('should reject prefix with single segment containing only underscores', () => {
+			const settings = {
+				worktreePrefix: '___',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).toThrow(
+				/worktreePrefix.*invalid.*character/i,
+			)
+		})
+
+		it('should accept prefix with segment containing alphanumeric and trailing separator', () => {
+			const settings = {
+				worktreePrefix: 'hatchboxes/myprefix-',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+
+		it('should accept prefix with both segments containing alphanumeric content', () => {
+			const settings = {
+				worktreePrefix: 'temp/branches',
+			}
+			expect(() => settingsManager['validateSettings'](settings)).not.toThrow()
+		})
+	})
+
 		it('should accept valid settings with all agents configured', () => {
 			const validSettings = {
 				agents: {
