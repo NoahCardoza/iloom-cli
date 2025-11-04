@@ -1,9 +1,20 @@
 # Hatchbox AI
 
 <div align="center">
+
+[![npm](https://img.shields.io/npm/v/%40hatchbox-ai%2Fhatchbox-cli?label=npm)](https://www.npmjs.com/package/@hatchbox-ai/hatchbox-cli)
+[![License: BSL-1.1](https://img.shields.io/badge/license-BSL--1.1-lightgrey)](https://raw.githubusercontent.com/hatchbox-ai/hatchbox-cli/main/LICENSE)
+[![Built for Claude Code](https://img.shields.io/badge/built%20for-claude%20code-8A6FFF)](https://claude.ai/)
+[![CI](https://github.com/hatchbox-ai/hatchbox-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/hatchbox-ai/hatchbox-cli/actions/workflows/ci.yml)
+
+</div>
+
+<div align="center">
   <img width="327" height="328" alt="hatchbox-ai-logo" src="https://raw.githubusercontent.com/hatchbox-ai/hatchbox-cli/main/assets/logo.png" />
   <div>Scale understanding, not just output.</div>
+
 </div>
+
 
 ## Built For Modern Tools
 
@@ -13,7 +24,7 @@
 [![Neon](https://img.shields.io/badge/Neon-00E699?style=for-the-badge)](https://neon.tech/)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-8A6FFF?style=for-the-badge)](https://claude.ai/)
 
-*These companies and projects do not endorse Hatchbox AI*
+*These companies and projects do not endorse Hatchbox AI.*
 
 ### Links to key sections
 [How It Works](#how-it-works) • [Installation](#installation) • [Commands](#commands) • [Limitations](#platform--integration-support) • [Configuration](#configuration)
@@ -22,30 +33,33 @@
 
 The promise of AI-assisted development is profound: write more code, ship features faster, handle complexity at scale. But there's a hidden cost that many tools ignore.
 
-**AI agents are incredibly powerful at generating code. They're remarkably poor at staying in sync with their human collaborators.**
+**AI agents write code quickly. They struggle to stay in sync with their humans.**
 
-When you're juggling multiple issues simultaneously, and even when working on just one, the real challenge isn't the mechanics of branch switching or port conflicts. It's cognitive: **keeping yourself and your AI aligned on what you're trying to accomplish**.
+When you juggle multiple issues, the hard part is not branches or ports. It is keeping you and your AI aligned on the goal.
 
-The friction compounds quickly:
+Friction piles up:
+- You open new chats for each problem and rebuild context in your head.
+- Mental overhead grows. Stress rises. Momentum drops.
+- Hidden assumptions creep in. The AI picks Axios when your team standardizes on fetch. It reaches for the wrong auth pattern.
+- Hit a context limit and the model forgets what matters.
 
-Work on 10 GitHub issues a day, 3 at a time, and you and your AI lose track. It's stressful. Chaotic. You start new Claude chats for each problem, then have to context switch in your own head to figure out what context to provide. That mental overhead is painful. You wonder if AI-assisted coding is actually making things worse. The promise was speed and convenience. The reality feels unproductive and overwhelming.
-
-Hidden assumptions make it worse: your AI assumes you want to use Axios when your team standardizes on fetch, or picks the wrong authentication pattern because it never learned your team's conventions. Hit the context window limit mid-conversation, and suddenly your AI shamelessly forgets the problem you were solving.
-
-The result: more time spent briefing AI than building, more time fixing AI's work than deploying. Solutions that appear to work but are shrouded in mystery.
+The outcome is familiar: more time briefing the AI than building, more time fixing than shipping. Work can look finished while somehow shrouded in mystery.
 
 **The bottleneck isn't output velocity. It's maintaining shared understanding between human and AI at scale.**
 
-## How Hatchbox Solves This
+*Hatchbox treats context as a first-class concern. It's not a tool for managing branches - it's a control plane for maintaining alignment between you and your AI assistant as you work across multiple issues simultaneously.*
 
-Hatchbox takes what context you already have, and works with you to build a shared mental model of the task at hand.
+## How Hatchbox AI Solves This
+
+Hatchbox uses your existing Claude subscription, takes what context you already have, and works with you to build a shared mental model of the task at hand.
 
 ```bash
-> npm -g install @hatchbox-ai/hatchbox-cli
+> npm install -g @hatchbox-ai/hatchbox-cli
 
-# Hatchbox doesn't need your github access token, it uses the gh cli instead.
+# Hatchbox doesn't need your GitHub access token - it uses the GitHub CLI instead.
 > gh auth login 
 
+# Spins up an isolated dev environment.
 # Pulls in issue 25 from GitHub, even if it's just an issue title.
 # Fills in the blanks with you.
 > hb start 25 
@@ -62,28 +76,25 @@ Hatchbox takes what context you already have, and works with you to build a shar
 
 # then
 
-# Knows which hatchbox you're in, validtes, merges your code back to your primary branch.
+# Knows which hatchbox you're in, validates, merges your code back to your primary branch.
 # If you hit compilation/lint/test failures or merge conflicts along the way,
 # Claude will help resolve them automatically.
 > hb finish 
 ```
 
-
-Hatchbox treats context as a first-class concern. It's not a tool for managing branches - it's a control plane for maintaining alignment between you and your AI assistant as you work across multiple issues simultaneously.
-
 **The Hatchbox difference**: Surface hidden assumptions up front, then persist all the analysis and reasoning in GitHub issue comments - visible and editable - rather than burning tokens in the context window where they're invisible and set in stone. Each hatchbox builds up structured context over multiple steps, but the AI only loads what's relevant for the current phase.
 
 ### One Command, Parallel Work, Predictable Flow
 
-Each Hatchbox follows the same workflow — structured, visible, repeatable.
+Each Hatchbox follows the same workflow - structured, visible, repeatable.
 
 `hb start` doesn't just create a git worktree. Here's what happens:
 
 - Fetches the full GitHub issue (or PR) including all comments and requirements - or not, if they don't exist.
-- Creates an isolated environment (Git worktree, database branch, web server on deterministic unique port)
-- Enhances the GitHub issue with better issue descriptions, structured analysis and planning. Asking questions and stating assumptions along the way, all in GitHub comments.
-- Launches Claude with this context pre-loaded from the issue, guides you through a structured workflow. You can stop at any time, pick up where you left off.
-- Each hatchbox is color coded - from terminal windows to VSCode, so you visually know which context you're in
+- Creates an isolated environment (Git worktree, database branch, web server on a deterministic unique port)
+- Enhances the GitHub issue with a better description, and structured analysis & planning. Asking questions and stating assumptions along the way, all in GitHub comments.
+- Launches Claude with this context preloaded from the issue, guides you through a structured workflow. You can stop at any time, pick up where you left off.
+- Each hatchbox is color-coded, from terminal windows to VS Code, so you visually know which context you're in.
 
 **When you switch to this hatchbox, both you and Claude know exactly what you're working on and why.**
 
@@ -99,7 +110,7 @@ Each Hatchbox follows the same workflow — structured, visible, repeatable.
 ```
 (as you can see, using Hatchbox does not spare you from copious emoji)
 
-This isn't just convenience automation. You know you're merging the correct code, correctly - the commit message is auto-generated from the issue context, and any build/test/merge failures get fixed automatically with Claude's help. It helps keep resources in check too, local and remote, by safely shutting down servers and cleaning up Neon db branches.
+This isn't just convenience automation. You know you're merging the correct code, correctly - the commit message is auto-generated from the issue context, and any build/test/merge failures get fixed automatically with Claude's help. It helps keep resources in check too, local and remote, by safely shutting down servers and cleaning up Neon DB branches.
 
 ## What This Means for How You Work
 
@@ -134,21 +145,21 @@ With Hatchbox, the cognitive load stays constant as you scale. Each hatchbox hol
 
 ### You Reduce Rework and Chaos
 
-When you and your AI are in lock step:
+When you and your AI are in lockstep:
 - Features get built right the first time because you spot when the AI is going off course, way before it writes a line of code.
 - Reviews focus on the quality of the AI's thinking, not just its code.
-- Fewer surprises caused by AI agents invetning requirements or inconsistently implementing existing patterns
+- Fewer surprises caused by AI agents inventing requirements or inconsistently implementing existing patterns
 - If the AI takes a wrong turn - you don't spend hours arguing with Claude and playing context window Tetris. You just start the process again with better issue descriptions, different assumptions and better context for your AI assistant.
 
 ### The Power of Predictable Flow
 
-Every Hatchbox follows the same rhythm — Start → Enhance → Analyze → Plan → Implement → Human Review → Finish.  
+Every Hatchbox follows the same rhythm - Start → Enhance → Analyze → Plan → Implement → Human review → Finish.  
 The steps never change. The tools stay aligned.  
-Predictability becomes muscle memory — you focus on ideas, not process.
+Predictability becomes muscle memory - you focus on ideas, not process.
 
 ## How It Works
 
-Hatchbox orchestrates specialized AI agents that analyze issues, evaluate complexity, create implementation plans, and document everything directly in GitHub comments. Each agent has a specific role and writes structured output that becomes permanent project, and team, knowledge.
+Hatchbox orchestrates specialized AI agents that analyze issues, evaluate complexity, create implementation plans, and document everything directly in GitHub comments. Each agent has a specific role and writes structured output that becomes permanent project and team knowledge.
 
 ### Creating Context
 
@@ -165,8 +176,8 @@ Hatchbox executes a multi-phase context-establishment workflow:
    - **Complexity Evaluator**: Assesses scope and determines workflow approach
      - **Simple workflow**: Combined analysis and planning in one step
      - **Complex workflow**: Separate analysis phase, then detailed planning phase
-4. **Establish environment** - Unique web server port (i.e. 3025), isolated database branch, `.env` file with correct DATABASE_URL env var
-5. **Launch tools** - VSCode with color theme, dev server, Claude with pre-loaded context from GitHub comments
+4. **Establish environment** - Unique web server port (e.g., 3025), isolated database branch, `.env` file with correct DATABASE_URL environment variable
+5. **Launch tools** - VS Code with color theme, dev server, Claude with preloaded context from GitHub comments
 
 **Result**: A complete bounded context where both you and your AI share understanding, with all context stored as structured GitHub comments. Open the issue in your browser to see:
 - Enhancement analysis (if the issue was brief)
@@ -183,14 +194,14 @@ Each hatchbox is isolated:
 - **Database branch** - Schema changes don't affect other contexts (optional, requires Neon - other provider support coming soon)
 - **Unique port** - Multiple dev servers run simultaneously (base port + issue number)
 - **Environment variables** - Each hatchbox has correct database URL
-- **Visual identity** - Color-coded VSCode window (40 distinct pastel colors)
+- **Visual identity** - Color-coded VS Code window (40 distinct pastel colors)
 - **GitHub issue comments** - Multi-phase context (enhancement, analysis, planning) persists and is editable by team members
 
 **When you switch hatchboxes, the context switches with you.**
 
 ### Context That Scales With Your Team
 
-Traditional AI workflows store context locally in chat history or markdown files. Hatchbox stores context where it belongs - in the GitHub issue itself.
+Traditional AI workflows store context locally in chat history or Markdown files. Hatchbox stores context where it belongs - in the GitHub issue itself.
 
 **Benefits:**
 
@@ -217,35 +228,45 @@ When you run `hb start 25`, Hatchbox orchestrates specialized AI agents that wor
 
 **Phase 2: Complexity Evaluation**
 - Analyzes scope, file changes, breaking changes, risks
-- Classifies as SIMPLE or COMPLEX
+- Classifies as Simple or Complex
 - Posts evaluation as a GitHub comment with metrics
 
-**Phase 3: Analysis**
+#### For complex issues
+
+**Phase 3: Dedicated Analysis** (Complex issues only)
 - Investigates root causes and technical constraints
 - Documents findings and implementation considerations
 - Posts analysis as a GitHub comment
 
-**Phase 4: Planning** (COMPLEX issues only)
+**Phase 4: Dedicated Planning** (Complex issues only)
 - Creates detailed implementation roadmap
 - Breaks work into phases with validation points
 - Posts plan as a GitHub comment
+
+#### For simple issues
+
+**Phase 3+4: Combined Analysis & Planning**
+- Combines analysis and planning to shorten time spent and the number of review checkpoints
+
+#### For all issues
 
 **Phase 5: Implementation Tracking**
 - Updates progress in a GitHub comment
 - Documents decisions and completion status
 
-All agent output is written to GitHub issue comments using a structured markdown format, making the AI's reasoning process transparent and collaborative. You can review, edit, or refine any comment before proceeding to the next phase.
+All agent output is written to GitHub issue comments using markdown, making the AI's reasoning process transparent and collaborative. You can review, edit, or refine any comment before proceeding to the next phase.
 
 ### A Note on Token Usage and Model Selection
 
 Hatchbox optimizes for **building shared understanding** and **long-term efficiency** over short-term token economy. The multi-phase workflow deliberately front-loads analysis and planning to reduce expensive implementation rework.
 
-**Model Configuration:**
-- **Default**: All agents run on Claude Sonnet 4.5 to balance of capability and cost
-- **Budget Mode**: Override to Haiku 4.5 for cost-conscious users (untested, may reduce quality)
+You can [configure](#configuration) the models used by the agents:
+
+- **Default**: All agents run on Claude Sonnet 4.5 to balance capability and cost
+- **Haiku**: Override one or more agents to use Haiku 4.5 for cost-conscious users (untested, may reduce quality)
 - **Maximum Power**: Override to Opus for complex architectural work (expensive, use sparingly)
 
-**Fun Fact**: Hatchbox originally used Opus for analysis and planning phases. As agent prompts improved, we switched entirely to Sonnet with better results at lower cost.
+**Fun Fact**: Hatchbox originally used Opus (over Sonnet 4.5) for analysis and planning phases. As agent prompts improved, we switched entirely to Sonnet with better results at lower cost.
 
 **Recommendation**: A Claude Max subscription is recommended. The theory is that token investment in structured/shared context pays dividends through reduced debugging, rework, and cognitive overhead.
 
@@ -266,7 +287,7 @@ hb start <issue-number | pr-number | issue-description | branch-name>
 #                        bypassPermissions: Full automation, skip all prompts. Be careful!
 
 hb finish
-# AI assisted validation, commit, merge steps, as well as hatchbox cleanup (run this from hatchbox directory)
+# AI assisted validation, commit, merge steps, as well as hatchbox cleanup (run this from the hatchbox directory)
 # Alias: dn
 
 hb cleanup [identifier...]
@@ -346,17 +367,17 @@ For complete configuration reference, see [.hatchbox/README.md](./.hatchbox/READ
 ## Requirements
 
 **Essential:**
-- Claude CLI - AI assistance with issue context pre-loaded
+- Claude CLI - AI assistance with issue context preloaded
 - Node.js 16+
 - Git 2.5+ (for worktree support)
 - GitHub CLI (`gh`) - authenticated with your repository
 
 **Recommended**
-- A Claude Max subscription
+- A Claude Max subscription - Hatchbox uses your own subscription
 
 **Optional (auto-detected):**
 - **Neon CLI** - Isolated database branches per hatchbox 
-- **VSCode** - Color-coded editor windows for visual context
+- **VS Code** - Color-coded editor windows for visual context
 
 The tool works with just the essentials. Optional features activate automatically when detected.
 
@@ -415,7 +436,7 @@ Automatically detects PR, fetches the branch, and creates hatchbox with PR conte
 - GitHub CLI integration for issues/PRs
 - Integration with node-based web servers via standard package.json scripts
 - Database branching (Neon) - optional
-- Claude CLI integration for AI assistance to resolve compilation/test/lint/merge errors.
+- Claude CLI integration for AI assistance to resolve compilation/test/lint/merge errors
 
 **Project structure:**
 ```
@@ -430,7 +451,7 @@ For development guidelines and testing strategy, see [CLAUDE.md](./CLAUDE.md).
 
 ### Node.js Web Project Support
 
-Hatchbox provides first-class support for Node.js web applications (next/express/vite etc) through standardized package.json scripts:
+Hatchbox provides first-class support for Node.js web applications (next/express/vite, etc) through standardized package.json scripts:
 
 **Required scripts** (auto-detected):
 - `dev` - Start development server (launched automatically with unique port)
@@ -491,7 +512,7 @@ This enables parallel development and testing of CLI features without conflicts 
 
 ## Roadmap
 
-**Currently in Development** - Actively developing this CLI tool, with the intent to support more workflow flexibility and different tech stacks, task management tools and db providers.
+**Currently in Development** - Actively developing this CLI tool, with the intent to support more workflow flexibility and different tech stacks, task management tools and DB providers.
 
 ### Understanding Git Worktrees
 
@@ -522,11 +543,11 @@ This is the foundation that enables hatchbox isolation and persistent context. O
 
 ### When to Choose Other Git Worktree Solutions
 
-Hatchbox isn't the only tool that makes git worktrees more accessible. Several excellent alternatives exist, each with different trade-offs:
+Hatchbox AI isn't the only tool that makes git worktrees more accessible. Several excellent alternatives exist, each with different trade-offs:
 
 **Editor-Integrated Solutions:**
 - [git-worktree.nvim](https://github.com/ThePrimeagen/git-worktree.nvim) - Neovim plugin for rapid worktree management
-- [VSCode Git Worktrees](https://marketplace.visualstudio.com/items?itemName=github.vscode-pull-request-github) - Native VSCode PR worktree support
+- [VS Code Git Worktrees](https://marketplace.visualstudio.com/items?itemName=github.VSCode-pull-request-github) - Native VS Code PR worktree support
 
 **CLI Helpers:**
 - [git-worktree-helpers](https://github.com/martinwoodward/git-worktree-helpers) - Bash scripts for common worktree operations
@@ -543,7 +564,7 @@ Hatchbox isn't the only tool that makes git worktrees more accessible. Several e
 Most tools focus on **making git worktrees easier to use**. Hatchbox focuses on **making multi-issue AI-assisted development sustainable**.
 
 **Beyond Worktrees:**
-- **Database isolation**: Neon branch integration for schema/data separation (rare among worktree tools)
+- **Database isolation**: Neon branch integration for schema/data separation
 - **AI context persistence**: Structured analysis stored in GitHub comments, not local chat history
 - **Cognitive overhead reduction**: Color coding, port assignment, environment setup handled automatically
 - **Human-AI alignment**: Multi-phase workflow surfaces assumptions before code is written
@@ -561,7 +582,7 @@ Other tools increase code output with minimal process change. Hatchbox increases
 - You primarily work solo without AI assistance
 - You want minimal workflow changes
 - You just need easier git worktree commands
-- Your projects don't have database schema changes
+- You don't see yourself working on multiple tasks at once
 
 **Choose Hatchbox if:**
 - You're scaling AI-assisted development across multiple issues
@@ -595,4 +616,4 @@ This project follows Test-Driven Development. All code must:
 
 For commercial licensing inquiries, contact Adam Creeger.
 
-See [LICENSE](./LICENSE) for complete terms.
+See [LICENSE](https://raw.githubusercontent.com/hatchbox-ai/hatchbox-cli/main/LICENSE) for complete terms.
