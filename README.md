@@ -15,10 +15,10 @@
 
 *These companies and projects do not endorse Hatchbox AI*
 
-## A Very Modern Problem
-
 ### Links to key sections
-[How It Works](#how-it-works) • [Installation](#installation) • [Commands](#commands) • [Limitation](#platform--integration-support) • [Configuration](#configuration)
+[How It Works](#how-it-works) • [Installation](#installation) • [Commands](#commands) • [Limitations](#platform--integration-support) • [Configuration](#configuration)
+
+## A Very Modern Problem
 
 The promise of AI-assisted development is profound: write more code, ship features faster, handle complexity at scale. But there's a hidden cost that many tools ignore.
 
@@ -46,7 +46,8 @@ Hatchbox takes what context you already have, and works with you to build a shar
 # Hatchbox doesn't need your github access token, it uses the gh cli instead.
 > gh auth login 
 
-# Pulls in issue 25 from GitHub, even if it's just an issue title. Fills in the blanks alongside you.
+# Pulls in issue 25 from GitHub, even if it's just an issue title.
+# Fills in the blanks with you.
 > hb start 25 
 
 # or 
@@ -56,15 +57,15 @@ Hatchbox takes what context you already have, and works with you to build a shar
 
 # or
 
-# grabs context from this PR and its original issue, then iterates on it alongside you 
+# Grabs context from this PR and its original issue, then iterates on it alongside you 
 > hb start 34 
 
 # then
 
-# it knows which hatchbox you're in, runs validation, and merges your code back to your primary branch.
+# Knows which hatchbox you're in, validtes, merges your code back to your primary branch.
+# If you hit compilation/lint/test failures or merge conflicts along the way,
+# Claude will help resolve them automatically.
 > hb finish 
-
-# If you hit compilation/lint/test failures or merge conflicts along the way, Claude will help resolve them automatically.
 ```
 
 
