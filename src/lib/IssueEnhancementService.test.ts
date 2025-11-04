@@ -19,7 +19,7 @@ vi.mock('../utils/browser.js', () => ({
 }))
 
 vi.mock('../utils/prompt.js', () => ({
-	waitForKeypress: vi.fn().mockResolvedValue(undefined),
+	waitForKeypress: vi.fn().mockResolvedValue('a'),
 }))
 
 vi.mock('../utils/logger.js', () => ({

@@ -276,7 +276,7 @@ describe('EnhanceCommand', () => {
 			const { launchClaude } = await import('../utils/claude.js')
 			const { waitForKeypress } = await import('../utils/prompt.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
-			vi.mocked(waitForKeypress).mockResolvedValue()
+			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
 			await command.execute({ issueNumber: 42, options: {} })
 
@@ -290,7 +290,7 @@ describe('EnhanceCommand', () => {
 			const { waitForKeypress } = await import('../utils/prompt.js')
 			const { openBrowser } = await import('../utils/browser.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
-			vi.mocked(waitForKeypress).mockResolvedValue()
+			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
 			await command.execute({ issueNumber: 42, options: {} })
 
@@ -349,7 +349,7 @@ describe('EnhanceCommand', () => {
 			const { launchClaude } = await import('../utils/claude.js')
 			const { waitForKeypress } = await import('../utils/prompt.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
-			vi.mocked(waitForKeypress).mockResolvedValue()
+			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
 			await command.execute({ issueNumber: 42, options: {} })
 
@@ -364,11 +364,39 @@ describe('EnhanceCommand', () => {
 			const { waitForKeypress } = await import('../utils/prompt.js')
 			const { openBrowser } = await import('../utils/browser.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
-			vi.mocked(waitForKeypress).mockResolvedValue()
+			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
 			await command.execute({ issueNumber: 42, options: {} })
 
 			expect(openBrowser).toHaveBeenCalledWith(commentUrl)
+		})
+
+		it('should NOT open browser when user presses q', async () => {
+			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
+			const { launchClaude } = await import('../utils/claude.js')
+			const { waitForKeypress } = await import('../utils/prompt.js')
+			const { openBrowser } = await import('../utils/browser.js')
+			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+			vi.mocked(waitForKeypress).mockResolvedValue('q')
+
+			await command.execute({ issueNumber: 42, options: {} })
+
+			expect(waitForKeypress).toHaveBeenCalled()
+			expect(openBrowser).not.toHaveBeenCalled()
+		})
+
+		it('should NOT open browser when user presses Q (uppercase)', async () => {
+			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
+			const { launchClaude } = await import('../utils/claude.js')
+			const { waitForKeypress } = await import('../utils/prompt.js')
+			const { openBrowser } = await import('../utils/browser.js')
+			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+			vi.mocked(waitForKeypress).mockResolvedValue('Q')
+
+			await command.execute({ issueNumber: 42, options: {} })
+
+			expect(waitForKeypress).toHaveBeenCalled()
+			expect(openBrowser).not.toHaveBeenCalled()
 		})
 
 		it('should skip browser when --no-browser flag is set', async () => {
@@ -390,7 +418,7 @@ describe('EnhanceCommand', () => {
 			const { waitForKeypress } = await import('../utils/prompt.js')
 			const { openBrowser } = await import('../utils/browser.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
-			vi.mocked(waitForKeypress).mockResolvedValue()
+			vi.mocked(waitForKeypress).mockResolvedValue('a')
 			vi.mocked(openBrowser).mockRejectedValue(new Error('Browser failed to open'))
 
 			// Should not throw - browser failures are logged but not fatal
@@ -443,6 +471,7 @@ describe('EnhanceCommand', () => {
 			const { waitForKeypress } = await import('../utils/prompt.js')
 			vi.mocked(waitForKeypress).mockImplementation(async () => {
 				calls.push('waitForKeypress')
+				return 'a'
 			})
 
 			const { openBrowser } = await import('../utils/browser.js')
@@ -510,7 +539,7 @@ describe('EnhanceCommand', () => {
 			const { waitForKeypress } = await import('../utils/prompt.js')
 			const { openBrowser } = await import('../utils/browser.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
-			vi.mocked(waitForKeypress).mockResolvedValue()
+			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
 			await command.execute({ issueNumber: 42, options: {} })
 

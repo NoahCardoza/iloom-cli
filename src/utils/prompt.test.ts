@@ -204,55 +204,62 @@ describe('prompt utils', () => {
 	})
 
 	describe('waitForKeypress', () => {
-		it('should wait for any keypress and resolve', async () => {
-			mockRl.question.mockImplementation((_, callback) => {
-				callback() // Simulate keypress
+		let mockStdin: {
+			setRawMode: ReturnType<typeof vi.fn>
+			once: ReturnType<typeof vi.fn>
+			resume: ReturnType<typeof vi.fn>
+			pause: ReturnType<typeof vi.fn>
+		}
+
+		beforeEach(() => {
+			mockStdin = {
+				setRawMode: vi.fn().mockReturnThis(),
+				once: vi.fn(),
+				resume: vi.fn(),
+				pause: vi.fn(),
+			}
+
+			vi.spyOn(process, 'stdin', 'get').mockReturnValue(
+				mockStdin as unknown as typeof process.stdin
+			)
+			vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+		})
+
+		const simulateKeypress = (key: string) => {
+			mockStdin.once.mockImplementation((event, callback) => {
+				;(callback as (chunk: Buffer) => void)(Buffer.from(key))
 			})
+		}
+
+		it('should resolve with the pressed key', async () => {
+			const keys = ['a', 'Z', '1', ' ', '\r', '\n', 'q']
+
+			for (const key of keys) {
+				simulateKeypress(key)
+				await expect(waitForKeypress()).resolves.toBe(key)
+			}
+		})
+
+		it('should accept custom message and return the key', async () => {
+			simulateKeypress('a')
+
+			await expect(waitForKeypress('Custom message')).resolves.toBe('a')
+		})
+
+		it('should work with default message and return the key', async () => {
+			simulateKeypress('x')
+
+			await expect(waitForKeypress()).resolves.toBe('x')
+		})
+
+		it('should enable and restore raw mode', async () => {
+			simulateKeypress('a')
 
 			await waitForKeypress()
 
-			expect(mockRl.close).toHaveBeenCalled()
-		})
-
-		it('should display custom message when provided', async () => {
-			mockRl.question.mockImplementation((_, callback) => {
-				callback()
-			})
-
-			await waitForKeypress('Press any key to continue...')
-
-			expect(mockRl.question).toHaveBeenCalledWith(
-				'Press any key to continue...',
-				expect.any(Function)
-			)
-		})
-
-		it('should display default message when no message provided', async () => {
-			mockRl.question.mockImplementation((_, callback) => {
-				callback()
-			})
-
-			await waitForKeypress()
-
-			expect(mockRl.question).toHaveBeenCalledWith(
-				'Press any key to continue...',
-				expect.any(Function)
-			)
-		})
-
-		it('should resolve immediately after any keypress', async () => {
-			let callbackFn: (() => void) | undefined
-			mockRl.question.mockImplementation((_, callback) => {
-				callbackFn = callback as () => void
-			})
-
-			const promise = waitForKeypress()
-
-			// Simulate keypress
-			callbackFn?.()
-
-			await expect(promise).resolves.toBeUndefined()
-			expect(mockRl.close).toHaveBeenCalled()
+			// Verify raw mode was enabled and disabled (but not the exact sequence)
+			expect(mockStdin.setRawMode).toHaveBeenCalledWith(true)
+			expect(mockStdin.setRawMode).toHaveBeenCalledWith(false)
 		})
 	})
 })

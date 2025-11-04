@@ -154,9 +154,15 @@ export class EnhanceCommand {
 	private async promptAndOpenBrowser(commentUrl: string): Promise<void> {
 		try {
 			// Prompt user with custom message
-			await waitForKeypress(
+			const key = await waitForKeypress(
 				'Press q to quit or any other key to view the enhanced issue in a web browser...'
 			)
+
+			// Check if user pressed 'q' to quit
+			if (key.toLowerCase() === 'q') {
+				logger.info('Skipping browser opening')
+				return
+			}
 
 			// Open browser with comment URL
 			await openBrowser(commentUrl)

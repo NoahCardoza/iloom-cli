@@ -97,6 +97,30 @@ The TypeScript implementation maintains exact functional parity with these bash 
 - **Property-Based Tests**: Edge case discovery using fast-check
 - **Performance Tests**: Benchmarking against bash script performance
 
+**Behavior-Focused Testing Principles**:
+
+Write tests that focus on **behavior and contracts** rather than **implementation details** to avoid brittle, hard-to-maintain test suites:
+
+- **Test the "what", not the "how"**: Verify that functions return expected results, not how they achieve them
+- **Avoid over-mocking internal details**: Don't test exact API call sequences, method invocation order, or internal state changes unless they're part of the public contract
+- **Use parameterized tests**: Test multiple similar scenarios in a single test rather than creating many similar test cases
+- **Mock at boundaries**: Mock external dependencies (APIs, file system, shell commands) but avoid mocking internal implementation details
+- **Focus on public contracts**: Test the function's inputs, outputs, and side effects that matter to consumers
+
+**Example - Brittle vs Robust**:
+```typescript
+// ❌ Brittle: Tests implementation details
+expect(mockStdin.setRawMode).toHaveBeenCalledWith(true)
+expect(mockStdin.resume).toHaveBeenCalled()
+expect(mockStdin.setRawMode).toHaveBeenCalledWith(false)
+expect(mockStdin.pause).toHaveBeenCalled()
+
+// ✅ Robust: Tests behavior
+await expect(waitForKeypress()).resolves.toBeUndefined()
+expect(mockStdin.setRawMode).toHaveBeenCalledWith(true) // Setup
+expect(mockStdin.setRawMode).toHaveBeenCalledWith(false) // Cleanup
+```
+
 **Mock Factories Required**:
 
 ```typescript
