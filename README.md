@@ -5,11 +5,20 @@
   <div>Scale understanding, not just output.</div>
 </div>
 
+## Built For Modern Tools
+
+[![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![Neon](https://img.shields.io/badge/Neon-00E699?style=for-the-badge)](https://neon.tech/)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-8A6FFF?style=for-the-badge)](https://claude.ai/)
+
+*These companies and projects do not endorse Hatchbox AI*
 
 ## A Very Modern Problem
 
 ### Links to key sections
-[How It Works](#how-it-works) • [Installation](#installation) • [Commands](#commands) • [Configuration](#configuration)
+[How It Works](#how-it-works) • [Installation](#installation) • [Commands](#commands) • [Limitation](#platform--integration-support) • [Configuration](#configuration)
 
 The promise of AI-assisted development is profound: write more code, ship features faster, handle complexity at scale. But there's a hidden cost that many tools ignore.
 
@@ -220,6 +229,19 @@ When you run `hb start 25`, Hatchbox orchestrates specialized AI agents that wor
 
 All agent output is written to GitHub issue comments using a structured markdown format, making the AI's reasoning process transparent and collaborative. You can review, edit, or refine any comment before proceeding to the next phase.
 
+### A Note on Token Usage and Model Selection
+
+Hatchbox optimizes for **building shared understanding** and **long-term efficiency** over short-term token economy. The multi-phase workflow deliberately front-loads analysis and planning to reduce expensive implementation rework.
+
+**Model Configuration:**
+- **Default**: All agents run on Claude Sonnet 4.5 to balance of capability and cost
+- **Budget Mode**: Override to Haiku 4.5 for cost-conscious users (untested, may reduce quality)
+- **Maximum Power**: Override to Opus for complex architectural work (expensive, use sparingly)
+
+**Fun Fact**: Hatchbox originally used Opus for analysis and planning phases. As agent prompts improved, we switched entirely to Sonnet with better results at lower cost.
+
+**Recommendation**: A Claude Max subscription is recommended. The theory is that token investment in structured/shared context pays dividends through reduced debugging, rework, and cognitive overhead.
+
 ## Commands
 
 ### Hatchbox Management
@@ -331,6 +353,25 @@ For complete configuration reference, see [.hatchbox/README.md](./.hatchbox/READ
 
 The tool works with just the essentials. Optional features activate automatically when detected.
 
+## Platform & Integration Support
+
+This is an early stage product - platform/tech stack support is limited for now.
+
+**Current Platform Support:**
+- ✅ **macOS** - Fully tested and supported
+- ⚠️ **Linux/Windows** - Not yet tested, may work with modifications
+
+**Issue Tracking Integration:**
+- ✅ **GitHub Issues** - Full support with AI enhancement, analysis, and planning
+- 🚧 **Linear** - Coming soon
+
+**Project Type Support:**
+- ✅ **Node.js web projects** - First-class support via package.json scripts (`dev`, `test`, `build`)
+- ✅ **Node.js CLI tools** - Full support with isolated executables (see below)
+- 🔧 **Other tech stacks** - Can work now via package.json scripts, native support coming later (open to help!)
+
+We (Claude and I) are actively working on expanding platform and integration support. Contributions welcome!
+
 ## Installation
 
 ```bash
@@ -380,6 +421,67 @@ src/
 
 For development guidelines and testing strategy, see [CLAUDE.md](./CLAUDE.md).
 
+### Node.js Web Project Support
+
+Hatchbox provides first-class support for Node.js web applications (next/express/vite etc) through standardized package.json scripts:
+
+**Required scripts** (auto-detected):
+- `dev` - Start development server (launched automatically with unique port)
+- `test` - Run test suite (executed during `hb finish` validation)
+
+**Optional scripts**:
+- `lint` - Code quality checks (run during `hb finish` if present)
+- `typecheck` - TypeScript validation (run during `hb finish` if present)
+
+**How it integrates:**
+
+```bash
+hb start 25
+# ✅ Runs `pnpm install` in worktree
+# ✅ Launches `pnpm dev` on port 3025 (3000 + issue number)
+# ✅ Sets up database branch with correct DATABASE_URL
+
+hb finish
+# ✅ Runs `pnpm test` (fails if tests fail)
+# ✅ Runs `pnpm build` (fails if build fails)
+# ✅ Runs `pnpm typecheck` if configured
+# ✅ Runs `pnpm lint` if configured
+# ✅ AI assists with any failures automatically
+```
+
+### Node.js CLI Tool Support
+
+Hatchbox was built using Hatchbox itself. CLI tools get the same isolation benefits as web projects, plus **isolated executable access per hatchbox**.
+
+**How it works:**
+
+When you create a hatchbox for a CLI project, Hatchbox creates workspace-specific binaries so you can test each issue's version independently:
+
+```bash
+hb start 52  # Working on CLI feature in issue 52
+cli-tool-52 --version  # Test issue 52's version
+
+hb start 137  # Switch to different CLI issue
+cli-tool-137 --help    # Test issue 137's version
+
+# Original binary still works from main branch
+cli-tool --version     # Unaffected by hatchbox CLIs
+```
+
+**Binary naming**: `<original-name>-<issue/pr-number>`
+- Binary named in package.json's "bin" object: `cli-tool`
+- Issue 52: `cli-tool-52`
+- Issue 137: `cli-tool-137`
+- PR 200: `cli-tool-200`
+
+**Cleanup**: When you run `hb finish`, the workspace-specific binary is automatically removed along with the worktree and any database branches.
+
+This enables parallel development and testing of CLI features without conflicts or manual PATH manipulation.
+
+
+
+**Other tech stacks**: Projects using different languages/frameworks can work with Hatchbox by providing compatible package.json scripts that wrap their native tooling. Native support for additional tech stacks is planned (but probably not for a while).
+
 ## Roadmap
 
 **Currently in Development** - Actively developing this CLI tool, with the intent to support more workflow flexibility and different tech stacks, task management tools and db providers.
@@ -410,6 +512,55 @@ Git worktree approach:
 ```
 
 This is the foundation that enables hatchbox isolation and persistent context. Other awesome tools use worktrees too.
+
+### When to Choose Other Git Worktree Solutions
+
+Hatchbox isn't the only tool that makes git worktrees more accessible. Several excellent alternatives exist, each with different trade-offs:
+
+**Editor-Integrated Solutions:**
+- [git-worktree.nvim](https://github.com/ThePrimeagen/git-worktree.nvim) - Neovim plugin for rapid worktree management
+- [VSCode Git Worktrees](https://marketplace.visualstudio.com/items?itemName=github.vscode-pull-request-github) - Native VSCode PR worktree support
+
+**CLI Helpers:**
+- [git-worktree-helpers](https://github.com/martinwoodward/git-worktree-helpers) - Bash scripts for common worktree operations
+- Bare repository workflows - Manual git worktree setup with bare repo as central hub
+
+**What They Do Well:**
+- Reduce friction of git worktree CLI commands
+- Integrate tightly with your editor workflow
+- Minimal learning curve if you know git
+- Lightweight - just worktree management, nothing more
+
+**Where Hatchbox Differs:**
+
+Most tools focus on **making git worktrees easier to use**. Hatchbox focuses on **making multi-issue AI-assisted development sustainable**.
+
+**Beyond Worktrees:**
+- **Database isolation**: Neon branch integration for schema/data separation (rare among worktree tools)
+- **AI context persistence**: Structured analysis stored in GitHub comments, not local chat history
+- **Cognitive overhead reduction**: Color coding, port assignment, environment setup handled automatically
+- **Human-AI alignment**: Multi-phase workflow surfaces assumptions before code is written
+- **Validation automation**: AI-assisted error fixing during merge process
+
+**The Trade-off:**
+
+Other tools increase code output with minimal process change. Hatchbox increases **sustainable velocity** with a prescriptive workflow. You trade flexibility for:
+- Persistent shared understanding between you and your AI
+- Reduced time debugging AI misunderstandings
+- Less context switching mental overhead
+- Complete environment isolation (not just git)
+
+**Choose other solutions if:**
+- You primarily work solo without AI assistance
+- You want minimal workflow changes
+- You just need easier git worktree commands
+- Your projects don't have database schema changes
+
+**Choose Hatchbox if:**
+- You're scaling AI-assisted development across multiple issues
+- Cognitive overhead is limiting your velocity more than coding speed
+- You work on projects with database schemas that change per feature
+- You want AI analysis and planning visible to your whole team
 
 ## Contributing
 
