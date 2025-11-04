@@ -29,10 +29,17 @@ Workflow Comment Strategy:
 4. After you complete every todo item, update the comment using mcp__github_comment__update_comment with your progress - you may add todo items if you need:
    - [ ] for incomplete tasks
    - [x] for completed tasks
- 
-   * Include relevant context (current step, progress, blockers) and a **very agressive** estimated time to completion of this step and the whole task in each update after the comment's todo list
-5. When you have finished your task, update the same comment as before, then let the calling process know the full web URL of the issue comment, including the comment ID.
+
+   * Include relevant context (current step, progress, blockers) - be BRIEF, one sentence per update
+   * Include a **very aggressive** estimated time to completion
+5. When you have finished your task, update the same comment with a concise summary (see "Final Summary Format" below)
 6. CONSTRAINT: After you create the initial comment, you may not create another comment. You must always update the initial comment instead.
+
+**Progress Update Conciseness:**
+- Keep progress updates BRIEF - one sentence per completed task
+- Only include error details when blocked (use <details> tags for >5 lines)
+- Focus on what was done, not how it was done
+- No unnecessary explanations or reasoning
 
 Example Usage:
 ```
@@ -86,22 +93,98 @@ NOTE: If no issue number has been provided, use the current branch name to look 
    - Keep the user updated with your progress via a github issue comment (see "HOW TO UPDATE THE USER OF YOUR PROGRESS", below)
    - Read the issue body first for overall context
    - Read all comments to understand the implementation plan
-   - Keep the user informed of your plan and updated with your progress via a github issue comment (see "HOW TO UPDATE THE USER OF YOUR PROGRESS", below)      
+   - Keep the user informed of your plan and updated with your progress via a github issue comment (see "HOW TO UPDATE THE USER OF YOUR PROGRESS", below)
    - Identify any ambiguities or decision points before starting
    - Implement the solution exactly as specified
    - When done, run "validate:commit" command if available in package.json. If not: typecheck, run tests and lint in that order.
-   - When all is validated, create a github issue comment that summarizes what you've done, and any concerns or ideas for future enhancements that you have.
+   - When all is validated, update your github issue comment with a concise final summary (see "Final Summary Format" below)
    - Avoid escaping issues by writing comments to temporary files before posting to GitHub
 
-   ### HOW TO UPDATE THE USER OF YOUR PROGRESS
+### HOW TO UPDATE THE USER OF YOUR PROGRESS
 * AS SOON AS YOU CAN, once you have formulated an initial plan/todo list for your task, you should create a comment as described in the <comment_tool_info> section above.
 * AFTER YOU COMPLETE EACH ITEM ON YOUR TODO LIST - update the same comment with your progress as described in the <comment_tool_info> section above.
-* When the whole task is complete, update the SAME comment with the results of your work.
+* When the whole task is complete, update the SAME comment with your final summary using the format below.
 
-**Code Output Formatting in Progress Comments:**
+### Final Summary Format
+
+When implementation is complete, use this TWO-SECTION structure for your final comment:
+
+**SECTION 1: Implementation Summary (Always Visible)**
+
+**Target reading time:** <3 minutes
+**Target audience:** Human reviewers who need to understand what was done
+
+```markdown
+# Implementation Complete - Issue #[NUMBER] ✅
+
+## Summary
+[2-3 sentences describing what was implemented]
+
+## Changes Made
+- [File or area changed]: [One sentence description]
+- [File or area changed]: [One sentence description]
+[Maximum 5-7 high-level bullets]
+
+## Validation Results
+- ✅ Tests: [X passed / Y total]
+- ✅ Typecheck: Passed
+- ✅ Lint: Passed
+
+## Issues Encountered (if any)
+- [Brief one-sentence description of any issues and how resolved]
+
+**Note:** Only include if issues were encountered. If none, omit this section.
+
+---
+```
+
+**SECTION 2: Technical Details (Collapsible)**
+
+**Target audience:** Reviewers who need file-by-file details
+
+```markdown
+<details>
+<summary>📋 Detailed Changes by File (click to expand)</summary>
+
+## Files Modified
+
+### [filepath]
+**Changes:** [One sentence]
+- [Specific change detail if needed]
+
+### [filepath]
+**Changes:** [One sentence]
+
+## Files Created (if any)
+
+### [filepath] (NEW)
+**Purpose:** [One sentence]
+
+## Test Coverage Added
+
+- [Test file]: [Brief description of test cases added]
+
+## Dependencies Added (if any)
+
+- [package@version]: [Purpose]
+
+**Note:** List "None" if no dependencies added.
+
+</details>
+```
+
+**CRITICAL CONSTRAINTS for Final Summary:**
+- Section 1: <3 minutes to read - high-level summary only
+- Section 2: File-by-file details in collapsible format
+- Be CONCISE - focus on what was done, not how
+- NO "AI slop": No time spent estimates, no verbose explanations, no redundant sections
+- One-sentence descriptions for most items
+- Only include code snippets if absolutely essential (rare - prefer file:line references)
+
+**IMPORTANT: Code Output Formatting in Progress Comments:**
 When including code, error logs, or test output in your progress updates:
-- **Code blocks ≤10 lines**: Include directly inline with triple backticks and language specification
-- **Code blocks >10 lines**: Wrap in `<details>/<summary>` tags
+- **Code blocks ≤5 lines**: Include directly inline with triple backticks and language specification
+- **Code blocks >5 lines**: Wrap in `<details>/<summary>` tags
   - Format: "Click to expand complete [language] code ([N] lines) - [optional: context]"
   - Applies to ALL CODE BLOCKS: implementation examples, test code, configuration samples, error output, and others
   - **Example**:
@@ -143,13 +226,25 @@ When including code, error logs, or test output in your progress updates:
 - All code must pass tests, typechecking, and linting before completion
 
 ### General Best Practices
-- **Leverage TDD principles**: Spend more time detailing the expected behavior via automated testing than planning out every line of implementation code (about 70% of your effort should be spend on defining automated tests).
+- **Follow project testing approach**: Read CLAUDE.md for project-specific testing guidance (TDD, test-after, etc.)
 - **No unnecessary backwards compatibility**: The codebase is deployed atomically - avoid polluting code with unnecessary fallback paths
 - **DRY principle**: Never duplicate code - create reusable functions and components
 - **No placeholder functionality**: Implement real functionality as specified, not placeholders
 - **No invented requirements**: DO NOT add features or optimizations not explicitly requested
 - **User experience ownership**: The human defines UX - do not make UX decisions autonomously
 
-When you have finished, update the issue with a comment describing your changes, and any issues that you encountered, and nay ideas for future improvment.
+## Success Criteria
 
-Your success is measured by how precisely your implementation matches the specified requirements, not by any additional features or optimizations you might think would improve the solution.
+Your success is measured by:
+1. **Precision**: Implementation matches specified requirements exactly
+2. **Quality**: All tests pass, typecheck passes, lint passes
+3. **Conciseness**: Final summary is scannable (<3 min Section 1)
+4. **Completeness**: All specified features implemented (no placeholders)
+5. **No scope creep**: Only what was requested, nothing more
+
+**CRITICAL REMINDERS:**
+- Implement EXACTLY what is specified - no additions, no "improvements"
+- Final summary uses two-section structure (Section 1 visible, Section 2 collapsible)
+- Progress updates are BRIEF - one sentence per completed task
+- NO "AI slop": No time spent estimates in final summary, no verbose explanations
+- Follow project's CLAUDE.md for testing approach (don't hardcode TDD assumptions)

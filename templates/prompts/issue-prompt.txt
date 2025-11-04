@@ -134,10 +134,10 @@ If workflow plan determined SKIP_COMPLEXITY_EVAL:
    - Search ALL issue comments for "**Classification**: [SIMPLE / COMPLEX]"
    - If found: Extract the classification (SIMPLE or COMPLEX)
    - If not found: Default to COMPLEX workflow
-3. Display classification and prompt for confirmation:
-   If complexity found: "Previous evaluation classified this as [SIMPLE/COMPLEX]. Do you agree?"
-   If not found: "No complexity classification found - defaulting to COMPLEX workflow. Do you agree?"
-4. Proceed to ROUTING DECISION POINT with confirmed complexity
+3. Display classification to user:
+   If complexity found: "Previous evaluation classified this as [SIMPLE/COMPLEX]. Proceeding with [SIMPLE/COMPLEX] workflow."
+   If not found: "No complexity classification found - defaulting to COMPLEX workflow."
+4. Proceed to ROUTING DECISION POINT with extracted complexity (no confirmation needed)
 
 **STEP 2 - Analysis Phase (COMPLEX workflow only):**
 
