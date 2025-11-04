@@ -1,10 +1,9 @@
 # Hatchbox AI
 
 <div align="center">
-  <img src="images/hatch-box-ai.png" alt="Hatchbox AI Logo" width="300"/>
+  <img width="327" height="328" alt="hatchbox-ai-logo-again" src="https://github.com/user-attachments/assets/2129e04d-9ae3-43be-894d-48324f7d4e02" />
+  <div>Scale understanding, not just output.</div>
 </div>
-
-> Scale understanding, not just output.
 
 ## A Very Modern Problem
 
