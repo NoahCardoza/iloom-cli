@@ -30,6 +30,8 @@ Hatchbox takes what context you already have, and works with you to build a shar
 ```bash
 npm -g install hatchbox-cli
 
+gh auth login #hatchbox doesn't need your github access token, it uses the gh cli instead.
+
 hb start 25 # Pulls in issue 25 from GitHub, even if it's just an issue title. Fills in the blanks alongside you.
 
 # or 
@@ -331,7 +333,7 @@ npm install -g hatchbox-cli
 
 # Authenticate with GitHub
 gh auth login
-# do gh auth login --scopes project to automatically move issues to in progress 
+# do `gh auth login --scopes project` to automatically move issues to in progress 
 
 # Initialize in your project
 cd your-project
@@ -350,20 +352,6 @@ hb start 125  # PR number instead of issue number
 ```
 
 Automatically detects PR, fetches the branch, and creates hatchbox with PR context. Everything else works the same.
-
-## Development Status
-
-**Currently in Development** - Converting proven bash workflow scripts to robust TypeScript implementation.
-
-This migration brings:
-- **Type safety** and better error handling
-- **Test-driven development** (70% coverage requirement)
-- **Cross-platform compatibility**
-- **Enhanced Claude AI integration**
-
-The bash scripts work and are being used daily. The TypeScript version is replacing them with a more maintainable foundation.
-
-See [plan.md](./plan.md) for complete development roadmap and [docs/](./docs/) for technical documentation.
 
 ## Architecture
 
@@ -386,6 +374,10 @@ src/
 
 For development guidelines and testing strategy, see [CLAUDE.md](./CLAUDE.md).
 
+## Development Status
+
+**Currently in Development** - Actively developing this CLI tool, with the intent of support more workflow flexibility and different tech stacks, task management tools and db providers.
+
 ### Understanding Git Worktrees
 
 A Git worktree is a separate working directory for the same repository. Instead of switching branches in one directory, you have multiple directories with different branches checked out simultaneously.
@@ -401,7 +393,7 @@ git stash pop             # Restore work
 git checkout feature-a    # Switch back
 ```
 
-Worktree approach:
+Git worktree approach:
 ```bash
 # All exist simultaneously:
 ~/project-hatchboxes/issue-25/  # feature-a checked out
