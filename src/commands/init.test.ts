@@ -2,11 +2,17 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { InitCommand } from './init.js'
 import { ShellCompletion } from '../lib/ShellCompletion.js'
 import * as prompt from '../utils/prompt.js'
+import { mkdir, writeFile, readFile } from 'fs/promises'
+import { existsSync } from 'fs'
 
 // Mock prompt utilities
 vi.mock('../utils/prompt.js', () => ({
   promptConfirmation: vi.fn(),
 }))
+
+// Mock fs/promises and fs
+vi.mock('fs/promises')
+vi.mock('fs')
 
 // Mock logger
 vi.mock('../utils/logger.js', () => ({
@@ -66,9 +72,11 @@ describe('InitCommand', () => {
       expect(mockShellCompletion.getSetupInstructions).toHaveBeenCalledWith('bash')
     })
 
-    it('should skip autocomplete setup if user declines', async () => {
+    it('should skip autocomplete setup if user declines but still run project configuration', async () => {
       vi.mocked(mockShellCompletion.detectShell).mockReturnValue('zsh')
       vi.mocked(prompt.promptConfirmation).mockResolvedValue(false)
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
 
       initCommand = new InitCommand(mockShellCompletion)
       await initCommand.execute()
@@ -76,6 +84,14 @@ describe('InitCommand', () => {
       expect(mockShellCompletion.detectShell).toHaveBeenCalled()
       expect(prompt.promptConfirmation).toHaveBeenCalled()
       expect(mockShellCompletion.getSetupInstructions).not.toHaveBeenCalled()
+
+      // Verify project configuration still runs
+      expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.hatchbox'), { recursive: true })
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('settings.local.json'),
+        '{}\n',
+        'utf-8'
+      )
     })
 
     it('should generate and display setup instructions for bash', async () => {
@@ -102,8 +118,10 @@ describe('InitCommand', () => {
       expect(mockShellCompletion.getSetupInstructions).toHaveBeenCalledWith('zsh')
     })
 
-    it('should handle errors gracefully when shell detection fails', async () => {
+    it('should handle errors gracefully when shell detection fails and still run project configuration', async () => {
       vi.mocked(mockShellCompletion.detectShell).mockReturnValue('unknown')
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
 
       initCommand = new InitCommand(mockShellCompletion)
       await initCommand.execute()
@@ -111,11 +129,21 @@ describe('InitCommand', () => {
       expect(mockShellCompletion.detectShell).toHaveBeenCalled()
       // Should exit early and not prompt for autocomplete
       expect(prompt.promptConfirmation).not.toHaveBeenCalled()
+
+      // Verify project configuration still runs
+      expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.hatchbox'), { recursive: true })
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('settings.local.json'),
+        '{}\n',
+        'utf-8'
+      )
     })
 
-    it('should work when SHELL environment variable is not set', async () => {
+    it('should work when SHELL environment variable is not set and still run project configuration', async () => {
       delete process.env.SHELL
       vi.mocked(mockShellCompletion.detectShell).mockReturnValue('unknown')
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
 
       initCommand = new InitCommand(mockShellCompletion)
       await initCommand.execute()
@@ -123,6 +151,14 @@ describe('InitCommand', () => {
       expect(mockShellCompletion.detectShell).toHaveBeenCalled()
       // Should exit early since shell is unknown
       expect(prompt.promptConfirmation).not.toHaveBeenCalled()
+
+      // Verify project configuration still runs
+      expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.hatchbox'), { recursive: true })
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('settings.local.json'),
+        '{}\n',
+        'utf-8'
+      )
     })
 
     it('should throw error if execution fails', async () => {
@@ -133,6 +169,103 @@ describe('InitCommand', () => {
       initCommand = new InitCommand(mockShellCompletion)
 
       await expect(initCommand.execute()).rejects.toThrow('Detection failed')
+    })
+  })
+
+  describe('setupProjectConfiguration', () => {
+    beforeEach(() => {
+      vi.mocked(mockShellCompletion.detectShell).mockReturnValue('bash')
+      vi.mocked(mockShellCompletion.getSetupInstructions).mockReturnValue('Instructions')
+      vi.mocked(prompt.promptConfirmation).mockResolvedValue(true)
+    })
+
+    it('should create empty settings.local.json if not exists', async () => {
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
+
+      initCommand = new InitCommand(mockShellCompletion)
+      await initCommand.execute()
+
+      expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.hatchbox'), { recursive: true })
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('settings.local.json'),
+        '{}\n',
+        'utf-8'
+      )
+    })
+
+    it('should preserve existing settings.local.json', async () => {
+      // First call for settings.local.json (exists)
+      // Second call for .gitignore (exists)
+      vi.mocked(existsSync).mockReturnValueOnce(true).mockReturnValueOnce(true)
+      vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
+
+      initCommand = new InitCommand(mockShellCompletion)
+      await initCommand.execute()
+
+      expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.hatchbox'), { recursive: true })
+      // writeFile should only be called once for .gitignore, not for settings.local.json
+      const writeFileCalls = vi.mocked(writeFile).mock.calls
+      const settingsLocalCalls = writeFileCalls.filter(call =>
+        call[0].toString().includes('settings.local.json')
+      )
+      expect(settingsLocalCalls).toHaveLength(0)
+    })
+
+    it('should add settings.local.json to .gitignore', async () => {
+      vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(true)
+      vi.mocked(readFile).mockResolvedValue('node_modules/\n')
+
+      initCommand = new InitCommand(mockShellCompletion)
+      await initCommand.execute()
+
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('.gitignore'),
+        'node_modules/\n\n# Added by Hatchbox AI CLI\n.hatchbox/settings.local.json\n',
+        'utf-8'
+      )
+    })
+
+    it('should create .gitignore if missing', async () => {
+      vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(false)
+
+      initCommand = new InitCommand(mockShellCompletion)
+      await initCommand.execute()
+
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('.gitignore'),
+        '\n# Added by Hatchbox AI CLI\n.hatchbox/settings.local.json\n',
+        'utf-8'
+      )
+    })
+
+    it('should not duplicate entry in .gitignore', async () => {
+      vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(true)
+      vi.mocked(readFile).mockResolvedValue('.hatchbox/settings.local.json\n')
+
+      initCommand = new InitCommand(mockShellCompletion)
+      await initCommand.execute()
+
+      // Should not write to .gitignore since entry already exists
+      const writeFileCalls = vi.mocked(writeFile).mock.calls
+      const gitignoreCalls = writeFileCalls.filter(call =>
+        call[0].toString().includes('.gitignore')
+      )
+      expect(gitignoreCalls).toHaveLength(0)
+    })
+
+    it('should handle .gitignore without trailing newline', async () => {
+      vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(true)
+      vi.mocked(readFile).mockResolvedValue('node_modules/')
+
+      initCommand = new InitCommand(mockShellCompletion)
+      await initCommand.execute()
+
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('.gitignore'),
+        'node_modules/\n\n# Added by Hatchbox AI CLI\n.hatchbox/settings.local.json\n',
+        'utf-8'
+      )
     })
   })
 })

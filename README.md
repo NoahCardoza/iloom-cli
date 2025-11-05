@@ -328,9 +328,27 @@ hb init
 
 ## Configuration
 
-Hatchbox uses `.hatchbox/settings.json` for project-specific behavior:
+Hatchbox uses a flexible configuration system with clear priority ordering.
 
-**Key Configuration:**
+### Configuration Priority
+
+Settings are loaded in this order (highest to lowest priority):
+
+1. **CLI arguments** - Command-line flags (e.g., `--one-shot bypassPermissions`)
+2. **`.hatchbox/settings.local.json`** - Local machine settings (gitignored, not committed)
+3. **`.hatchbox/settings.json`** - Project-wide settings (committed to repository)
+4. **Built-in defaults** - Hardcoded fallback values
+
+This allows teams to share project defaults via `settings.json` while individual developers maintain personal overrides in `settings.local.json`.
+
+**Example Use Cases:**
+- Developer needs different `basePort` due to port conflicts
+- Local database connection strings that differ from team defaults
+- Personal preferences for `permissionMode` or component launch flags
+
+**Note:** The `.hatchbox/settings.local.json` file is automatically created and gitignored when you run `hb init`.
+
+### Key Configuration:
 
 ```json
 {
@@ -358,6 +376,8 @@ Hatchbox uses `.hatchbox/settings.json` for project-specific behavior:
 - `capabilities.web.basePort` - Base port for dev servers (default: 3000)
 - `workflows` - Per-workflow Claude CLI permission modes and tool launching
 - `agents` - Claude model selection (sonnet/opus/haiku) per agent type
+
+All options can be specified in either `settings.json` (project-wide) or `settings.local.json` (local overrides).
 
 Port calculation: `assignedPort = basePort + issueNumber`
 Example: Issue #25 with basePort 3000 = port 3025

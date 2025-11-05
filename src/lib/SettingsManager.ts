@@ -155,12 +155,43 @@ export type HatchboxSettings = z.infer<typeof HatchboxSettingsSchema>
  */
 export class SettingsManager {
 	/**
-	 * Load settings from <PROJECT_ROOT>/.hatchbox/settings.json
-	 * Returns empty object if file doesn't exist (not an error)
+	 * Load settings from <PROJECT_ROOT>/.hatchbox/settings.json and settings.local.json
+	 * Merges settings.local.json over settings.json with priority
+	 * Returns empty object if both files don't exist (not an error)
 	 */
 	async loadSettings(projectRoot?: string): Promise<HatchboxSettings> {
 		const root = this.getProjectRoot(projectRoot)
-		const settingsPath = this.getSettingsPath(root)
+
+		// Load base settings from settings.json
+		const baseSettings = await this.loadSettingsFile(root, 'settings.json')
+
+		// Load local overrides from settings.local.json
+		const localSettings = await this.loadSettingsFile(root, 'settings.local.json')
+
+		// Deep merge with priority: localSettings > baseSettings
+		const merged = this.mergeSettings(baseSettings, localSettings)
+
+		// Validate merged result
+		try {
+			return HatchboxSettingsSchema.parse(merged)
+		} catch (error) {
+			// Show all Zod validation errors
+			if (error instanceof z.ZodError) {
+				throw this.formatAllZodErrors(error, '<merged settings>')
+			}
+			throw error
+		}
+	}
+
+	/**
+	 * Load and parse a single settings file
+	 * Returns empty object if file doesn't exist (not an error)
+	 */
+	private async loadSettingsFile(
+		projectRoot: string,
+		filename: string,
+	): Promise<Partial<HatchboxSettings>> {
+		const settingsPath = path.join(projectRoot, '.hatchbox', filename)
 
 		try {
 			const content = await readFile(settingsPath, 'utf-8')
@@ -174,16 +205,15 @@ export class SettingsManager {
 				)
 			}
 
-			// Validate with Zod schema
-			try {
-				return HatchboxSettingsSchema.parse(parsed)
-			} catch (error) {
-				// Show all Zod validation errors
-				if (error instanceof z.ZodError) {
-					throw this.formatAllZodErrors(error, settingsPath)
-				}
-				throw error
+			// Basic validation: ensure parsed content is an object
+			if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+				throw new Error(
+					`Settings validation failed at ${settingsPath}:\n  - root: Expected object, received ${Array.isArray(parsed) ? 'array' : typeof parsed}`,
+				)
 			}
+
+			// Return parsed content (detailed validation happens after merge)
+			return parsed as Partial<HatchboxSettings>
 		} catch (error) {
 			// File not found is not an error - return empty settings
 			if ((error as { code?: string }).code === 'ENOENT') {
@@ -191,9 +221,71 @@ export class SettingsManager {
 				return {}
 			}
 
-			// Re-throw validation or parsing errors
+			// Re-throw parsing errors
 			throw error
 		}
+	}
+
+	/**
+	 * Deep merge two settings objects with priority to override
+	 * Arrays are replaced, not concatenated
+	 */
+	private mergeSettings(
+		base: Partial<HatchboxSettings>,
+		override: Partial<HatchboxSettings>,
+	): HatchboxSettings {
+		// Start with base settings
+		const merged = { ...base }
+
+		// Merge top-level primitive fields
+		if (override.mainBranch !== undefined) {
+			merged.mainBranch = override.mainBranch
+		}
+		if (override.worktreePrefix !== undefined) {
+			merged.worktreePrefix = override.worktreePrefix
+		}
+		if (override.protectedBranches !== undefined) {
+			merged.protectedBranches = override.protectedBranches
+		}
+
+		// Deep merge workflows
+		if (override.workflows !== undefined) {
+			merged.workflows = {
+				...base.workflows,
+				...override.workflows,
+				issue:
+					override.workflows.issue !== undefined
+						? { ...base.workflows?.issue, ...override.workflows.issue }
+						: base.workflows?.issue,
+				pr:
+					override.workflows.pr !== undefined
+						? { ...base.workflows?.pr, ...override.workflows.pr }
+						: base.workflows?.pr,
+				regular:
+					override.workflows.regular !== undefined
+						? { ...base.workflows?.regular, ...override.workflows.regular }
+						: base.workflows?.regular,
+			}
+		}
+
+		// Deep merge agents
+		if (override.agents !== undefined) {
+			merged.agents = { ...base.agents, ...override.agents }
+		}
+
+		// Deep merge capabilities
+		if (override.capabilities !== undefined) {
+			merged.capabilities = {
+				...base.capabilities,
+				...override.capabilities,
+				web:
+					override.capabilities.web !== undefined
+						? { ...base.capabilities?.web, ...override.capabilities.web }
+						: base.capabilities?.web,
+			}
+		}
+
+		return merged as HatchboxSettings
 	}
 
 	/**
@@ -232,13 +324,6 @@ export class SettingsManager {
 	 */
 	private getProjectRoot(projectRoot?: string): string {
 		return projectRoot ?? process.cwd()
-	}
-
-	/**
-	 * Get settings file path
-	 */
-	private getSettingsPath(projectRoot: string): string {
-		return path.join(projectRoot, '.hatchbox', 'settings.json')
 	}
 
 	/**

@@ -635,14 +635,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.noVerify).toBe(true)
@@ -659,14 +652,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.pr?.noVerify).toBe(false)
@@ -682,14 +668,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.noVerify).toBeUndefined()
@@ -706,14 +685,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*workflows\.issue\.noVerify[\s\S]*Expected boolean, received string/,
@@ -739,14 +711,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.noVerify).toBe(true)
@@ -770,14 +735,7 @@ describe('SettingsManager', () => {
 				mainBranch: 'develop',
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.permissionMode).toBe('bypassPermissions')
@@ -801,14 +759,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.permissionMode).toBe('plan')
@@ -825,14 +776,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.pr?.permissionMode).toBe('acceptEdits')
@@ -851,14 +795,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities?.web?.basePort).toBe(8080)
@@ -874,14 +811,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities?.web?.basePort).toBe(3000)
@@ -897,14 +827,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities?.web?.basePort).toBe(65535)
@@ -920,14 +843,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities?.web?.basePort).toBe(1)
@@ -943,14 +859,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities?.web?.basePort).toBe(80)
@@ -966,14 +875,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*capabilities\.web\.basePort[\s\S]*Base port must be >= 1/,
@@ -990,14 +892,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*capabilities\.web\.basePort[\s\S]*Base port must be <= 65535/,
@@ -1014,14 +909,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*capabilities\.web\.basePort[\s\S]*Expected number, received string/,
@@ -1034,14 +922,7 @@ describe('SettingsManager', () => {
 				mainBranch: 'main',
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities?.web?.basePort).toBeUndefined()
@@ -1054,14 +935,7 @@ describe('SettingsManager', () => {
 				agents: {},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities).toBeUndefined()
@@ -1088,14 +962,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.mainBranch).toBe('develop')
@@ -1118,14 +985,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.startIde).toBe(true)
@@ -1145,14 +1005,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.startIde).toBe(false)
@@ -1172,14 +1025,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.startIde).toBe(true)
@@ -1197,14 +1043,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.startIde).toBe(true)
@@ -1234,14 +1073,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.startIde).toBe(true)
@@ -1265,14 +1097,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*workflows\.issue\.startIde[\s\S]*Expected boolean, received string/,
@@ -1289,14 +1114,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*workflows\.issue\.startDevServer[\s\S]*Expected boolean, received number/,
@@ -1313,14 +1131,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*workflows\.issue\.startAiAgent[\s\S]*Expected boolean/,
@@ -1341,14 +1152,7 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.permissionMode).toBe('bypassPermissions')
@@ -1591,9 +1395,7 @@ describe('SettingsManager', () => {
 				code: 'ENOENT',
 				message: 'ENOENT: no such file or directory',
 			}
-			vi.mocked(readFile)
-				.mockRejectedValueOnce(error) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockRejectedValueOnce(error)
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1607,14 +1409,7 @@ describe('SettingsManager', () => {
 				mainBranch: 'develop',
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1629,14 +1424,7 @@ describe('SettingsManager', () => {
 				protectedBranches: ['production', 'staging'],
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1651,14 +1439,7 @@ describe('SettingsManager', () => {
 				protectedBranches: ['main', 'production', 'staging'],
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1673,14 +1454,7 @@ describe('SettingsManager', () => {
 				protectedBranches: ['main', 'master', 'production'],
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1695,14 +1469,7 @@ describe('SettingsManager', () => {
 				protectedBranches: [],
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1716,14 +1483,7 @@ describe('SettingsManager', () => {
 				protectedBranches: ['production'],
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.getProtectedBranches()
 
@@ -1738,14 +1498,7 @@ describe('SettingsManager', () => {
 				protectedBranches: ['main', 'develop'],
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1760,14 +1513,7 @@ describe('SettingsManager', () => {
 				protectedBranches: ['production', 'main', 'staging'],
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1782,14 +1528,7 @@ describe('SettingsManager', () => {
 				protectedBranches: ['production', 'staging', 'main'],
 			}
 
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-
-			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(settings))
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
