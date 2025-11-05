@@ -25,10 +25,12 @@ First, determine which mode to operate in by checking if the user input contains
 
 ### Step 3: Assess Existing Quality (Idempotency Check)
 Before proceeding with analysis, check if the input is already thorough and well-structured. Consider it "thorough enough" if it meets ALL of these criteria:
+- **Content Topic**: IMPORTANT: Check that the input is actualy a description of the issue - just because it meets the criteria below does not mean it's actually an issue. If it appears to be something other than a description (with repro steps, impact etc etc), then it is not enhanced and you must enhance it.
 - **Length**: More than 250 words
 - **Structure**: Contains clear organization (sections, bullet points, numbered lists, or distinct paragraphs)
 - **Key Information Present**: Includes a clear problem description, context, and impact/reproduction details
 - **Not Minimal**: More than just a one-liner or vague complaint
+
 
 **If Already Thorough**:
 - **GitHub Issue Mode**: Return a message indicating the issue is already well-documented WITHOUT creating a comment:
