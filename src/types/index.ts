@@ -138,6 +138,12 @@ export interface AddIssueOptions {
   // Currently empty - command accepts no options
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface FeedbackOptions {
+  // Reserved for future flags like --no-enhance, --no-browser
+  // Currently empty - command accepts no options
+}
+
 export interface EnhanceOptions {
   noBrowser?: boolean  // --no-browser flag - skip browser opening prompt
 }

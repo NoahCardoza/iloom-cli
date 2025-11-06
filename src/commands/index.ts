@@ -4,6 +4,9 @@ export type { StartCommandInput, ParsedInput } from './start.js'
 export { AddIssueCommand } from './add-issue.js'
 export type { AddIssueCommandInput } from './add-issue.js'
 
+export { FeedbackCommand } from './feedback.js'
+export type { FeedbackCommandInput } from './feedback.js'
+
 export { EnhanceCommand } from './enhance.js'
 export type { EnhanceCommandInput, EnhanceOptions } from './enhance.js'
 

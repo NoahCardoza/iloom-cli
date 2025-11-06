@@ -230,7 +230,9 @@ describe('IssueEnhancementService', () => {
 
 			expect(mockGitHubService.createIssue).toHaveBeenCalledWith(
 				originalDescription,
-				enhancedDescription
+				enhancedDescription,
+				undefined,
+				undefined
 			)
 		})
 
@@ -282,7 +284,7 @@ describe('IssueEnhancementService', () => {
 
 				await service.waitForReviewAndOpen(issueNumber)
 
-				expect(mockGitHubService.getIssueUrl).toHaveBeenCalledWith(issueNumber)
+				expect(mockGitHubService.getIssueUrl).toHaveBeenCalledWith(issueNumber, undefined)
 			})
 
 			it('should wait for keypress before opening browser', async () => {

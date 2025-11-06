@@ -146,6 +146,27 @@ program
   })
 
 program
+  .command('feedback')
+  .alias('f')
+  .description('Submit feedback/bug report to hatchbox-cli repository')
+  .argument('<description>', 'Natural language description of feedback (>50 chars, >2 spaces)')
+  .action(async (description: string) => {
+    try {
+      const { FeedbackCommand } = await import('./commands/feedback.js')
+      const command = new FeedbackCommand()
+      const issueNumber = await command.execute({
+        description,
+        options: {}
+      })
+      logger.success(`Feedback submitted as issue #${issueNumber} in hatchbox-cli repository`)
+      process.exit(0)
+    } catch (error) {
+      logger.error(`Failed to submit feedback: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
   .command('enhance')
   .description('Apply enhancement agent to existing GitHub issue')
   .argument('<issue-number>', 'GitHub issue number to enhance', parseInt)

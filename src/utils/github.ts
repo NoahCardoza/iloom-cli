@@ -64,17 +64,24 @@ export async function hasProjectScope(): Promise<boolean> {
 
 // Issue fetching
 export async function fetchGhIssue(
-	issueNumber: number
+	issueNumber: number,
+	repo?: string
 ): Promise<GitHubIssue> {
-	logger.debug('Fetching GitHub issue', { issueNumber })
+	logger.debug('Fetching GitHub issue', { issueNumber, repo })
 
-	return executeGhCommand<GitHubIssue>([
+	const args = [
 		'issue',
 		'view',
 		String(issueNumber),
 		'--json',
 		'number,title,body,state,labels,assignees,url,createdAt,updatedAt',
-	])
+	]
+
+	if (repo) {
+		args.push('--repo', repo)
+	}
+
+	return executeGhCommand<GitHubIssue>(args)
 }
 
 // PR fetching
@@ -236,26 +243,49 @@ interface IssueCreateResponse {
  * Create a new GitHub issue
  * @param title - The issue title
  * @param body - The issue body (markdown supported)
+ * @param options - Optional configuration
+ * @param options.repo - Repository in format "owner/repo" (uses current repo if not provided)
+ * @param options.labels - Array of label names to add to the issue
  * @returns Issue metadata including number and URL
  */
 export async function createIssue(
 	title: string,
-	body: string
+	body: string,
+	options?: { repo?: string | undefined; labels?: string[] | undefined }
 ): Promise<IssueCreateResponse> {
-	logger.debug('Creating GitHub issue', { title })
+	const { repo, labels } = options ?? {}
 
-	const result = await execa('gh', [
+	logger.debug('Creating GitHub issue', { title, repo, labels })
+
+	const args = [
 		'issue',
 		'create',
 		'--title',
 		title,
 		'--body',
 		body,
-	], {
-		cwd: process.cwd(),
+	]
+
+	// Add repo if provided
+	if (repo) {
+		args.splice(2, 0, '--repo', repo)
+	}
+
+	// Add labels if provided
+	if (labels && labels.length > 0) {
+		args.push('--label', labels.join(','))
+	}
+
+	const execaOptions: { timeout: number; encoding: 'utf8'; cwd?: string } = {
 		timeout: 30000,
 		encoding: 'utf8',
-	})
+	}
+
+	if (!repo) {
+		execaOptions.cwd = process.cwd()
+	}
+
+	const result = await execa('gh', args, execaOptions)
 
 	// Parse the URL from the output (format: "https://github.com/owner/repo/issues/123")
 	const urlMatch = result.stdout.trim().match(/https:\/\/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/)
@@ -270,6 +300,24 @@ export async function createIssue(
 		number: issueNumber,
 		url: issueUrl,
 	}
+}
+
+/**
+ * @deprecated Use createIssue with options.repo instead
+ * Create a new GitHub issue in a specific repository
+ * @param title - Issue title
+ * @param body - Issue body (markdown)
+ * @param repository - Repository in format "owner/repo"
+ * @param labels - Optional array of label names to add to the issue
+ * @returns Issue number and URL
+ */
+export async function createIssueInRepo(
+	title: string,
+	body: string,
+	repository: string,
+	labels?: string[]
+): Promise<IssueCreateResponse> {
+	return createIssue(title, body, { repo: repository, labels })
 }
 
 // GitHub Comment Operations

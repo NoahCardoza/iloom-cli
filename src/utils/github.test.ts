@@ -622,6 +622,107 @@ describe('github utils', () => {
 			)
 		})
 
+		it('should create GitHub issue with labels', async () => {
+			const issueUrl = 'https://github.com/owner/repo/issues/124'
+
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: issueUrl,
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await createIssue('Test', 'Body', { labels: ['bug', 'enhancement'] })
+
+			expect(result).toEqual({
+				number: 124,
+				url: issueUrl
+			})
+			expect(execa).toHaveBeenCalledWith(
+				'gh',
+				[
+					'issue',
+					'create',
+					'--title',
+					'Test',
+					'--body',
+					'Body',
+					'--label',
+					'bug,enhancement'
+				],
+				expect.any(Object)
+			)
+		})
+
+		it('should create GitHub issue in specific repository', async () => {
+			const issueUrl = 'https://github.com/other-owner/other-repo/issues/125'
+
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: issueUrl,
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await createIssue('Test', 'Body', { repo: 'other-owner/other-repo' })
+
+			expect(result).toEqual({
+				number: 125,
+				url: issueUrl
+			})
+			expect(execa).toHaveBeenCalledWith(
+				'gh',
+				[
+					'issue',
+					'create',
+					'--repo',
+					'other-owner/other-repo',
+					'--title',
+					'Test',
+					'--body',
+					'Body'
+				],
+				expect.objectContaining({
+					timeout: 30000,
+					encoding: 'utf8'
+				})
+			)
+		})
+
+		it('should create GitHub issue with both repo and labels', async () => {
+			const issueUrl = 'https://github.com/other-owner/other-repo/issues/126'
+
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: issueUrl,
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await createIssue('Test', 'Body', {
+				repo: 'other-owner/other-repo',
+				labels: ['bug']
+			})
+
+			expect(result).toEqual({
+				number: 126,
+				url: issueUrl
+			})
+			expect(execa).toHaveBeenCalledWith(
+				'gh',
+				[
+					'issue',
+					'create',
+					'--repo',
+					'other-owner/other-repo',
+					'--title',
+					'Test',
+					'--body',
+					'Body',
+					'--label',
+					'bug'
+				],
+				expect.any(Object)
+			)
+		})
+
 		it('should handle multiline issue body', async () => {
 			const issueUrl = 'https://github.com/owner/repo/issues/456'
 

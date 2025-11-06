@@ -27,7 +27,7 @@
 *These companies and projects do not endorse Hatchbox AI.*
 
 ### Links to key sections
-[How It Works](#how-it-works) • [Installation](#installation) • [Commands](#commands) • [Limitations](#platform--integration-support) • [Configuration](#configuration)
+[How It Works](#how-it-works) • [Installation](#installation) • [Commands](#commands) • [Feedback](#providing-feedback) • [Limitations](#platform--integration-support) • [Configuration](#configuration)
 
 ## A Very Modern Problem
 
@@ -317,6 +317,32 @@ hb enhance <issue-number>
 # Apply AI enhancement agent to existing GitHub issue
 # Expands requirements and adds implementation context
 ```
+
+## Providing Feedback
+
+Found a bug, have a feature request, or want to contribute ideas to improve Hatchbox CLI? Submit feedback directly from your terminal.
+
+```bash
+hb feedback <description>
+# Submit feedback/bug report to hatchbox-cli repository
+# Alias: f
+# Example: hb feedback "Add support for Linear issue tracking"
+# Example: hb feedback "The worktree cleanup seems to leave temp files behind"
+```
+
+**What happens when you run `hb feedback`:**
+
+1. **AI Enhancement**: Your feedback gets enhanced by Claude to provide clear context and actionable details
+2. **Issue Creation**: Creates a new issue in the [hatchbox-cli repository](https://github.com/hatchbox-ai/hatchbox-cli)
+3. **Browser Opening**: Opens the created issue in your browser for you to review and add additional context
+
+**Open the browser to provide additional context. Please:**
+- Be specific about what you expected vs. what happened
+- Include your environment details if reporting a bug (OS, Node version, etc.)
+- Mention the command or workflow that had issues
+- Suggest improvements or alternative approaches if you have ideas
+
+Your feedback helps make Hatchbox better for everyone! Issues created through `hb feedback` are prioritized and reviewed regularly.
 
 ### Setup
 

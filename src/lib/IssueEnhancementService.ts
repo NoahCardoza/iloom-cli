@@ -83,17 +83,23 @@ Your response should be the raw markdown that will become the GitHub issue body.
 	 * Creates a GitHub issue with title and enhanced body.
 	 * @param originalDescription - Used as the issue title
 	 * @param enhancedDescription - Used as the issue body
+	 * @param repository - Optional repository override (format: "owner/repo")
+	 * @param labels - Optional array of label names to add to the issue
 	 * @returns Issue number and URL
 	 */
 	public async createEnhancedIssue(
 		originalDescription: string,
-		enhancedDescription: string
+		enhancedDescription: string,
+		repository?: string,
+		labels?: string[]
 	): Promise<{ number: number; url: string }> {
 		logger.info('Creating GitHub issue from description...')
 
 		const result = await this.gitHubService.createIssue(
 			originalDescription,  // Use original description as title
-			enhancedDescription  // Use enhanced description as body
+			enhancedDescription,  // Use enhanced description as body
+			repository,
+			labels
 		)
 
 		return result
@@ -103,10 +109,11 @@ Your response should be the raw markdown that will become the GitHub issue body.
 	 * Waits for user keypress and opens issue in browser for review.
 	 * @param issueNumber - Issue number to open for review
 	 * @param confirm - If true, wait for additional keypress after opening browser before returning
+	 * @param repository - Optional repository to fetch issue from (format: "owner/repo")
 	 */
-	public async waitForReviewAndOpen(issueNumber: number, confirm = false): Promise<void> {
+	public async waitForReviewAndOpen(issueNumber: number, confirm = false, repository?: string): Promise<void> {
 		// Get issue URL
-		const issueUrl = await this.gitHubService.getIssueUrl(issueNumber)
+		const issueUrl = await this.gitHubService.getIssueUrl(issueNumber, repository)
 
 		// Display message and wait for first keypress
 		const message = `Created issue #${issueNumber}.

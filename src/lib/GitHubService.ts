@@ -205,15 +205,17 @@ export class GitHubService {
 	// Issue creation
 	public async createIssue(
 		title: string,
-		body: string
+		body: string,
+		repository?: string,
+		labels?: string[]
 	): Promise<{ number: number; url: string }> {
 		// logger.info('Creating GitHub issue', { title })
-		return createIssue(title, body)
+		return createIssue(title, body, { repo: repository, labels })
 	}
 
-	public async getIssueUrl(issueNumber: number): Promise<string> {
-		logger.debug('Fetching issue URL', { issueNumber })
-		const issue = await fetchGhIssue(issueNumber)
+	public async getIssueUrl(issueNumber: number, repo?: string): Promise<string> {
+		logger.debug('Fetching issue URL', { issueNumber, repo })
+		const issue = await fetchGhIssue(issueNumber, repo)
 		return issue.url
 	}
 

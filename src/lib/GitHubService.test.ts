@@ -476,7 +476,7 @@ describe('GitHubService', () => {
 			const result = await service.createIssue('Test title', 'Test body')
 
 			expect(result).toEqual(issueData)
-			expect(githubUtils.createIssue).toHaveBeenCalledWith('Test title', 'Test body')
+			expect(githubUtils.createIssue).toHaveBeenCalledWith('Test title', 'Test body', { repo: undefined, labels: undefined })
 		})
 
 		it('should handle issue creation errors', async () => {
@@ -507,7 +507,7 @@ describe('GitHubService', () => {
 			const url = await service.getIssueUrl(123)
 
 			expect(url).toBe('https://github.com/owner/repo/issues/123')
-			expect(githubUtils.fetchGhIssue).toHaveBeenCalledWith(123)
+			expect(githubUtils.fetchGhIssue).toHaveBeenCalledWith(123, undefined)
 		})
 
 		it('should handle fetch errors', async () => {
