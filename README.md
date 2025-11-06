@@ -518,7 +518,6 @@ Hatchbox provides first-class support for Node.js web applications (next/express
 
 > hb finish
 # ✅ Runs `pnpm test` (fails if tests fail)
-# ✅ Runs `pnpm build` (fails if build fails)
 # ✅ Runs `pnpm typecheck` if configured
 # ✅ Runs `pnpm lint` if configured
 # ✅ AI assists with any failures automatically
