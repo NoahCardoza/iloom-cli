@@ -9,5 +9,10 @@
       "startDevServer": true,
       "startAiAgent": true      
     }
+  },
+  "agents": {
+    "hatchbox-issue-implementer": {
+      "model": "haiku"
+    }
   }
 }
