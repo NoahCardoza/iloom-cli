@@ -12,6 +12,19 @@ Hatchbox AI is a TypeScript CLI tool that converts existing bash workflow script
 * When catching exceptions and returning objects or throwing new exceptions, you must be very specific about the circumstances in which you are doing that. You must explicitly check for the expected error class, message (or substring) or code before returning an object or throwing a new error. Failure to do this effectively swallows the error.
 * Use pnpm as your package manager. Don't use npm.
 
+### Documentation Requirements
+
+**IMPORTANT: When adding features or configuration options, you MUST update README.md**:
+
+- **New CLI commands**: Add to the command reference section with usage examples
+- **New configuration options**: Document in the configuration section with default values and examples
+- **New environment variables**: Add to the environment variables section
+- **New flags or options**: Update the relevant command documentation
+- **Breaking changes**: Clearly mark and explain migration steps
+- **New dependencies or integrations**: Document setup and usage
+
+The README.md is the primary user-facing documentation. Keeping it synchronized ensures users can discover and use new features without diving into the code.
+
 **Core Commands**:
 
 - `hb start <issue-number>` - Create isolated workspace for an issue/PR
