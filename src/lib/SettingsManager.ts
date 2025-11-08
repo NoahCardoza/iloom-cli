@@ -38,6 +38,10 @@ export const WorkflowPermissionSchema = z.object({
 		.boolean()
 		.default(true)
 		.describe('Launch Claude AI agent when starting this workflow type'),
+	startTerminal: z
+		.boolean()
+		.default(false)
+		.describe('Launch terminal window without dev server when starting this workflow type'),
 })
 
 /**

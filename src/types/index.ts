@@ -128,6 +128,7 @@ export interface StartOptions {
   claude?: boolean
   code?: boolean
   devServer?: boolean
+  terminal?: boolean
   // One-shot automation mode
   oneShot?: OneShotMode
 }

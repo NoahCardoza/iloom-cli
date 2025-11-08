@@ -161,12 +161,13 @@ export class HatchboxManager {
     const enableClaude = input.options?.enableClaude !== false
     const enableCode = input.options?.enableCode !== false
     const enableDevServer = input.options?.enableDevServer !== false
+    const enableTerminal = input.options?.enableTerminal ?? false
     const oneShot = input.options?.oneShot ?? 'default'
     const setArguments = input.options?.setArguments
     const executablePath = input.options?.executablePath
 
     // Only launch if at least one component is enabled
-    if (enableClaude || enableCode || enableDevServer) {
+    if (enableClaude || enableCode || enableDevServer || enableTerminal) {
       const { HatchboxLauncher } = await import('./HatchboxLauncher.js')
       const { ClaudeContextManager } = await import('./ClaudeContextManager.js')
 
@@ -178,6 +179,7 @@ export class HatchboxManager {
         enableClaude,
         enableCode,
         enableDevServer,
+        enableTerminal,
         worktreePath,
         branchName,
         port,
@@ -588,11 +590,12 @@ export class HatchboxManager {
     const enableClaude = input.options?.enableClaude !== false
     const enableCode = input.options?.enableCode !== false
     const enableDevServer = input.options?.enableDevServer !== false
+    const enableTerminal = input.options?.enableTerminal ?? false
     const oneShot = input.options?.oneShot ?? 'default'
     const setArguments = input.options?.setArguments
     const executablePath = input.options?.executablePath
 
-    if (enableClaude || enableCode || enableDevServer) {
+    if (enableClaude || enableCode || enableDevServer || enableTerminal) {
       logger.info('Launching workspace components...')
       const { HatchboxLauncher } = await import('./HatchboxLauncher.js')
       const { ClaudeContextManager } = await import('./ClaudeContextManager.js')
@@ -605,6 +608,7 @@ export class HatchboxManager {
         enableClaude,
         enableCode,
         enableDevServer,
+        enableTerminal,
         worktreePath,
         branchName,
         port,

@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { openTerminalWindow, openDualTerminalWindow } from '../utils/terminal.js'
+import { openTerminalWindow, openMultipleTerminalWindows } from '../utils/terminal.js'
+import type { TerminalWindowOptions } from '../utils/terminal.js'
 import { openVSCodeWindow } from '../utils/vscode.js'
 import { getDevServerLaunchCommand } from '../utils/dev-server.js'
 import { generateColorFromBranchName } from '../utils/color.js'
@@ -12,6 +13,7 @@ export interface LaunchHatchboxOptions {
 	enableClaude: boolean
 	enableCode: boolean
 	enableDevServer: boolean
+	enableTerminal: boolean
 	worktreePath: string
 	branchName: string
 	port?: number
@@ -38,9 +40,9 @@ export class HatchboxLauncher {
 	 * Launch hatchbox components based on individual flags
 	 */
 	async launchHatchbox(options: LaunchHatchboxOptions): Promise<void> {
-		const { enableClaude, enableCode, enableDevServer } = options
+		const { enableClaude, enableCode, enableDevServer, enableTerminal } = options
 
-		logger.debug(`Launching hatchbox components: Claude=${enableClaude}, Code=${enableCode}, DevServer=${enableDevServer}`)
+		logger.debug(`Launching hatchbox components: Claude=${enableClaude}, Code=${enableCode}, DevServer=${enableDevServer}, Terminal=${enableTerminal}`)
 
 		const launchPromises: Promise<void>[] = []
 
@@ -50,20 +52,53 @@ export class HatchboxLauncher {
 			launchPromises.push(this.launchVSCode(options))
 		}
 
-		// Launch terminal if Claude or dev server is enabled
-		if (enableClaude || enableDevServer) {
-			if (enableClaude && enableDevServer) {
-				// Both Claude and dev server - launch dual terminals
-				logger.debug('Launching dual terminals: Claude + dev server')
-				launchPromises.push(this.launchDualTerminals(options))
-			} else if (enableClaude) {
-				// Claude only
-				logger.debug('Launching Claude terminal')
+		// Build array of terminals to launch
+		const terminalsToLaunch: Array<{
+			type: 'claude' | 'devServer' | 'terminal'
+			options: TerminalWindowOptions
+		}> = []
+
+		if (enableClaude) {
+			terminalsToLaunch.push({
+				type: 'claude',
+				options: await this.buildClaudeTerminalOptions(options),
+			})
+		}
+
+		if (enableDevServer) {
+			terminalsToLaunch.push({
+				type: 'devServer',
+				options: await this.buildDevServerTerminalOptions(options),
+			})
+		}
+
+		if (enableTerminal) {
+			terminalsToLaunch.push({
+				type: 'terminal',
+				options: this.buildStandaloneTerminalOptions(options),
+			})
+		}
+
+		// Launch terminals based on count
+		if (terminalsToLaunch.length > 1) {
+			// Multiple terminals - launch as tabs in single window
+			logger.debug(`Launching ${terminalsToLaunch.length} terminals in single window`)
+			launchPromises.push(this.launchMultipleTerminals(terminalsToLaunch, options))
+		} else if (terminalsToLaunch.length === 1) {
+			// Single terminal - launch standalone
+			const terminal = terminalsToLaunch[0]
+			if (!terminal) {
+				throw new Error('Terminal configuration is undefined')
+			}
+			const terminalType = terminal.type
+			logger.debug(`Launching single ${terminalType} terminal`)
+
+			if (terminalType === 'claude') {
 				launchPromises.push(this.launchClaudeTerminal(options))
-			} else {
-				// Dev server only
-				logger.debug('Launching dev server terminal')
+			} else if (terminalType === 'devServer') {
 				launchPromises.push(this.launchDevServerTerminal(options))
+			} else {
+				launchPromises.push(this.launchStandaloneTerminal(options))
 			}
 		}
 
@@ -122,10 +157,52 @@ export class HatchboxLauncher {
 	}
 
 	/**
-	 * Launch dual terminals: Claude + dev server
-	 * Uses iTerm2 with tabs if available, otherwise falls back to separate Terminal.app windows
+	 * Launch standalone terminal (no command, just workspace with env vars)
 	 */
-	private async launchDualTerminals(options: LaunchHatchboxOptions): Promise<void> {
+	private async launchStandaloneTerminal(options: LaunchHatchboxOptions): Promise<void> {
+		const colorData = generateColorFromBranchName(options.branchName)
+
+		await openTerminalWindow({
+			workspacePath: options.worktreePath,
+			backgroundColor: colorData.rgb,
+			includeEnvSetup: existsSync(join(options.worktreePath, '.env')),
+			includePortExport: options.capabilities.includes('web'),
+			...(options.port !== undefined && { port: options.port }),
+		})
+		logger.info('Standalone terminal opened')
+	}
+
+	/**
+	 * Build terminal options for Claude
+	 */
+	private async buildClaudeTerminalOptions(
+		options: LaunchHatchboxOptions
+	): Promise<TerminalWindowOptions> {
+		const colorData = generateColorFromBranchName(options.branchName)
+		const hasEnvFile = existsSync(join(options.worktreePath, '.env'))
+		const claudeTitle = `Claude - ${this.formatIdentifier(options.workflowType, options.identifier)}`
+
+		let claudeCommand = 'hb ignite'
+		if (options.oneShot !== undefined && options.oneShot !== 'default') {
+			claudeCommand += ` --one-shot=${options.oneShot}`
+		}
+
+		return {
+			workspacePath: options.worktreePath,
+			command: claudeCommand,
+			backgroundColor: colorData.rgb,
+			title: claudeTitle,
+			includeEnvSetup: hasEnvFile,
+			...(options.port !== undefined && { port: options.port, includePortExport: true }),
+		}
+	}
+
+	/**
+	 * Build terminal options for dev server
+	 */
+	private async buildDevServerTerminalOptions(
+		options: LaunchHatchboxOptions
+	): Promise<TerminalWindowOptions> {
 		const colorData = generateColorFromBranchName(options.branchName)
 		const devServerCommand = await getDevServerLaunchCommand(
 			options.worktreePath,
@@ -133,39 +210,52 @@ export class HatchboxLauncher {
 			options.capabilities
 		)
 		const hasEnvFile = existsSync(join(options.worktreePath, '.env'))
-
-		// Generate tab titles based on workflow type
-		const claudeTitle = `Claude - ${this.formatIdentifier(options.workflowType, options.identifier)}`
 		const devServerTitle = `Dev Server - ${this.formatIdentifier(options.workflowType, options.identifier)}`
 
-		// Build launch command for Claude
-		let claudeCommand = "hb ignite"
-		if (options.oneShot !== undefined && options.oneShot !== 'default') {
-			claudeCommand += ` --one-shot=${options.oneShot}`
+		return {
+			workspacePath: options.worktreePath,
+			command: devServerCommand,
+			backgroundColor: colorData.rgb,
+			title: devServerTitle,
+			includeEnvSetup: hasEnvFile,
+			includePortExport: options.capabilities.includes('web'),
+			...(options.port !== undefined && { port: options.port }),
 		}
+	}
 
-		// Launch dual terminals (iTerm2 tabs or separate Terminal.app windows)
-		await openDualTerminalWindow(
-			{
-				workspacePath: options.worktreePath,
-				command: claudeCommand,
-				backgroundColor: colorData.rgb,
-				title: claudeTitle,
-				includeEnvSetup: hasEnvFile,
-				...(options.port !== undefined && { port: options.port, includePortExport: true }),
-			},
-			{
-				workspacePath: options.worktreePath,
-				command: devServerCommand,
-				backgroundColor: colorData.rgb,
-				title: devServerTitle,
-				includeEnvSetup: hasEnvFile,
-				includePortExport: options.capabilities.includes('web'),
-				...(options.port !== undefined && { port: options.port }),
-			}
-		)
+	/**
+	 * Build terminal options for standalone terminal (no command)
+	 */
+	private buildStandaloneTerminalOptions(
+		options: LaunchHatchboxOptions
+	): TerminalWindowOptions {
+		const colorData = generateColorFromBranchName(options.branchName)
+		const hasEnvFile = existsSync(join(options.worktreePath, '.env'))
+		const terminalTitle = `Terminal - ${this.formatIdentifier(options.workflowType, options.identifier)}`
 
-		logger.info('Dual terminals opened: Claude + dev server')
+		return {
+			workspacePath: options.worktreePath,
+			backgroundColor: colorData.rgb,
+			title: terminalTitle,
+			includeEnvSetup: hasEnvFile,
+			includePortExport: options.capabilities.includes('web'),
+			...(options.port !== undefined && { port: options.port }),
+		}
+	}
+
+	/**
+	 * Launch multiple terminals (2+) as tabs in single window
+	 */
+	private async launchMultipleTerminals(
+		terminals: Array<{ type: string; options: TerminalWindowOptions }>,
+		_options: LaunchHatchboxOptions
+	): Promise<void> {
+		const terminalOptions = terminals.map((t) => t.options)
+
+		await openMultipleTerminalWindows(terminalOptions)
+
+		const terminalTypes = terminals.map((t) => t.type).join(' + ')
+		logger.info(`Multiple terminals opened: ${terminalTypes}`)
 	}
 
 	/**

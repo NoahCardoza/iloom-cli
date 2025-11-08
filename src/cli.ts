@@ -96,6 +96,8 @@ program
   .option('--no-code', 'Disable VSCode')
   .option('--dev-server', 'Enable dev server in terminal (default: true)')
   .option('--no-dev-server', 'Disable dev server')
+  .option('--terminal', 'Enable terminal without dev server (default: false)')
+  .option('--no-terminal', 'Disable terminal')
   .addOption(
     new Option('--one-shot <mode>', 'One-shot automation mode')
       .choices(['default', 'noReview', 'bypassPermissions'])

@@ -188,24 +188,31 @@ function buildCommandSequence(options: TerminalWindowOptions): string {
 }
 
 /**
- * Build iTerm2 AppleScript for dual tabs in single window
+ * Build iTerm2 AppleScript for multiple tabs (2+) in single window
  */
-function buildITerm2DualTabScript(
-	options1: TerminalWindowOptions,
-	options2: TerminalWindowOptions
+function buildITerm2MultiTabScript(
+	optionsArray: TerminalWindowOptions[]
 ): string {
-	const command1 = buildCommandSequence(options1)
-	const command2 = buildCommandSequence(options2)
+	if (optionsArray.length < 2) {
+		throw new Error('buildITerm2MultiTabScript requires at least 2 terminal options')
+	}
 
 	let script = 'tell application id "com.googlecode.iterm2"\n'
 	script += '  create window with default profile\n'
 	script += '  set newWindow to current window\n'
+
+	// First tab
+	const options1 = optionsArray[0]
+	if (!options1) {
+		throw new Error('First terminal option is undefined')
+	}
+	const command1 = buildCommandSequence(options1)
+
 	script += '  set s1 to current session of newWindow\n\n'
 
 	// Set background color for first tab
 	if (options1.backgroundColor) {
 		const { r, g, b } = options1.backgroundColor
-		// Convert 8-bit RGB (0-255) to 16-bit RGB (0-65535)
 		script += `  set background color of s1 to {${Math.round(r * 257)}, ${Math.round(g * 257)}, ${Math.round(b * 257)}}\n`
 	}
 
@@ -217,25 +224,34 @@ function buildITerm2DualTabScript(
 		script += `  set name of s1 to "${escapeForAppleScript(options1.title)}"\n\n`
 	}
 
-	// Create second tab
-	script += '  tell newWindow\n'
-	script += '    set newTab to (create tab with default profile)\n'
-	script += '  end tell\n'
-	script += '  set s2 to current session of newTab\n\n'
+	// Subsequent tabs (2, 3, ...)
+	for (let i = 1; i < optionsArray.length; i++) {
+		const options = optionsArray[i]
+		if (!options) {
+			throw new Error(`Terminal option at index ${i} is undefined`)
+		}
+		const command = buildCommandSequence(options)
+		const sessionVar = `s${i + 1}`
 
-	// Set background color for second tab
-	if (options2.backgroundColor) {
-		const { r, g, b } = options2.backgroundColor
-		// Convert 8-bit RGB (0-255) to 16-bit RGB (0-65535)
-		script += `  set background color of s2 to {${Math.round(r * 257)}, ${Math.round(g * 257)}, ${Math.round(b * 257)}}\n`
-	}
+		// Create tab
+		script += '  tell newWindow\n'
+		script += `    set newTab${i} to (create tab with default profile)\n`
+		script += '  end tell\n'
+		script += `  set ${sessionVar} to current session of newTab${i}\n\n`
 
-	// Execute command in second tab
-	script += `  tell s2 to write text "${escapeForAppleScript(command2)}"\n\n`
+		// Set background color
+		if (options.backgroundColor) {
+			const { r, g, b } = options.backgroundColor
+			script += `  set background color of ${sessionVar} to {${Math.round(r * 257)}, ${Math.round(g * 257)}, ${Math.round(b * 257)}}\n`
+		}
 
-	// Set tab title for second tab
-	if (options2.title) {
-		script += `  set name of s2 to "${escapeForAppleScript(options2.title)}"\n\n`
+		// Execute command
+		script += `  tell ${sessionVar} to write text "${escapeForAppleScript(command)}"\n\n`
+
+		// Set tab title
+		if (options.title) {
+			script += `  set name of ${sessionVar} to "${escapeForAppleScript(options.title)}"\n\n`
+		}
 	}
 
 	// Activate iTerm2
@@ -246,14 +262,17 @@ function buildITerm2DualTabScript(
 }
 
 /**
- * Open dual terminal windows/tabs with specified options
- * If iTerm2 is available on macOS, creates single window with two tabs
- * Otherwise falls back to two separate Terminal.app windows
+ * Open multiple terminal windows/tabs (2+) with specified options
+ * If iTerm2 is available on macOS, creates single window with multiple tabs
+ * Otherwise falls back to multiple separate Terminal.app windows
  */
-export async function openDualTerminalWindow(
-	options1: TerminalWindowOptions,
-	options2: TerminalWindowOptions
+export async function openMultipleTerminalWindows(
+	optionsArray: TerminalWindowOptions[]
 ): Promise<void> {
+	if (optionsArray.length < 2) {
+		throw new Error('openMultipleTerminalWindows requires at least 2 terminal options. Use openTerminalWindow for single terminal.')
+	}
+
 	const platform = detectPlatform()
 
 	if (platform !== 'darwin') {
@@ -267,8 +286,8 @@ export async function openDualTerminalWindow(
 	const hasITerm2 = await detectITerm2()
 
 	if (hasITerm2) {
-		// Use iTerm2 with dual tabs in single window
-		const applescript = buildITerm2DualTabScript(options1, options2)
+		// Use iTerm2 with multiple tabs in single window
+		const applescript = buildITerm2MultiTabScript(optionsArray)
 
 		try {
 			await execa('osascript', ['-e', applescript])
@@ -278,13 +297,32 @@ export async function openDualTerminalWindow(
 			)
 		}
 	} else {
-		// Fall back to dual Terminal.app windows
-		await openTerminalWindow(options1)
+		// Fall back to multiple Terminal.app windows
+		for (let i = 0; i < optionsArray.length; i++) {
+			const options = optionsArray[i]
+			if (!options) {
+				throw new Error(`Terminal option at index ${i} is undefined`)
+			}
+			await openTerminalWindow(options)
 
-		// Brief pause to let first terminal initialize
-		// eslint-disable-next-line no-undef
-		await new Promise<void>((resolve) => setTimeout(resolve, 1000))
-
-		await openTerminalWindow(options2)
+			// Brief pause between terminals (except after last one)
+			if (i < optionsArray.length - 1) {
+				// eslint-disable-next-line no-undef
+				await new Promise<void>((resolve) => setTimeout(resolve, 1000))
+			}
+		}
 	}
+}
+
+/**
+ * Open dual terminal windows/tabs with specified options
+ * If iTerm2 is available on macOS, creates single window with two tabs
+ * Otherwise falls back to two separate Terminal.app windows
+ */
+export async function openDualTerminalWindow(
+	options1: TerminalWindowOptions,
+	options2: TerminalWindowOptions
+): Promise<void> {
+	// Delegate to openMultipleTerminalWindows for consistency
+	await openMultipleTerminalWindows([options1, options2])
 }

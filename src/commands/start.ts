@@ -171,11 +171,13 @@ export class StartCommand {
 			const enableClaude = input.options.claude ?? workflowConfig?.startAiAgent ?? true
 			const enableCode = input.options.code ?? workflowConfig?.startIde ?? true
 			const enableDevServer = input.options.devServer ?? workflowConfig?.startDevServer ?? true
+			const enableTerminal = input.options.terminal ?? workflowConfig?.startTerminal ?? false
 
 			logger.debug('Final workflow config values:', {
 				enableClaude,
 				enableCode,
 				enableDevServer,
+				enableTerminal,
 			})
 
 			const hatchbox = await hatchboxManager.createHatchbox({
@@ -186,6 +188,7 @@ export class StartCommand {
 					enableClaude,
 					enableCode,
 					enableDevServer,
+					enableTerminal,
 					...(input.options.oneShot && { oneShot: input.options.oneShot }),
 					...(setArguments.length > 0 && { setArguments }),
 					...(executablePath && { executablePath }),

@@ -387,7 +387,8 @@ This allows teams to share project defaults via `settings.json` while individual
       "permissionMode": "default",
       "startIde": true,
       "startDevServer": true,
-      "startAiAgent": true
+      "startAiAgent": true,
+      "startTerminal": false
     }
   },
   "agents": {

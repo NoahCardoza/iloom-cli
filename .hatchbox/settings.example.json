@@ -10,5 +10,10 @@
     "web": {
       "basePort": 3000
     }
+  },
+  "agents": {
+    "hatchbox-issue-analyzer": {
+      "model": "opus"
+    }
   }
 }

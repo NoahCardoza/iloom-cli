@@ -79,15 +79,29 @@ Configure per-workflow permission modes for Claude CLI. This allows you to contr
 - `bypassPermissions` - Claude will make changes directly without asking (requires `--dangerously-skip-permissions` flag in Claude CLI)
 - `default` - Use Claude CLI's default permission behavior (no flags passed)
 
+**Component launch settings**:
+- `startIde` - Launch IDE (VSCode) when starting workflow (default: true)
+- `startDevServer` - Launch development server in terminal when starting workflow (default: true)
+- `startAiAgent` - Launch Claude AI agent when starting workflow (default: true)
+- `startTerminal` - Launch terminal window without dev server when starting workflow (default: false)
+
 **Example**:
 ```json
 {
   "workflows": {
     "issue": {
-      "permissionMode": "acceptEdits"
+      "permissionMode": "acceptEdits",
+      "startIde": true,
+      "startDevServer": true,
+      "startAiAgent": true,
+      "startTerminal": false
     },
     "pr": {
-      "permissionMode": "plan"
+      "permissionMode": "plan",
+      "startIde": true,
+      "startDevServer": false,
+      "startAiAgent": true,
+      "startTerminal": true
     },
     "regular": {
       "permissionMode": "bypassPermissions"

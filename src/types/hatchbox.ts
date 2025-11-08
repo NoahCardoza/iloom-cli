@@ -34,6 +34,7 @@ export interface CreateHatchboxInput {
     enableClaude?: boolean
     enableCode?: boolean
     enableDevServer?: boolean
+    enableTerminal?: boolean
     // One-shot automation mode
     oneShot?: import('./index.js').OneShotMode
     // Raw --set arguments to forward to ignite

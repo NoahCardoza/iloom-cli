@@ -27,6 +27,7 @@ describe('HatchboxLauncher', () => {
 		enableClaude: true,
 		enableCode: true,
 		enableDevServer: true,
+		enableTerminal: false,
 		worktreePath: '/Users/test/workspace',
 		branchName: 'feat/test-feature',
 		port: 3042,
@@ -62,13 +63,14 @@ describe('HatchboxLauncher', () => {
 					enableClaude: true,
 					enableCode: true,
 					enableDevServer: true,
+					enableTerminal: false,
 				})
 
 				// Should launch VSCode
 				expect(vscode.openVSCodeWindow).toHaveBeenCalledWith(baseOptions.worktreePath)
 
-				// Should launch dual terminals (not individual Claude/terminal calls)
-				expect(terminal.openDualTerminalWindow).toHaveBeenCalled()
+				// Should launch multiple terminals (not individual Claude/terminal calls)
+				expect(terminal.openMultipleTerminalWindows).toHaveBeenCalled()
 				expect(mockClaudeContext.launchWithContext).not.toHaveBeenCalled()
 				expect(terminal.openTerminalWindow).not.toHaveBeenCalled()
 			})
@@ -77,10 +79,11 @@ describe('HatchboxLauncher', () => {
 				await launcher.launchHatchbox({
 					...baseOptions,
 					workflowType: 'pr',
+					enableTerminal: false,
 				})
 
-				// Dual terminals should be launched (not individual Claude call)
-				expect(terminal.openDualTerminalWindow).toHaveBeenCalled()
+				// Multiple terminals should be launched (not individual Claude call)
+				expect(terminal.openMultipleTerminalWindows).toHaveBeenCalled()
 				expect(mockClaudeContext.launchWithContext).not.toHaveBeenCalled()
 			})
 
@@ -88,10 +91,11 @@ describe('HatchboxLauncher', () => {
 				await launcher.launchHatchbox({
 					...baseOptions,
 					workflowType: 'regular',
+					enableTerminal: false,
 				})
 
-				// Dual terminals should be launched (not individual Claude call)
-				expect(terminal.openDualTerminalWindow).toHaveBeenCalled()
+				// Multiple terminals should be launched (not individual Claude call)
+				expect(terminal.openMultipleTerminalWindows).toHaveBeenCalled()
 				expect(mockClaudeContext.launchWithContext).not.toHaveBeenCalled()
 			})
 		})
@@ -103,6 +107,7 @@ describe('HatchboxLauncher', () => {
 					enableClaude: true,
 					enableCode: false,
 					enableDevServer: false,
+					enableTerminal: false,
 				})
 
 				expect(mockClaudeContext.launchWithContext).toHaveBeenCalled()
@@ -116,6 +121,7 @@ describe('HatchboxLauncher', () => {
 					enableClaude: false,
 					enableCode: true,
 					enableDevServer: false,
+					enableTerminal: false,
 				})
 
 				expect(vscode.openVSCodeWindow).toHaveBeenCalledWith(baseOptions.worktreePath)
@@ -133,6 +139,7 @@ describe('HatchboxLauncher', () => {
 					enableClaude: false,
 					enableCode: false,
 					enableDevServer: true,
+					enableTerminal: false,
 				})
 
 				expect(terminal.openTerminalWindow).toHaveBeenCalled()
@@ -146,6 +153,7 @@ describe('HatchboxLauncher', () => {
 					enableClaude: false,
 					enableCode: false,
 					enableDevServer: false,
+					enableTerminal: false,
 				})
 
 				expect(mockClaudeContext.launchWithContext).not.toHaveBeenCalled()
@@ -167,6 +175,7 @@ describe('HatchboxLauncher', () => {
 					enableClaude: true,
 					enableCode: true,
 					enableDevServer: false,
+					enableTerminal: false,
 				})
 
 				expect(mockClaudeContext.launchWithContext).toHaveBeenCalled()
@@ -180,10 +189,11 @@ describe('HatchboxLauncher', () => {
 					enableClaude: true,
 					enableCode: false,
 					enableDevServer: true,
+					enableTerminal: false,
 				})
 
-				// Should use dual terminal window
-				expect(terminal.openDualTerminalWindow).toHaveBeenCalled()
+				// Should use multiple terminal windows
+				expect(terminal.openMultipleTerminalWindows).toHaveBeenCalled()
 				expect(mockClaudeContext.launchWithContext).not.toHaveBeenCalled()
 				expect(terminal.openTerminalWindow).not.toHaveBeenCalled()
 				expect(vscode.openVSCodeWindow).not.toHaveBeenCalled()
@@ -195,6 +205,7 @@ describe('HatchboxLauncher', () => {
 					enableClaude: false,
 					enableCode: true,
 					enableDevServer: true,
+					enableTerminal: false,
 				})
 
 				expect(vscode.openVSCodeWindow).toHaveBeenCalled()
@@ -202,32 +213,34 @@ describe('HatchboxLauncher', () => {
 				expect(mockClaudeContext.launchWithContext).not.toHaveBeenCalled()
 			})
 
-			it('should launch dual terminals when Claude and DevServer both enabled', async () => {
+			it('should launch multiple terminals when Claude and DevServer both enabled', async () => {
 				await launcher.launchHatchbox({
 					...baseOptions,
 					enableClaude: true,
 					enableCode: false,
 					enableDevServer: true,
+					enableTerminal: false,
 				})
 
-				// Should use dual terminal window (single call, not sequential)
-				expect(terminal.openDualTerminalWindow).toHaveBeenCalled()
+				// Should use multiple terminal windows (single call, not sequential)
+				expect(terminal.openMultipleTerminalWindows).toHaveBeenCalled()
 				expect(mockClaudeContext.launchWithContext).not.toHaveBeenCalled()
 				expect(terminal.openTerminalWindow).not.toHaveBeenCalled()
 			})
 
-			it('should not need delay when using dual terminal window', async () => {
-				// With openDualTerminalWindow, both tabs are created in a single AppleScript call
+			it('should not need delay when using multiple terminal windows', async () => {
+				// With openMultipleTerminalWindows, all tabs are created in a single AppleScript call
 				// No need for sequential timing or delays
 				await launcher.launchHatchbox({
 					...baseOptions,
 					enableClaude: true,
 					enableCode: false,
 					enableDevServer: true,
+					enableTerminal: false,
 				})
 
-				// Should use dual terminal window (single synchronous call)
-				expect(terminal.openDualTerminalWindow).toHaveBeenCalled()
+				// Should use multiple terminal windows (single synchronous call)
+				expect(terminal.openMultipleTerminalWindows).toHaveBeenCalled()
 				expect(mockClaudeContext.launchWithContext).not.toHaveBeenCalled()
 				expect(terminal.openTerminalWindow).not.toHaveBeenCalled()
 			})
@@ -238,6 +251,7 @@ describe('HatchboxLauncher', () => {
 					enableClaude: false,
 					enableCode: false,
 					enableDevServer: true,
+					enableTerminal: false,
 					capabilities: ['web'],
 				})
 
@@ -252,6 +266,7 @@ describe('HatchboxLauncher', () => {
 					enableClaude: false,
 					enableCode: false,
 					enableDevServer: true,
+					enableTerminal: false,
 				})
 
 				const call = vi.mocked(terminal.openTerminalWindow).mock.calls[0][0]
@@ -271,6 +286,7 @@ describe('HatchboxLauncher', () => {
 						enableClaude: false,
 						enableCode: false,
 						enableDevServer: true,
+						enableTerminal: false,
 					})
 				).rejects.toThrow('not yet supported on linux')
 			})
@@ -286,6 +302,7 @@ describe('HatchboxLauncher', () => {
 						enableClaude: false,
 						enableCode: true,
 						enableDevServer: false,
+						enableTerminal: false,
 					})
 				).rejects.toThrow('VSCode is not available')
 			})
@@ -301,6 +318,7 @@ describe('HatchboxLauncher', () => {
 						enableClaude: true,
 						enableCode: false,
 						enableDevServer: false,
+						enableTerminal: false,
 					})
 				).rejects.toThrow('Claude CLI not found')
 			})
@@ -316,8 +334,105 @@ describe('HatchboxLauncher', () => {
 						enableClaude: false,
 						enableCode: false,
 						enableDevServer: true,
+						enableTerminal: false,
 					})
 				).rejects.toThrow('No package.json found')
+			})
+		})
+
+		describe('terminal flag combinations', () => {
+			beforeEach(() => {
+				vi.mocked(devServer.getDevServerLaunchCommand).mockResolvedValue('pnpm dev')
+			})
+
+			it('should launch 3 tabs when Claude + DevServer + Terminal all enabled', async () => {
+				await launcher.launchHatchbox({
+					...baseOptions,
+					enableClaude: true,
+					enableCode: false,
+					enableDevServer: true,
+					enableTerminal: true,
+				})
+
+				// Should launch 3 terminals as tabs
+				const call = vi.mocked(terminal.openMultipleTerminalWindows).mock.calls[0][0]
+				expect(call).toHaveLength(3)
+				expect(call[0]).toMatchObject({
+					title: 'Claude - Issue #42',
+					command: 'hb ignite',
+				})
+				expect(call[1]).toMatchObject({
+					title: 'Dev Server - Issue #42',
+					command: 'pnpm dev',
+				})
+				expect(call[2]).toMatchObject({
+					title: 'Terminal - Issue #42',
+				})
+				// Terminal tab should NOT have a command field
+				expect(call[2].command).toBeUndefined()
+			})
+
+			it('should launch 2 tabs when DevServer + Terminal enabled (no Claude)', async () => {
+				await launcher.launchHatchbox({
+					...baseOptions,
+					enableClaude: false,
+					enableCode: false,
+					enableDevServer: true,
+					enableTerminal: true,
+				})
+
+				expect(terminal.openMultipleTerminalWindows).toHaveBeenCalledWith(
+					expect.arrayContaining([
+						expect.objectContaining({ title: 'Dev Server - Issue #42' }),
+						expect.objectContaining({ title: 'Terminal - Issue #42' }),
+					])
+				)
+			})
+
+			it('should launch 2 tabs when Claude + Terminal enabled (no DevServer)', async () => {
+				await launcher.launchHatchbox({
+					...baseOptions,
+					enableClaude: true,
+					enableCode: false,
+					enableDevServer: false,
+					enableTerminal: true,
+				})
+
+				expect(terminal.openMultipleTerminalWindows).toHaveBeenCalledWith(
+					expect.arrayContaining([
+						expect.objectContaining({ title: 'Claude - Issue #42' }),
+						expect.objectContaining({ title: 'Terminal - Issue #42' }),
+					])
+				)
+			})
+
+			it('should launch single terminal when only Terminal enabled', async () => {
+				await launcher.launchHatchbox({
+					...baseOptions,
+					enableClaude: false,
+					enableCode: false,
+					enableDevServer: false,
+					enableTerminal: true,
+				})
+
+				// Single terminal should use openTerminalWindow
+				expect(terminal.openTerminalWindow).toHaveBeenCalled()
+				expect(terminal.openMultipleTerminalWindows).not.toHaveBeenCalled()
+			})
+
+			it('should include PORT export for web projects in terminal tab', async () => {
+				await launcher.launchHatchbox({
+					...baseOptions,
+					enableClaude: false,
+					enableCode: false,
+					enableDevServer: false,
+					enableTerminal: true,
+					capabilities: ['web'],
+				})
+
+				const call = vi.mocked(terminal.openTerminalWindow).mock.calls[0][0]
+				expect(call.includePortExport).toBe(true)
+				expect(call.port).toBe(3042)
 			})
 		})
 	})
