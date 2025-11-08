@@ -395,21 +395,24 @@ export class ValidationRunner {
 				return (
 					`There are TypeScript errors in this codebase. ` +
 					`Please analyze the typecheck output, identify all type errors, and fix them. ` +
-					`Run '${validationCommand}' to see the errors, then make the necessary code changes to resolve all type issues.`
+					`Run '${validationCommand}' to see the errors, then make the necessary code changes to resolve all type issues.` +
+					`When you are done, tell the user to quit to continue the validation process.`
 				)
 			case 'lint':
 				return (
 					`There are ESLint errors in this codebase. ` +
 					`Please analyze the linting output, identify all linting issues, and fix them. ` +
 					`Run '${validationCommand}' to see the errors, then make the necessary code changes to resolve all linting issues. ` +
-					`Focus on code quality, consistency, and following the project's linting rules.`
+					`Focus on code quality, consistency, and following the project's linting rules.` +
+					`When you are done, tell the user to quit to continue the validation process.`
 				)
 			case 'test':
 				return (
 					`There are unit test failures in this codebase. ` +
 					`Please analyze the test output to understand what's failing, then fix the issues. ` +
 					`This might involve updating test code, fixing bugs in the source code, or updating tests to match new behavior. ` +
-					`Run '${validationCommand}' to see the detailed test failures, then make the necessary changes to get all tests passing.`
+					`Run '${validationCommand}' to see the detailed test failures, then make the necessary changes to get all tests passing.` +
+					`When you are done, tell the user to quit to continue the validation process.`
 				)
 		}
 	}
