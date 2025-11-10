@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { UpdateNotifier, checkAndNotifyUpdate } from './update-notifier.js'
 import fs from 'fs-extra'
 import os from 'os'
@@ -221,6 +221,214 @@ describe('UpdateNotifier', () => {
       expect(String(jsonContent)).toContain('latestVersion')
       expect(String(jsonContent)).toContain('1.3.0')
       expect(encoding).toBe('utf8')
+    })
+  })
+
+  describe('Environment variable configuration', () => {
+    let originalEnvValue: string | undefined
+
+    beforeEach(() => {
+      // Save original environment variable value
+      originalEnvValue = process.env.HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS
+      // Clear for clean test slate
+      delete process.env.HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS
+    })
+
+    afterEach(() => {
+      // Restore original environment variable
+      if (originalEnvValue !== undefined) {
+        process.env.HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS = originalEnvValue
+      } else {
+        delete process.env.HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS
+      }
+    })
+
+    it('respects custom timeout from HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS', async () => {
+      // Set custom timeout to 60 minutes (1 hour)
+      process.env.HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS = '60'
+
+      const notifier = new UpdateNotifier('1.2.3', '@test/package')
+
+      // Test 1: Cache that is 30 minutes old (should be fresh with 60 min timeout)
+      vi.mocked(fs.existsSync).mockReturnValue(true)
+      const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000)
+      const freshCache = {
+        lastCheck: thirtyMinutesAgo,
+        latestVersion: '1.3.0',
+      }
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(freshCache))
+
+      // Should use cached data, not query npm
+      const result1 = await notifier.checkForUpdates()
+      expect(result1?.latestVersion).toBe('1.3.0')
+      expect(execa).not.toHaveBeenCalled()
+
+      vi.clearAllMocks()
+
+      // Test 2: Cache that is 90 minutes old (should be stale with 60 min timeout)
+      const ninetyMinutesAgo = Date.now() - (90 * 60 * 1000)
+      const staleCache = {
+        lastCheck: ninetyMinutesAgo,
+        latestVersion: '1.3.0',
+      }
+      vi.mocked(fs.existsSync).mockReturnValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(staleCache))
+      vi.mocked(execa).mockResolvedValue(mockExecaResponse('1.4.0'))
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      // Should query npm for new version
+      const result2 = await notifier.checkForUpdates()
+      expect(result2?.latestVersion).toBe('1.4.0')
+      expect(execa).toHaveBeenCalled()
+    })
+
+    it('treats cache as always stale when environment variable is invalid', async () => {
+      // Test with non-numeric value
+      process.env.HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS = 'invalid'
+
+      const notifier = new UpdateNotifier('1.2.3', '@test/package')
+
+      // Cache that is only 1 second old
+      vi.mocked(fs.existsSync).mockReturnValue(true)
+      const oneSecondAgo = Date.now() - 1000
+      const cache = {
+        lastCheck: oneSecondAgo,
+        latestVersion: '1.3.0',
+      }
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(cache))
+      vi.mocked(execa).mockResolvedValue(mockExecaResponse('1.4.0'))
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      // parseInt('invalid') returns NaN, causing cache to always be stale
+      const result = await notifier.checkForUpdates()
+      expect(result?.latestVersion).toBe('1.4.0')
+      expect(execa).toHaveBeenCalled()
+
+      vi.clearAllMocks()
+
+      // Test with empty string
+      process.env.HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS = ''
+
+      const notifier2 = new UpdateNotifier('1.2.3', '@test/package')
+      vi.mocked(fs.existsSync).mockReturnValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(cache))
+      vi.mocked(execa).mockResolvedValue(mockExecaResponse('1.4.0'))
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      // parseInt('') also returns NaN, causing cache to always be stale
+      const result2 = await notifier2.checkForUpdates()
+      expect(result2?.latestVersion).toBe('1.4.0')
+      expect(execa).toHaveBeenCalled()
+    })
+
+    it('handles edge case timeout values', async () => {
+      // Test with 0 (cache should always be stale)
+      process.env.HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS = '0'
+
+      const notifier = new UpdateNotifier('1.2.3', '@test/package')
+
+      vi.mocked(fs.existsSync).mockReturnValue(true)
+      const oneSecondAgo = Date.now() - 1000 // Just 1 second ago
+      const cache = {
+        lastCheck: oneSecondAgo,
+        latestVersion: '1.3.0',
+      }
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(cache))
+      vi.mocked(execa).mockResolvedValue(mockExecaResponse('1.4.0'))
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      // With 0 timeout, even 1-second-old cache should be stale
+      const result = await notifier.checkForUpdates()
+      expect(result?.latestVersion).toBe('1.4.0')
+      expect(execa).toHaveBeenCalled()
+
+      vi.clearAllMocks()
+
+      // Test with negative value (cache should always be stale)
+      process.env.HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS = '-10'
+
+      const notifier2 = new UpdateNotifier('1.2.3', '@test/package')
+      const oneSecondAgo2 = Date.now() - 1000
+      const cache2 = {
+        lastCheck: oneSecondAgo2,
+        latestVersion: '1.3.0',
+      }
+      vi.mocked(fs.existsSync).mockReturnValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(cache2))
+      vi.mocked(execa).mockResolvedValue(mockExecaResponse('1.4.0'))
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      // Negative value results in negative timeout, making cache always stale
+      const result2 = await notifier2.checkForUpdates()
+      expect(result2?.latestVersion).toBe('1.4.0')
+      expect(execa).toHaveBeenCalled()
+
+      vi.clearAllMocks()
+
+      // Test with very large value (cache effectively never expires)
+      process.env.HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS = '999999'
+
+      const notifier3 = new UpdateNotifier('1.2.3', '@test/package')
+      const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000)
+      const cache3 = {
+        lastCheck: oneDayAgo,
+        latestVersion: '1.3.0',
+      }
+      vi.mocked(fs.existsSync).mockReturnValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(cache3))
+
+      // With huge timeout, even day-old cache should be fresh
+      const result3 = await notifier3.checkForUpdates()
+      expect(result3?.latestVersion).toBe('1.3.0')
+      expect(execa).not.toHaveBeenCalled()
+    })
+
+    it('handles fractional and scientific notation values', async () => {
+      // Test with fractional value (should be truncated by parseInt)
+      process.env.HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS = '1.5'
+
+      const notifier = new UpdateNotifier('1.2.3', '@test/package')
+
+      // Cache that is 1.2 minutes old (should be stale with 1 min timeout due to parseInt truncation)
+      vi.mocked(fs.existsSync).mockReturnValue(true)
+      const seventyTwoSecondsAgo = Date.now() - (72 * 1000) // 1.2 minutes
+      const cache = {
+        lastCheck: seventyTwoSecondsAgo,
+        latestVersion: '1.3.0',
+      }
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(cache))
+      vi.mocked(execa).mockResolvedValue(mockExecaResponse('1.4.0'))
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      // parseInt('1.5') = 1, so 1.2 minutes should be stale
+      const result = await notifier.checkForUpdates()
+      expect(result?.latestVersion).toBe('1.4.0')
+      expect(execa).toHaveBeenCalled()
+
+      vi.clearAllMocks()
+
+      // Test with scientific notation
+      process.env.HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS = '1e3' // parseInt stops at 'e', returns 1
+
+      const notifier2 = new UpdateNotifier('1.2.3', '@test/package')
+      const thirtySecondsAgo = Date.now() - (30 * 1000) // 0.5 minutes
+      const cache2 = {
+        lastCheck: thirtySecondsAgo,
+        latestVersion: '1.3.0',
+      }
+      vi.mocked(fs.existsSync).mockReturnValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(cache2))
+
+      // parseInt('1e3') = 1 (stops at 'e'), so 30-second-old cache should be fresh
+      const result2 = await notifier2.checkForUpdates()
+      expect(result2?.latestVersion).toBe('1.3.0')
+      expect(execa).not.toHaveBeenCalled()
     })
   })
 })

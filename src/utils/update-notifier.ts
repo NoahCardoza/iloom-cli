@@ -20,7 +20,6 @@ export class UpdateNotifier {
   private cacheFilePath: string
   private currentVersion: string
   private packageName: string
-  private cacheDurationMs: number = 24 * 60 * 60 * 1000 // 24 hours
 
   constructor(currentVersion: string, packageName: string) {
     this.currentVersion = currentVersion
@@ -97,13 +96,16 @@ export class UpdateNotifier {
       logger.debug(`getCachedCheck: Cache file content: ${content}`)
       const cache = JSON.parse(content) as UpdateCheckCache
 
-      // Check if cache is still fresh (< 24 hours)
+      // Check if cache is still fresh (< configurable hours)
+      const cacheTimeoutMins = parseInt(process.env.HATCHBOX_UPDATE_CACHE_TIMEOUT_MINS ?? '360', 10) // Default 6 hours
+      const cacheTimeoutMs = cacheTimeoutMins * 60 * 1000
+      logger.debug(`getCachedCheck: Using cache timeout of ${cacheTimeoutMins} minutes`)
       const now = Date.now()
       const age = now - cache.lastCheck
       const ageHours = age / (60 * 60 * 1000)
-      logger.debug(`getCachedCheck: Cache age: ${ageHours.toFixed(2)} hours (threshold: 24 hours)`)
+      logger.debug(`getCachedCheck: Cache age: ${ageHours.toFixed(2)} hours (threshold: ${cacheTimeoutMins / 60} hours)`)
 
-      if (now - cache.lastCheck < this.cacheDurationMs) {
+      if (now - cache.lastCheck < cacheTimeoutMs) {
         logger.debug('getCachedCheck: Cache is fresh, returning cached data')
         return cache
       }

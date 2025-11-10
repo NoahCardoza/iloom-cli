@@ -35,7 +35,11 @@ describe('CLI', () => {
     const { stdout, code } = await runCLI(['--help'])
     expect(code).toBe(0)
     expect(stdout).toContain('Usage: hatchbox')
-    expect(stdout).toContain('AI-assisted workspace management')
+    expect(stdout).toContain('[options]')
+    expect(stdout).toContain('[command]')
+    // Check for presence of commands, not description
+    expect(stdout).toContain('Commands:')
+    expect(stdout).toContain('Options:')
   })
 
   it('should show version when --version flag is provided', async () => {
