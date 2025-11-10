@@ -5,6 +5,7 @@ import { launchClaude } from '../utils/claude.js'
 import { openBrowser } from '../utils/browser.js'
 import { waitForKeypress } from '../utils/prompt.js'
 import { logger } from '../utils/logger.js'
+import { generateGitHubCommentMcpConfig } from '../utils/mcp.js'
 import { GitHubService as DefaultGitHubService } from '../lib/GitHubService.js'
 import { AgentManager as DefaultAgentManager } from '../lib/AgentManager.js'
 import { SettingsManager as DefaultSettingsManager } from '../lib/SettingsManager.js'
@@ -64,6 +65,28 @@ export class EnhanceCommand {
 		const loadedAgents = await this.agentManager.loadAgents(settings)
 		const agents = this.agentManager.formatForCli(loadedAgents)
 
+		// Step 3.5: Generate MCP config and tool filtering for GitHub comment broker
+		let mcpConfig: Record<string, unknown>[] | undefined
+		let allowedTools: string[] | undefined
+		let disallowedTools: string[] | undefined
+
+		try {
+			mcpConfig = await generateGitHubCommentMcpConfig('issue')
+			logger.debug('Generated MCP configuration for GitHub comment broker')
+
+			// Configure tool filtering for issue workflows
+			allowedTools = [
+				'mcp__github_comment__create_comment',
+				'mcp__github_comment__update_comment',
+			]
+			disallowedTools = ['Bash(gh api:*)']
+
+			logger.debug('Configured tool filtering for issue workflow', { allowedTools, disallowedTools })
+		} catch (error) {
+			// Log warning but continue without MCP
+			logger.warn(`Failed to generate MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
 		// Step 4: Invoke Claude CLI with enhancer agent
 		logger.info('Invoking enhancer agent. This may take a moment...')
 		const prompt = this.constructPrompt(issueNumber)
@@ -71,6 +94,9 @@ export class EnhanceCommand {
 			headless: true,
 			model: 'sonnet',
 			agents,
+			...(mcpConfig && { mcpConfig }),
+			...(allowedTools && { allowedTools }),
+			...(disallowedTools && { disallowedTools }),
 		})
 
 		// Step 5: Parse response to determine outcome
@@ -114,6 +140,7 @@ export class EnhanceCommand {
 ## OUTPUT REQUIREMENTS
 * If the issue was not enhanced, return ONLY: "No enhancement needed"
 * If the issue WAS enhanced, return ONLY: <FULL URL OF THE COMMENT INCLUDING COMMENT ID>
+* If you encounter permission/authentication/access errors, return ONLY: "Permission denied: <specific error description>"
 * IMPORTANT: Return ONLY one of the above - DO NOT include commentary such as "I created a comment at <URL>" or "I examined the issue and found no enhancement was necessary"
 * CONTEXT: Your output is going to be parsed programmatically, so adherence to the output requirements is CRITICAL.`
 	}
@@ -121,6 +148,7 @@ export class EnhanceCommand {
 	/**
 	 * Parse the response from the enhancer agent.
 	 * Returns either { enhanced: false } or { enhanced: true, url: "..." }
+	 * Throws specific errors for permission issues.
 	 */
 	private parseEnhancerResponse(response: string | void): { enhanced: boolean; url?: string } {
 		// Handle empty or void response
@@ -129,6 +157,14 @@ export class EnhanceCommand {
 		}
 
 		const trimmed = response.trim()
+	
+		logger.debug(`RESPONSE FROM ENHANCER AGENT: '${trimmed}'`)
+
+		// Check for permission denied errors (case-insensitive)
+		if (trimmed.toLowerCase().startsWith('permission denied:')) {
+			const errorMessage = trimmed.substring('permission denied:'.length).trim()
+			throw new Error(`Permission denied: ${errorMessage}`)
+		}
 
 		// Check for "No enhancement needed" (case-insensitive)
 		if (trimmed.toLowerCase().includes('no enhancement needed')) {
@@ -171,4 +207,5 @@ export class EnhanceCommand {
 			logger.warn(`Failed to open browser: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 	}
+
 }

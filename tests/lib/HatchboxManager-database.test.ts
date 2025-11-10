@@ -24,6 +24,8 @@ vi.mock('../../src/lib/SettingsManager.js')
 vi.mock('../../src/utils/git.js', () => ({
   branchExists: vi.fn().mockResolvedValue(false),
   executeGitCommand: vi.fn().mockResolvedValue(''),
+  ensureRepositoryHasCommits: vi.fn().mockResolvedValue(undefined),
+  isEmptyRepository: vi.fn().mockResolvedValue(false),
 }))
 
 // Mock package-manager utilities

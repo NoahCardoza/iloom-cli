@@ -315,6 +315,42 @@ describe('EnhanceCommand', () => {
 				command.execute({ issueNumber: 42, options: {} })
 			).rejects.toThrow('No response from enhancer agent')
 		})
+
+		it('should detect and handle permission denied responses', async () => {
+			const { launchClaude } = await import('../utils/claude.js')
+			vi.mocked(launchClaude).mockResolvedValue('Permission denied: GitHub CLI not authenticated or not installed')
+
+			await expect(
+				command.execute({ issueNumber: 42, options: {} })
+			).rejects.toThrow('Permission denied: GitHub CLI not authenticated or not installed')
+		})
+
+		it('should handle permission denied with case insensitive matching', async () => {
+			const { launchClaude } = await import('../utils/claude.js')
+			vi.mocked(launchClaude).mockResolvedValue('permission denied: Cannot access repository or issue does not exist')
+
+			await expect(
+				command.execute({ issueNumber: 42, options: {} })
+			).rejects.toThrow('Permission denied: Cannot access repository or issue does not exist')
+		})
+
+		it('should handle permission denied for comment creation', async () => {
+			const { launchClaude } = await import('../utils/claude.js')
+			vi.mocked(launchClaude).mockResolvedValue('Permission denied: Cannot create comments on this repository')
+
+			await expect(
+				command.execute({ issueNumber: 42, options: {} })
+			).rejects.toThrow('Permission denied: Cannot create comments on this repository')
+		})
+
+		it('should handle permission denied for API rate limits', async () => {
+			const { launchClaude } = await import('../utils/claude.js')
+			vi.mocked(launchClaude).mockResolvedValue('Permission denied: GitHub API rate limit exceeded')
+
+			await expect(
+				command.execute({ issueNumber: 42, options: {} })
+			).rejects.toThrow('Permission denied: GitHub API rate limit exceeded')
+		})
 	})
 
 	describe('browser interaction', () => {

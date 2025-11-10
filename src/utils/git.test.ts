@@ -831,4 +831,92 @@ describe('Git Utility Regression Tests', () => {
       })
     })
   })
+
+  describe('isEmptyRepository', () => {
+    it('returns true when repository has no commits (HEAD does not exist)', async () => {
+      const { isEmptyRepository } = await import('./git.js')
+
+      vi.mocked(execa).mockRejectedValueOnce(
+        new Error('fatal: not a valid object name: \'HEAD\'')
+      )
+
+      const result = await isEmptyRepository('/test/repo')
+      expect(result).toBe(true)
+      expect(execa).toHaveBeenCalledWith('git', ['rev-parse', '--verify', 'HEAD'], expect.objectContaining({ cwd: '/test/repo' }))
+    })
+
+    it('returns false when repository has at least one commit', async () => {
+      const { isEmptyRepository } = await import('./git.js')
+
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'abc123def456',
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      const result = await isEmptyRepository('/test/repo')
+      expect(result).toBe(false)
+      expect(execa).toHaveBeenCalledWith('git', ['rev-parse', '--verify', 'HEAD'], expect.objectContaining({ cwd: '/test/repo' }))
+    })
+
+    it('uses process.cwd() when path is not provided', async () => {
+      const { isEmptyRepository } = await import('./git.js')
+
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'abc123def456',
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      await isEmptyRepository()
+      expect(execa).toHaveBeenCalledWith('git', ['rev-parse', '--verify', 'HEAD'], expect.objectContaining({ cwd: process.cwd() }))
+    })
+  })
+
+  describe('ensureRepositoryHasCommits', () => {
+    it('creates initial commit when repository is empty', async () => {
+      const { ensureRepositoryHasCommits } = await import('./git.js')
+
+      // First call (isEmptyRepository check) returns error -> repo is empty
+      // Second call (create initial commit) succeeds
+      vi.mocked(execa)
+        .mockRejectedValueOnce(new Error('fatal: not a valid object name: \'HEAD\''))
+        .mockResolvedValueOnce({
+          stdout: '',
+          stderr: '',
+        } as ReturnType<typeof execa>)
+
+      await ensureRepositoryHasCommits('/test/repo')
+
+      expect(execa).toHaveBeenCalledTimes(2)
+      // First call checks if repo is empty
+      expect(execa).toHaveBeenNthCalledWith(1, 'git', ['rev-parse', '--verify', 'HEAD'], expect.objectContaining({ cwd: '/test/repo' }))
+      // Second call creates initial commit
+      expect(execa).toHaveBeenNthCalledWith(2, 'git', ['commit', '--no-verify', '--allow-empty', '-m', 'Initial commit'], expect.objectContaining({ cwd: '/test/repo' }))
+    })
+
+    it('does nothing when repository already has commits', async () => {
+      const { ensureRepositoryHasCommits } = await import('./git.js')
+
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'abc123def456',
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      await ensureRepositoryHasCommits('/test/repo')
+
+      expect(execa).toHaveBeenCalledTimes(1)
+      expect(execa).toHaveBeenCalledWith('git', ['rev-parse', '--verify', 'HEAD'], expect.objectContaining({ cwd: '/test/repo' }))
+    })
+
+    it('uses process.cwd() when path is not provided', async () => {
+      const { ensureRepositoryHasCommits } = await import('./git.js')
+
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'abc123def456',
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      await ensureRepositoryHasCommits()
+      expect(execa).toHaveBeenCalledWith('git', ['rev-parse', '--verify', 'HEAD'], expect.objectContaining({ cwd: process.cwd() }))
+    })
+  })
 })

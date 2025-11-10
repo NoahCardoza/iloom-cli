@@ -118,7 +118,7 @@ describe('claude utils', () => {
 				expect(result).toBe(output)
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
-					['-p', '--add-dir', '/tmp'],
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp'],
 					expect.objectContaining({
 						input: prompt,
 						timeout: 0, // Disabled timeout
@@ -140,7 +140,7 @@ describe('claude utils', () => {
 
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
-					['-p', '--model', 'opus', '--add-dir', '/tmp'],
+					['-p', '--output-format', 'stream-json', '--verbose', '--model', 'opus', '--add-dir', '/tmp'],
 					expect.any(Object)
 				)
 			})
@@ -159,7 +159,7 @@ describe('claude utils', () => {
 
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
-					['-p', '--permission-mode', 'plan', '--add-dir', '/tmp'],
+					['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'plan', '--add-dir', '/tmp'],
 					expect.any(Object)
 				)
 			})
@@ -178,7 +178,7 @@ describe('claude utils', () => {
 
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
-					['-p', '--add-dir', '/tmp'],
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp'],
 					expect.any(Object)
 				)
 			})
@@ -198,7 +198,7 @@ describe('claude utils', () => {
 
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
-					['-p', '--add-dir', workspacePath, '--add-dir', '/tmp'],
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', workspacePath, '--add-dir', '/tmp'],
 					expect.any(Object)
 				)
 			})
@@ -218,7 +218,7 @@ describe('claude utils', () => {
 
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
-					['-p', '--add-dir', workspacePath, '--add-dir', '/tmp'],
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', workspacePath, '--add-dir', '/tmp'],
 					expect.objectContaining({
 						input: prompt,
 						timeout: 0,
@@ -240,7 +240,7 @@ describe('claude utils', () => {
 
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
-					['-p', '--add-dir', '/tmp'],
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp'],
 					expect.objectContaining({
 						input: prompt,
 						timeout: 0,
@@ -250,6 +250,84 @@ describe('claude utils', () => {
 				// Ensure cwd is not in the options
 				const execaCall = vi.mocked(execa).mock.calls[0]
 				expect(execaCall[2]).not.toHaveProperty('cwd')
+			})
+
+			it('should add --output-format stream-json in headless mode always', async () => {
+				const prompt = 'Test prompt'
+
+				// Mock logger to return true for debug enabled
+				const { logger } = await import('./logger.js')
+				vi.mocked(logger.isDebugEnabled).mockReturnValue(true)
+
+				// Mock process.stdout.write to capture the streaming output
+				const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '{"type":"message","text":"Hello"}\n{"type":"thinking","text":"Let me think"}',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				const result = await launchClaude(prompt, {
+					headless: true,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp'],
+					expect.objectContaining({
+						input: prompt,
+						timeout: 0,
+						verbose: true, // Debug mode enabled
+					})
+				)
+
+				// Verify JSON output was written to stdout
+				expect(stdoutSpy).toHaveBeenCalledWith('{"type":"message","text":"Hello"}\n{"type":"thinking","text":"Let me think"}')
+				expect(result).toBe('{"type":"message","text":"Hello"}\n{"type":"thinking","text":"Let me think"}')
+
+				stdoutSpy.mockRestore()
+				// Reset logger mock
+				vi.mocked(logger.isDebugEnabled).mockReturnValue(false)
+			})
+
+			it('should show progress dots in non-debug mode with JSON streaming', async () => {
+				const prompt = 'Test prompt'
+
+				// Mock logger to return false for debug disabled (non-debug mode)
+				const { logger } = await import('./logger.js')
+				vi.mocked(logger.isDebugEnabled).mockReturnValue(false)
+
+				// Mock process.stdout.write to capture the progress dots
+				const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '{"type":"result","result":"Hello World"}',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				const result = await launchClaude(prompt, {
+					headless: true,
+				})
+
+				// Verify --output-format stream-json is still added in non-debug mode
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp'],
+					expect.objectContaining({
+						input: prompt,
+						timeout: 0,
+						verbose: false, // Debug mode disabled
+					})
+				)
+
+				// Verify progress dots were shown instead of full JSON, followed by cleanup newline
+				expect(stdoutSpy).toHaveBeenCalledWith('🤖 .')
+				expect(stdoutSpy).toHaveBeenCalledWith('\n')
+
+				// Verify result is parsed from JSON
+				expect(result).toBe('Hello World')
+
+				stdoutSpy.mockRestore()
 			})
 
 			it('should throw error with context when Claude CLI fails', async () => {
@@ -513,6 +591,9 @@ describe('claude utils', () => {
 					'claude',
 					[
 						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
 						'--model', 'sonnet',
 						'--add-dir', '/tmp',
 						'--append-system-prompt', systemPrompt
@@ -581,6 +662,9 @@ describe('claude utils', () => {
 					'claude',
 					[
 						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
 						'--add-dir', '/tmp',
 						'--mcp-config', JSON.stringify(mcpConfigs[0]),
 						'--mcp-config', JSON.stringify(mcpConfigs[1])
@@ -615,6 +699,9 @@ describe('claude utils', () => {
 					'claude',
 					[
 						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
 						'--add-dir', '/tmp',
 						'--mcp-config', JSON.stringify(mcpConfigs[0])
 					],
@@ -637,7 +724,7 @@ describe('claude utils', () => {
 
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
-					['-p', '--add-dir', '/tmp'],
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp'],
 					expect.any(Object)
 				)
 			})
@@ -712,6 +799,9 @@ describe('claude utils', () => {
 					'claude',
 					[
 						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
 						'--model', 'opus',
 						'--permission-mode', 'plan',
 						'--add-dir', '/workspace',
@@ -742,6 +832,9 @@ describe('claude utils', () => {
 					'claude',
 					[
 						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
 						'--add-dir', '/tmp',
 						'--allowed-tools', ...allowedTools
 					],
@@ -767,6 +860,9 @@ describe('claude utils', () => {
 					'claude',
 					[
 						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
 						'--add-dir', '/tmp',
 						'--disallowed-tools', ...disallowedTools
 					],
@@ -794,6 +890,9 @@ describe('claude utils', () => {
 					'claude',
 					[
 						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
 						'--add-dir', '/tmp',
 						'--allowed-tools', ...allowedTools,
 						'--disallowed-tools', ...disallowedTools
@@ -907,6 +1006,9 @@ describe('claude utils', () => {
 					'claude',
 					[
 						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
 						'--model', 'opus',
 						'--permission-mode', 'plan',
 						'--add-dir', '/workspace',
@@ -945,7 +1047,7 @@ describe('claude utils', () => {
 
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
-					['-p', '--add-dir', '/tmp', '--agents', JSON.stringify(agents)],
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp', '--agents', JSON.stringify(agents)],
 					expect.any(Object),
 				)
 			})
@@ -996,7 +1098,7 @@ describe('claude utils', () => {
 				// Verify JSON.stringify was used
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
-					['-p', '--add-dir', '/tmp', '--agents', JSON.stringify(agents)],
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp', '--agents', JSON.stringify(agents)],
 					expect.any(Object),
 				)
 			})
@@ -1096,6 +1198,9 @@ describe('claude utils', () => {
 					'claude',
 					[
 						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
 						'--model',
 						'opus',
 						'--permission-mode',
@@ -1326,7 +1431,7 @@ describe('claude utils', () => {
 			expect(result).toBe('feat/issue-123-user-authentication')
 			expect(execa).toHaveBeenCalledWith(
 				'claude',
-				['-p', '--model', 'haiku', '--add-dir', '/tmp'],
+				['-p', '--output-format', 'stream-json', '--verbose', '--model', 'haiku', '--add-dir', '/tmp'],
 				expect.objectContaining({
 					input: expect.stringContaining(issueTitle),
 				})

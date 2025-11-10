@@ -4,7 +4,7 @@ import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables } from '../lib/PromptTemplateManager.js'
-import { getRepoInfo } from '../utils/github.js'
+import { generateGitHubCommentMcpConfig } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
@@ -116,7 +116,7 @@ export class IgniteCommand {
 
 			if (context.type === 'issue' || context.type === 'pr') {
 				try {
-					mcpConfig = await this.generateMcpConfig(context)
+					mcpConfig = await generateGitHubCommentMcpConfig(context.type)
 					logger.debug('Generated MCP configuration for GitHub comment broker')
 
 					// Configure tool filtering for issue/PR workflows
@@ -465,41 +465,6 @@ export class IgniteCommand {
 		return port
 	}
 
-	/**
-	 * Generate MCP configuration for GitHub comment broker
-	 * Returns array of MCP server config objects
-	 */
-	private async generateMcpConfig(context: ClaudeWorkflowOptions): Promise<Record<string, unknown>[]> {
-		// Get repository information
-		const repoInfo = await getRepoInfo()
-
-		// Determine GitHub event name based on context type
-		const githubEventName = context.type === 'issue' ? 'issues' : 'pull_request'
-		// const args = [path.join(path.dirname(new URL(import.meta.url).pathname), '../mcp/github-comment-server.js')]
-
-		// logger.debug('')
-		// Build MCP server configuration wrapped in github_comment key
-		const mcpServerConfig = {
-			mcpServers: {
-				github_comment: {
-					transport: 'stdio',
-					command: 'node',
-					args: [path.join(path.dirname(new globalThis.URL(import.meta.url).pathname), '../dist/mcp/github-comment-server.js')],
-					env: {
-						REPO_OWNER: repoInfo.owner,
-						REPO_NAME: repoInfo.name,
-						GITHUB_EVENT_NAME: githubEventName,
-						GITHUB_API_URL: 'https://api.github.com/',
-					},
-				},
-			},
-		}
-
-		logger.debug('Generated MCP config', { mcpServerConfig })
-
-		// Return as array (user clarification: mcpConfig should be an array)
-		return [mcpServerConfig]
-	}
 
 	/**
 	 * Build user prompt based on one-shot mode
@@ -507,10 +472,10 @@ export class IgniteCommand {
 	private buildUserPrompt(oneShot: import('../types/index.js').OneShotMode = 'default'): string {
 		// For one-shot modes, add bypass instructions to override template approval requirements
 		if (oneShot === 'noReview' || oneShot === 'bypassPermissions') {
-			return 'Go! The user has requested you move through the workflow without awaiting confirmation. This supersedes any other guidance.'
+			return 'Guide the user through the hatchbox workflow! The user has requested you move through the workflow without awaiting confirmation. This supersedes any other guidance.'
 		}
 
 		// Default mode: simple "Go!" prompt
-		return 'Go!'
+		return 'Guide the user through the hatchbox workflow!'
 	}
 }

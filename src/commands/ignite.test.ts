@@ -534,7 +534,7 @@ describe('IgniteCommand', () => {
 
 				// Verify launchClaude was called with appendSystemPrompt
 				expect(launchClaudeSpy).toHaveBeenCalledWith(
-					'Go!', // User prompt should be "Go!"
+					'Guide the user through the hatchbox workflow!', // User prompt
 					expect.objectContaining({
 						headless: false,
 						model: 'claude-sonnet-4-20250514',
@@ -560,7 +560,7 @@ describe('IgniteCommand', () => {
 				await command.execute()
 
 				expect(launchClaudeSpy).toHaveBeenCalledWith(
-					'Go!',
+					'Guide the user through the hatchbox workflow!',
 					expect.objectContaining({
 						headless: false,
 						appendSystemPrompt: 'System instructions for PR workflow',
@@ -588,7 +588,7 @@ describe('IgniteCommand', () => {
 				await command.execute()
 
 				expect(launchClaudeSpy).toHaveBeenCalledWith(
-					'Go!',
+					'Guide the user through the hatchbox workflow!',
 					expect.objectContaining({
 						headless: false,
 						appendSystemPrompt: 'System instructions for regular workflow',
@@ -1343,7 +1343,7 @@ describe('IgniteCommand', () => {
 				const userPrompt = launchClaudeCall[0]
 
 				// Should include approval bypass text to override template requirements
-				expect(userPrompt).toContain('Go!')
+				expect(userPrompt).toContain('Guide the user through the hatchbox workflow!')
 				expect(userPrompt).toContain('without awaiting confirmation')
 				expect(userPrompt).toContain('This supersedes any other guidance')
 			} finally {
@@ -1367,7 +1367,7 @@ describe('IgniteCommand', () => {
 				const userPrompt = launchClaudeCall[0]
 
 				// Should include approval bypass text to override template requirements
-				expect(userPrompt).toContain('Go!')
+				expect(userPrompt).toContain('Guide the user through the hatchbox workflow!')
 				expect(userPrompt).toContain('without awaiting confirmation')
 				expect(userPrompt).toContain('This supersedes any other guidance')
 			} finally {
@@ -1386,12 +1386,12 @@ describe('IgniteCommand', () => {
 				// Execute without one-shot mode (default)
 				await command.execute('default')
 
-				// Verify the user prompt is just "Go!"
+				// Verify the user prompt is the standard workflow prompt
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				const userPrompt = launchClaudeCall[0]
 
-				// Should be simple "Go!" without extra instructions
-				expect(userPrompt).toBe('Go!')
+				// Should be simple workflow prompt without extra instructions
+				expect(userPrompt).toBe('Guide the user through the hatchbox workflow!')
 				expect(userPrompt).not.toContain('Answer Table')
 				expect(userPrompt).not.toContain('one-shot mode')
 			} finally {
@@ -1410,12 +1410,12 @@ describe('IgniteCommand', () => {
 				// Execute without any oneShot option
 				await command.execute()
 
-				// Verify the user prompt is just "Go!"
+				// Verify the user prompt is the standard workflow prompt
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				const userPrompt = launchClaudeCall[0]
 
-				// Should be simple "Go!" without extra instructions
-				expect(userPrompt).toBe('Go!')
+				// Should be simple workflow prompt without extra instructions
+				expect(userPrompt).toBe('Guide the user through the hatchbox workflow!')
 				expect(userPrompt).not.toContain('Answer Table')
 				expect(userPrompt).not.toContain('one-shot mode')
 			} finally {

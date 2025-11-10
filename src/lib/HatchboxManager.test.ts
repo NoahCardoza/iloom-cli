@@ -23,6 +23,8 @@ vi.mock('./SettingsManager.js')
 vi.mock('../utils/git.js', () => ({
   branchExists: vi.fn().mockResolvedValue(false),
   executeGitCommand: vi.fn().mockResolvedValue(''),
+  ensureRepositoryHasCommits: vi.fn().mockResolvedValue(undefined),
+  isEmptyRepository: vi.fn().mockResolvedValue(false),
 }))
 
 // Mock package-manager utilities
@@ -1537,6 +1539,84 @@ describe('HatchboxManager', () => {
       expect(result).toBeDefined()
       expect(result.path).toBe(expectedPath)
       expect(mockGitHub.moveIssueToInProgress).toHaveBeenCalledWith(39)
+    })
+
+    it('should create initial commit in empty repository before worktree creation', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'issue',
+        identifier: 165,
+        originalInput: '165',
+      }
+
+      const { ensureRepositoryHasCommits } = await import('../utils/git.js')
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 165,
+        title: 'Empty Repo Test',
+        body: '',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/165',
+      })
+      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('feat/issue-165-empty-repo')
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(null)
+
+      const expectedPath = '/test/worktree-issue-165'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3165)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {},
+      })
+
+      // Call createHatchbox
+      const result = await manager.createHatchbox(input)
+
+      // Verify that ensureRepositoryHasCommits was called before worktree creation
+      expect(ensureRepositoryHasCommits).toHaveBeenCalledWith(mockGitWorktree.workingDirectory)
+      expect(result).toBeDefined()
+      expect(result.path).toBe(expectedPath)
+    })
+
+    it('should not fail when repository already has commits', async () => {
+      const input: CreateHatchboxInput = {
+        type: 'issue',
+        identifier: 166,
+        originalInput: '166',
+      }
+
+      const { ensureRepositoryHasCommits } = await import('../utils/git.js')
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 166,
+        title: 'Repo with Commits Test',
+        body: '',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/166',
+      })
+      vi.mocked(mockGitHub.generateBranchName).mockResolvedValue('feat/issue-166-with-commits')
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(null)
+
+      const expectedPath = '/test/worktree-issue-166'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3166)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {},
+      })
+
+      // Call createHatchbox
+      const result = await manager.createHatchbox(input)
+
+      // Verify that ensureRepositoryHasCommits was called but only checks for existing commits
+      expect(ensureRepositoryHasCommits).toHaveBeenCalledWith(mockGitWorktree.workingDirectory)
+      expect(result).toBeDefined()
+      expect(result.path).toBe(expectedPath)
     })
   })
 })

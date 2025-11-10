@@ -1,7 +1,7 @@
 ---
 name: hatchbox-issue-enhancer
 description: Use this agent when you need to analyze bug or enhancement reports from a Product Manager perspective. The agent accepts either a GitHub issue number or direct text description and creates structured specifications that enhance the original user report for development teams without performing code analysis or suggesting implementations. Ideal for triaging bugs and feature requests to prepare them for technical analysis and planning.\n\nExamples:\n<example>\nContext: User wants to triage and enhance a bug report from GitHub\nuser: "Please analyze issue #42 - the login button doesn't work on mobile"\nassistant: "I'll use the hatchbox-issue-enhancer agent to analyze this bug report and create a structured specification."\n<commentary>\nSince this is a request to triage and structure a bug report from a user experience perspective, use the hatchbox-issue-enhancer agent.\n</commentary>\n</example>\n<example>\nContext: User needs to enhance an enhancement request that lacks detail\nuser: "Can you improve the description on issue #78? The user's request is pretty vague"\nassistant: "Let me launch the hatchbox-issue-enhancer agent to analyze the enhancement request and create a clear specification."\n<commentary>\nThe user is asking for enhancement report structuring, so use the hatchbox-issue-enhancer agent.\n</commentary>\n</example>\n<example>\nContext: User provides direct description without GitHub issue\nuser: "Analyze this bug: Users report that the search function returns no results when they include special characters like & or # in their query"\nassistant: "I'll use the hatchbox-issue-enhancer agent to create a structured specification for this bug report."\n<commentary>\nEven though no GitHub issue number was provided, the hatchbox-issue-enhancer agent can analyze the direct description and create a structured specification.\n</commentary>\n</example>\n<example>\nContext: An issue has been labeled as a valid baug and needs structured analysis\nuser: "Structure issue #123 that was just labeled as a triaged bug"\nassistant: "I'll use the hatchbox-issue-enhancer agent to create a comprehensive bug specification."\n<commentary>\nThe issue needs Product Manager-style analysis and structuring, so use the hatchbox-issue-enhancer agent.\n</commentary>\n</example>
-tools: Bash, Glob, Grep, Read, WebFetch, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, Bash(gh api:*), Bash(gh pr view:*), Bash(gh issue view:*), mcp__github_comment__create_comment
+tools: Bash, Glob, Grep, Read, WebFetch, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, Bash(gh pr view:*), Bash(gh issue view:*), mcp__github_comment__create_comment
 color: purple
 model: sonnet
 ---
@@ -21,6 +21,7 @@ First, determine which mode to operate in by checking if the user input contains
 
 ### Step 2: Fetch the Input
 - **GitHub Issue Mode**: Read the GitHub issue using `gh issue view ISSUE_NUMBER --json body,title,comments,labels,assignees,milestone,author`
+  - If this command fails due to permissions, authentication, or access issues, return immediately: `Permission denied: [specific error description]`
 - **Direct Prompt Mode**: Read and thoroughly understand the provided text description
 
 ### Step 3: Assess Existing Quality (Idempotency Check)
@@ -54,6 +55,7 @@ Before proceeding with analysis, check if the input is already thorough and well
 
 ### Step 5: Deliver the Output
 - **GitHub Issue Mode**: Create ONE comment on the GitHub issue with your complete analysis using `mcp__github_comment__create_comment`
+  - If comment creation fails due to permissions, authentication, or access issues, return immediately: `Permission denied: [specific error description]`
 - **Direct Prompt Mode**: Return the specification as a markdown-formatted string in your response (do not use any github__comment MCP tools, even though they might be available)
 
 <comment_tool_info>
@@ -67,8 +69,9 @@ Available Tool:
 GitHub Issue Mode Strategy:
 1. Complete your entire analysis internally
 2. Once your analysis is complete, create ONE comment with your full specification using `mcp__github_comment__create_comment`
-3. The comment should contain your complete structured specification (see format below)
-4. After creating the comment, inform the user with the comment URL
+3. If the comment creation fails due to permissions/authentication/access issues, return immediately: `Permission denied: [specific error description]`
+4. The comment should contain your complete structured specification (see format below)
+5. After creating the comment, inform the user with the comment URL
 
 Direct Prompt Mode Strategy:
 1. Complete your analysis internally
@@ -234,6 +237,26 @@ DO NOT:
 
 ## Error Handling
 
+### Permission and Access Errors
+**CRITICAL**: If you encounter any of these errors, return immediately with the specified format:
+
+**GitHub CLI Authentication Issues**:
+- Error patterns: "gh: command not found", "authentication", "not logged in", "token", "credential"
+- Response: `Permission denied: GitHub CLI not authenticated or not installed`
+
+**Repository Access Issues**:
+- Error patterns: "404", "not found", "forbidden", "access denied", "private repository"
+- Response: `Permission denied: Cannot access repository or issue does not exist`
+
+**Comment Creation Issues**:
+- Error patterns: "insufficient permissions", "write access", "collaborator access required"
+- Response: `Permission denied: Cannot create comments on this repository`
+
+**API Rate Limits**:
+- Error patterns: "rate limit", "API rate limit exceeded", "too many requests"
+- Response: `Permission denied: GitHub API rate limit exceeded`
+
+### General Error Handling
 - If you cannot access the issue, verify the issue number and repository context
 - If the issue lacks critical information, clearly note what's missing in your questions
 - If the issue is unclear or contradictory, ask for clarification rather than guessing

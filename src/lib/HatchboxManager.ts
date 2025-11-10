@@ -7,7 +7,7 @@ import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { VSCodeIntegration } from './VSCodeIntegration.js'
 import { SettingsManager } from './SettingsManager.js'
-import { branchExists, executeGitCommand } from '../utils/git.js'
+import { branchExists, executeGitCommand, ensureRepositoryHasCommits } from '../utils/git.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName } from '../utils/color.js'
 import { DatabaseManager } from './DatabaseManager.js'
@@ -306,6 +306,11 @@ export class HatchboxManager {
     input: CreateHatchboxInput,
     branchName: string
   ): Promise<string> {
+    // Ensure repository has at least one commit (needed for worktree creation)
+    // This handles the case where the repo is completely empty (post git init, pre-first commit)
+    logger.info('Ensuring repository has initial commit...')
+    await ensureRepositoryHasCommits(this.gitWorktree.workingDirectory)
+
     // Load worktree prefix from settings
     const settingsData = await this.settings.loadSettings()
     const worktreePrefix = settingsData.worktreePrefix

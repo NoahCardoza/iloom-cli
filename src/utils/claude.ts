@@ -55,6 +55,35 @@ export async function getClaudeVersion(): Promise<string | null> {
 }
 
 /**
+ * Parse JSON stream output and extract result from last JSON object with type:"result"
+ */
+function parseJsonStreamOutput(output: string): string {
+	try {
+		// Split by newlines and filter out empty lines
+		const lines = output.split('\n').filter(line => line.trim())
+
+		// Find the last valid JSON object with type:"result"
+		let lastResult = ''
+		for (const line of lines) {
+			try {
+				const jsonObj = JSON.parse(line)
+				if (jsonObj && typeof jsonObj === 'object' && jsonObj.type === 'result' && 'result' in jsonObj) {
+					lastResult = jsonObj.result
+				}
+			} catch {
+				// Skip invalid JSON lines
+				continue
+			}
+		}
+
+		return lastResult || output // Fallback to original output if no valid result found
+	} catch {
+		// If parsing fails completely, return original output
+		return output
+	}
+}
+
+/**
  * Launch Claude CLI with specified options
  * In headless mode, returns stdout. In interactive mode, returns void.
  */
@@ -69,6 +98,10 @@ export async function launchClaude(
 
 	if (headless) {
 		args.push('-p')
+
+		// Add JSON streaming output for progress tracking
+		args.push('--output-format', 'stream-json')
+		args.push('--verbose')
 	}
 
 	if (model) {
@@ -115,13 +148,74 @@ export async function launchClaude(
 	try {
 		if (headless) {
 			// Headless mode: capture and return output
-			const result = await execa('claude', args, {
+			const isDebugMode = logger.isDebugEnabled()
+
+			// Set up execa options based on debug mode
+			const execaOptions = {
 				input: prompt,
 				timeout: 0, // Disable timeout for long responses
 				...(addDir && { cwd: addDir }), // Run Claude in the worktree directory
-				verbose: logger.isDebugEnabled(),
-			})
-			return result.stdout.trim()
+				verbose: isDebugMode,
+				...(isDebugMode && { stdio: ['pipe', 'pipe', 'pipe'] as const }), // Enable streaming in debug mode
+			}
+
+			const subprocess = execa('claude', args, execaOptions)
+
+			// Check if JSON streaming format is enabled (always true in headless mode)
+			const isJsonStreamFormat = args.includes('--output-format') && args.includes('stream-json')
+
+			// Handle real-time streaming (enabled for progress tracking)
+			let outputBuffer = ''
+			let isStreaming = false
+			let isFirstProgress = true
+			if (subprocess.stdout && typeof subprocess.stdout.on === 'function') {
+				isStreaming = true
+				subprocess.stdout.on('data', (chunk: Buffer) => {
+					const text = chunk.toString()
+					outputBuffer += text
+
+					if (isDebugMode) {
+						process.stdout.write(text) // Full JSON streaming in debug mode
+					} else {
+						// Progress dots in non-debug mode with robot emoji prefix
+						if (isFirstProgress) {
+							process.stdout.write('🤖 .')
+							isFirstProgress = false
+						} else {
+							process.stdout.write('.')
+						}
+					}
+				})
+			}
+
+			const result = await subprocess
+
+			// Return streamed output if we were streaming, otherwise use result.stdout
+			if (isStreaming) {
+				const rawOutput = outputBuffer.trim()
+
+				// Clean up progress dots with newline in non-debug mode
+				if (!isDebugMode) {
+					process.stdout.write('\n')
+				}
+
+				return isJsonStreamFormat ? parseJsonStreamOutput(rawOutput) : rawOutput
+			} else {
+				// Fallback for mocked tests or when streaming not available
+				if (isDebugMode) {
+					// In debug mode, write to stdout even if not streaming (old behavior for tests)
+					process.stdout.write(result.stdout)
+					if (result.stdout && !result.stdout.endsWith('\n')) {
+						process.stdout.write('\n')
+					}
+				} else {
+					// In non-debug mode, show a single progress dot even without streaming (for tests)
+					process.stdout.write('🤖 .')
+					process.stdout.write('\n')
+				}
+				const rawOutput = result.stdout.trim()
+				return isJsonStreamFormat ? parseJsonStreamOutput(rawOutput) : rawOutput
+			}
 		} else {
 			// Simple interactive mode: run Claude in current terminal with stdio inherit
 			// Used for conflict resolution, error fixing, etc.

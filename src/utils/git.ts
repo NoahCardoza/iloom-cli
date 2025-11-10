@@ -544,6 +544,32 @@ export async function findAllBranchesForIssue(
 }
 
 /**
+ * Check if a repository is empty (has no commits yet)
+ * @param path - Repository path to check (defaults to process.cwd())
+ * @returns true if repository has no commits, false otherwise
+ */
+export async function isEmptyRepository(path: string = process.cwd()): Promise<boolean> {
+  try {
+    await executeGitCommand(['rev-parse', '--verify', 'HEAD'], { cwd: path })
+    return false // HEAD exists, repo has commits
+  } catch {
+    return true // HEAD doesn't exist, repo is empty
+  }
+}
+
+/**
+ * Ensure repository has at least one commit
+ * Creates an initial empty commit if repository is empty
+ * @param path - Repository path (defaults to process.cwd())
+ */
+export async function ensureRepositoryHasCommits(path: string = process.cwd()): Promise<void> {
+  const isEmpty = await isEmptyRepository(path)
+  if (isEmpty) {
+    await executeGitCommand(['commit', '--no-verify', '--allow-empty', '-m', 'Initial commit'], { cwd: path })
+  }
+}
+
+/**
  * Push a branch to remote repository
  * Used for PR workflow to push changes to remote without merging locally
  *
