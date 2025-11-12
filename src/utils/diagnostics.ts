@@ -3,6 +3,9 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { platform, release, arch } from 'os'
 import { logger } from './logger'
+import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
+import type { ProjectCapability } from '../types/hatchbox.js'
+import { getClaudeVersion } from './claude.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -16,6 +19,8 @@ export interface DiagnosticInfo {
 	osType: string
 	osVersion: string
 	architecture: string
+	capabilities: ProjectCapability[]
+	claudeVersion: string | null
 }
 
 /**
@@ -23,12 +28,21 @@ export interface DiagnosticInfo {
  * Fails gracefully with fallback messages if any information cannot be gathered.
  */
 export async function gatherDiagnosticInfo(): Promise<DiagnosticInfo> {
+	// Instantiate detector for current directory
+	const detector = new ProjectCapabilityDetector()
+	const { capabilities } = await detector.detectCapabilities(process.cwd())
+
+	// Get Claude CLI version (returns null if not available)
+	const claudeVersion = await getClaudeVersion()
+
 	const diagnostics: DiagnosticInfo = {
 		cliVersion: await getCliVersion(),
 		nodeVersion: getNodeVersion(),
 		osType: getOsType(),
 		osVersion: getOsVersion(),
 		architecture: getArchitecture(),
+		capabilities,
+		claudeVersion,
 	}
 
 	return diagnostics
@@ -39,6 +53,14 @@ export async function gatherDiagnosticInfo(): Promise<DiagnosticInfo> {
  */
 export function formatDiagnosticsAsMarkdown(diagnostics: DiagnosticInfo, includeMarker = true): string {
 	const marker = includeMarker ? `<!-- CLI GENERATED FEEDBACK v${diagnostics.cliVersion} -->\n` : ''
+
+	// Format capabilities as comma-separated string or "none"
+	const capabilitiesDisplay = diagnostics.capabilities.length > 0
+		? diagnostics.capabilities.join(', ')
+		: 'none'
+
+	// Format Claude version with fallback for null
+	const claudeVersionDisplay = diagnostics.claudeVersion ?? 'not available'
 
 	return `${marker}
 <details>
@@ -51,6 +73,8 @@ export function formatDiagnosticsAsMarkdown(diagnostics: DiagnosticInfo, include
 | OS | ${diagnostics.osType} |
 | OS Version | ${diagnostics.osVersion} |
 | Architecture | ${diagnostics.architecture} |
+| Capabilities | ${capabilitiesDisplay} |
+| Claude CLI Version | ${claudeVersionDisplay} |
 
 </details>
 `
