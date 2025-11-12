@@ -48,3 +48,6 @@ logs/
 
 tmp/
 .vscode/
+
+# Added by Hatchbox AI CLI
+.hatchbox/settings.local.json
