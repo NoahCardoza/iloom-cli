@@ -2,11 +2,11 @@ name: Bug Triage Enhancement
 
 on:
   issues:
-    types: [labeled]
+    types: [opened]
 
 jobs:
   enhance_bug_report:
-    if: github.event.label.name == 'cli-feedback'
+    if: contains(github.event.issue.body, '<!-- CLI GENERATED FEEDBACK')
     runs-on: ubuntu-latest
     permissions:
       contents: read
