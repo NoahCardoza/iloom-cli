@@ -125,20 +125,21 @@ export class EnvironmentManager {
   }
 
   /**
-   * Copy .env file from source to destination
+   * Generic file copy helper that only copies if source exists
+   * Does not throw if source file doesn't exist - just logs and returns
+   * @private
    */
-  async copyEnvFile(
+   async copyIfExists(
     source: string,
-    destination: string,
-    options?: { overwrite?: boolean }
+    destination: string
   ): Promise<void> {
     const sourceExists = await fs.pathExists(source)
     if (!sourceExists) {
-      throw new Error(`Source file ${source} does not exist`)
+      logger.debug(`Source file ${source} does not exist, skipping copy`)
+      return
     }
 
-    const overwrite = options?.overwrite ?? true
-    await fs.copy(source, destination, { overwrite })
+    await fs.copy(source, destination, { overwrite: false })
     logger.success(`Copied ${source} to ${destination}`)
   }
 

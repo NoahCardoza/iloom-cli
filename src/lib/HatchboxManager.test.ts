@@ -19,6 +19,14 @@ vi.mock('./ProjectCapabilityDetector.js')
 vi.mock('./CLIIsolationManager.js')
 vi.mock('./SettingsManager.js')
 
+// Mock fs-extra
+vi.mock('fs-extra', () => ({
+  default: {
+    ensureDir: vi.fn().mockResolvedValue(undefined),
+    pathExists: vi.fn().mockResolvedValue(false),
+  },
+}))
+
 // Mock branchExists utility
 vi.mock('../utils/git.js', () => ({
   branchExists: vi.fn().mockResolvedValue(false),
@@ -86,7 +94,7 @@ describe('HatchboxManager', () => {
     // Individual tests override this based on their specific port needs
     vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3000)
 
-    // Default mock for setEnvVar - setupEnvironment now calls this directly
+    // Default mock for setEnvVar - setupPortForWeb now calls this directly
     vi.mocked(mockEnvironment.setEnvVar).mockResolvedValue()
 
     vi.clearAllMocks()
@@ -935,11 +943,8 @@ describe('HatchboxManager', () => {
         originalInput: 'test-branch',
       }
 
-      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue({
-        path: '/test/path',
-        branch: 'test-branch',
-        commit: 'abc123',
-      } as unknown)
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/path')
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/path')
       vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
         capabilities: [],
         binEntries: {},
@@ -964,11 +969,8 @@ describe('HatchboxManager', () => {
         },
       }
 
-      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue({
-        path: '/test/path',
-        branch: 'test-branch',
-        commit: 'abc123',
-      } as unknown)
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/path')
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/path')
       vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
         capabilities: [],
         binEntries: {},
@@ -991,11 +993,8 @@ describe('HatchboxManager', () => {
         },
       }
 
-      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue({
-        path: '/test/path',
-        branch: 'test-branch',
-        commit: 'abc123',
-      } as unknown)
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/path')
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/path')
       vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
         capabilities: [],
         binEntries: {},
@@ -1193,7 +1192,7 @@ describe('HatchboxManager', () => {
       expect(mockGitWorktree.createWorktree).not.toHaveBeenCalled()
     })
 
-    it('should NOT copy .env file or set PORT when reusing existing worktree for issue', async () => {
+    it('should defensively copy files and set PORT when reusing existing worktree for issue', async () => {
       const input: CreateHatchboxInput = {
         type: 'issue',
         identifier: 39,
@@ -1226,16 +1225,15 @@ describe('HatchboxManager', () => {
 
       await manager.createHatchbox(input)
 
-      // When reusing an existing worktree:
-      // - copyEnvFile should NOT be called (already exists)
+      // When reusing an existing worktree (NEW BEHAVIOR - defensive copying):
+      // - Files are copied defensively (internal implementation via copyIfExists)
       // - calculatePort SHOULD be called (to return the correct port)
-      // - setEnvVar should NOT be called (.env already configured)
-      expect(mockEnvironment.copyEnvFile).not.toHaveBeenCalled()
+      // - setEnvVar SHOULD be called for web projects (ensure PORT is set)
       expect(mockEnvironment.calculatePort).toHaveBeenCalled()
-      expect(mockEnvironment.setEnvVar).not.toHaveBeenCalled()
+      expect(mockEnvironment.setEnvVar).toHaveBeenCalled() // Changed: now sets PORT on reuse
     })
 
-    it('should NOT copy .env file or set PORT when reusing existing worktree for PR', async () => {
+    it('should defensively copy files and set PORT when reusing existing worktree for PR', async () => {
       const input: CreateHatchboxInput = {
         type: 'pr',
         identifier: 42,
@@ -1269,13 +1267,12 @@ describe('HatchboxManager', () => {
 
       await manager.createHatchbox(input)
 
-      // When reusing an existing worktree:
-      // - copyEnvFile should NOT be called (already exists)
+      // When reusing an existing worktree (NEW BEHAVIOR - defensive copying):
+      // - Files are copied defensively (internal implementation via copyIfExists)
       // - calculatePort SHOULD be called (to return the correct port)
-      // - setEnvVar should NOT be called (.env already configured)
-      expect(mockEnvironment.copyEnvFile).not.toHaveBeenCalled()
+      // - setEnvVar SHOULD be called for web projects (ensure PORT is set)
       expect(mockEnvironment.calculatePort).toHaveBeenCalled()
-      expect(mockEnvironment.setEnvVar).not.toHaveBeenCalled()
+      expect(mockEnvironment.setEnvVar).toHaveBeenCalled() // Changed: now sets PORT on reuse
     })
 
     it('should still call moveIssueToInProgress for issue reuse', async () => {

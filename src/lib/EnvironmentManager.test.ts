@@ -239,30 +239,6 @@ describe('EnvironmentManager', () => {
     })
   })
 
-  describe('copyEnvFile', () => {
-    it('should copy file successfully', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.copy).mockResolvedValue(undefined)
-
-      await manager.copyEnvFile('/source/.env', '/dest/.env')
-
-      expect(vi.mocked(fs.copy)).toHaveBeenCalledWith(
-        '/source/.env',
-        '/dest/.env',
-        { overwrite: true }
-      )
-    })
-
-    it('should handle copy errors', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.copy).mockRejectedValue(new Error('Permission denied'))
-
-      await expect(
-        manager.copyEnvFile('/source/.env', '/dest/.env')
-      ).rejects.toThrow('Permission denied')
-    })
-  })
-
   describe('setPortForWorkspace', () => {
     it('should set port correctly for issue', async () => {
       const filePath = '/test/.env'

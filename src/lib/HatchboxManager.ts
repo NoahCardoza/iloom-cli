@@ -1,4 +1,5 @@
 import path from 'path'
+import fs from 'fs-extra'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { GitHubService } from './GitHubService.js'
 import { EnvironmentManager } from './EnvironmentManager.js'
@@ -68,17 +69,23 @@ export class HatchboxManager {
     // 5. Detect project capabilities
     const { capabilities, binEntries } = await this.capabilityDetector.detectCapabilities(worktreePath)
 
-    // 6. Setup environment based on capabilities (copy .env + set PORT)
+    // 6. Copy environment files (.env) - ALWAYS done regardless of capabilities
+    await this.copyEnvironmentFiles(worktreePath)
+
+    // 7. Copy Hatchbox settings (settings.local.json) - ALWAYS done regardless of capabilities
+    await this.copyHatchboxSettings(worktreePath)
+
+    // 8. Setup PORT environment variable - ONLY for web projects
     // Load base port from settings
     const settingsData = await this.settings.loadSettings()
     const basePort = settingsData.capabilities?.web?.basePort ?? 3000
 
     let port = basePort // default
     if (capabilities.includes('web')) {
-      port = await this.setupEnvironment(worktreePath, input, basePort)
+      port = await this.setupPortForWeb(worktreePath, input, basePort)
     }
 
-    // 7. Install dependencies AFTER environment setup (like bash script line 757-769)
+    // 9. Install dependencies AFTER environment setup (like bash script line 757-769)
     try {
       await installDependencies(worktreePath, true)
     } catch (error) {
@@ -86,7 +93,7 @@ export class HatchboxManager {
       logger.warn(`Failed to install dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`, error)
     }
 
-    // 9. Setup database branch if configured
+    // 10. Setup database branch if configured
     let databaseBranch: string | undefined = undefined
     if (this.database && !input.options?.skipDatabase) {
       try {
@@ -382,27 +389,63 @@ export class HatchboxManager {
   }
 
   /**
-   * Setup environment for the hatchbox
-   * Copies main .env file to worktree first, then sets/updates PORT variable
+   * Copy user application environment files (.env) from main repo to worktree
+   * Always called regardless of project capabilities
    */
-  private async setupEnvironment(
+  private async copyEnvironmentFiles(worktreePath: string): Promise<void> {
+    const envFilePath = path.join(worktreePath, '.env')
+
+    try {
+      const mainEnvPath = path.join(process.cwd(), '.env')
+      if (await fs.pathExists(envFilePath)) {
+        logger.warn('.env file already exists in worktree, skipping copy')
+      } else {
+        //TODO: Update this to handle .env.local, .env.development and .env.development.local as well.
+        await this.environment.copyIfExists(mainEnvPath, envFilePath)
+      }
+    } catch (error) {
+      // Handle gracefully if main .env fails to copy
+      logger.warn(`Warning: Failed to copy main .env file: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /**
+   * Copy Hatchbox configuration (settings.local.json) from main repo to worktree
+   * Always called regardless of project capabilities
+   */
+  private async copyHatchboxSettings(worktreePath: string): Promise<void> {
+    const mainSettingsLocalPath = path.join(process.cwd(), '.hatchbox', 'settings.local.json')
+
+    try {
+      const worktreeHatchboxDir = path.join(worktreePath, '.hatchbox')
+
+      // Ensure .hatchbox directory exists in worktree
+      await fs.ensureDir(worktreeHatchboxDir)
+
+      const worktreeSettingsLocalPath = path.join(worktreeHatchboxDir, 'settings.local.json')
+      // Check if settings.local.json already exists in worktree
+      if (await fs.pathExists(worktreeSettingsLocalPath)) {
+        logger.warn('settings.local.json already exists in worktree, skipping copy')
+      } else {
+        await this.environment.copyIfExists(mainSettingsLocalPath, worktreeSettingsLocalPath)
+      }
+    } catch (error) {
+      logger.warn(`Warning: Failed to copy settings.local.json: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /**
+   * Setup PORT environment variable for web projects
+   * Only called when project has web capabilities
+   */
+  private async setupPortForWeb(
     worktreePath: string,
     input: CreateHatchboxInput,
     basePort: number
   ): Promise<number> {
     const envFilePath = path.join(worktreePath, '.env')
 
-    // First, copy main .env file to worktree (like bash script lines 715-725)
-    try {
-      const mainEnvPath = path.join(process.cwd(), '.env')
-      await this.environment.copyEnvFile(mainEnvPath, envFilePath)
-      logger.info('Copied main .env file to worktree')
-    } catch (error) {
-      // Handle gracefully if main .env doesn't exist
-      logger.warn(`Warning: Failed to copy main .env file: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    }
-
-    // Then set/update the PORT variable in the copied file using configured base port
+    // Calculate port based on input type
     const options: { basePort: number; issueNumber?: number; prNumber?: number; branchName?: string } = { basePort }
 
     if (input.type === 'issue') {
@@ -561,24 +604,27 @@ export class HatchboxManager {
     // 2. Detect capabilities (quick, no installation)
     const { capabilities, binEntries } = await this.capabilityDetector.detectCapabilities(worktreePath)
 
-    // 3. Calculate port for existing worktree (but DON'T copy .env or set PORT)
-    // The .env file was already set up when the worktree was first created
+    // 3. Defensively copy .env and settings.local.json if missing
+    await this.copyEnvironmentFiles(worktreePath)
+    await this.copyHatchboxSettings(worktreePath)
+
+    // 4. Setup PORT for web projects (ensure it's set even if .env existed)
     // Load base port from settings
     const settingsData = await this.settings.loadSettings()
     const basePort = settingsData.capabilities?.web?.basePort ?? 3000
 
     let port = basePort
     if (capabilities.includes('web')) {
-      port = await this.calculatePort(input)
+      port = await this.setupPortForWeb(worktreePath, input, basePort)
     }
 
-    // 4. Skip database branch creation for existing worktrees
+    // 5. Skip database branch creation for existing worktrees
     // The database branch should have been created when the worktree was first created
     // Matches bash script behavior: handle_existing_worktree() skips all setup
     logger.info('Database branch assumed to be already configured for existing worktree')
     const databaseBranch: string | undefined = undefined
 
-    // NEW: Move issue to In Progress (for reused worktrees too)
+    // 6. Move issue to In Progress (for reused worktrees too)
     if (input.type === 'issue') {
       try {
         logger.info('Moving issue to In Progress...')
@@ -591,7 +637,7 @@ export class HatchboxManager {
       }
     }
 
-    // 5. Launch components (same as new worktree)
+    // 7. Launch components (same as new worktree)
     const enableClaude = input.options?.enableClaude !== false
     const enableCode = input.options?.enableCode !== false
     const enableDevServer = input.options?.enableDevServer !== false
@@ -627,7 +673,7 @@ export class HatchboxManager {
       })
     }
 
-    // 6. Return hatchbox metadata
+    // 8. Return hatchbox metadata
     const hatchbox: Hatchbox = {
       id: this.generateHatchboxId(input),
       path: worktreePath,
