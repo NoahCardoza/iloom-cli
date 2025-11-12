@@ -75,7 +75,7 @@ jobs:
             Use the GitHub CLI to post a comment on this issue using:
             gh issue comment ${{ github.event.issue.number }} --body "your analysis"
 
-            Structure your comment with this format:
+            Structure your comment with this format (do not escape the auto-enhancement html comment! - write it exactly as shown):
 
             <!-- AUTO-ENHANCEMENT-${{ github.run_id }} -->
             ## Enhancement Request Analysis
