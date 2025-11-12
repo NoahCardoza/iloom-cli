@@ -358,18 +358,18 @@ describe('HatchboxLauncher', () => {
 				const call = vi.mocked(terminal.openMultipleTerminalWindows).mock.calls[0][0]
 				expect(call).toHaveLength(3)
 				expect(call[0]).toMatchObject({
-					title: 'Claude - Issue #42',
-					command: 'hb ignite',
-				})
-				expect(call[1]).toMatchObject({
 					title: 'Dev Server - Issue #42',
 					command: 'pnpm dev',
 				})
-				expect(call[2]).toMatchObject({
+				expect(call[1]).toMatchObject({
 					title: 'Terminal - Issue #42',
 				})
 				// Terminal tab should NOT have a command field
-				expect(call[2].command).toBeUndefined()
+				expect(call[1].command).toBeUndefined()
+				expect(call[2]).toMatchObject({
+					title: 'Claude - Issue #42',
+					command: 'hb ignite',
+				})
 			})
 
 			it('should launch 2 tabs when DevServer + Terminal enabled (no Claude)', async () => {

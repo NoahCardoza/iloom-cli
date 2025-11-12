@@ -58,13 +58,6 @@ export class HatchboxLauncher {
 			options: TerminalWindowOptions
 		}> = []
 
-		if (enableClaude) {
-			terminalsToLaunch.push({
-				type: 'claude',
-				options: await this.buildClaudeTerminalOptions(options),
-			})
-		}
-
 		if (enableDevServer) {
 			terminalsToLaunch.push({
 				type: 'devServer',
@@ -76,6 +69,13 @@ export class HatchboxLauncher {
 			terminalsToLaunch.push({
 				type: 'terminal',
 				options: this.buildStandaloneTerminalOptions(options),
+			})
+		}
+
+		if (enableClaude) {
+			terminalsToLaunch.push({
+				type: 'claude',
+				options: await this.buildClaudeTerminalOptions(options),
 			})
 		}
 
