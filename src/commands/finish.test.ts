@@ -11,11 +11,9 @@ import { ProcessManager } from '../lib/process/ProcessManager.js'
 import { BuildRunner } from '../lib/BuildRunner.js'
 import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { NeonProvider } from '../lib/providers/NeonProvider.js'
-import { EnvironmentManager } from '../lib/EnvironmentManager.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import type { GitWorktree } from '../types/worktree.js'
-import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 
 // Mock dependencies
 vi.mock('../lib/GitHubService.js')
