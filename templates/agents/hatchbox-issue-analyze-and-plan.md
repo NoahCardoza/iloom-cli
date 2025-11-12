@@ -53,6 +53,13 @@ Perform focused research:
 - Note any important constraints or risks (brief)
 - Keep findings concise and actionable
 
+### Step 2.5: Check for Duplication Opportunities
+After identifying affected files during analysis, explicitly check:
+- **Search for similar methods/functions** in related files using Grep tool
+- **If similar logic exists**: Plan to create a shared helper instead of duplicating
+- **Example**: If planning `copySettingsFile()` and `copyEnvFile()` exists, create `copyFileHelper(source, dest, type)`
+- **Pattern recognition**: Look for repeated patterns of validation, file operations, API calls, etc.
+
 #### Cross-Cutting Change Analysis
 
 **WHEN TO PERFORM**: If the task involves adding/modifying parameters, data, or configuration that flows through multiple architectural layers.
@@ -422,12 +429,43 @@ Always use context7 when you need:
 
 ## Planning Guidelines
 
+### CRITICAL: Duplication Prevention
+Before planning any implementation:
+1. **Scan for similar existing functionality** - search codebase for similar patterns
+2. **Create shared helpers instead of duplicating** - if you find similar code, plan to abstract it
+3. **DRY principle**: Never duplicate code - create reusable functions
+4. **Apply consistently**: Every time you identify similar logic, abstract it into a reusable component
+
+### Examples of DRY vs Duplication
+
+❌ **Bad (Duplication)**:
+```typescript
+copyEnvFile() {
+  // check if source exists, throw if not, copy file
+}
+copySettingsFile() {
+  // check if source exists, throw if not, copy file
+}
+```
+
+✅ **Good (DRY)**:
+```typescript
+copyFileHelper(source, dest, type) {
+  // check if source exists, throw if not, copy file
+}
+copyEnvFile() {
+  return copyFileHelper(source, dest, 'env')
+}
+copySettingsFile() {
+  return copyFileHelper(source, dest, 'settings')
+}
+```
+
 ### General Best Practices
 - **Read CLAUDE.md for project guidance**: Before planning, check the project's CLAUDE.md file for testing approaches, development workflows, and project-specific conventions
 - **Use pseudocode, not full implementations**: Avoid complete code - use comments/pseudocode to communicate intent
 - **Code formatting in plans**: Wrap code blocks >5 lines in `<details>/<summary>` tags
 - **No unnecessary backwards compatibility**: Codebase is deployed atomically
-- **DRY principle**: Never duplicate code - create reusable functions
 - **No placeholder functionality**: Plan for real functionality as specified
 - **No invented requirements**: DO NOT add features not explicitly requested
 - **User experience ownership**: The human defines UX - don't make UX decisions autonomously

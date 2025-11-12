@@ -75,7 +75,46 @@ First read the issue thoroughly using the GitHub CLI tool `gh issue view --json 
 6. Consider the impact on related components and systems
 7. Structure the plan in a clear, actionable format
 
+### Step 2.5: Check for Duplication Opportunities
+After identifying files to modify, explicitly check:
+- **Search for similar methods/functions** in related files using Grep tool
+- **If similar logic exists**: Plan to create a shared helper instead of duplicating
+- **Example**: If planning `copySettingsFile()` and `copyEnvFile()` exists, create `copyFileHelper(source, dest, type)`
+- **Pattern recognition**: Look for repeated patterns of validation, file operations, API calls, etc.
+
 ## Implementation Planning Principles
+
+### CRITICAL: Duplication Prevention
+Before planning any implementation:
+1. **Scan for similar existing functionality** - search codebase for similar patterns
+2. **Create shared helpers instead of duplicating** - if you find similar code, plan to abstract it
+3. **DRY principle**: Never duplicate code - create reusable functions and components
+4. **Apply consistently**: Every time you identify similar logic, abstract it into a reusable component
+
+### Examples of DRY vs Duplication
+
+❌ **Bad (Duplication)**:
+```typescript
+copyEnvFile() {
+  // check if source exists, throw if not, copy file
+}
+copySettingsFile() {
+  // check if source exists, throw if not, copy file
+}
+```
+
+✅ **Good (DRY)**:
+```typescript
+copyFileHelper(source, dest, type) {
+  // check if source exists, throw if not, copy file
+}
+copyEnvFile() {
+  return copyFileHelper(source, dest, 'env')
+}
+copySettingsFile() {
+  return copyFileHelper(source, dest, 'settings')
+}
+```
 
 ### General Best Practices
 - **Read CLAUDE.md for project guidance**: Before planning, read the project's CLAUDE.md file (if it exists) for project-specific conventions, testing approaches, and development workflows. Follow the guidance provided there.
@@ -84,7 +123,6 @@ First read the issue thoroughly using the GitHub CLI tool `gh issue view --json 
   - Summary format: "Click to expand complete [language] code ([N] lines) - [optional: component/file]"
   - Applies to ALL CODE BLOCKS: implementation examples, test code, configuration samples, error output, and others
 - **No unnecessary backwards compatibility**: The codebase is deployed atomically - avoid polluting code with unnecessary fallback paths
-- **DRY principle**: Never duplicate code - create reusable functions and components
 - **No placeholder functionality**: Implement real functionality as specified, not placeholders
 - **No invented requirements**: DO NOT add features or optimizations not explicitly requested
 - **User experience ownership**: The human defines UX - do not make UX decisions autonomously
