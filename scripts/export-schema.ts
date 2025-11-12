@@ -1,0 +1,21 @@
+import { writeFile, mkdir } from 'fs/promises'
+import path from 'path'
+import { zodToJsonSchema } from 'zod-to-json-schema'
+import { HatchboxSettingsSchema } from '../src/lib/SettingsManager.js'
+
+async function exportSchema() {
+	const jsonSchema = zodToJsonSchema(HatchboxSettingsSchema, {
+		name: 'HatchboxSettings',
+		$refStrategy: 'none', // Inline all references for simplicity
+	})
+
+	const outputDir = path.join(process.cwd(), 'dist', 'schema')
+	const outputPath = path.join(outputDir, 'settings.schema.json')
+
+	await mkdir(outputDir, { recursive: true })
+	await writeFile(outputPath, JSON.stringify(jsonSchema, null, 2), 'utf-8')
+
+	console.log(`✓ Schema exported to ${outputPath}`)
+}
+
+exportSchema().catch(console.error)

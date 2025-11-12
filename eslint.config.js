@@ -6,8 +6,38 @@ import prettier from 'eslint-config-prettier'
 export default [
   js.configs.recommended,
   {
+    files: ['scripts/**/*.ts'],
+    languageOptions: {
+      parser: typescriptParser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        // Don't use project for scripts since they're not in tsconfig
+      },
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        BufferEncoding: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        URL: 'readonly',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': typescript,
+    },
+    rules: {
+      ...typescript.configs.recommended.rules,
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      'no-console': 'off', // Allow console in scripts
+    },
+  },
+  {
     files: ['**/*.ts', '**/*.tsx'],
-    ignores: ['**/*.test.ts', '**/*.spec.ts', 'tests/**/*.ts'], // Exclude test files from main TypeScript config
+    ignores: ['**/*.test.ts', '**/*.spec.ts', 'tests/**/*.ts', 'scripts/**/*.ts'], // Exclude test files and scripts from main TypeScript config
     languageOptions: {
       parser: typescriptParser,
       parserOptions: {

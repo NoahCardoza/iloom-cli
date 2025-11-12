@@ -46,7 +46,8 @@
   },
   "packageManager": "pnpm@10.16.1+sha512.0e155aa2629db8672b49e8475da6226aa4bdea85fdcdfdc15350874946d4f3c91faaf64cbdc4a5d1ab8002f473d5c3fcedcd197989cf0390f9badd3c04678706",
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && pnpm run export-schema",
+    "export-schema": "tsx scripts/export-schema.ts",
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest --watch",
@@ -94,8 +95,10 @@
     "prettier": "^3.0.3",
     "rimraf": "^5.0.5",
     "tsup": "^8.5.0",
+    "tsx": "^4.20.6",
     "typescript": "^5.2.2",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "zod-to-json-schema": "^3.24.6"
   },
   "engines": {
     "node": ">=16.0.0"
