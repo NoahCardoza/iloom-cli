@@ -72,7 +72,7 @@ jobs:
 
             You are an expert issue enhancement agent for Hatchbox AI. Analyze and enhance this issue report to create a comprehensive specification for development teams.
 
-            Use the GitHub CLI to post a comment on this issue using:
+            Use the GitHub CLI to post a comment on this issue using the Bash tool, using a heredoc to mitigate escaping issues:
             gh issue comment ${{ github.event.issue.number }} --body "your analysis"
 
             Structure your comment with this format (do not escape the auto-enhancement html comment! - write it exactly as shown):
@@ -120,6 +120,5 @@ jobs:
                       
           claude_args: |
             --model claude-opus-4-1-20250805
-            --permission-mode "bypassPermissions"
-            --allowed-tools "Bash(gh issue comment:*)"
+            --allowed-tools "Bash(gh issue comment:*), Bash(cat:*)"
             --disallowed-tools "Edit,Write,MultiEdit,NotebookEdit,Bash(git),Bash(git commit:*),Bash(git add:*),Bash(git push:*)"
