@@ -2,7 +2,7 @@ name: Bug Triage Enhancement
 
 on:
   issues:
-    types: [opened]
+    types: [opened, edited]
 
 jobs:
   enhance_bug_report:
@@ -61,7 +61,7 @@ jobs:
         uses: acreeger/claude-code-action@main
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           # Custom prompt for issue enhancement
           prompt: |
             REPO: ${{ github.repository }}
