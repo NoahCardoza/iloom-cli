@@ -120,5 +120,6 @@ jobs:
                       
           claude_args: |
             --model claude-opus-4-1-20250805
+            --permission-mode "bypassPermissions"
             --allowed-tools "Bash(gh issue comment:*)"
             --disallowed-tools "Edit,Write,MultiEdit,NotebookEdit,Bash(git),Bash(git commit:*),Bash(git add:*),Bash(git push:*)"
