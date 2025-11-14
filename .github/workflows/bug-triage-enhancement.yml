@@ -2,7 +2,7 @@ name: Bug Triage Enhancement
 
 on:
   issues:
-    types: [opened, edited]
+    types: [opened]
 
 jobs:
   enhance_bug_report:
