@@ -23,7 +23,7 @@ export interface LaunchLoomOptions {
 	title?: string
 	oneShot?: import('../types/index.js').OneShotMode
 	setArguments?: string[] // Raw --set arguments to forward
-	executablePath?: string // Executable path to use for ignite command
+	executablePath?: string // Executable path to use for spin command
 }
 
 /**
@@ -182,8 +182,8 @@ export class LoomLauncher {
 		const hasEnvFile = existsSync(join(options.worktreePath, '.env'))
 		const claudeTitle = `Claude - ${this.formatIdentifier(options.workflowType, options.identifier)}`
 
-		const executable = options.executablePath ?? 'il'
-		let claudeCommand = `${executable} ignite`
+		const executable = options.executablePath ?? 'iloom'
+		let claudeCommand = `${executable} spin`
 		if (options.oneShot !== undefined && options.oneShot !== 'default') {
 			claudeCommand += ` --one-shot=${options.oneShot}`
 		}

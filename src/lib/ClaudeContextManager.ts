@@ -11,7 +11,7 @@ export interface ClaudeContext {
 	branchName?: string
 	oneShot?: import('../types/index.js').OneShotMode
 	setArguments?: string[] // Raw --set arguments to forward
-	executablePath?: string // Executable path to use for ignite command
+	executablePath?: string // Executable path to use for spin command
 }
 
 export class ClaudeContextManager {

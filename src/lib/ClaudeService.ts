@@ -14,7 +14,7 @@ export interface ClaudeWorkflowOptions {
 	branchName?: string
 	oneShot?: import('../types/index.js').OneShotMode
 	setArguments?: string[] // Raw --set arguments to forward
-	executablePath?: string // Executable path to use for ignite command
+	executablePath?: string // Executable path to use for spin command
 }
 
 export class ClaudeService {
@@ -156,7 +156,7 @@ export class ClaudeService {
 				claudeOptions.setArguments = setArguments
 			}
 
-			// Add optional executablePath for ignite command
+			// Add optional executablePath for spin command
 			if (executablePath !== undefined) {
 				claudeOptions.executablePath = executablePath
 			}

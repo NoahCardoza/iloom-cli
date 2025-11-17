@@ -18,7 +18,7 @@ export interface ClaudeCliOptions {
 	agents?: Record<string, unknown> // Agent configurations for --agents flag
 	oneShot?: import('../types/index.js').OneShotMode // One-shot automation mode
 	setArguments?: string[] // Raw --set arguments to forward (e.g., ['workflows.issue.startIde=false'])
-	executablePath?: string // Executable path to use for ignite command (e.g., 'il', 'il-125', or '/path/to/dist/cli.js')
+	executablePath?: string // Executable path to use for spin command (e.g., 'il', 'il-125', or '/path/to/dist/cli.js')
 }
 
 /**
@@ -268,8 +268,8 @@ export async function launchClaudeInNewTerminalWindow(
 
 	// Build launch command with optional --one-shot flag
 	// Use provided executable path or fallback to 'il'
-	const executable = executablePath ?? 'il'
-	let launchCommand = `${executable} ignite`
+	const executable = executablePath ?? 'iloom'
+	let launchCommand = `${executable} spin`
 	if (oneShot !== 'default') {
 		launchCommand += ` --one-shot=${oneShot}`
 	}

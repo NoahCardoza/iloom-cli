@@ -50,7 +50,7 @@ If the issue involves adding/modifying parameters, data, or configuration that m
 3. **Document Integration Points**:
    - Where data is extracted: `input.options.executablePath`
    - Where data is forwarded: `{ executablePath: input.options?.executablePath }`
-   - Where data is consumed: `command: ${executablePath} ignite`
+   - Where data is consumed: `command: ${executablePath} spin`
 
 4. **Create Call Chain Map**:
    ```
@@ -161,7 +161,7 @@ await mcp__github_comment__update_comment({
    | [Specific question about requirements, approach, or constraints] | [Your analysis-based answer] |
    | [Technical decision that needs stakeholder input] | [Your recommendation] |
 
-   - **Note:** Only include this section if you have identified questions or decisions. If none exist, omit entirely.
+   - **Note:** Only include this section if you have identified questions or decisions. If none exist, omit entirely. Do not include questions already answered in previous comments.
 
 3. **HIGH/CRITICAL Risks** (if any):
    - **MANDATORY: This section appears immediately after Questions (or after Executive Summary if no questions)**

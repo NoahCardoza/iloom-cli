@@ -158,7 +158,7 @@ export class StartCommand {
 			const workflowType = parsed.type === 'branch' ? 'regular' : parsed.type
 			const workflowConfig = settings.workflows?.[workflowType]
 
-			// Step 2.9: Extract raw --set arguments and executable path for forwarding to ignite
+			// Step 2.9: Extract raw --set arguments and executable path for forwarding to spin
 			const { extractRawSetArguments, getExecutablePath } = await import('../utils/cli-overrides.js')
 			const setArguments = extractRawSetArguments()
 			const executablePath = getExecutablePath()

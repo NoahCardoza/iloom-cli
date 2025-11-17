@@ -369,7 +369,7 @@ describe('LoomLauncher', () => {
 				expect(call[1].command).toBeUndefined()
 				expect(call[2]).toMatchObject({
 					title: 'Claude - Issue #42',
-					command: 'il ignite',
+					command: 'iloom spin',
 				})
 			})
 
@@ -449,7 +449,7 @@ describe('LoomLauncher', () => {
 				const calls = vi.mocked(terminal.openMultipleTerminalWindows).mock.calls[0][0]
 				const claudeTab = calls.find((tab: TerminalWindowOptions) => tab.title?.includes('Claude'))
 				expect(claudeTab).toBeDefined()
-				expect(claudeTab?.command).toContain('/custom/path/to/cli.js ignite')
+				expect(claudeTab?.command).toContain('/custom/path/to/cli.js spin')
 			})
 
 			it('should include setArguments in multi-terminal Claude command', async () => {

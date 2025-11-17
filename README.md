@@ -324,7 +324,7 @@ iloom cleanup [identifier...]
 iloom list
 # Show active looms with their ports and paths
 
-iloom ignite
+iloom spin
 # Launch Claude with auto-detected loom context
 # Options:
 #   --one-shot=<mode>  - Same automation modes as 'start'
@@ -530,7 +530,7 @@ Automatically detects PR, fetches the branch, and creates loom with PR context. 
 **Project structure:**
 ```
 src/
-├── commands/          # CLI commands (start, finish, cleanup, list, add-issue, enhance, ignite, init, open)
+├── commands/          # CLI commands (start, finish, cleanup, list, add-issue, enhance, spin, init, open)
 ├── lib/              # Core business logic (WorkspaceManager, GitWorktreeManager, etc.)
 ├── utils/            # Utility functions (git, github, env, database, shell)
 └── types/            # TypeScript definitions

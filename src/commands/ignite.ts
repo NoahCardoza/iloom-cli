@@ -41,11 +41,11 @@ export class IgniteCommand {
 	}
 
 	/**
-	 * Main entry point for ignite command
+	 * Main entry point for spin command
 	 */
 	async execute(oneShot: import('../types/index.js').OneShotMode = 'default'): Promise<void> {
 		try {
-			logger.info('🚀 Your loom is igniting, please wait...')
+			logger.info('🚀 Your loom is spinning up, please wait...')
 
 			// Step 1: Auto-detect workspace context
 			const context = await this.detectWorkspaceContext()

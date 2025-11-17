@@ -343,7 +343,7 @@ Directory PR pattern → Directory issue pattern → Git branch pattern → Regu
    - Calls LoomLauncher to open terminals
    - LoomLauncher → ClaudeContextManager → ClaudeService → launchClaude()
 
-2. **Ignite Command** (`il ignite`):
+2. **Ignite Command** (`il spin`):
    - Auto-detects context in current directory
    - Loads prompt templates and agents
    - Directly calls launchClaude() with system instructions
@@ -508,7 +508,7 @@ Opens terminal tabs with:
 - Background color based on branch name (consistent color hashing)
 - Environment sourcing (`.env` file if exists)
 - Port export (if development server)
-- Command execution (e.g., `il ignite` for Claude launch)
+- Command execution (e.g., `il spin` for Claude launch)
 
 **Supported Platforms:**
 - macOS (AppleScript via Terminal.app)

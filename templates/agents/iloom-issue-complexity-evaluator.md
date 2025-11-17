@@ -104,8 +104,8 @@ Estimate the following metrics:
    3. Search for words indicating data flow: "forwards", "passes", "inherits", "propagates"
    4. Identify if change affects multiple architectural layers (CLI → Manager → Service → Utility)
 
-   **Real Example (Issue #149 - executablePath)**:
-   - Issue text: "Any argument that is passed to il start should be passed to il ignite"
+   **Real Example (iloom Issue #149 - executablePath)**:
+   - Issue text: "Any argument that is passed to il start should be passed to il spin"
    - Appeared SIMPLE: ~3 files, <200 LOC, no breaking changes
    - Actually COMPLEX: Required updating 5 TypeScript interfaces across 6 layers
    - **This should trigger COMPLEX classification immediately**

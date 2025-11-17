@@ -41,6 +41,7 @@ export class ShellCompletion {
       reply([
         'start',
         'finish',
+        'spin',
         'ignite',
         'open',
         'run',

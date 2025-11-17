@@ -238,7 +238,8 @@ program
   })
 
 program
-  .command('ignite')
+  .command('spin')
+  .alias('ignite')
   .description('Launch Claude with auto-detected workspace context')
   .addOption(
     new Option('--one-shot <mode>', 'One-shot automation mode')
@@ -251,7 +252,7 @@ program
       const command = new IgniteCommand()
       await command.execute(options.oneShot ?? 'default')
     } catch (error) {
-      logger.error(`Failed to ignite Claude: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      logger.error(`Failed to spin up loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
     }
   })
