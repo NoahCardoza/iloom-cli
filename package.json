@@ -9,8 +9,8 @@
     "git-worktree",
     "developer-productivity",
     "parallel-development",
-    "ci-cd",
-    "automation"
+    "automation",
+    "ai-assisted-development"
   ],
   "homepage": "https://github.com/iloom-ai/iloom-cli#readme",
   "bugs": {
