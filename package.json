@@ -36,8 +36,7 @@
   "types": "./dist/index.d.ts",
   "bin": {
     "iloom": "./dist/cli.js",
-    "il": "./dist/cli.js",
-    "hb": "./dist/cli.js"
+    "il": "./dist/cli.js"
   },
   "files": [
     "dist"
