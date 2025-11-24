@@ -50,5 +50,5 @@ tmp/
 .vscode/
 
 # Added by iloom CLI
-.hatchbox/settings.local.json
+.iloom/settings.local.json
 .iloom/settings.local.json
