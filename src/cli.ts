@@ -36,35 +36,13 @@ program
     // Check for updates before command execution for global installations
     try {
       const { checkAndNotifyUpdate } = await import('./utils/update-notifier.js')
-      const { detectInstallationMethod, detectLegacyPackage } = await import('./utils/installation-detector.js')
+      const { detectInstallationMethod } = await import('./utils/installation-detector.js')
 
       // Detect installation method
       const installMethod = detectInstallationMethod(__filename)
 
       // Check and notify (non-blocking, all errors handled internally)
       await checkAndNotifyUpdate(packageJson.version, packageJson.name, installMethod)
-
-      // Block execution if running from legacy hatchbox package (global mode only)
-      const legacyPackage = detectLegacyPackage(__filename)
-      if (legacyPackage !== null && installMethod === 'global') {
-        // Get the command being executed
-        const commandName = thisCommand.name()
-
-        // Allow update command to proceed (so users can migrate)
-        if (commandName !== 'update') {
-          logger.error('Legacy package detected: You are using the legacy "@hatchbox-ai/hatchbox-cli" package')
-          logger.error('This package has been renamed to "@iloom/cli"')
-          logger.error('')
-          logger.error('Please run the following command to migrate:')
-          logger.error('  il update')
-          logger.error('')
-          logger.error('This will automatically:')
-          logger.error('  1. Install @iloom/cli@latest')
-          logger.error('  2. Verify the installation')
-          logger.error('  3. Remove @hatchbox-ai/hatchbox-cli')
-          process.exit(1)
-        }
-      }
     } catch {
       // Silently fail - update check should never break user experience
     }
