@@ -14,6 +14,10 @@ import { NeonProvider } from '../lib/providers/NeonProvider.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import type { GitWorktree } from '../types/worktree.js'
+import { GitHubError, GitHubErrorCode } from '../types/github.js'
+import { findMainWorktreePathWithSettings, pushBranchToRemote } from '../utils/git.js'
+import { logger } from '../utils/logger.js'
+import { installDependencies } from '../utils/package-manager.js'
 
 // Mock dependencies
 vi.mock('../lib/GitHubService.js')
@@ -1510,7 +1514,6 @@ describe('FinishCommand', () => {
 					})
 
 					// Mock NOT_FOUND error
-					const { GitHubError, GitHubErrorCode } = await import('../types/github.js')
 					const notFoundError = new GitHubError(
 						GitHubErrorCode.NOT_FOUND,
 						'Issue #999 not found'
@@ -1654,7 +1657,6 @@ describe('FinishCommand', () => {
 
 				it('should throw error if PR not found on GitHub', async () => {
 					// Mock NOT_FOUND error
-					const { GitHubError, GitHubErrorCode } = await import('../types/github.js')
 					const notFoundError = new GitHubError(
 						GitHubErrorCode.NOT_FOUND,
 						'PR #999 not found'
@@ -2003,7 +2005,6 @@ describe('FinishCommand', () => {
 					}
 
 					// Mock logger to capture calls
-					const { logger } = await import('../utils/logger.js')
 
 					vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
 						type: 'issue',
@@ -2136,7 +2137,6 @@ describe('FinishCommand', () => {
 					expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
 
 					// Should push to remote
-					const { pushBranchToRemote } = await import('../utils/git.js')
 					expect(pushBranchToRemote).toHaveBeenCalledWith(
 						'feat/test',
 						'/test/worktree',
@@ -2177,7 +2177,6 @@ describe('FinishCommand', () => {
 					expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
 
 					// In dry run, push should not be called
-					const { pushBranchToRemote } = await import('../utils/git.js')
 					expect(pushBranchToRemote).not.toHaveBeenCalled()
 				})
 
@@ -2214,7 +2213,6 @@ describe('FinishCommand', () => {
 					expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
 
 					// In dry run, push should not be called
-					const { pushBranchToRemote } = await import('../utils/git.js')
 					expect(pushBranchToRemote).not.toHaveBeenCalled()
 				})
 			})
@@ -2240,7 +2238,6 @@ describe('FinishCommand', () => {
 					})
 				).rejects.toThrow('Request timeout')
 
-				const { logger } = await import('../utils/logger.js')
 				expect(logger.error).toHaveBeenCalled()
 			})
 
@@ -2263,7 +2260,6 @@ describe('FinishCommand', () => {
 					})
 				).rejects.toThrow('API rate limit exceeded')
 
-				const { logger } = await import('../utils/logger.js')
 				expect(logger.error).toHaveBeenCalled()
 			})
 
@@ -2305,7 +2301,6 @@ describe('FinishCommand', () => {
 					})
 				).rejects.toThrow('GitHub API error: failed to fetch')
 
-				const { logger } = await import('../utils/logger.js')
 				expect(logger.error).toHaveBeenCalledWith(
 					expect.stringContaining('GitHub API error')
 				)
@@ -2404,7 +2399,6 @@ describe('FinishCommand', () => {
 					})
 				).rejects.toThrow()
 
-				const { logger } = await import('../utils/logger.js')
 				expect(logger.error).toHaveBeenCalledWith('An unknown error occurred')
 			})
 
@@ -2418,7 +2412,6 @@ describe('FinishCommand', () => {
 					})
 				).rejects.toThrow()
 
-				const { logger } = await import('../utils/logger.js')
 				expect(logger.error).toHaveBeenCalledWith('An unknown error occurred')
 			})
 		})
@@ -2717,8 +2710,6 @@ describe('FinishCommand', () => {
 
 			beforeEach(async () => {
 				// Import the mocked functions
-				const { installDependencies } = await import('../utils/package-manager.js')
-				const { findMainWorktreePathWithSettings } = await import('../utils/git.js')
 
 				// Reset mocks
 				vi.mocked(installDependencies).mockClear()
@@ -2743,8 +2734,6 @@ describe('FinishCommand', () => {
 			})
 
 			it('should install dependencies in main worktree after merge', async () => {
-				const { installDependencies } = await import('../utils/package-manager.js')
-				const { findMainWorktreePathWithSettings } = await import('../utils/git.js')
 
 				await command.execute({
 					identifier: '123',
@@ -2759,7 +2748,6 @@ describe('FinishCommand', () => {
 			})
 
 			it('should install dependencies before running post-merge build', async () => {
-				const { installDependencies } = await import('../utils/package-manager.js')
 				const executionOrder: string[] = []
 
 				vi.mocked(installDependencies).mockImplementation(async () => {
@@ -2789,7 +2777,6 @@ describe('FinishCommand', () => {
 			})
 
 			it('should skip dependency installation in dry-run mode', async () => {
-				const { installDependencies } = await import('../utils/package-manager.js')
 
 				await command.execute({
 					identifier: '123',
@@ -2803,7 +2790,6 @@ describe('FinishCommand', () => {
 			})
 
 			it('should fail finish command if dependency installation fails', async () => {
-				const { installDependencies } = await import('../utils/package-manager.js')
 
 				// Mock installation failure
 				vi.mocked(installDependencies).mockRejectedValue(
@@ -2822,7 +2808,6 @@ describe('FinishCommand', () => {
 			})
 
 			it('should not install dependencies for PR workflow (open PR)', async () => {
-				const { installDependencies } = await import('../utils/package-manager.js')
 
 				const mockPR: PullRequest = {
 					number: 456,
@@ -2867,7 +2852,6 @@ describe('FinishCommand', () => {
 			})
 
 			it('should not install dependencies for PR workflow (closed PR)', async () => {
-				const { installDependencies } = await import('../utils/package-manager.js')
 
 				const mockPR: PullRequest = {
 					number: 456,

@@ -51,7 +51,9 @@ vi.mock('./git.js', () => ({
   }),
 }))
 
-// Import the mocked pushBranchToRemote
+// IMPORTANT: Dynamic import is required here because this file uses a complex vi.mock() factory
+// that references variables (mockExecuteGitCommand). The import must happen after the mock setup
+// at runtime, not at module load time. Do not convert this to a static import.
 const { pushBranchToRemote } = await import('./git.js')
 
 describe('pushBranchToRemote', () => {

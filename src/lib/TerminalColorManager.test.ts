@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { TerminalColorManager } from './TerminalColorManager.js'
 import { execa } from 'execa'
+import { generateColorFromBranchName } from '../utils/color.js'
+import { logger } from '../utils/logger.js'
 
 // Mock execa
 vi.mock('execa')
@@ -146,7 +148,6 @@ describe('TerminalColorManager', () => {
 		})
 
 		it('should log warning about limited Linux support', async () => {
-			const { logger } = await import('../utils/logger.js')
 
 			await manager.applyTerminalColor('feature/test-branch')
 
@@ -175,7 +176,6 @@ describe('TerminalColorManager', () => {
 		})
 
 		it('should log warning about Windows not being supported', async () => {
-			const { logger } = await import('../utils/logger.js')
 
 			await manager.applyTerminalColor('feature/test-branch')
 
@@ -204,7 +204,6 @@ describe('TerminalColorManager', () => {
 		})
 
 		it('should log warning about unsupported platform', async () => {
-			const { logger } = await import('../utils/logger.js')
 
 			await manager.applyTerminalColor('feature/test-branch')
 
@@ -255,7 +254,6 @@ describe('TerminalColorManager', () => {
 		})
 
 		it('should generate color from branch name before applying', async () => {
-			const { generateColorFromBranchName } = await import('../utils/color.js')
 
 			await manager.applyTerminalColor('feature/test-branch')
 
@@ -290,7 +288,6 @@ describe('TerminalColorManager', () => {
 				value: 'linux',
 			})
 
-			const { logger } = await import('../utils/logger.js')
 			await manager.applyTerminalColor('feature/test-branch')
 
 			expect(logger.warn).toHaveBeenCalled()
@@ -301,7 +298,6 @@ describe('TerminalColorManager', () => {
 				value: 'win32',
 			})
 
-			const { logger } = await import('../utils/logger.js')
 			await manager.applyTerminalColor('feature/test-branch')
 
 			expect(logger.warn).toHaveBeenCalled()

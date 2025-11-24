@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { execa, type ExecaReturnValue } from 'execa'
 import { existsSync } from 'node:fs'
 import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow } from './claude.js'
+import { logger } from './logger.js'
 
 vi.mock('execa')
 vi.mock('node:fs')
@@ -256,7 +257,6 @@ describe('claude utils', () => {
 				const prompt = 'Test prompt'
 
 				// Mock logger to return true for debug enabled
-				const { logger } = await import('./logger.js')
 				vi.mocked(logger.isDebugEnabled).mockReturnValue(true)
 
 				// Mock process.stdout.write to capture the streaming output
@@ -294,7 +294,6 @@ describe('claude utils', () => {
 				const prompt = 'Test prompt'
 
 				// Mock logger to return false for debug disabled (non-debug mode)
-				const { logger } = await import('./logger.js')
 				vi.mocked(logger.isDebugEnabled).mockReturnValue(false)
 
 				// Mock process.stdout.write to capture the progress dots

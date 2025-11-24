@@ -132,6 +132,32 @@ expect(mockStdin.setRawMode).toHaveBeenCalledWith(true) // Setup
 expect(mockStdin.setRawMode).toHaveBeenCalledWith(false) // Cleanup
 ```
 
+**Test Configuration Best Practices**:
+
+- **Leverage vitest.config.ts**: The global config already has `mockReset: true`, `clearMocks: true`, and `restoreMocks: true`. Do NOT manually call `vi.clearAllMocks()` or `vi.restoreAllMocks()` in `afterEach` hooks - these are redundant and hurt performance.
+
+```typescript
+// ❌ Redundant: Already done by vitest.config.ts
+afterEach(() => {
+  vi.clearAllMocks()
+  vi.restoreAllMocks()
+})
+
+// ✅ Correct: Let the global config handle it
+// No afterEach needed for basic mock cleanup
+```
+
+- **Avoid Dynamic Imports**: Do NOT use dynamic imports in tests unless absolutely necessary. They significantly slow down test execution and add complexity. Use static imports with proper mocking instead.
+
+```typescript
+// ❌ Slow: Dynamic import
+const { someFunction } = await import('../utils/helpers.js')
+
+// ✅ Fast: Static import with mocking
+import { someFunction } from '../utils/helpers.js'
+vi.mock('../utils/helpers.js')
+```
+
 **Mock Factories Required**:
 
 ```typescript

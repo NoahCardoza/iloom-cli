@@ -9,6 +9,7 @@ import type { ProjectCapabilities } from '../types/loom.js'
 import fs from 'fs-extra'
 import path from 'path'
 import { execa } from 'execa'
+import { openBrowser } from '../utils/browser.js'
 
 // Mock dependencies
 vi.mock('../lib/GitWorktreeManager.js')
@@ -255,7 +256,6 @@ describe('RunCommand', () => {
 			vi.mocked(fs.pathExists).mockResolvedValue(true)
 			vi.mocked(fs.readFile).mockResolvedValue('PORT=3087\n')
 
-			const { openBrowser } = await import('../utils/browser.js')
 			await command.execute({ identifier: '87' })
 
 			expect(openBrowser).toHaveBeenCalledWith('http://localhost:3087')
@@ -282,7 +282,6 @@ describe('RunCommand', () => {
 				env: process.env,
 			})
 
-			const { openBrowser } = await import('../utils/browser.js')
 			expect(openBrowser).not.toHaveBeenCalled()
 		})
 
@@ -438,7 +437,6 @@ describe('RunCommand', () => {
 			vi.mocked(fs.pathExists).mockResolvedValue(true)
 			vi.mocked(fs.readFile).mockResolvedValue('PORT=3087\n')
 
-			const { openBrowser } = await import('../utils/browser.js')
 			await command.execute({ identifier: '87' })
 
 			expect(openBrowser).toHaveBeenCalledWith('http://localhost:3087')
@@ -457,7 +455,6 @@ describe('RunCommand', () => {
 			vi.mocked(fs.pathExists).mockResolvedValue(true)
 			vi.mocked(fs.readFile).mockResolvedValue('PORT=3045\nOTHER_VAR=value\n')
 
-			const { openBrowser } = await import('../utils/browser.js')
 			await command.execute({ identifier: '87' })
 
 			expect(openBrowser).toHaveBeenCalledWith('http://localhost:3045')
@@ -597,7 +594,6 @@ describe('RunCommand', () => {
 			await command.execute({ identifier: '87' })
 
 			// Should still try to open browser
-			const { openBrowser } = await import('../utils/browser.js')
 			expect(openBrowser).toHaveBeenCalledWith('http://localhost:3087')
 		})
 

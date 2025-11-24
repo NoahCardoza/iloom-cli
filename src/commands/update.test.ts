@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { UpdateCommand } from './update.js'
+import { detectInstallationMethod } from '../utils/installation-detector.js'
+import { logger } from '../utils/logger.js'
+import { UpdateNotifier } from '../utils/update-notifier.js'
+import { spawn } from 'child_process'
+import { default as fs } from 'fs-extra'
 
 // Mock dependencies
 vi.mock('../utils/logger.js', () => ({
@@ -44,7 +49,6 @@ describe('UpdateCommand', () => {
     }) as never)
 
     // Default mocks for package.json reading
-    const { default: fs } = await import('fs-extra')
     vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
       name: '@iloom/cli',
       version: '1.0.0'
@@ -52,7 +56,6 @@ describe('UpdateCommand', () => {
   })
 
   it('exits with error for non-global installations', async () => {
-    const { detectInstallationMethod } = await import('../utils/installation-detector.js')
 
     // Mock: Local installation
     vi.mocked(detectInstallationMethod).mockReturnValue('local')
@@ -64,9 +67,6 @@ describe('UpdateCommand', () => {
   })
 
   it('performs update when new version is available', async () => {
-    const { detectInstallationMethod } = await import('../utils/installation-detector.js')
-    const { UpdateNotifier } = await import('../utils/update-notifier.js')
-    const { spawn } = await import('child_process')
 
     // Mock: Global installation
     vi.mocked(detectInstallationMethod).mockReturnValue('global')
@@ -93,9 +93,6 @@ describe('UpdateCommand', () => {
   })
 
   it('exits successfully when already up to date', async () => {
-    const { detectInstallationMethod } = await import('../utils/installation-detector.js')
-    const { UpdateNotifier } = await import('../utils/update-notifier.js')
-    const { logger } = await import('../utils/logger.js')
 
     // Mock: Global installation
     vi.mocked(detectInstallationMethod).mockReturnValue('global')
@@ -117,9 +114,6 @@ describe('UpdateCommand', () => {
   })
 
   it('shows update plan in dry run mode', async () => {
-    const { detectInstallationMethod } = await import('../utils/installation-detector.js')
-    const { UpdateNotifier } = await import('../utils/update-notifier.js')
-    const { logger } = await import('../utils/logger.js')
 
     // Mock: Global installation
     vi.mocked(detectInstallationMethod).mockReturnValue('global')
@@ -144,8 +138,6 @@ describe('UpdateCommand', () => {
   })
 
   it('exits with error when update check fails', async () => {
-    const { detectInstallationMethod } = await import('../utils/installation-detector.js')
-    const { UpdateNotifier } = await import('../utils/update-notifier.js')
 
     // Mock: Global installation
     vi.mocked(detectInstallationMethod).mockReturnValue('global')

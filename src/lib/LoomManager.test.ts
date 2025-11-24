@@ -9,6 +9,7 @@ import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import type { CreateLoomInput } from '../types/loom.js'
 import { installDependencies } from '../utils/package-manager.js'
+import { branchExists, ensureRepositoryHasCommits } from '../utils/git.js'
 
 // Mock all dependencies
 vi.mock('./GitWorktreeManager.js')
@@ -515,7 +516,6 @@ describe('LoomManager', () => {
 
   describe('branch existence checking', () => {
     it('should check branch existence before creating worktree for issues', async () => {
-      const { branchExists } = await import('../utils/git.js')
       vi.mocked(branchExists).mockResolvedValue(true)
 
       const input: CreateLoomInput = {
@@ -544,7 +544,6 @@ describe('LoomManager', () => {
     })
 
     it('should check branch existence before creating worktree for branches', async () => {
-      const { branchExists } = await import('../utils/git.js')
       vi.mocked(branchExists).mockResolvedValue(true)
 
       const input: CreateLoomInput = {
@@ -561,7 +560,6 @@ describe('LoomManager', () => {
     })
 
     it('should not check branch existence for PRs', async () => {
-      const { branchExists } = await import('../utils/git.js')
       vi.mocked(branchExists).mockResolvedValue(false)
 
       const input: CreateLoomInput = {
@@ -594,7 +592,6 @@ describe('LoomManager', () => {
     })
 
     it('should create worktree when branch does not exist', async () => {
-      const { branchExists } = await import('../utils/git.js')
       vi.mocked(branchExists).mockResolvedValue(false)
 
       const input: CreateLoomInput = {
@@ -1545,7 +1542,6 @@ describe('LoomManager', () => {
         originalInput: '165',
       }
 
-      const { ensureRepositoryHasCommits } = await import('../utils/git.js')
 
       vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
         number: 165,
@@ -1584,7 +1580,6 @@ describe('LoomManager', () => {
         originalInput: '166',
       }
 
-      const { ensureRepositoryHasCommits } = await import('../utils/git.js')
 
       vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
         number: 166,

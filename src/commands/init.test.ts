@@ -4,6 +4,7 @@ import { ShellCompletion } from '../lib/ShellCompletion.js'
 import * as prompt from '../utils/prompt.js'
 import { mkdir, writeFile, readFile } from 'fs/promises'
 import { existsSync } from 'fs'
+import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
 
 // Mock prompt utilities
 vi.mock('../utils/prompt.js', () => ({
@@ -195,7 +196,6 @@ describe('InitCommand', () => {
       await initCommand.execute()
 
       // Verify migration manager was imported and used
-      const { SettingsMigrationManager } = await import('../lib/SettingsMigrationManager.js')
       expect(SettingsMigrationManager).toHaveBeenCalled()
     })
 

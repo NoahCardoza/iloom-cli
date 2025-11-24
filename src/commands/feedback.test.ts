@@ -7,6 +7,39 @@ import type { SettingsManager } from '../lib/SettingsManager.js'
 
 // Mock dependencies
 vi.mock('../lib/IssueEnhancementService.js')
+vi.mock('../utils/diagnostics.js', () => {
+	const mockDiagnostics = {
+		cliVersion: '1.0.0',
+		nodeVersion: 'v18.0.0',
+		osType: 'darwin',
+		osVersion: '10.0.0',
+		architecture: 'arm64',
+		capabilities: [],
+		claudeVersion: null,
+	}
+	const mockMarkdown = `<!-- CLI GENERATED FEEDBACK v1.0.0 -->
+
+<details>
+<summary>Diagnostic Information</summary>
+
+| Property | Value |
+|----------|-------|
+| CLI Version | 1.0.0 |
+| Node.js Version | v18.0.0 |
+| OS | darwin |
+| OS Version | 10.0.0 |
+| Architecture | arm64 |
+| Capabilities | none |
+| Claude CLI Version | not available |
+
+</details>
+`
+
+	return {
+		gatherDiagnosticInfo: vi.fn(async () => mockDiagnostics),
+		formatDiagnosticsAsMarkdown: vi.fn(() => mockMarkdown),
+	}
+})
 
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({

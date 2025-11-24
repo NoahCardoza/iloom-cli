@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { CommitManager } from './CommitManager.js'
 import * as git from '../utils/git.js'
 import * as claude from '../utils/claude.js'
+import { logger } from '../utils/logger.js'
 
 // Mock dependencies
 vi.mock('../utils/git.js')
@@ -386,7 +387,6 @@ describe('CommitManager', () => {
     })
 
     it('should log what would be executed in dry-run mode', async () => {
-      const { logger } = await import('../utils/logger.js')
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('M  file.ts')
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('main')
 
@@ -731,7 +731,6 @@ describe('CommitManager', () => {
     })
 
     it('should log what would be executed in dry-run mode', async () => {
-      const { logger } = await import('../utils/logger.js')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
       await manager.commitChanges(mockWorktreePath, { dryRun: true, issueNumber: 123 })
@@ -885,7 +884,6 @@ describe('CommitManager', () => {
     })
 
     it('should log warning when --no-verify flag is used', async () => {
-      const { logger } = await import('../utils/logger.js')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
       await manager.commitChanges(mockWorktreePath, {
@@ -899,7 +897,6 @@ describe('CommitManager', () => {
     })
 
     it('should log correct dry-run message when skipVerify is true', async () => {
-      const { logger } = await import('../utils/logger.js')
 
       await manager.commitChanges(mockWorktreePath, {
         skipVerify: true,

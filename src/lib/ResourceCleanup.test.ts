@@ -6,6 +6,8 @@ import { ProcessManager } from './process/ProcessManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { ResourceCleanupOptions } from '../types/cleanup.js'
+import { executeGitCommand, findMainWorktreePathWithSettings, hasUncommittedChanges } from '../utils/git.js'
+import { logger } from '../utils/logger.js'
 
 // Mock dependencies
 vi.mock('./GitWorktreeManager.js')
@@ -82,7 +84,6 @@ describe('ResourceCleanup', () => {
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
 
 			// Mock branch deletion
-			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
 			vi.mocked(executeGitCommand).mockResolvedValueOnce('')
 
@@ -261,7 +262,6 @@ describe('ResourceCleanup', () => {
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
 
 			// Mock logger.debug to capture debug logs
-			const { logger } = await import('../utils/logger.js')
 			const debugSpy = vi.spyOn(logger, 'debug')
 
 			const parsedInput = {
@@ -357,7 +357,6 @@ describe('ResourceCleanup', () => {
 
 	describe('deleteBranch', () => {
 		it('should delete local branch using git command', async () => {
-			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
 			vi.mocked(executeGitCommand).mockResolvedValueOnce('')
 
@@ -383,7 +382,6 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should use safe delete (-d) by default', async () => {
-			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
 			vi.mocked(executeGitCommand).mockResolvedValueOnce('')
 
@@ -396,7 +394,6 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should use force delete (-D) when force option enabled', async () => {
-			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
 			vi.mocked(executeGitCommand).mockResolvedValueOnce('')
 
@@ -409,7 +406,6 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should provide helpful error message for unmerged branches', async () => {
-			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
 			vi.mocked(executeGitCommand).mockRejectedValueOnce(new Error('branch not fully merged'))
 
@@ -419,7 +415,6 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should support dry-run mode', async () => {
-			const { executeGitCommand } = await import('../utils/git.js')
 
 			const result = await resourceCleanup.deleteBranch('feat/test-branch', { dryRun: true })
 
@@ -452,7 +447,6 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should always protect mainBranch even if not in protectedBranches setting', async () => {
-			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
 
 			// Mock settings with mainBranch: 'trunk', protectedBranches: ['staging']
 			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
@@ -481,7 +475,6 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should use default protected branches when not configured', async () => {
-			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
 
 			// Mock settings without protectedBranches
 			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({})
@@ -549,7 +542,6 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should allow deletion of non-protected custom branches', async () => {
-			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
 
 			// Mock settings with mainBranch: 'trunk', protectedBranches: ['trunk', 'staging']
 			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
@@ -573,7 +565,6 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should not duplicate mainBranch in protectedBranches if already present', async () => {
-			const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
 
 			// Mock settings with mainBranch already in protectedBranches
 			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({
@@ -716,7 +707,6 @@ describe('ResourceCleanup', () => {
 			vi.mocked(mockGitWorktree.findWorktreesByIdentifier).mockResolvedValueOnce([mockWorktree])
 			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
 
-			const { hasUncommittedChanges } = await import('../utils/git.js')
 			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(true)
 
 			const result = await resourceCleanup.validateCleanupSafety('issue-25')

@@ -9,6 +9,7 @@ import { IdentifierParser } from '../../src/utils/IdentifierParser.js'
 import { ResourceCleanup } from '../../src/lib/ResourceCleanup.js'
 import { BuildRunner } from '../../src/lib/BuildRunner.js'
 import type { PullRequest, Issue, GitWorktree } from '../../src/types/index.js'
+import { pushBranchToRemote } from '../../src/utils/git.js'
 
 // Mock git utils module for pushBranchToRemote and findMainWorktreePathWithSettings
 vi.mock('../../src/utils/git.js', async () => {
@@ -291,7 +292,6 @@ describe('FinishCommand - Open PR Workflow', () => {
 		expect(commitCall?.[1]).not.toHaveProperty('issueNumber')
 
 		// Verify push was called (from mocked git utils)
-		const { pushBranchToRemote } = await import('../../src/utils/git.js')
 		expect(pushBranchToRemote).toHaveBeenCalledWith(
 			mockOpenPR.branch,
 			mockWorktree.path,
@@ -312,7 +312,6 @@ describe('FinishCommand - Open PR Workflow', () => {
 		})
 
 		// Verify push was called with correct parameters
-		const { pushBranchToRemote } = await import('../../src/utils/git.js')
 		expect(pushBranchToRemote).toHaveBeenCalledWith(
 			mockOpenPR.branch,
 			mockWorktree.path,
@@ -342,7 +341,6 @@ describe('FinishCommand - Open PR Workflow', () => {
 		})
 
 		// Mock push failure
-		const { pushBranchToRemote } = await import('../../src/utils/git.js')
 		vi.mocked(pushBranchToRemote).mockRejectedValue(
 			new Error('Failed to push to remote: rejected by remote')
 		)
@@ -748,7 +746,6 @@ describe('FinishCommand - Dry-Run Mode for PRs', () => {
 		// Verify operations were NOT executed (only logged)
 		expect(mockCommitManager.commitChanges).not.toHaveBeenCalled()
 
-		const { pushBranchToRemote } = await import('../../src/utils/git.js')
 		expect(pushBranchToRemote).not.toHaveBeenCalled()
 
 		expect(mockResourceCleanup.cleanupWorktree).not.toHaveBeenCalled()
@@ -897,7 +894,6 @@ describe('FinishCommand - Issue Workflow (Regression Tests)', () => {
 		expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalled()
 
 		// Verify PR workflow was NOT used
-		const { pushBranchToRemote } = await import('../../src/utils/git.js')
 		expect(pushBranchToRemote).not.toHaveBeenCalled()
 	})
 })

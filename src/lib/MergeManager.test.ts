@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MergeManager } from './MergeManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import * as git from '../utils/git.js'
+import * as claude from '../utils/claude.js'
 
 // Mock dependencies
 vi.mock('../utils/git.js')
@@ -721,13 +722,11 @@ describe('MergeManager', () => {
 	describe('Claude Conflict Resolution', () => {
 		beforeEach(async () => {
 			// Import claude utils for mocking
-			const claude = await import('../utils/claude.js')
 			vi.mocked(claude.detectClaudeCli)
 			vi.mocked(claude.launchClaude)
 		})
 
 		it('should attempt Claude resolution when conflicts detected', async () => {
-			const claude = await import('../utils/claude.js')
 
 			// Mock: rebase fails with conflict, Claude available and resolves
 			vi.mocked(git.executeGitCommand)
@@ -758,7 +757,6 @@ describe('MergeManager', () => {
 		})
 
 		it('should fail fast when Claude CLI not available', async () => {
-			const claude = await import('../utils/claude.js')
 
 			// Mock: rebase fails with conflict, Claude not available
 			vi.mocked(git.executeGitCommand)
@@ -782,7 +780,6 @@ describe('MergeManager', () => {
 		})
 
 		it('should fail fast when Claude unable to resolve conflicts', async () => {
-			const claude = await import('../utils/claude.js')
 
 			// Mock: rebase fails, Claude available but conflicts remain
 			vi.mocked(git.executeGitCommand)
@@ -810,7 +807,6 @@ describe('MergeManager', () => {
 		// Skip this test - it's complex to mock fs.access for isRebaseInProgress
 		// The functionality is covered by the integration tests
 		it.skip('should fail fast when rebase still in progress after Claude', async () => {
-			const claude = await import('../utils/claude.js')
 
 			// Mock: rebase fails, Claude runs but rebase still in progress
 			vi.mocked(git.executeGitCommand)
@@ -833,7 +829,6 @@ describe('MergeManager', () => {
 		})
 
 		it('should handle Claude launch errors gracefully', async () => {
-			const claude = await import('../utils/claude.js')
 
 			// Mock: rebase fails, Claude available but throws error
 			vi.mocked(git.executeGitCommand)
@@ -855,7 +850,6 @@ describe('MergeManager', () => {
 		})
 
 		it('should provide hard-coded conflict resolution prompt', async () => {
-			const claude = await import('../utils/claude.js')
 
 			// Mock: successful Claude resolution
 			vi.mocked(git.executeGitCommand)

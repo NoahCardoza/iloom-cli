@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { StartCommand } from './start.js'
 import { GitHubService } from '../lib/GitHubService.js'
+import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { LoomManager } from '../lib/LoomManager.js'
+import { SettingsManager } from '../lib/SettingsManager.js'
+import { branchExists, findMainWorktreePathWithSettings } from '../utils/git.js'
 
 // Mock the GitHubService
 vi.mock('../lib/GitHubService.js')
@@ -852,7 +856,6 @@ describe('StartCommand', () => {
 
 		describe('branch existence checking', () => {
 			it('should check if branch exists before creation', async () => {
-				const { branchExists } = await import('../utils/git.js')
 
 				vi.mocked(branchExists).mockResolvedValue(true)
 
@@ -867,7 +870,6 @@ describe('StartCommand', () => {
 			})
 
 			it('should not throw when branch does not exist', async () => {
-				const { branchExists } = await import('../utils/git.js')
 
 				vi.mocked(branchExists).mockResolvedValue(false)
 
@@ -944,8 +946,6 @@ describe('StartCommand', () => {
 
 			beforeEach(async () => {
 				// Re-import to get fresh mocked instances
-				const { LoomManager } = await import('../lib/LoomManager.js')
-				const { SettingsManager } = await import('../lib/SettingsManager.js')
 
 				mockLoomManager = new LoomManager()
 				mockSettingsManager = new SettingsManager()
@@ -1057,7 +1057,6 @@ describe('StartCommand', () => {
 				})
 
 				it('should use regular workflow config when starting branch workflow', async () => {
-					const { branchExists } = await import('../utils/git.js')
 					vi.mocked(branchExists).mockResolvedValue(false)
 
 					// Mock settings with regular workflow config
@@ -1405,7 +1404,6 @@ describe('StartCommand', () => {
 
 	describe('worktree directory behavior', () => {
 		it('should call findMainWorktreePathWithSettings during execute', async () => {
-			const { findMainWorktreePathWithSettings } = await import('../utils/git.js')
 			const mockIssue = {
 				number: 123,
 				title: 'Test Issue',
@@ -1434,8 +1432,6 @@ describe('StartCommand', () => {
 		})
 
 		it('should initialize GitWorktreeManager with main worktree path (not process.cwd)', async () => {
-			const { GitWorktreeManager } = await import('../lib/GitWorktreeManager.js')
-			const { findMainWorktreePathWithSettings } = await import('../utils/git.js')
 
 			// Mock findMainWorktreePathWithSettings to return a specific path
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValue('/test/main-repo')

@@ -3,6 +3,10 @@ import { IssueEnhancementService } from './IssueEnhancementService.js'
 import { GitHubService } from './GitHubService.js'
 import { AgentManager } from './AgentManager.js'
 import { SettingsManager } from './SettingsManager.js'
+import { openBrowser } from '../utils/browser.js'
+import { launchClaude } from '../utils/claude.js'
+import { logger } from '../utils/logger.js'
+import { waitForKeypress } from '../utils/prompt.js'
 
 // Mock dependencies
 vi.mock('./GitHubService.js')
@@ -98,7 +102,6 @@ describe('IssueEnhancementService', () => {
 		})
 
 		it('should call Claude with correct prompt format', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('Enhanced description')
 
 			const description = 'Original description that needs enhancement'
@@ -122,7 +125,6 @@ describe('IssueEnhancementService', () => {
 		})
 
 		it('should load and pass agent configurations', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('Enhanced description')
 
 			await service.enhanceDescription('Test description with enough length and spaces')
@@ -133,7 +135,6 @@ describe('IssueEnhancementService', () => {
 		})
 
 		it('should return enhanced description on success', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			const enhancedText = 'This is the enhanced description from Claude'
 			vi.mocked(launchClaude).mockResolvedValue(enhancedText)
 
@@ -142,7 +143,6 @@ describe('IssueEnhancementService', () => {
 		})
 
 		it('should return original description when Claude returns empty/null', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			const originalDescription = 'Original description with enough length and spaces'
 
 			vi.mocked(launchClaude).mockResolvedValue('')
@@ -155,7 +155,6 @@ describe('IssueEnhancementService', () => {
 		})
 
 		it('should return original description when Claude throws error', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			const originalDescription = 'Original description with enough length and spaces'
 
 			vi.mocked(launchClaude).mockRejectedValue(new Error('Claude API error'))
@@ -165,8 +164,6 @@ describe('IssueEnhancementService', () => {
 		})
 
 		it('should log appropriate messages for each scenario', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
-			const { logger } = await import('../utils/logger.js')
 			const originalDescription = 'Original description with enough length and spaces'
 
 			// Success scenario
@@ -186,7 +183,6 @@ describe('IssueEnhancementService', () => {
 		})
 
 		it('should handle enhanced content that starts directly with markdown', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			const enhancedContent = '## Enhancement Request\n\nAdd dark mode support'
 			vi.mocked(launchClaude).mockResolvedValue(enhancedContent)
 
@@ -198,7 +194,6 @@ describe('IssueEnhancementService', () => {
 		})
 
 		it('should call launchClaude with non-conversational prompt', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('Enhanced')
 
 			await service.enhanceDescription('Test description with enough length and spaces')
@@ -305,8 +300,6 @@ describe('IssueEnhancementService', () => {
 			})
 
 			it('should wait for keypress before opening browser', async () => {
-				const { waitForKeypress } = await import('../utils/prompt.js')
-				const { openBrowser } = await import('../utils/browser.js')
 
 				vi.mocked(mockGitHubService.getIssueUrl).mockResolvedValue('https://github.com/owner/repo/issues/123')
 
@@ -327,7 +320,6 @@ describe('IssueEnhancementService', () => {
 			})
 
 			it('should open browser with correct URL', async () => {
-				const { openBrowser } = await import('../utils/browser.js')
 				const issueUrl = 'https://github.com/owner/repo/issues/123'
 
 				vi.mocked(mockGitHubService.getIssueUrl).mockResolvedValue(issueUrl)
@@ -338,7 +330,6 @@ describe('IssueEnhancementService', () => {
 			})
 
 			it('should wait for keypress only once when confirm=false', async () => {
-				const { waitForKeypress } = await import('../utils/prompt.js')
 
 				vi.mocked(mockGitHubService.getIssueUrl).mockResolvedValue('https://github.com/owner/repo/issues/123')
 
@@ -357,8 +348,6 @@ describe('IssueEnhancementService', () => {
 
 		describe('with confirm=true (double keypress)', () => {
 			it('should wait for first keypress before opening browser', async () => {
-				const { waitForKeypress } = await import('../utils/prompt.js')
-				const { openBrowser } = await import('../utils/browser.js')
 
 				vi.mocked(mockGitHubService.getIssueUrl).mockResolvedValue('https://github.com/owner/repo/issues/123')
 
@@ -379,7 +368,6 @@ describe('IssueEnhancementService', () => {
 			})
 
 			it('should open browser with correct issue URL', async () => {
-				const { openBrowser } = await import('../utils/browser.js')
 				const issueUrl = 'https://github.com/owner/repo/issues/456'
 
 				vi.mocked(mockGitHubService.getIssueUrl).mockResolvedValue(issueUrl)
@@ -390,8 +378,6 @@ describe('IssueEnhancementService', () => {
 			})
 
 			it('should wait for second keypress after opening browser', async () => {
-				const { waitForKeypress } = await import('../utils/prompt.js')
-				const { openBrowser } = await import('../utils/browser.js')
 
 				vi.mocked(mockGitHubService.getIssueUrl).mockResolvedValue('https://github.com/owner/repo/issues/123')
 
@@ -411,8 +397,6 @@ describe('IssueEnhancementService', () => {
 			})
 
 			it('should call waitForKeypress exactly twice in correct order', async () => {
-				const { waitForKeypress } = await import('../utils/prompt.js')
-				const { openBrowser } = await import('../utils/browser.js')
 
 				vi.mocked(mockGitHubService.getIssueUrl).mockResolvedValue('https://github.com/owner/repo/issues/123')
 
@@ -437,7 +421,6 @@ describe('IssueEnhancementService', () => {
 			})
 
 			it('should pass appropriate messages to waitForKeypress', async () => {
-				const { waitForKeypress } = await import('../utils/prompt.js')
 
 				vi.mocked(mockGitHubService.getIssueUrl).mockResolvedValue('https://github.com/owner/repo/issues/123')
 
@@ -480,8 +463,6 @@ describe('IssueEnhancementService', () => {
 
 		it('should skip keypress and browser when CI=true', async () => {
 			process.env.CI = 'true'
-			const { waitForKeypress } = await import('../utils/prompt.js')
-			const { openBrowser } = await import('../utils/browser.js')
 
 			vi.mocked(mockGitHubService.getIssueUrl).mockResolvedValue('https://github.com/owner/repo/issues/123')
 
@@ -493,8 +474,6 @@ describe('IssueEnhancementService', () => {
 
 		it('should perform normal flow when CI is not set', async () => {
 			delete process.env.CI
-			const { waitForKeypress } = await import('../utils/prompt.js')
-			const { openBrowser } = await import('../utils/browser.js')
 
 			vi.mocked(mockGitHubService.getIssueUrl).mockResolvedValue('https://github.com/owner/repo/issues/123')
 
@@ -506,8 +485,6 @@ describe('IssueEnhancementService', () => {
 
 		it('should perform normal flow when CI is false', async () => {
 			process.env.CI = 'false'
-			const { waitForKeypress } = await import('../utils/prompt.js')
-			const { openBrowser } = await import('../utils/browser.js')
 
 			vi.mocked(mockGitHubService.getIssueUrl).mockResolvedValue('https://github.com/owner/repo/issues/123')
 

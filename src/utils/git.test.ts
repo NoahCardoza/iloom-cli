@@ -6,6 +6,8 @@ import {
   isWorktreePath,
   generateWorktreePath,
   findMainWorktreePath,
+  isEmptyRepository,
+  ensureRepositoryHasCommits,
 } from './git.js'
 import { execa } from 'execa'
 
@@ -834,7 +836,6 @@ describe('Git Utility Regression Tests', () => {
 
   describe('isEmptyRepository', () => {
     it('returns true when repository has no commits (HEAD does not exist)', async () => {
-      const { isEmptyRepository } = await import('./git.js')
 
       vi.mocked(execa).mockRejectedValueOnce(
         new Error('fatal: not a valid object name: \'HEAD\'')
@@ -846,7 +847,6 @@ describe('Git Utility Regression Tests', () => {
     })
 
     it('returns false when repository has at least one commit', async () => {
-      const { isEmptyRepository } = await import('./git.js')
 
       vi.mocked(execa).mockResolvedValueOnce({
         stdout: 'abc123def456',
@@ -859,7 +859,6 @@ describe('Git Utility Regression Tests', () => {
     })
 
     it('uses process.cwd() when path is not provided', async () => {
-      const { isEmptyRepository } = await import('./git.js')
 
       vi.mocked(execa).mockResolvedValueOnce({
         stdout: 'abc123def456',
@@ -873,7 +872,6 @@ describe('Git Utility Regression Tests', () => {
 
   describe('ensureRepositoryHasCommits', () => {
     it('creates initial commit when repository is empty', async () => {
-      const { ensureRepositoryHasCommits } = await import('./git.js')
 
       // First call (isEmptyRepository check) returns error -> repo is empty
       // Second call (create initial commit) succeeds
@@ -894,7 +892,6 @@ describe('Git Utility Regression Tests', () => {
     })
 
     it('does nothing when repository already has commits', async () => {
-      const { ensureRepositoryHasCommits } = await import('./git.js')
 
       vi.mocked(execa).mockResolvedValueOnce({
         stdout: 'abc123def456',
@@ -908,7 +905,6 @@ describe('Git Utility Regression Tests', () => {
     })
 
     it('uses process.cwd() when path is not provided', async () => {
-      const { ensureRepositoryHasCommits } = await import('./git.js')
 
       vi.mocked(execa).mockResolvedValueOnce({
         stdout: 'abc123def456',

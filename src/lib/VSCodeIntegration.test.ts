@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { VSCodeIntegration } from './VSCodeIntegration.js'
 import path from 'path'
 import fs from 'fs-extra'
+import { parse } from 'jsonc-parser'
 
 // Mock fs-extra
 vi.mock('fs-extra', () => ({
@@ -203,7 +204,6 @@ describe('VSCodeIntegration', () => {
 			expect(content).toContain('/* Multi-line')
 
 			// Settings should be valid
-			const { parse } = await import('jsonc-parser')
 			const settings = parse(content)
 			expect(settings['workbench.colorCustomizations']['titleBar.activeBackground']).toBe(
 				'#dcebf8'

@@ -4,11 +4,21 @@ import type { GitHubService } from '../lib/GitHubService.js'
 import type { AgentManager } from '../lib/AgentManager.js'
 import type { SettingsManager, IloomSettings } from '../lib/SettingsManager.js'
 import type { Issue } from '../types/index.js'
+import { launchClaude } from '../utils/claude.js'
+import { openBrowser } from '../utils/browser.js'
+import { waitForKeypress } from '../utils/prompt.js'
 
 // Mock dependencies
 vi.mock('../utils/claude.js')
 vi.mock('../utils/browser.js')
-vi.mock('../utils/prompt.js')
+vi.mock('../utils/prompt.js', () => ({
+	waitForKeypress: vi.fn(),
+	promptConfirmation: vi.fn(),
+	promptInput: vi.fn(),
+}))
+vi.mock('../utils/mcp.js', () => ({
+	generateGitHubCommentMcpConfig: vi.fn().mockResolvedValue([]),
+}))
 
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
@@ -93,7 +103,6 @@ describe('EnhanceCommand', () => {
 			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
 			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
 
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
 
 			await expect(
@@ -119,7 +128,6 @@ describe('EnhanceCommand', () => {
 			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
 			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
 
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
 
 			await command.execute({ issueNumber: 123, options: {} })
@@ -166,7 +174,6 @@ describe('EnhanceCommand', () => {
 			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
 			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
 
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -179,7 +186,6 @@ describe('EnhanceCommand', () => {
 			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
 			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
 
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -198,7 +204,6 @@ describe('EnhanceCommand', () => {
 			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
 			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
 
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -215,7 +220,6 @@ describe('EnhanceCommand', () => {
 			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
 			vi.mocked(mockAgentManager.formatForCli).mockReturnValue(mockAgents)
 
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -231,7 +235,6 @@ describe('EnhanceCommand', () => {
 			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
 			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
 
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -261,8 +264,6 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should detect "No enhancement needed" response', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
-			const { waitForKeypress } = await import('../utils/prompt.js')
 			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -273,8 +274,6 @@ describe('EnhanceCommand', () => {
 
 		it('should detect comment URL in response', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			const { launchClaude } = await import('../utils/claude.js')
-			const { waitForKeypress } = await import('../utils/prompt.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
 			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
@@ -286,9 +285,6 @@ describe('EnhanceCommand', () => {
 
 		it('should extract comment URL from response', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			const { launchClaude } = await import('../utils/claude.js')
-			const { waitForKeypress } = await import('../utils/prompt.js')
-			const { openBrowser } = await import('../utils/browser.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
 			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
@@ -299,7 +295,6 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should handle malformed responses gracefully', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('Some unexpected response format')
 
 			await expect(
@@ -308,7 +303,6 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should throw error on empty response', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('')
 
 			await expect(
@@ -317,7 +311,6 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should detect and handle permission denied responses', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('Permission denied: GitHub CLI not authenticated or not installed')
 
 			await expect(
@@ -326,7 +319,6 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should handle permission denied with case insensitive matching', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('permission denied: Cannot access repository or issue does not exist')
 
 			await expect(
@@ -335,7 +327,6 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should handle permission denied for comment creation', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('Permission denied: Cannot create comments on this repository')
 
 			await expect(
@@ -344,7 +335,6 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should handle permission denied for API rate limits', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('Permission denied: GitHub API rate limit exceeded')
 
 			await expect(
@@ -371,8 +361,6 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should not prompt for browser when no enhancement needed', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
-			const { waitForKeypress } = await import('../utils/prompt.js')
 			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -382,8 +370,6 @@ describe('EnhanceCommand', () => {
 
 		it('should prompt "Press q to quit or any other key to view" when enhanced', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			const { launchClaude } = await import('../utils/claude.js')
-			const { waitForKeypress } = await import('../utils/prompt.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
 			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
@@ -396,9 +382,6 @@ describe('EnhanceCommand', () => {
 
 		it('should open browser when user does not press q', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			const { launchClaude } = await import('../utils/claude.js')
-			const { waitForKeypress } = await import('../utils/prompt.js')
-			const { openBrowser } = await import('../utils/browser.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
 			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
@@ -409,9 +392,6 @@ describe('EnhanceCommand', () => {
 
 		it('should NOT open browser when user presses q', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			const { launchClaude } = await import('../utils/claude.js')
-			const { waitForKeypress } = await import('../utils/prompt.js')
-			const { openBrowser } = await import('../utils/browser.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
 			vi.mocked(waitForKeypress).mockResolvedValue('q')
 
@@ -423,9 +403,6 @@ describe('EnhanceCommand', () => {
 
 		it('should NOT open browser when user presses Q (uppercase)', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			const { launchClaude } = await import('../utils/claude.js')
-			const { waitForKeypress } = await import('../utils/prompt.js')
-			const { openBrowser } = await import('../utils/browser.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
 			vi.mocked(waitForKeypress).mockResolvedValue('Q')
 
@@ -437,9 +414,6 @@ describe('EnhanceCommand', () => {
 
 		it('should skip browser when --no-browser flag is set', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			const { launchClaude } = await import('../utils/claude.js')
-			const { waitForKeypress } = await import('../utils/prompt.js')
-			const { openBrowser } = await import('../utils/browser.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
 
 			await command.execute({ issueNumber: 42, options: { noBrowser: true } })
@@ -450,9 +424,6 @@ describe('EnhanceCommand', () => {
 
 		it('should handle browser opening failures gracefully', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			const { launchClaude } = await import('../utils/claude.js')
-			const { waitForKeypress } = await import('../utils/prompt.js')
-			const { openBrowser } = await import('../utils/browser.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
 			vi.mocked(waitForKeypress).mockResolvedValue('a')
 			vi.mocked(openBrowser).mockRejectedValue(new Error('Browser failed to open'))
@@ -498,19 +469,16 @@ describe('EnhanceCommand', () => {
 				return {}
 			})
 
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockImplementation(async () => {
 				calls.push('launchClaude')
 				return 'https://github.com/owner/repo/issues/42#issuecomment-123456'
 			})
 
-			const { waitForKeypress } = await import('../utils/prompt.js')
 			vi.mocked(waitForKeypress).mockImplementation(async () => {
 				calls.push('waitForKeypress')
 				return 'a'
 			})
 
-			const { openBrowser } = await import('../utils/browser.js')
 			vi.mocked(openBrowser).mockImplementation(async () => {
 				calls.push('openBrowser')
 			})
@@ -544,8 +512,6 @@ describe('EnhanceCommand', () => {
 			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
 			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
 
-			const { launchClaude } = await import('../utils/claude.js')
-			const { openBrowser } = await import('../utils/browser.js')
 			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -571,9 +537,6 @@ describe('EnhanceCommand', () => {
 			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
 			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
 
-			const { launchClaude } = await import('../utils/claude.js')
-			const { waitForKeypress } = await import('../utils/prompt.js')
-			const { openBrowser } = await import('../utils/browser.js')
 			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
 			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
@@ -602,7 +565,6 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should include author in prompt when provided', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
 
 			await command.execute({ issueNumber: 42, options: { author: 'testuser' } })
@@ -614,7 +576,6 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should not include author reference in prompt when not provided', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -624,7 +585,6 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should work without author parameter for backwards compatibility', async () => {
-			const { launchClaude } = await import('../utils/claude.js')
 			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
 
 			await expect(
