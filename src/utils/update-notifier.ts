@@ -97,7 +97,7 @@ export class UpdateNotifier {
       const cache = JSON.parse(content) as UpdateCheckCache
 
       // Check if cache is still fresh (< configurable hours)
-      const cacheTimeoutMins = parseInt(process.env.ILOOM_UPDATE_CACHE_TIMEOUT_MINS ?? '360', 10) // Default 6 hours
+      const cacheTimeoutMins = parseInt(process.env.ILOOM_UPDATE_CACHE_TIMEOUT_MINS ?? '60', 10) // Default 1 hour
       const cacheTimeoutMs = cacheTimeoutMins * 60 * 1000
       logger.debug(`getCachedCheck: Using cache timeout of ${cacheTimeoutMins} minutes`)
       const now = Date.now()
