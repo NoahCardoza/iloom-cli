@@ -424,20 +424,19 @@ This allows teams to share project defaults via `settings.json` while individual
     }
   },
   "agents": {
-    "iloom-issue-enhancer": "sonnet",
-    "iloom-issue-analyzer": "sonnet",
-    "iloom-issue-analyze-and-plan": "sonnet",
-    "iloom-issue-implementer": "sonnet"
+    "iloom-issue-enhancer": "opus",
+    "iloom-issue-analyzer": "opus",
+    "iloom-issue-analyze-and-plan": "opus",
+    "iloom-issue-implementer": "haiku"
   }
 }
 ```
 
-**Note on agent configuration:** All agents use the latest Sonnet model by default. The example above shows a performance-optimized configuration:
+**Note on agent configuration:** All agents use the latest Sonnet model by default, except complexity evaluator which uses Haiku. You could also try a some different configurations:
 - **Opus for analysis/enhancement** - Maximum reasoning capability for understanding requirements and planning
 - **Haiku for implementation** - Cost-effective execution of detailed plans (recommended for token-conscious users)
-- Other agents (complexity evaluator, planner, reviewer) remain on Sonnet by default
 
-**Configuration options:**
+** Common configuration options:**
 - `mainBranch` - Primary branch for merging (default: "main")
 - `capabilities.web.basePort` - Base port for dev servers (default: 3000)
 - `capabilities.database.databaseUrlEnvVarName` - Name of environment variable for database connection URL (default: "DATABASE_URL")

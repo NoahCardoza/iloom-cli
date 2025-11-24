@@ -23,7 +23,7 @@ Specifies the name of your main/primary branch. This is used by iloom to determi
 #### worktreePrefix (optional)
 Configures the directory prefix used when creating worktrees. This allows you to customize where and how worktree directories are named.
 
-**Default**: `<repo-folder-name>-looms` (e.g., if your repo is in `/Users/dev/my-project`, the default prefix is `my-project-looms`)
+**Default**: `<repo-folder-name>-looms/` (e.g., if your repo is in `/Users/dev/my-project`, the default folder for looms is `my-project-looms`, as a sibling of your project folder)
 
 **Allowed characters**: Alphanumeric, hyphens (`-`), underscores (`_`), and forward slashes (`/`)
 
@@ -124,18 +124,24 @@ Configure Claude model preferences for different agent types. This allows you to
 - `opus` - Most capable model for complex tasks
 - `haiku` - Fastest model for simple tasks
 
+**Available agent types**:
+- `iloom-issue-analyze-and-plan` - Combined analysis and planning for SIMPLE tasks
+- `iloom-issue-analyzer` - Analyzes and researches GitHub issues to identify root causes
+- `iloom-issue-complexity-evaluator` - Quickly assesses issue complexity (SIMPLE or COMPLEX)
+- `iloom-issue-enhancer` - Enhances bug/enhancement reports from Product Manager perspective
+- `iloom-issue-implementer` - Implements GitHub issues exactly as specified
+- `iloom-issue-planner` - Creates detailed implementation plans for issues
+- `iloom-issue-reviewer` - Reviews uncommitted code changes against issue requirements
+
 **Example**:
 ```json
 {
   "agents": {
-    "code-reviewer": {
+    "iloom-issue-implementer": {
       "model": "opus"
     },
-    "quick-fixes": {
+    "iloom-issue-complexity-evaluator": {
       "model": "haiku"
-    },
-    "default": {
-      "model": "sonnet"
     }
   }
 }
@@ -197,14 +203,11 @@ Here's a complete example showing all available options:
     }
   },
   "agents": {
-    "code-reviewer": {
+    "iloom-issue-implementer": {
       "model": "opus"
     },
-    "quick-fixes": {
+    "iloom-issue-complexity-evaluator": {
       "model": "haiku"
-    },
-    "default": {
-      "model": "sonnet"
     }
   },
   "capabilities": {
