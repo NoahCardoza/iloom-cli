@@ -213,6 +213,9 @@ Here's a complete example showing all available options:
   "capabilities": {
     "web": {
       "basePort": 8080
+    },
+    "database": {
+      "databaseUrlEnvVarName": "DATABASE_URL"
     }
   }
 }

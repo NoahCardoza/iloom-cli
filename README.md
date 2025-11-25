@@ -424,10 +424,10 @@ This allows teams to share project defaults via `settings.json` while individual
     }
   },
   "agents": {
-    "iloom-issue-enhancer": "opus",
-    "iloom-issue-analyzer": "opus",
-    "iloom-issue-analyze-and-plan": "opus",
-    "iloom-issue-implementer": "haiku"
+    "iloom-issue-enhancer": {"model":"opus"},
+    "iloom-issue-analyzer": {"model":"opus"},
+    "iloom-issue-analyze-and-plan":  {"model":"opus"},
+    "iloom-issue-implementer":  {"model":"haiku"}
   }
 }
 ```
