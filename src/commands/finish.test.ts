@@ -2689,6 +2689,216 @@ describe('FinishCommand', () => {
 			})
 		})
 
+		describe('terminal close warning', () => {
+			const mockIssue: Issue = {
+				number: 123,
+				title: 'Test issue',
+				body: 'Test body',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://github.com/test/repo/issues/123',
+			}
+
+			const mockWorktree: GitWorktree = {
+				path: '/test/worktree/feat-issue-123',
+				branch: 'feat/issue-123',
+				commit: 'abc123',
+				isPR: false,
+				issueNumber: 123,
+			}
+
+			beforeEach(() => {
+				// Mock successful issue fetch
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+
+				// Mock successful worktree finding
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+				// Mock IdentifierParser to detect as issue
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					originalInput: '123',
+				})
+			})
+
+			it('should warn when finish is run from within the loom directory', async () => {
+				// Mock process.cwd() to return worktree path
+				const originalCwd = process.cwd
+				process.cwd = vi.fn(() => '/test/worktree/feat-issue-123')
+
+				try {
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					// Verify warning was displayed
+					expect(logger.info).toHaveBeenCalledWith(
+						'You are currently in the directory of the loom that was just finished.'
+					)
+					expect(logger.info).toHaveBeenCalledWith(
+						'Please close this terminal and any IDE/terminal windows using this directory.'
+					)
+					expect(logger.info).toHaveBeenCalledWith(
+						`Directory: ${mockWorktree.path}`
+					)
+				} finally {
+					process.cwd = originalCwd
+				}
+			})
+
+			it('should warn when finish is run from within a subdirectory of the loom', async () => {
+				// Mock process.cwd() to return subdirectory within worktree
+				const originalCwd = process.cwd
+				process.cwd = vi.fn(() => '/test/worktree/feat-issue-123/src/commands')
+
+				try {
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					// Verify warning was displayed
+					expect(logger.info).toHaveBeenCalledWith(
+						'You are currently in the directory of the loom that was just finished.'
+					)
+				} finally {
+					process.cwd = originalCwd
+				}
+			})
+
+			it('should not warn when finish is run from outside the loom directory', async () => {
+				// Mock process.cwd() to return different path
+				const originalCwd = process.cwd
+				process.cwd = vi.fn(() => '/test/main')
+
+				try {
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					// Verify warning was NOT displayed
+					expect(logger.info).not.toHaveBeenCalledWith(
+						'You are currently in the directory of the loom that was just finished.'
+					)
+				} finally {
+					process.cwd = originalCwd
+				}
+			})
+
+			it('should warn for closed PR cleanup when run from within loom directory', async () => {
+				const mockPR: PullRequest = {
+					number: 456,
+					title: 'Test PR',
+					body: 'Test body',
+					state: 'closed',
+					branch: 'feat/test',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/456',
+					isDraft: false,
+				}
+
+				const mockPRWorktree: GitWorktree = {
+					path: '/test/worktree/feat-test_pr_456',
+					branch: 'feat/test',
+					commit: 'def456',
+					isPR: true,
+					prNumber: 456,
+				}
+
+				// Mock process.cwd() to return PR worktree path
+				const originalCwd = process.cwd
+				process.cwd = vi.fn(() => '/test/worktree/feat-test_pr_456')
+
+				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+				vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockPRWorktree)
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'pr',
+					number: 456,
+					originalInput: 'pr/456',
+				})
+
+				try {
+					await command.execute({
+						identifier: 'pr/456',
+						options: {},
+					})
+
+					// Verify warning was displayed
+					expect(logger.info).toHaveBeenCalledWith(
+						'You are currently in the directory of the loom that was just finished.'
+					)
+					expect(logger.info).toHaveBeenCalledWith(
+						`Directory: ${mockPRWorktree.path}`
+					)
+				} finally {
+					process.cwd = originalCwd
+				}
+			})
+
+			it('should NOT warn for closed PR cleanup when cleanup fails', async () => {
+				const mockPR: PullRequest = {
+					number: 456,
+					title: 'Test PR',
+					body: 'Test body',
+					state: 'closed',
+					branch: 'feat/test',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/456',
+					isDraft: false,
+				}
+
+				const mockPRWorktree: GitWorktree = {
+					path: '/test/worktree/feat-test_pr_456',
+					branch: 'feat/test',
+					commit: 'def456',
+					isPR: true,
+					prNumber: 456,
+				}
+
+				// Mock process.cwd() to return PR worktree path
+				const originalCwd = process.cwd
+				process.cwd = vi.fn(() => '/test/worktree/feat-test_pr_456')
+
+				// Mock failed cleanup
+				vi.mocked(mockResourceCleanup.cleanupWorktree).mockResolvedValue({
+					identifier: 'pr/456',
+					success: false, // Failed cleanup
+					operations: [
+						{ type: 'worktree', success: false, message: 'Failed to remove worktree' },
+					],
+				})
+
+				vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+				vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockPRWorktree)
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'pr',
+					number: 456,
+					originalInput: 'pr/456',
+				})
+
+				try {
+					await command.execute({
+						identifier: 'pr/456',
+						options: {},
+					})
+
+					// Verify warning was NOT displayed (since cleanup failed)
+					expect(logger.info).not.toHaveBeenCalledWith(
+						'You are currently in the directory of the loom that was just finished.'
+					)
+					expect(logger.info).not.toHaveBeenCalledWith(
+						`Directory: ${mockPRWorktree.path}`
+					)
+				} finally {
+					process.cwd = originalCwd
+				}
+			})
+		})
+
 		describe('post-merge dependency installation', () => {
 			const mockIssue: Issue = {
 				number: 123,

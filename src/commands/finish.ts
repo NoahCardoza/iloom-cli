@@ -664,6 +664,11 @@ export class FinishCommand {
 			if (!result.success) {
 				logger.warn('Some cleanup operations failed - manual cleanup may be required')
 				this.showManualCleanupInstructions(worktree)
+			} else {
+				// Warn if running from within the worktree being finished (only on successful cleanup)
+				if (this.isRunningFromWithinWorktree(worktree.path)) {
+					this.showTerminalCloseWarning(worktree)
+				}
 			}
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -747,6 +752,11 @@ export class FinishCommand {
 			} else {
 				logger.success('Post-merge cleanup completed successfully')
 			}
+
+			// Warn if running from within the worktree being finished
+			if (this.isRunningFromWithinWorktree(worktree.path)) {
+				this.showTerminalCloseWarning(worktree)
+			}
 		} catch (error) {
 			// Catch cleanup errors to prevent finish command from failing
 			// (merge already succeeded - cleanup failures are non-fatal)
@@ -786,5 +796,24 @@ export class FinishCommand {
 		logger.info(`  1. Remove worktree: git worktree remove ${worktree.path}`)
 		logger.info(`  2. Delete branch: git branch -d ${worktree.branch}`)
 		logger.info(`  3. Check dev servers: lsof -i :PORT (and kill if needed)`)
+	}
+
+	/**
+	 * Check if current working directory is within the target worktree
+	 */
+	private isRunningFromWithinWorktree(worktreePath: string): boolean {
+		const normalizedCwd = path.normalize(process.cwd())
+		const normalizedWorktree = path.normalize(worktreePath)
+		return normalizedCwd.startsWith(normalizedWorktree)
+	}
+
+	/**
+	 * Display warning to close terminal/IDE when running from within finished loom
+	 */
+	private showTerminalCloseWarning(worktree: GitWorktree): void {
+		logger.info('')
+		logger.info('You are currently in the directory of the loom that was just finished.')
+		logger.info('Please close this terminal and any IDE/terminal windows using this directory.')
+		logger.info(`Directory: ${worktree.path}`)
 	}
 }
