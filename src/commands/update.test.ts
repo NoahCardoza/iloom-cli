@@ -81,14 +81,30 @@ describe('UpdateCommand', () => {
       checkForUpdates: mockCheckForUpdates
     }) as never)
 
-    // Should throw due to process.exit(0)
-    await expect(updateCommand.execute()).rejects.toThrow('process.exit(0)')
+    // Track the close callback so we can trigger it
+    let closeCallback: ((code: number) => void) | undefined
+    const mockOn = vi.fn((event: string, callback: (code: number) => void) => {
+      if (event === 'close') {
+        closeCallback = callback
+      }
+    })
+    vi.mocked(spawn).mockReturnValue({ on: mockOn } as never)
 
-    // Verify regular update flow
+    // Don't throw on process.exit for this test - just track it was called
+    mockExit.mockImplementation((() => {}) as never)
+
+    // Start the update
+    await updateCommand.execute()
+
+    // Verify npm install is called with stdio inherit
     expect(spawn).toHaveBeenCalledWith('npm', ['install', '-g', '@iloom/cli@latest'], {
-      detached: true,
       stdio: 'inherit'
     })
+
+    // Simulate npm completing successfully
+    expect(closeCallback).toBeDefined()
+    closeCallback!(0)
+
     expect(mockExit).toHaveBeenCalledWith(0)
   })
 

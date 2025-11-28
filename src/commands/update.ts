@@ -74,13 +74,17 @@ export class UpdateCommand {
 
     logger.info('🔄 Starting update...')
 
-    // Start npm update in background and exit immediately
-    spawn('npm', ['install', '-g', `${packageName}@latest`], {
-      detached: true,
+    const child = spawn('npm', ['install', '-g', `${packageName}@latest`], {
       stdio: 'inherit'
     })
 
-    // Exit before npm tries to replace files (avoids file locking issues)
-    process.exit(0)
+    child.on('close', (code) => {
+      if (code === 0) {
+        logger.success('Update complete!')
+      } else {
+        logger.error(`Update failed with exit code ${code}`)
+      }
+      process.exit(code ?? 0)
+    })
   }
 }
