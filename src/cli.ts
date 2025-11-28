@@ -58,21 +58,101 @@ program
     }
 
     // Validate settings for all commands
-    await validateSettingsForCommand()
+    await validateSettingsForCommand(thisCommand)
   })
 
 // Helper function to validate settings at startup
-async function validateSettingsForCommand(): Promise<void> {
+async function validateSettingsForCommand(command: Command): Promise<void> {
+  const commandName = command.args[0] ?? ''
+
+  // Tier 1: Commands that bypass ALL validation
+  const bypassCommands = ['help', 'init', 'update']
+
+  if (bypassCommands.includes(commandName)) {
+    return
+  }
+
+  // Tier 2: All other commands require FULL validation (settings + multi-remote)
+  // Commands: start, add-issue, enhance, finish, list, cleanup, open, run, etc.
   try {
     const { SettingsManager } = await import('./lib/SettingsManager.js')
     const settingsManager = new SettingsManager()
 
     // Attempt to load settings - this will throw on validation errors
     // Missing file is OK (returns {})
-    await settingsManager.loadSettings()
+    const settings = await settingsManager.loadSettings()
+
+    // Check for multi-remote configuration requirement
+    const { hasMultipleRemotes } = await import('./utils/remote.js')
+    const multipleRemotes = await hasMultipleRemotes()
+
+    if (multipleRemotes && !settings.issueManagement?.github?.remote) {
+      // Auto-launch init command to configure remotes
+      // After init completes, function returns and Commander.js continues with original command
+      await autoLaunchInitForMultipleRemotes()
+      return // Settings now configured, let preAction complete
+    }
   } catch (error) {
     logger.error(`Configuration error: ${error instanceof Error ? error.message : 'Unknown error'}`)
     logger.info('Please fix your .iloom/settings.json file and try again.')
+    process.exit(1)
+  }
+}
+
+/**
+ * Auto-launch init command when multiple remotes are detected but not configured
+ * Shows message, waits for keypress, launches interactive Claude configuration,
+ * then returns to let Commander.js continue with the original command
+ */
+async function autoLaunchInitForMultipleRemotes(): Promise<void> {
+  logger.info('Multiple git remotes detected, but no GitHub remote is configured.')
+  logger.info('')
+  logger.info('iloom will now launch an interactive configuration session with Claude')
+  logger.info('to help you select which remote to use for GitHub operations.')
+  logger.info('')
+
+  // Wait for keypress to continue
+  const { waitForKeypress } = await import('./utils/prompt.js')
+  await waitForKeypress('Press any key to start configuration...')
+
+  logger.info('')
+
+  try {
+    // Launch init command with focused initial message
+    const { InitCommand } = await import('./commands/init.js')
+    const initCommand = new InitCommand()
+
+    // Custom initial message that focuses on multi-remote configuration
+    const customInitialMessage = 'Help me configure which git remote iloom should use for GitHub operations. I have multiple remotes and need to select the correct one.'
+
+    await initCommand.execute(customInitialMessage)
+
+    logger.info('')
+    logger.info('Configuration complete! Continuing with your original command...')
+    logger.info('')
+
+    // Re-validate settings after init to ensure multi-remote is now configured
+    const { SettingsManager } = await import('./lib/SettingsManager.js')
+    const settingsManager = new SettingsManager()
+    const settings = await settingsManager.loadSettings()
+
+    const { hasMultipleRemotes } = await import('./utils/remote.js')
+    const multipleRemotes = await hasMultipleRemotes()
+
+    // Verify the issue is resolved
+    if (multipleRemotes && !settings.issueManagement?.github?.remote) {
+      logger.error('Configuration incomplete: GitHub remote is still not configured.')
+      logger.info('Please run "iloom init" again and configure the GitHub remote setting.')
+      process.exit(1)
+    }
+
+    // Configuration verified - simply return to let Commander.js continue
+    // with the original command (preAction hook will complete normally)
+    return
+
+  } catch (error) {
+    logger.error(`Failed to configure remotes: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    logger.info('You can manually run "iloom init" to configure settings.')
     process.exit(1)
   }
 }

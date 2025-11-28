@@ -229,6 +229,16 @@ describe('Settings validation on CLI startup', () => {
     expect(stdout).toContain('Usage: iloom')
   })
 
+  it('should NOT validate settings for init command', async () => {
+    // Create invalid settings
+    writeFileSync(settingsPath, '{ invalid json }')
+
+    // init should still work with invalid settings (it's meant to fix configuration)
+    const { stdout, code } = await runCLI(['init', '--help'], testDir)
+    expect(code).toBe(0)
+    expect(stdout).toContain('Initialize iloom configuration')
+  })
+
   it('should validate settings for all commands except help', async () => {
     // Create invalid settings
     const invalidSettings = {

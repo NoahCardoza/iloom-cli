@@ -86,17 +86,24 @@ export async function fetchGhIssue(
 
 // PR fetching
 export async function fetchGhPR(
-	prNumber: number
+	prNumber: number,
+	repo?: string
 ): Promise<GitHubPullRequest> {
-	logger.debug('Fetching GitHub PR', { prNumber })
+	logger.debug('Fetching GitHub PR', { prNumber, repo })
 
-	return executeGhCommand<GitHubPullRequest>([
+	const args = [
 		'pr',
 		'view',
 		String(prNumber),
 		'--json',
 		'number,title,body,state,headRefName,baseRefName,url,isDraft,mergeable,createdAt,updatedAt',
-	])
+	]
+
+	if (repo) {
+		args.push('--repo', repo)
+	}
+
+	return executeGhCommand<GitHubPullRequest>(args)
 }
 
 // Project operations
@@ -338,17 +345,23 @@ interface RepoInfo {
  * Create a comment on a GitHub issue
  * @param issueNumber - The issue number
  * @param body - The comment body (markdown supported)
+ * @param repo - Optional repo in "owner/repo" format
  * @returns Comment metadata including ID and URL
  */
 export async function createIssueComment(
 	issueNumber: number,
-	body: string
+	body: string,
+	repo?: string
 ): Promise<CommentResponse> {
-	logger.debug('Creating issue comment', { issueNumber })
+	logger.debug('Creating issue comment', { issueNumber, repo })
+
+	const apiPath = repo
+		? `repos/${repo}/issues/${issueNumber}/comments`
+		: `repos/:owner/:repo/issues/${issueNumber}/comments`
 
 	return executeGhCommand<CommentResponse>([
 		'api',
-		`repos/:owner/:repo/issues/${issueNumber}/comments`,
+		apiPath,
 		'-f',
 		`body=${body}`,
 		'--jq',
@@ -360,17 +373,23 @@ export async function createIssueComment(
  * Update an existing GitHub comment
  * @param commentId - The comment ID
  * @param body - The updated comment body (markdown supported)
+ * @param repo - Optional repo in "owner/repo" format
  * @returns Updated comment metadata
  */
 export async function updateIssueComment(
 	commentId: number,
-	body: string
+	body: string,
+	repo?: string
 ): Promise<CommentResponse> {
-	logger.debug('Updating issue comment', { commentId })
+	logger.debug('Updating issue comment', { commentId, repo })
+
+	const apiPath = repo
+		? `repos/${repo}/issues/comments/${commentId}`
+		: `repos/:owner/:repo/issues/comments/${commentId}`
 
 	return executeGhCommand<CommentResponse>([
 		'api',
-		`repos/:owner/:repo/issues/comments/${commentId}`,
+		apiPath,
 		'-X',
 		'PATCH',
 		'-f',
@@ -385,18 +404,24 @@ export async function updateIssueComment(
  * Note: PR comments use the same endpoint as issue comments
  * @param prNumber - The PR number
  * @param body - The comment body (markdown supported)
+ * @param repo - Optional repo in "owner/repo" format
  * @returns Comment metadata including ID and URL
  */
 export async function createPRComment(
 	prNumber: number,
-	body: string
+	body: string,
+	repo?: string
 ): Promise<CommentResponse> {
-	logger.debug('Creating PR comment', { prNumber })
+	logger.debug('Creating PR comment', { prNumber, repo })
+
+	const apiPath = repo
+		? `repos/${repo}/issues/${prNumber}/comments`
+		: `repos/:owner/:repo/issues/${prNumber}/comments`
 
 	// PR comments use the issues endpoint
 	return executeGhCommand<CommentResponse>([
 		'api',
-		`repos/:owner/:repo/issues/${prNumber}/comments`,
+		apiPath,
 		'-f',
 		`body=${body}`,
 		'--jq',

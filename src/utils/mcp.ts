@@ -6,10 +6,29 @@ import { logger } from './logger.js'
  * Generate MCP configuration for GitHub comment broker
  * Uses a single server that can handle both issues and pull requests
  * Returns array of MCP server config objects
+ * @param contextType - Optional context type (issue or pr)
+ * @param repo - Optional repo in "owner/repo" format. If not provided, will auto-detect from git.
  */
-export async function generateGitHubCommentMcpConfig(contextType?: 'issue' | 'pr'): Promise<Record<string, unknown>[]> {
-	// Get repository information
-	const repoInfo = await getRepoInfo()
+export async function generateGitHubCommentMcpConfig(
+	contextType?: 'issue' | 'pr',
+	repo?: string
+): Promise<Record<string, unknown>[]> {
+	// Get repository information - either from provided repo string or auto-detect
+	let owner: string
+	let name: string
+
+	if (repo) {
+		const parts = repo.split('/')
+		if (parts.length !== 2 || !parts[0] || !parts[1]) {
+			throw new Error(`Invalid repo format: ${repo}. Expected "owner/repo"`)
+		}
+		owner = parts[0]
+		name = parts[1]
+	} else {
+		const repoInfo = await getRepoInfo()
+		owner = repoInfo.owner
+		name = repoInfo.name
+	}
 
 	// Map logical types to GitHub's webhook event names (handle GitHub's naming quirk here)
 	const githubEventName = contextType === 'issue' ? 'issues' : contextType === 'pr' ? 'pull_request' : undefined
@@ -22,8 +41,8 @@ export async function generateGitHubCommentMcpConfig(contextType?: 'issue' | 'pr
 				command: 'node',
 				args: [path.join(path.dirname(new globalThis.URL(import.meta.url).pathname), '../dist/mcp/github-comment-server.js')],
 				env: {
-					REPO_OWNER: repoInfo.owner,
-					REPO_NAME: repoInfo.name,
+					REPO_OWNER: owner,
+					REPO_NAME: name,
 					GITHUB_API_URL: 'https://api.github.com/',
 					...(githubEventName && { GITHUB_EVENT_NAME: githubEventName }),
 				},
@@ -32,8 +51,8 @@ export async function generateGitHubCommentMcpConfig(contextType?: 'issue' | 'pr
 	}
 
 	logger.debug('Generated MCP config for GitHub comment broker', {
-		repoOwner: repoInfo.owner,
-		repoName: repoInfo.name,
+		repoOwner: owner,
+		repoName: name,
 		contextType: contextType ?? 'auto-detect',
 		githubEventName: githubEventName ?? 'auto-detect'
 	})

@@ -8,6 +8,14 @@ import type { SettingsManager } from '../lib/SettingsManager.js'
 // Mock dependencies
 vi.mock('../lib/IssueEnhancementService.js')
 
+// Mock remote utilities
+vi.mock('../utils/remote.js', () => ({
+	hasMultipleRemotes: vi.fn().mockResolvedValue(false),
+	getConfiguredRepoFromSettings: vi.fn().mockResolvedValue('owner/repo'),
+	parseGitRemotes: vi.fn().mockResolvedValue([]),
+	validateConfiguredRemote: vi.fn().mockResolvedValue(undefined),
+}))
+
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
 	logger: {
@@ -108,7 +116,8 @@ describe('AddIssueCommand', () => {
 
 				expect(mockEnhancementService.createEnhancedIssue).toHaveBeenCalledWith(
 					validDescription,
-					enhancedDescription
+					enhancedDescription,
+					undefined
 				)
 			})
 

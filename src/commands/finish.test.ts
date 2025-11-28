@@ -51,6 +51,14 @@ vi.mock('../utils/git.js', async () => {
 	}
 })
 
+// Mock remote utils module
+vi.mock('../utils/remote.js', () => ({
+	hasMultipleRemotes: vi.fn().mockResolvedValue(false),
+	getConfiguredRepoFromSettings: vi.fn().mockResolvedValue('owner/repo'),
+	parseGitRemotes: vi.fn().mockResolvedValue([]),
+	validateConfiguredRemote: vi.fn().mockResolvedValue(undefined),
+}))
+
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
 	logger: {
@@ -566,7 +574,7 @@ describe('FinishCommand', () => {
 				expect(mockIdentifierParser.parseForPatternDetection).toHaveBeenCalledWith('123')
 
 				// Verify GitHub API was called to validate the issue
-				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
+				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123, undefined)
 
 				// Verify specific worktree finding method was used
 				expect(mockGitWorktreeManager.findWorktreeForIssue).toHaveBeenCalledWith(123)
@@ -614,7 +622,7 @@ describe('FinishCommand', () => {
 				expect(mockIdentifierParser.parseForPatternDetection).toHaveBeenCalledWith('#123')
 
 				// Verify GitHub API was called to validate the issue
-				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
+				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123, undefined)
 			})
 
 			it('should parse PR-specific format (pr/123)', async () => {
@@ -928,7 +936,7 @@ describe('FinishCommand', () => {
 				expect(mockIdentifierParser.parseForPatternDetection).toHaveBeenCalledWith('42')
 
 				// Verify GitHub API was called to validate the issue
-				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(42)
+				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(42, undefined)
 			})
 
 			it('should throw error if number is neither issue nor PR', async () => {
@@ -1044,7 +1052,7 @@ describe('FinishCommand', () => {
 					})
 
 					// Verify issue was fetched with auto-detected number
-					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(66)
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(66, undefined)
 					expect(mockGitWorktreeManager.findWorktreeForIssue).toHaveBeenCalledWith(66)
 				} finally {
 					// Restore original cwd
@@ -1250,7 +1258,7 @@ describe('FinishCommand', () => {
 				})
 
 				// Verify it parsed and validated the large number correctly
-				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(999999)
+				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(999999, undefined)
 			})
 
 			it('should handle leading zeros in numbers', async () => {
@@ -1290,7 +1298,7 @@ describe('FinishCommand', () => {
 				})
 
 				// Verify leading zeros were handled correctly (parsed as 42, not 42 with leading zeros)
-				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(42)
+				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(42, undefined)
 			})
 
 			it('should reject invalid characters in branch names', async () => {
@@ -1415,7 +1423,7 @@ describe('FinishCommand', () => {
 						options: {},
 					})
 
-					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123, undefined)
 				})
 
 				it('should throw error for closed issue without --force', async () => {
@@ -1479,7 +1487,7 @@ describe('FinishCommand', () => {
 						options: { force: true },
 					})
 
-					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123, undefined)
 					expect(mockValidationRunner.runValidations).toHaveBeenCalled()
 				})
 
@@ -1835,7 +1843,7 @@ describe('FinishCommand', () => {
 					).resolves.not.toThrow()
 
 					// Verify GitHub API was called
-					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123, undefined)
 				})
 
 				it('should skip confirmations when force=true', async () => {
@@ -1914,7 +1922,7 @@ describe('FinishCommand', () => {
 					).resolves.not.toThrow()
 
 					// GitHub API should still be called (reads allowed in dry-run)
-					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(789)
+					expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(789, undefined)
 				})
 
 				it('should preview actions without executing when dryRun=true', async () => {

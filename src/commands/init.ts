@@ -24,12 +24,14 @@ export class InitCommand {
   /**
    * Main entry point for the init command
    * Prompts user for autocomplete setup and displays instructions
+   * @param customInitialMessage Optional custom initial message to send to Claude (defaults to "Help me configure iloom settings.")
    */
-  public async execute(): Promise<void> {
+  public async execute(customInitialMessage?: string): Promise<void> {
     try {
       logger.debug('InitCommand.execute() starting', {
         cwd: process.cwd(),
-        nodeVersion: process.version
+        nodeVersion: process.version,
+        hasCustomInitialMessage: !!customInitialMessage
       })
 
       logger.info(chalk.bold('Welcome to iloom setup'))
@@ -40,7 +42,7 @@ export class InitCommand {
       await this.setupProjectConfiguration()
 
       // Launch guided Claude configuration if available
-      await this.launchGuidedInit()
+      await this.launchGuidedInit(customInitialMessage)
 
       logger.info(chalk.green('Setup complete! Enjoy using iloom CLI.'))
     } catch (error) {
@@ -152,9 +154,10 @@ export class InitCommand {
 
   /**
    * Launch interactive Claude-guided configuration
+   * @param customInitialMessage Optional custom initial message to send to Claude
    */
-  private async launchGuidedInit(): Promise<void> {
-    logger.debug('launchGuidedInit() starting')
+  private async launchGuidedInit(customInitialMessage?: string): Promise<void> {
+    logger.debug('launchGuidedInit() starting', { hasCustomInitialMessage: !!customInitialMessage })
     logger.info(chalk.bold('Starting interactive Claude-guided configuration...'))
 
     // Check if Claude CLI is available
@@ -303,6 +306,33 @@ export class InitCommand {
         logger.debug('Unknown shell detected, skipping config read')
       }
 
+      // Detect git remotes for GitHub configuration
+      logger.debug('Detecting git remotes for GitHub configuration')
+      const { parseGitRemotes } = await import('../utils/remote.js')
+      const remotes = await parseGitRemotes()
+      logger.debug('Git remotes detected', { count: remotes.length, remotes })
+
+      let remotesInfo = ''
+      let multipleRemotes = ''
+      let singleRemote = ''
+      let singleRemoteName = ''
+      let singleRemoteUrl = ''
+      let noRemotes = ''
+
+      if (remotes.length === 0) {
+        noRemotes = 'true'
+        remotesInfo = 'No git remotes detected in this repository.'
+      } else if (remotes.length === 1 && remotes[0]) {
+        singleRemote = 'true'
+        singleRemoteName = remotes[0].name
+        singleRemoteUrl = remotes[0].url
+        remotesInfo = `Detected Remote:\n- **${remotes[0].name}**: ${remotes[0].url} (${remotes[0].owner}/${remotes[0].repo})`
+      } else {
+        multipleRemotes = 'true'
+        remotesInfo = `Detected Remotes (${remotes.length}):\n` +
+          remotes.map(r => `- **${r.name}**: ${r.url} (${r.owner}/${r.repo})`).join('\n')
+      }
+
       // Build template variables
       const variables = {
         SETTINGS_SCHEMA: schemaContent,
@@ -310,7 +340,13 @@ export class InitCommand {
         SETTINGS_LOCAL_JSON: settingsLocalJson,
         SHELL_TYPE: shell,
         SHELL_CONFIG_PATH: shellConfigPath,
-        SHELL_CONFIG_CONTENT: shellConfigContent
+        SHELL_CONFIG_CONTENT: shellConfigContent,
+        REMOTES_INFO: remotesInfo,
+        MULTIPLE_REMOTES: multipleRemotes,
+        SINGLE_REMOTE: singleRemote,
+        SINGLE_REMOTE_NAME: singleRemoteName,
+        SINGLE_REMOTE_URL: singleRemoteUrl,
+        NO_REMOTES: noRemotes
       }
 
       logger.debug('Building template variables', {
@@ -323,6 +359,7 @@ export class InitCommand {
       // Get init prompt
       logger.debug('Loading init prompt template')
       const prompt = await this.templateManager.getPrompt('init', variables)
+
       logger.debug('Init prompt loaded', {
         promptLength: prompt.length,
         containsSchema: prompt.includes('SETTINGS_SCHEMA'),
@@ -340,11 +377,13 @@ export class InitCommand {
         headless: claudeOptions.headless,
         hasSystemPrompt: !!claudeOptions.appendSystemPrompt,
         addDir: claudeOptions.addDir,
-        promptLength: prompt.length
+        promptLength: prompt.length,
+        hasCustomInitialMessage: !!customInitialMessage
       })
 
-      // Launch Claude in interactive mode
-      await launchClaude('Help me configure iloom settings.', claudeOptions)
+      // Launch Claude in interactive mode with custom initial message if provided
+      const initialMessage = customInitialMessage ?? 'Help me configure iloom settings.'
+      await launchClaude(initialMessage, claudeOptions)
       logger.debug('Claude session completed')
 
     } catch (error) {

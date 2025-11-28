@@ -52,7 +52,7 @@ export class GitHubService {
 	}
 
 	// Input detection
-	public async detectInputType(input: string): Promise<GitHubInputDetection> {
+	public async detectInputType(input: string, repo?: string): Promise<GitHubInputDetection> {
 		// Pattern: #123 or just 123
 		const numberMatch = input.match(/^#?(\d+)$/)
 
@@ -64,14 +64,14 @@ export class GitHubService {
 
 		// Try PR first (based on bash script logic at lines 500-533)
 		logger.debug('Checking if input is a PR', { number })
-		const pr = await this.isValidPR(number)
+		const pr = await this.isValidPR(number, repo)
 		if (pr) {
 			return { type: 'pr', number, rawInput: input }
 		}
 
 		// Try issue next (lines 536-575 in bash)
 		logger.debug('Checking if input is an issue', { number })
-		const issue = await this.isValidIssue(number)
+		const issue = await this.isValidIssue(number, repo)
 		if (issue) {
 			return { type: 'issue', number, rawInput: input }
 		}
@@ -81,9 +81,9 @@ export class GitHubService {
 	}
 
 	// Issue fetching with validation
-	public async fetchIssue(issueNumber: number): Promise<Issue> {
+	public async fetchIssue(issueNumber: number, repo?: string): Promise<Issue> {
 		try {
-			return await this.fetchIssueInternal(issueNumber)
+			return await this.fetchIssueInternal(issueNumber, repo)
 		} catch (error) {
 			// Only throw NOT_FOUND for actual "not found" errors
 			if (error instanceof Error && 'stderr' in error && (error as {stderr?: string}).stderr?.includes('Could not resolve')) {
@@ -99,9 +99,9 @@ export class GitHubService {
 	}
 
 	// Silent issue validation (for detection phase)
-	public async isValidIssue(issueNumber: number): Promise<Issue | false> {
+	public async isValidIssue(issueNumber: number, repo?: string): Promise<Issue | false> {
 		try {
-			return await this.fetchIssueInternal(issueNumber)
+			return await this.fetchIssueInternal(issueNumber, repo)
 		} catch (error) {
 			// Silently return false for "not found" errors
 			if (error instanceof Error && 'stderr' in error && (error as {stderr?: string}).stderr?.includes('Could not resolve')) {
@@ -113,8 +113,8 @@ export class GitHubService {
 	}
 
 	// Internal issue fetching logic (shared by fetchIssue and isValidIssue)
-	private async fetchIssueInternal(issueNumber: number): Promise<Issue> {
-		const ghIssue = await fetchGhIssue(issueNumber)
+	private async fetchIssueInternal(issueNumber: number, repo?: string): Promise<Issue> {
+		const ghIssue = await fetchGhIssue(issueNumber, repo)
 		return this.mapGitHubIssueToIssue(ghIssue)
 	}
 
@@ -133,9 +133,9 @@ export class GitHubService {
 	}
 
 	// PR fetching with validation
-	public async fetchPR(prNumber: number): Promise<PullRequest> {
+	public async fetchPR(prNumber: number, repo?: string): Promise<PullRequest> {
 		try {
-			return await this.fetchPRInternal(prNumber)
+			return await this.fetchPRInternal(prNumber, repo)
 		} catch (error) {
 			// Only throw NOT_FOUND for actual "not found" errors
 			if (error instanceof Error && 'stderr' in error && (error as {stderr?: string}).stderr?.includes('Could not resolve')) {
@@ -151,9 +151,9 @@ export class GitHubService {
 	}
 
 	// Silent PR validation (for detection phase)
-	public async isValidPR(prNumber: number): Promise<PullRequest | false> {
+	public async isValidPR(prNumber: number, repo?: string): Promise<PullRequest | false> {
 		try {
-			return await this.fetchPRInternal(prNumber)
+			return await this.fetchPRInternal(prNumber, repo)
 		} catch (error) {
 			// Silently return false for "not found" errors
 			if (error instanceof Error && 'stderr' in error && (error as {stderr?: string}).stderr?.includes('Could not resolve')) {
@@ -165,8 +165,8 @@ export class GitHubService {
 	}
 
 	// Internal PR fetching logic (shared by fetchPR and isValidPR)
-	private async fetchPRInternal(prNumber: number): Promise<PullRequest> {
-		const ghPR = await fetchGhPR(prNumber)
+	private async fetchPRInternal(prNumber: number, repo?: string): Promise<PullRequest> {
+		const ghPR = await fetchGhPR(prNumber, repo)
 		return this.mapGitHubPRToPullRequest(ghPR)
 	}
 

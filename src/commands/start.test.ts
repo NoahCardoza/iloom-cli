@@ -57,6 +57,14 @@ vi.mock('../utils/git.js', async () => {
 	}
 })
 
+// Mock remote utilities
+vi.mock('../utils/remote.js', () => ({
+	hasMultipleRemotes: vi.fn().mockResolvedValue(false),
+	getConfiguredRepoFromSettings: vi.fn().mockResolvedValue('owner/repo'),
+	parseGitRemotes: vi.fn().mockResolvedValue([]),
+	validateConfiguredRemote: vi.fn().mockResolvedValue(undefined),
+}))
+
 // Mock claude utilities
 vi.mock('../utils/claude.js', () => ({
 	launchClaude: vi.fn().mockResolvedValue('Enhanced description from Claude AI'),
@@ -122,7 +130,8 @@ describe('StartCommand', () => {
 				).resolves.not.toThrow()
 
 				expect(mockGitHubService.detectInputType).toHaveBeenCalledWith(
-					'123'
+					'123',
+					undefined
 				)
 			})
 
@@ -141,7 +150,8 @@ describe('StartCommand', () => {
 				).resolves.not.toThrow()
 
 				expect(mockGitHubService.detectInputType).toHaveBeenCalledWith(
-					'456'
+					'456',
+					undefined
 				)
 			})
 
@@ -160,7 +170,8 @@ describe('StartCommand', () => {
 				).resolves.not.toThrow()
 
 				expect(mockGitHubService.detectInputType).toHaveBeenCalledWith(
-					'#456'
+					'#456',
+					undefined
 				)
 			})
 
@@ -543,7 +554,8 @@ describe('StartCommand', () => {
 				).resolves.not.toThrow()
 
 				expect(mockGitHubService.detectInputType).toHaveBeenCalledWith(
-					'42'
+					'42',
+					undefined
 				)
 			})
 
@@ -562,7 +574,8 @@ describe('StartCommand', () => {
 				).resolves.not.toThrow()
 
 				expect(mockGitHubService.detectInputType).toHaveBeenCalledWith(
-					'24'
+					'24',
+					undefined
 				)
 			})
 
@@ -582,7 +595,8 @@ describe('StartCommand', () => {
 
 				// The number should be parsed as 123, not 0123
 				expect(mockGitHubService.detectInputType).toHaveBeenCalledWith(
-					'0123'
+					'0123',
+					undefined
 				)
 			})
 		})
@@ -730,7 +744,8 @@ describe('StartCommand', () => {
 				).resolves.not.toThrow()
 
 				expect(mockGitHubService.detectInputType).toHaveBeenCalledWith(
-					'123'
+					'123',
+					undefined
 				)
 			})
 
@@ -773,7 +788,7 @@ describe('StartCommand', () => {
 					options: {},
 				})
 
-				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
+				expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123, undefined)
 				expect(mockGitHubService.validateIssueState).toHaveBeenCalledWith(mockIssue)
 			})
 
@@ -797,7 +812,7 @@ describe('StartCommand', () => {
 					options: {},
 				})
 
-				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(456)
+				expect(mockGitHubService.fetchPR).toHaveBeenCalledWith(456, undefined)
 				expect(mockGitHubService.validatePRState).toHaveBeenCalledWith(mockPR)
 			})
 

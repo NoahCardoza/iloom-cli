@@ -18,6 +18,12 @@ export interface TemplateVariables {
 	SHELL_TYPE?: string
 	SHELL_CONFIG_PATH?: string
 	SHELL_CONFIG_CONTENT?: string
+	REMOTES_INFO?: string
+	MULTIPLE_REMOTES?: string
+	SINGLE_REMOTE?: string
+	SINGLE_REMOTE_NAME?: string
+	SINGLE_REMOTE_URL?: string
+	NO_REMOTES?: string
 }
 
 export class PromptTemplateManager {
@@ -137,6 +143,30 @@ export class PromptTemplateManager {
 			result = result.replace(/SHELL_CONFIG_CONTENT/g, variables.SHELL_CONFIG_CONTENT)
 		}
 
+		if (variables.REMOTES_INFO !== undefined) {
+			result = result.replace(/REMOTES_INFO/g, variables.REMOTES_INFO)
+		}
+
+		if (variables.MULTIPLE_REMOTES !== undefined) {
+			result = result.replace(/MULTIPLE_REMOTES/g, variables.MULTIPLE_REMOTES)
+		}
+
+		if (variables.SINGLE_REMOTE !== undefined) {
+			result = result.replace(/SINGLE_REMOTE/g, variables.SINGLE_REMOTE)
+		}
+
+		if (variables.SINGLE_REMOTE_NAME !== undefined) {
+			result = result.replace(/SINGLE_REMOTE_NAME/g, variables.SINGLE_REMOTE_NAME)
+		}
+
+		if (variables.SINGLE_REMOTE_URL !== undefined) {
+			result = result.replace(/SINGLE_REMOTE_URL/g, variables.SINGLE_REMOTE_URL)
+		}
+
+		if (variables.NO_REMOTES !== undefined) {
+			result = result.replace(/NO_REMOTES/g, variables.NO_REMOTES)
+		}
+
 		return result
 	}
 
@@ -180,6 +210,39 @@ export class PromptTemplateManager {
 		} else {
 			// Remove the entire conditional block
 			result = result.replace(settingsLocalJsonRegex, '')
+		}
+
+		// Process MULTIPLE_REMOTES conditionals
+		const multipleRemotesRegex = /\{\{#IF MULTIPLE_REMOTES\}\}(.*?)\{\{\/IF MULTIPLE_REMOTES\}\}/gs
+
+		if (variables.MULTIPLE_REMOTES !== undefined && variables.MULTIPLE_REMOTES !== '') {
+			// Include the content, remove the conditional markers
+			result = result.replace(multipleRemotesRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(multipleRemotesRegex, '')
+		}
+
+		// Process SINGLE_REMOTE conditionals
+		const singleRemoteRegex = /\{\{#IF SINGLE_REMOTE\}\}(.*?)\{\{\/IF SINGLE_REMOTE\}\}/gs
+
+		if (variables.SINGLE_REMOTE !== undefined && variables.SINGLE_REMOTE !== '') {
+			// Include the content, remove the conditional markers
+			result = result.replace(singleRemoteRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(singleRemoteRegex, '')
+		}
+
+		// Process NO_REMOTES conditionals
+		const noRemotesRegex = /\{\{#IF NO_REMOTES\}\}(.*?)\{\{\/IF NO_REMOTES\}\}/gs
+
+		if (variables.NO_REMOTES !== undefined && variables.NO_REMOTES !== '') {
+			// Include the content, remove the conditional markers
+			result = result.replace(noRemotesRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(noRemotesRegex, '')
 		}
 
 		return result

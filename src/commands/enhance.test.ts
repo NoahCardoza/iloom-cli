@@ -19,6 +19,12 @@ vi.mock('../utils/prompt.js', () => ({
 vi.mock('../utils/mcp.js', () => ({
 	generateGitHubCommentMcpConfig: vi.fn().mockResolvedValue([]),
 }))
+vi.mock('../utils/remote.js', () => ({
+	hasMultipleRemotes: vi.fn().mockResolvedValue(false),
+	getConfiguredRepoFromSettings: vi.fn().mockResolvedValue('owner/repo'),
+	parseGitRemotes: vi.fn().mockResolvedValue([]),
+	validateConfiguredRemote: vi.fn().mockResolvedValue(undefined),
+}))
 
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
@@ -132,7 +138,7 @@ describe('EnhanceCommand', () => {
 
 			await command.execute({ issueNumber: 123, options: {} })
 
-			expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123)
+			expect(mockGitHubService.fetchIssue).toHaveBeenCalledWith(123, undefined)
 		})
 
 		it('should throw error when issue does not exist', async () => {
@@ -486,8 +492,8 @@ describe('EnhanceCommand', () => {
 			await command.execute({ issueNumber: 42, options: {} })
 
 			expect(calls).toEqual([
-				'fetchIssue',
 				'loadSettings',
+				'fetchIssue',
 				'loadAgents',
 				'formatForCli',
 				'launchClaude',

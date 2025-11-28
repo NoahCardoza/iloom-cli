@@ -175,6 +175,19 @@ export const IloomSettingsSchema = z.object({
 		),
 	capabilities: CapabilitiesSettingsSchema.describe('Project capability configurations'),
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
+	issueManagement: z
+		.object({
+			github: z
+				.object({
+					remote: z
+						.string()
+						.min(1, 'Remote name cannot be empty')
+						.describe('Git remote name to use for GitHub operations'),
+				})
+				.optional(),
+		})
+		.optional()
+		.describe('Issue management configuration'),
 })
 
 /**

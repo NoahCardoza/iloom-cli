@@ -78,7 +78,7 @@ Follow these steps to guide the user through configuration:
 
 ### Phase 0: Extract Current Settings
 
-**BEFORE asking any questions, extract current values from existing configuration:**
+**BEFORE doing anything else, extract current values from existing configuration:**
 
 {{#IF SETTINGS_JSON}}{{#IF SETTINGS_LOCAL_JSON}}
 Parse both settings.json and settings.local.json. Merge them with local taking precedence over shared.
@@ -95,7 +95,7 @@ Extract these current values if they exist:
 - `currentPermissionMode` from `workflows.issue.permissionMode` field (default: "acceptEdits")
 - `currentBasePort` from `capabilities.web.basePort` field (default: 3000)
 
-**Display current configuration summary to user BEFORE asking questions:**
+**If configuration already exists, display current configuration summary:**
 
 ```
 Current Configuration:
@@ -104,40 +104,111 @@ Main Branch: [currentMainBranch or "main (default)"]
 Worktree Prefix: [currentWorktreePrefix or "default (repo-name-looms)"]
 Permission Mode (Issues): [currentPermissionMode or "acceptEdits (default)"]
 Base Port: [currentBasePort or "3000 (default)"]
+GitHub Remote: [currentGitHubRemote or "not configured"]
 ```
+
+**Then ask the user what they want to do:**
+
+"Your iloom CLI is already configured. What would you like to do?
+  - Modify existing settings
+  - Configure GitHub remotes
+  - Add advanced configuration (agent models, database settings, protected branches, etc.)
+  - Start fresh with new configuration
+  - Nothing, just exit"
+
+**Based on their answer:**
+- **Modify existing settings** → Proceed to Phase 1 to update settings
+{{#IF MULTIPLE_REMOTES}}
+- **Configure GitHub remote** → Go to Phase 0.5 to configure remote, then skip to Phase 2 (summary), Phase 3 (choose file), and Phase 5 (save). Do NOT re-ask about other settings.
+{{/IF MULTIPLE_REMOTES}}
+- **Add advanced configuration** → Skip to Phase 8 to help with advanced options
+- **Start fresh** → Proceed to Phase 1 to reconfigure from scratch
+- **Nothing/Exit** → Show Phase 8 wrap-up message and end session
+
+**If NO configuration exists**, skip directly to Phase 0.5 (GitHub Remote Configuration) without asking what they want to do.
+
+### Phase 0.5: GitHub Remote Configuration
+
+REMOTES_INFO
+
+**IMPORTANT: Before proceeding, determine if remote configuration is needed:**
+
+{{#IF MULTIPLE_REMOTES}}
+This repository has multiple git remotes detected. iloom needs to know which remote's GitHub repository to use for creating and reading issues.
+
+**Detected remotes:**
+REMOTES_INFO
+
+If the user has no `issueManagement.github.remote` configured you MUST ask the user: "Which remote should iloom use for GitHub issue operations?"
+- Show the list of detected remotes above with their repository URLs
+- **Classic fork pattern (origin + upstream)**: If both "origin" and "upstream" remotes exist, recommend "upstream" since issues are typically tracked in the original repository, not personal forks. Explain: "In a typical fork workflow, 'upstream' points to the original project where issues are tracked, while 'origin' is your personal fork for submitting PRs."
+- For other multi-remote scenarios: Default to "origin" if it exists, otherwise the first remote
+- Store answer as: `issueManagement.github.remote`
+
+**IMPORTANT**: Do NOT save this setting yet. You will ask the user where to save ALL configuration settings in Phase 3.
+{{/IF MULTIPLE_REMOTES}}
+
+{{#IF SINGLE_REMOTE}}
+**Note:** Only one remote detected (SINGLE_REMOTE_NAME pointing to SINGLE_REMOTE_URL). iloom will use this for GitHub operations. No configuration needed.
+{{/IF SINGLE_REMOTE}}
+
+{{#IF NO_REMOTES}}
+**Warning:** No git remotes detected. You may need to configure a remote before using iloom's GitHub features.
+{{/IF NO_REMOTES}}
 
 ### Phase 1: Essential Settings
 
-Use AskUserQuestion to ask these questions **ONE AT A TIME**. **ALWAYS include current values in questions as shown below:**
+Use AskUserQuestion to ask ALL essential settings questions **IN A SINGLE BATCH**. **ALWAYS include current values in questions as shown below:**
+
+**Create a single AskUserQuestion call with these 4 questions:**
 
 1. **Main Branch**
-   - Question format: "What is your main/primary branch name? (Currently: [currentMainBranch])"
-   - If no current value: "What is your main/primary branch name?"
+   - Question format: "What is your main/primary branch name?{{#IF currentMainBranch}} (Currently: [currentMainBranch]){{/IF currentMainBranch}}"
+   - Options (as examples, user can type "Other" to provide custom):
+     - "main" - Standard default
+     - "master" - Legacy default
+     - "develop" - Common development branch
    - Default: currentMainBranch or "main"
    - Validation: Non-empty string
    - Store answer as: `mainBranch`
 
 2. **Worktree Prefix**
-   - Question format: "What prefix should iloom use for worktree directories? (Currently: [currentWorktreePrefix or 'default (repo-name-looms)']) Leave empty to use default."
-   - If no current value: "What prefix should iloom use for worktree directories? (Leave empty to use default: <repo-name>-looms)"
+   - Question format: "What prefix should iloom use for worktree directories?{{#IF currentWorktreePrefix}} (Currently: [currentWorktreePrefix]){{/IF currentWorktreePrefix}} Leave empty to use default (<repo-name>-looms)."
+   - Options (as examples):
+     - "" (empty) - Use default prefix
+     - "looms" - Simple prefix
+     - "../looms" - Sibling directory
    - Default: currentWorktreePrefix or "" (empty means use default)
    - Validation: If not empty, only alphanumeric characters, hyphens, underscores, and forward slashes allowed
    - Store answer as: `worktreePrefix`
    - Note: If user provides empty string, omit this field from settings
 
 3. **Permission Mode for Issue Workflows**
-   - Question format: "What permission mode should Claude use when working on issues? (Currently: [currentPermissionMode])\n  - plan: Claude plans but doesn't execute\n  - acceptEdits: Claude executes with your confirmation (recommended)\n  - bypassPermissions: Claude executes without confirmation\n  - default: Use Claude Code's default behavior"
-   - If no current value: "What permission mode should Claude use when working on issues?\n  - plan: Claude plans but doesn't execute\n  - acceptEdits: Claude executes with your confirmation (recommended)\n  - bypassPermissions: Claude executes without confirmation\n  - default: Use Claude Code's default behavior"
+   - Question format: "What permission mode should Claude use when working on issues?{{#IF currentPermissionMode}} (Currently: [currentPermissionMode]){{/IF currentPermissionMode}}"
+   - Options:
+     - "acceptEdits" - Claude executes with your confirmation (recommended)
+     - "plan" - Claude plans but doesn't execute
+     - "bypassPermissions" - ⚠️ Claude executes without confirmation (use with caution)
+     - "default" - Use Claude Code's default behavior
    - Default: currentPermissionMode or "acceptEdits"
    - Validation: Must be one of: plan, acceptEdits, bypassPermissions, default
    - Store answer as: `workflows.issue.permissionMode`
 
 4. **Base Port**
-   - Question format: "What base port should web development servers use? (Currently: [currentBasePort])"
-   - If no current value: "What base port should web development servers use?"
+   - Question format: "What base port should web development servers use?{{#IF currentBasePort}} (Currently: [currentBasePort]){{/IF currentBasePort}}"
+   - Options (as examples):
+     - "3000" - Common Node.js default
+     - "8000" - Common Python default
+     - "5000" - Common Flask/Express default
    - Default: currentBasePort or 3000
    - Validation: Number between 1 and 65535
    - Store answer as: `capabilities.web.basePort`
+
+**Implementation Details:**
+- Set multiSelect: false for all questions (user picks one answer per question)
+- Use the AskUserQuestion tool with all 4 questions in the questions array
+- Users can select "Other" on any question to provide custom input
+- Process all answers at once when the user submits
 
 ### Phase 2: Configuration Summary
 
@@ -150,7 +221,10 @@ Main Branch: [value]
 Worktree Prefix: [value or "default (repo-name-looms)"]
 Permission Mode (Issues): [value]
 Base Port: [value]
+{{#IF MULTIPLE_REMOTES}}GitHub Remote: [value]{{/IF MULTIPLE_REMOTES}}
 ```
+
+**Note**: Include the GitHub Remote line in the summary ONLY if it was configured in Phase 0.5.
 
 Then ask: "Does this configuration look correct?"
 - If yes, proceed to Phase 3
@@ -158,13 +232,58 @@ Then ask: "Does this configuration look correct?"
 
 ### Phase 3: Choose Configuration File
 
-Ask: "Should this configuration be committed to git?\n  - yes: Save to .iloom/settings.json (shared with team)\n  - no: Save to .iloom/settings.local.json (local only, gitignored)"
+**CRITICAL: You MUST ask the user where to save the configuration. DO NOT make assumptions or decide for them.**
 
-Store the answer to determine which file to write.
+Ask the user this exact question: "Should this configuration be committed to git?
+  - yes: Save to .iloom/settings.json (shared with team)
+  - no: Save to .iloom/settings.local.json (local only, gitignored)"
+
+**DO NOT:**
+- Assume what the user wants based on the type of setting
+- Make decisions about what "should" be shared with the team
+- Skip this question and auto-save to either file
+
+Store the user's answer to determine which file to write in Phase 5.
 
 ### Phase 4: File Generation
 
 Based on the user's answers, generate the settings JSON content following these rules:
+
+**CRITICAL: AVOID DUPLICATION BETWEEN SETTINGS FILES**
+
+When both settings.json and settings.local.json exist, you MUST prevent duplication:
+- **settings.json** = Shared settings committed to git (team defaults)
+- **settings.local.json** = Local overrides NOT committed to git (personal customizations)
+
+**Rules for preventing duplication:**
+
+1. **When updating settings.local.json:**
+   - ONLY include settings that DIFFER from settings.json
+   - If a setting has the same value in both files, REMOVE it from settings.local.json
+   - settings.local.json should ONLY contain overrides, not duplicates
+   - Example: If settings.json has `"mainBranch": "main"` and user sets local to "main", OMIT it from settings.local.json
+
+2. **When updating settings.json:**
+   - Include all settings the user configured
+   - If settings.local.json exists with overrides, those will take precedence at runtime
+   - Do NOT copy values from settings.local.json into settings.json unless user explicitly changed them
+
+3. **Merge behavior example:**
+   ```
+   Before:
+   settings.json: { "mainBranch": "main", "capabilities": { "web": { "basePort": 3000 } } }
+   settings.local.json: { "mainBranch": "main", "capabilities": { "web": { "basePort": 4000 } } }
+
+   Problem: mainBranch is duplicated (same value in both)
+
+   After user updates local settings:
+   settings.json: { "mainBranch": "main", "capabilities": { "web": { "basePort": 3000 } } }
+   settings.local.json: { "capabilities": { "web": { "basePort": 4000 } } }
+
+   Result: mainBranch removed from local because it matches shared
+   ```
+
+**Settings generation rules:**
 
 1. **Start with base structure:**
    ```json
@@ -209,11 +328,41 @@ Based on the user's answers, generate the settings JSON content following these 
 
 ### Phase 5: Write File
 
+**CRITICAL: REMOVE DUPLICATES BEFORE WRITING**
+
+Before writing the file, perform a final duplication check:
+
+**If writing to settings.local.json:**
+1. Load the current settings.json (if it exists)
+2. Compare EVERY setting in the generated local config against settings.json
+3. Remove any setting from local config that has the SAME VALUE as in settings.json
+4. Only write settings to local that are DIFFERENT from shared
+5. If this results in an empty object `{}`, inform the user, and skip creating it"
+
+**If writing to settings.json:**
+1. Load the current settings.local.json (if it exists)
+2. Write all configured settings to settings.json
+3. After writing settings.json, check if any settings in settings.local.json are now duplicates
+4. If duplicates found, ask the user: "I noticed some settings in settings.local.json now match settings.json. Should I remove these duplicates from your local file?"
+
+**Example duplication removal:**
+```
+settings.json: { "mainBranch": "develop", "capabilities": { "web": { "basePort": 3000 } } }
+Generated local: { "mainBranch": "develop", "capabilities": { "web": { "basePort": 4000 } } }
+
+After removing duplicates:
+Write to local: { "capabilities": { "web": { "basePort": 4000 } } }
+
+Reason: mainBranch has same value in both files, so it's removed from local
+```
+
+**Write steps:**
 1. Ensure `.iloom/` directory exists (create if needed)
-2. Write the generated settings to the chosen file:
+2. Perform duplication check as described above
+3. Write the deduplicated settings to the chosen file:
    - `.iloom/settings.json` if user chose to commit
    - `.iloom/settings.local.json` if user chose local-only
-3. Use the Write tool to create/update the file
+4. Use the Write tool to create/update the file
 
 ### Phase 6: Update .gitignore
 
@@ -314,9 +463,14 @@ If users ask about specific configurations, help them add these sections to thei
 ## Important Notes
 
 - **Validate ALL inputs** against the schema before writing files
-- **Ask questions one at a time** using AskUserQuestion - don't batch them
-- **ALWAYS follow Phase 0** - Extract current settings and display current configuration summary before asking questions
+- **Use batch mode** for AskUserQuestion - ask all 4 essential settings questions in a single call for faster setup
+- **ALWAYS follow Phase 0** - Extract current settings and check if configuration exists
+- **For existing users** - Ask what they want to do (modify, add advanced config, start fresh, or exit) instead of forcing them through the entire flow
+- **For new users** - Skip directly to Phase 0.5 (GitHub Remote Configuration) and proceed with setup
 - **ALWAYS use the question formats** specified in Phase 1 that include "(Currently: [value])" when current values exist
 - **Keep configuration minimal** - only include non-default values
 - **Merge carefully** when updating existing settings - preserve any settings the user didn't modify
 - **Handle errors gracefully** - if schema validation fails, explain what went wrong and ask the user to try again
+- **CRITICAL: PREVENT DUPLICATION** - When writing settings.local.json, ONLY include settings that differ from settings.json. If a setting has the same value in both files, it MUST be removed from the local file. Local should only contain overrides, never duplicates.
+- **Deep comparison required** - When comparing settings for duplication, compare nested objects deeply (e.g., capabilities.web.basePort), not just top-level keys
+- **Empty local is OK** - If all local settings match shared settings after deduplication, an empty settings.local.json file is perfectly valid (or the user may choose not to create it at all)

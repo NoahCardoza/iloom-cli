@@ -3,6 +3,8 @@ import { IssueEnhancementService } from '../lib/IssueEnhancementService.js'
 import { GitHubService } from '../lib/GitHubService.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
+import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
+import { logger } from '../utils/logger.js'
 
 /**
  * Input structure for AddIssueCommand
@@ -18,13 +20,15 @@ export interface AddIssueCommandInput {
  */
 export class AddIssueCommand {
 	private enhancementService: IssueEnhancementService
+	private settingsManager: SettingsManager
 
-	constructor(enhancementService?: IssueEnhancementService) {
+	constructor(enhancementService?: IssueEnhancementService, settingsManager?: SettingsManager) {
 		// Use provided service or create default
+		this.settingsManager = settingsManager ?? new SettingsManager()
 		this.enhancementService = enhancementService ?? new IssueEnhancementService(
 			new GitHubService(),
 			new AgentManager(),
-			new SettingsManager()
+			this.settingsManager
 		)
 	}
 
@@ -39,6 +43,16 @@ export class AddIssueCommand {
 	public async execute(input: AddIssueCommandInput): Promise<number> {
 		const { description } = input
 
+		// Step 0: Load settings and get configured repo for GitHub operations
+		const settings = await this.settingsManager.loadSettings()
+		let repo: string | undefined
+
+		const multipleRemotes = await hasMultipleRemotes()
+		if (multipleRemotes) {
+			repo = await getConfiguredRepoFromSettings(settings)
+			logger.info(`Using GitHub repository: ${repo}`)
+		}
+
 		// Step 1: Validate description format
 		if (!description || !this.enhancementService.validateDescription(description)) {
 			throw new Error('Description is required and must be more than 30 characters with at least 3 words')
@@ -50,7 +64,8 @@ export class AddIssueCommand {
 		// Step 3: Create GitHub issue with original as title, enhanced as body
 		const result = await this.enhancementService.createEnhancedIssue(
 			description,
-			enhancedDescription
+			enhancedDescription,
+			repo
 		)
 
 		// Step 4: Wait for keypress and open issue in browser for review

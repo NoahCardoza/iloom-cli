@@ -14,6 +14,7 @@ import { branchExists, findMainWorktreePathWithSettings } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
+import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import type { StartOptions } from '../types/index.js'
 
 export interface StartCommandInput {
@@ -109,14 +110,25 @@ export class StartCommand {
 	 */
 	public async execute(input: StartCommandInput): Promise<void> {
 		try {
-			// Step 0: Initialize LoomManager with main worktree path
+			// Step 0: Load settings and get configured repo for GitHub operations
+			const initialSettings = await this.settingsManager.loadSettings()
+			let repo: string | undefined
+
+			// Only get repo if we have multiple remotes (prehook already validated config)
+			const multipleRemotes = await hasMultipleRemotes()
+			if (multipleRemotes) {
+				repo = await getConfiguredRepoFromSettings(initialSettings)
+				logger.info(`Using GitHub repository: ${repo}`)
+			}
+
+			// Step 0.5: Initialize LoomManager with main worktree path
 			const loomManager = await this.initializeLoomManager()
 
-			// Step 1: Parse and validate input
-			const parsed = await this.parseInput(input.identifier)
+			// Step 1: Parse and validate input (pass repo to methods)
+			const parsed = await this.parseInput(input.identifier, repo)
 
 			// Step 2: Validate based on type
-			await this.validateInput(parsed)
+			await this.validateInput(parsed, repo)
 
 			// Step 2.5: Handle description input - create GitHub issue
 			if (parsed.type === 'description') {
@@ -209,7 +221,7 @@ export class StartCommand {
 	/**
 	 * Parse input to determine type and extract relevant data
 	 */
-	private async parseInput(identifier: string): Promise<ParsedInput> {
+	private async parseInput(identifier: string, repo?: string): Promise<ParsedInput> {
 		// Handle empty input
 		const trimmedIdentifier = identifier.trim()
 		if (!trimmedIdentifier) {
@@ -244,7 +256,8 @@ export class StartCommand {
 
 			// Use GitHubService to detect if it's a PR or issue
 			const detection = await this.gitHubService.detectInputType(
-				trimmedIdentifier
+				trimmedIdentifier,
+				repo
 			)
 
 			if (detection.type === 'pr') {
@@ -275,14 +288,14 @@ export class StartCommand {
 	/**
 	 * Validate the parsed input based on its type
 	 */
-	private async validateInput(parsed: ParsedInput): Promise<void> {
+	private async validateInput(parsed: ParsedInput, repo?: string): Promise<void> {
 		switch (parsed.type) {
 			case 'pr': {
 				if (!parsed.number) {
 					throw new Error('Invalid PR number')
 				}
 				// Fetch and validate PR state
-				const pr = await this.gitHubService.fetchPR(parsed.number)
+				const pr = await this.gitHubService.fetchPR(parsed.number, repo)
 				await this.gitHubService.validatePRState(pr)
 				logger.debug(`Validated PR #${parsed.number}`)
 				break
@@ -293,7 +306,7 @@ export class StartCommand {
 					throw new Error('Invalid issue number')
 				}
 				// Fetch and validate issue state
-				const issue = await this.gitHubService.fetchIssue(parsed.number)
+				const issue = await this.gitHubService.fetchIssue(parsed.number, repo)
 				await this.gitHubService.validateIssueState(issue)
 				logger.debug(`Validated issue #${parsed.number}`)
 				break

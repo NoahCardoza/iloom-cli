@@ -16,6 +16,7 @@ import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
+import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions, PullRequest } from '../types/index.js'
 import type { ResourceCleanupOptions, CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
@@ -113,11 +114,21 @@ export class FinishCommand {
 	 */
 	public async execute(input: FinishCommandInput): Promise<void> {
 		try {
+			// Step 0: Load settings and get configured repo for GitHub operations
+			const settings = await this.settingsManager.loadSettings()
+			let repo: string | undefined
+
+			const multipleRemotes = await hasMultipleRemotes()
+			if (multipleRemotes) {
+				repo = await getConfiguredRepoFromSettings(settings)
+				logger.info(`Using GitHub repository: ${repo}`)
+			}
+
 			// Step 1: Parse input (or auto-detect from current directory)
 			const parsed = await this.parseInput(input.identifier, input.options)
 
 			// Step 2: Validate based on type and get worktrees
-			const worktrees = await this.validateInput(parsed, input.options)
+			const worktrees = await this.validateInput(parsed, input.options, repo)
 
 			// Step 3: Log success
 			logger.info(`Validated input: ${this.formatParsedInput(parsed)}`)
@@ -134,7 +145,7 @@ export class FinishCommand {
 				if (!parsed.number) {
 					throw new Error('Invalid PR number')
 				}
-				const pr = await this.gitHubService.fetchPR(parsed.number)
+				const pr = await this.gitHubService.fetchPR(parsed.number, repo)
 				await this.executePRWorkflow(parsed, input.options, worktree, pr)
 			} else {
 				// Execute traditional issue/branch workflow
@@ -304,7 +315,8 @@ export class FinishCommand {
 	 */
 	private async validateInput(
 		parsed: ParsedFinishInput,
-		options: FinishOptions
+		options: FinishOptions,
+		repo?: string
 	): Promise<GitWorktree[]> {
 		switch (parsed.type) {
 			case 'pr': {
@@ -329,7 +341,7 @@ export class FinishCommand {
 				}
 
 				// Fetch issue from GitHub
-				const issue = await this.gitHubService.fetchIssue(parsed.number)
+				const issue = await this.gitHubService.fetchIssue(parsed.number, repo)
 
 				// Validate issue state (warn if closed unless --force)
 				if (issue.state === 'closed' && !options.force) {

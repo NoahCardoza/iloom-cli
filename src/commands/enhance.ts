@@ -9,6 +9,7 @@ import { generateGitHubCommentMcpConfig } from '../utils/mcp.js'
 import { GitHubService as DefaultGitHubService } from '../lib/GitHubService.js'
 import { AgentManager as DefaultAgentManager } from '../lib/AgentManager.js'
 import { SettingsManager as DefaultSettingsManager } from '../lib/SettingsManager.js'
+import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 
 export interface EnhanceCommandInput {
 	issueNumber: number
@@ -53,17 +54,26 @@ export class EnhanceCommand {
 		const { issueNumber, options } = input
 		const { author } = options
 
+		// Step 0: Load settings and get configured repo for GitHub operations
+		const settings = await this.settingsManager.loadSettings()
+		let repo: string | undefined
+
+		const multipleRemotes = await hasMultipleRemotes()
+		if (multipleRemotes) {
+			repo = await getConfiguredRepoFromSettings(settings)
+			logger.info(`Using GitHub repository: ${repo}`)
+		}
+
 		// Step 1: Validate issue number
 		this.validateIssueNumber(issueNumber)
 
 		// Step 2: Fetch issue to verify it exists
 		logger.info(`Fetching issue #${issueNumber}...`)
-		const issue = await this.gitHubService.fetchIssue(issueNumber)
+		const issue = await this.gitHubService.fetchIssue(issueNumber, repo)
 		logger.debug('Issue fetched successfully', { number: issue.number, title: issue.title })
 
 		// Step 3: Load agent configurations
 		logger.debug('Loading agent configurations...')
-		const settings = await this.settingsManager.loadSettings()
 		const loadedAgents = await this.agentManager.loadAgents(settings)
 		const agents = this.agentManager.formatForCli(loadedAgents)
 
@@ -73,7 +83,7 @@ export class EnhanceCommand {
 		let disallowedTools: string[] | undefined
 
 		try {
-			mcpConfig = await generateGitHubCommentMcpConfig('issue')
+			mcpConfig = await generateGitHubCommentMcpConfig('issue', repo)
 			logger.debug('Generated MCP configuration for GitHub comment broker')
 
 			// Configure tool filtering for issue workflows
