@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { ShellCompletion } from './ShellCompletion.js'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
+import omelette from 'omelette'
 
 // Mock omelette
 vi.mock('omelette', () => ({
@@ -49,6 +50,12 @@ describe('ShellCompletion', () => {
   })
 
   describe('command name detection', () => {
+    it('should register completion for both iloom and il command names', () => {
+      shellCompletion = new ShellCompletion()
+      // Verify omelette was called with the pipe-separated alias template
+      expect(vi.mocked(omelette)).toHaveBeenCalledWith('iloom|il <command> <arg>')
+    })
+
     it('should detect command name from process.argv[1]', () => {
       process.argv[1] = '/usr/local/bin/il-94'
       shellCompletion = new ShellCompletion()

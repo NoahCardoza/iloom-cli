@@ -22,10 +22,11 @@ export class ShellCompletion {
     // Detect command name from process.argv[1] if not provided
     this.commandName = commandName ?? this.detectCommandName()
 
-    // Initialize omelette with detected command name
+    // Initialize omelette with both command names using pipe syntax
+    // This registers completion for both 'iloom' and 'il' aliases
     // Template covers: <commandName> <command> <arg>
     // This allows for two-level completion: command completion + argument completion
-    this.completion = omelette(`${this.commandName} <command> <arg>`)
+    this.completion = omelette('iloom|il <command> <arg>')
     this.setupHandlers()
   }
 
