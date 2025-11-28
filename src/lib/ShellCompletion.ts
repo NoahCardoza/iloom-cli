@@ -1,6 +1,10 @@
 import omelette from 'omelette'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { logger } from '../utils/logger.js'
+import { readFile } from 'fs/promises'
+import { existsSync } from 'fs'
+import path from 'path'
+import os from 'os'
 
 export type ShellType = 'bash' | 'zsh' | 'fish' | 'unknown'
 
@@ -218,4 +222,66 @@ Please consult your shell's documentation for setting up custom completions.
       process.exit(1)
     }
   }
+
+  /**
+   * Get the shell configuration file path for the given shell type
+   */
+  getShellConfigPath(shell: ShellType): string | null {
+    const homeDir = os.homedir()
+
+    switch (shell) {
+      case 'bash': {
+        // Prefer .bashrc, fall back to .bash_profile
+        const bashrcPath = path.join(homeDir, '.bashrc')
+        const bashProfilePath = path.join(homeDir, '.bash_profile')
+
+        if (existsSync(bashrcPath)) {
+          return bashrcPath
+        } else if (existsSync(bashProfilePath)) {
+          return bashProfilePath
+        }
+        // Return .bashrc path even if it doesn't exist (for creation)
+        return bashrcPath
+      }
+
+      case 'zsh':
+        return path.join(homeDir, '.zshrc')
+
+      case 'fish':
+        return path.join(homeDir, '.config', 'fish', 'config.fish')
+
+      default:
+        return null
+    }
+  }
+
+  /**
+   * Read the shell configuration file contents
+   */
+  async readShellConfig(shell: ShellType): Promise<{ path: string; content: string } | null> {
+    const configPath = this.getShellConfigPath(shell)
+
+    if (!configPath) {
+      return null
+    }
+
+    try {
+      let content = ''
+      if (existsSync(configPath)) {
+        content = await readFile(configPath, 'utf-8')
+      }
+      // Return the path and content (empty string if file doesn't exist)
+      return {
+        path: configPath,
+        content
+      }
+    } catch (error) {
+      logger.debug(`Failed to read shell config file ${configPath}: ${error}`)
+      return {
+        path: configPath,
+        content: ''
+      }
+    }
+  }
+
 }

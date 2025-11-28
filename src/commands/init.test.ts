@@ -1,15 +1,11 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { InitCommand } from './init.js'
 import { ShellCompletion } from '../lib/ShellCompletion.js'
-import * as prompt from '../utils/prompt.js'
+import { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
+import * as claudeUtils from '../utils/claude.js'
 import { mkdir, writeFile, readFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
-
-// Mock prompt utilities
-vi.mock('../utils/prompt.js', () => ({
-  promptConfirmation: vi.fn(),
-}))
 
 // Mock fs/promises and fs
 vi.mock('fs/promises')
@@ -33,66 +29,68 @@ vi.mock('../lib/SettingsMigrationManager.js', () => ({
   })),
 }))
 
+// Mock claude utils
+vi.mock('../utils/claude.js', () => ({
+  detectClaudeCli: vi.fn(),
+  launchClaude: vi.fn(),
+}))
+
 describe('InitCommand', () => {
   let initCommand: InitCommand
   let mockShellCompletion: ShellCompletion
-  let originalShell: string | undefined
+  let mockTemplateManager: PromptTemplateManager
 
   beforeEach(() => {
-    vi.clearAllMocks()
-    originalShell = process.env.SHELL
-
     // Create mock shell completion
     mockShellCompletion = {
       detectShell: vi.fn(),
       getSetupInstructions: vi.fn(),
+      readShellConfig: vi.fn(),
       init: vi.fn(),
       getBranchSuggestions: vi.fn(),
       getCompletionScript: vi.fn(),
       printCompletionScript: vi.fn(),
+      getShellConfigPath: vi.fn(),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any
-  })
 
-  afterEach(() => {
-    if (originalShell === undefined) {
-      delete process.env.SHELL
-    } else {
-      process.env.SHELL = originalShell
-    }
+    // Create mock template manager
+    mockTemplateManager = {
+      getPrompt: vi.fn(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any
   })
 
   describe('execute', () => {
     it('should detect user shell and offer autocomplete setup', async () => {
       vi.mocked(mockShellCompletion.detectShell).mockReturnValue('bash')
-      vi.mocked(mockShellCompletion.getSetupInstructions).mockReturnValue(
-        'Add eval "$(il --completion)" to ~/.bashrc'
-      )
-      vi.mocked(prompt.promptConfirmation).mockResolvedValue(true)
-
-      initCommand = new InitCommand(mockShellCompletion)
-      await initCommand.execute()
-
-      expect(mockShellCompletion.detectShell).toHaveBeenCalled()
-      expect(prompt.promptConfirmation).toHaveBeenCalledWith(
-        'Would you like to enable shell autocomplete?',
-        true
-      )
-      expect(mockShellCompletion.getSetupInstructions).toHaveBeenCalledWith('bash')
-    })
-
-    it('should skip autocomplete setup if user declines but still run project configuration', async () => {
-      vi.mocked(mockShellCompletion.detectShell).mockReturnValue('zsh')
-      vi.mocked(prompt.promptConfirmation).mockResolvedValue(false)
+      vi.mocked(mockShellCompletion.readShellConfig).mockResolvedValue({
+        path: '/home/user/.bashrc',
+        content: 'export PATH=$PATH:/usr/local/bin',
+      })
+      vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue('Test prompt')
+      vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValue(true)
+      vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
       vi.mocked(existsSync).mockReturnValue(false)
       vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
 
-      initCommand = new InitCommand(mockShellCompletion)
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
 
       expect(mockShellCompletion.detectShell).toHaveBeenCalled()
-      expect(prompt.promptConfirmation).toHaveBeenCalled()
-      expect(mockShellCompletion.getSetupInstructions).not.toHaveBeenCalled()
+      expect(mockShellCompletion.readShellConfig).toHaveBeenCalledWith('bash')
+    })
+
+    it('should skip autocomplete setup if user declines but still run project configuration', async () => {
+      vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValue(false)
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
+
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
+      await initCommand.execute()
+
+      // When Claude CLI is not available, shell detection is not called
+      expect(mockShellCompletion.readShellConfig).not.toHaveBeenCalled()
 
       // Verify project configuration still runs
       expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.iloom'), { recursive: true })
@@ -105,94 +103,67 @@ describe('InitCommand', () => {
 
     it('should generate and display setup instructions for bash', async () => {
       vi.mocked(mockShellCompletion.detectShell).mockReturnValue('bash')
-      vi.mocked(mockShellCompletion.getSetupInstructions).mockReturnValue(
-        'Bash instructions here'
-      )
-      vi.mocked(prompt.promptConfirmation).mockResolvedValue(true)
+      vi.mocked(mockShellCompletion.readShellConfig).mockResolvedValue({
+        path: '/home/user/.bashrc',
+        content: 'export PATH=$PATH:/usr/local/bin',
+      })
+      vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue('Test prompt')
+      vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValue(true)
+      vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
 
-      initCommand = new InitCommand(mockShellCompletion)
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
 
-      expect(mockShellCompletion.getSetupInstructions).toHaveBeenCalledWith('bash')
+      expect(mockShellCompletion.readShellConfig).toHaveBeenCalledWith('bash')
     })
 
     it('should generate and display setup instructions for zsh', async () => {
       vi.mocked(mockShellCompletion.detectShell).mockReturnValue('zsh')
-      vi.mocked(mockShellCompletion.getSetupInstructions).mockReturnValue('Zsh instructions here')
-      vi.mocked(prompt.promptConfirmation).mockResolvedValue(true)
-
-      initCommand = new InitCommand(mockShellCompletion)
-      await initCommand.execute()
-
-      expect(mockShellCompletion.getSetupInstructions).toHaveBeenCalledWith('zsh')
-    })
-
-    it('should handle errors gracefully when shell detection fails and still run project configuration', async () => {
-      vi.mocked(mockShellCompletion.detectShell).mockReturnValue('unknown')
+      vi.mocked(mockShellCompletion.readShellConfig).mockResolvedValue({
+        path: '/home/user/.zshrc',
+        content: 'export PATH=$PATH:/usr/local/bin',
+      })
+      vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue('Test prompt')
+      vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValue(true)
+      vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
       vi.mocked(existsSync).mockReturnValue(false)
       vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
 
-      initCommand = new InitCommand(mockShellCompletion)
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
 
-      expect(mockShellCompletion.detectShell).toHaveBeenCalled()
-      // Should exit early and not prompt for autocomplete
-      expect(prompt.promptConfirmation).not.toHaveBeenCalled()
-
-      // Verify project configuration still runs
-      expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.iloom'), { recursive: true })
-      expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('settings.local.json'),
-        '{}\n',
-        'utf-8'
-      )
-    })
-
-    it('should work when SHELL environment variable is not set and still run project configuration', async () => {
-      delete process.env.SHELL
-      vi.mocked(mockShellCompletion.detectShell).mockReturnValue('unknown')
-      vi.mocked(existsSync).mockReturnValue(false)
-      vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
-
-      initCommand = new InitCommand(mockShellCompletion)
-      await initCommand.execute()
-
-      expect(mockShellCompletion.detectShell).toHaveBeenCalled()
-      // Should exit early since shell is unknown
-      expect(prompt.promptConfirmation).not.toHaveBeenCalled()
-
-      // Verify project configuration still runs
-      expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.iloom'), { recursive: true })
-      expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('settings.local.json'),
-        '{}\n',
-        'utf-8'
-      )
+      expect(mockShellCompletion.readShellConfig).toHaveBeenCalledWith('zsh')
     })
 
     it('should throw error if execution fails', async () => {
-      vi.mocked(mockShellCompletion.detectShell).mockImplementation(() => {
-        throw new Error('Detection failed')
-      })
+      // Mock mkdir to throw error during setupProjectConfiguration
+      vi.mocked(mkdir).mockRejectedValue(new Error('Permission denied'))
 
-      initCommand = new InitCommand(mockShellCompletion)
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
 
-      await expect(initCommand.execute()).rejects.toThrow('Detection failed')
+      await expect(initCommand.execute()).rejects.toThrow('Permission denied')
     })
   })
 
   describe('setupProjectConfiguration', () => {
     beforeEach(() => {
       vi.mocked(mockShellCompletion.detectShell).mockReturnValue('bash')
-      vi.mocked(mockShellCompletion.getSetupInstructions).mockReturnValue('Instructions')
-      vi.mocked(prompt.promptConfirmation).mockResolvedValue(true)
+      vi.mocked(mockShellCompletion.readShellConfig).mockResolvedValue({
+        path: '/home/user/.bashrc',
+        content: '',
+      })
+      vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue('Test prompt')
+      vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValue(true)
+      vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
     })
 
     it('should run settings migration before creating new settings files', async () => {
       vi.mocked(existsSync).mockReturnValue(false)
       vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
 
-      initCommand = new InitCommand(mockShellCompletion)
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
 
       // Verify migration manager was imported and used
@@ -203,7 +174,7 @@ describe('InitCommand', () => {
       vi.mocked(existsSync).mockReturnValue(false)
       vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
 
-      initCommand = new InitCommand(mockShellCompletion)
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
 
       expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.iloom'), { recursive: true })
@@ -220,7 +191,7 @@ describe('InitCommand', () => {
       vi.mocked(existsSync).mockReturnValueOnce(true).mockReturnValueOnce(true)
       vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
 
-      initCommand = new InitCommand(mockShellCompletion)
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
 
       expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.iloom'), { recursive: true })
@@ -236,7 +207,7 @@ describe('InitCommand', () => {
       vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(true)
       vi.mocked(readFile).mockResolvedValue('node_modules/\n')
 
-      initCommand = new InitCommand(mockShellCompletion)
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
 
       expect(writeFile).toHaveBeenCalledWith(
@@ -249,7 +220,7 @@ describe('InitCommand', () => {
     it('should create .gitignore if missing', async () => {
       vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(false)
 
-      initCommand = new InitCommand(mockShellCompletion)
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
 
       expect(writeFile).toHaveBeenCalledWith(
@@ -263,7 +234,7 @@ describe('InitCommand', () => {
       vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(true)
       vi.mocked(readFile).mockResolvedValue('.iloom/settings.local.json\n')
 
-      initCommand = new InitCommand(mockShellCompletion)
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
 
       // Should not write to .gitignore since entry already exists
@@ -278,7 +249,7 @@ describe('InitCommand', () => {
       vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(true)
       vi.mocked(readFile).mockResolvedValue('node_modules/')
 
-      initCommand = new InitCommand(mockShellCompletion)
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
 
       expect(writeFile).toHaveBeenCalledWith(

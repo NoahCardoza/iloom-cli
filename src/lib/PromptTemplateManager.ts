@@ -12,6 +12,12 @@ export interface TemplateVariables {
 	WORKSPACE_PATH?: string
 	PORT?: number
 	ONE_SHOT_MODE?: boolean
+	SETTINGS_SCHEMA?: string
+	SETTINGS_JSON?: string
+	SETTINGS_LOCAL_JSON?: string
+	SHELL_TYPE?: string
+	SHELL_CONFIG_PATH?: string
+	SHELL_CONFIG_CONTENT?: string
 }
 
 export class PromptTemplateManager {
@@ -56,7 +62,7 @@ export class PromptTemplateManager {
 	/**
 	 * Load a template file by name
 	 */
-	async loadTemplate(templateName: 'issue' | 'pr' | 'regular'): Promise<string> {
+	async loadTemplate(templateName: 'issue' | 'pr' | 'regular' | 'init'): Promise<string> {
 		const templatePath = path.join(this.templateDir, `${templateName}-prompt.txt`)
 
 		logger.debug('Loading template', {
@@ -107,13 +113,37 @@ export class PromptTemplateManager {
 			result = result.replace(/PORT/g, String(variables.PORT))
 		}
 
+		if (variables.SETTINGS_SCHEMA !== undefined) {
+			result = result.replace(/SETTINGS_SCHEMA/g, variables.SETTINGS_SCHEMA)
+		}
+
+		if (variables.SETTINGS_JSON !== undefined) {
+			result = result.replace(/SETTINGS_JSON/g, variables.SETTINGS_JSON)
+		}
+
+		if (variables.SETTINGS_LOCAL_JSON !== undefined) {
+			result = result.replace(/SETTINGS_LOCAL_JSON/g, variables.SETTINGS_LOCAL_JSON)
+		}
+
+		if (variables.SHELL_TYPE !== undefined) {
+			result = result.replace(/SHELL_TYPE/g, variables.SHELL_TYPE)
+		}
+
+		if (variables.SHELL_CONFIG_PATH !== undefined) {
+			result = result.replace(/SHELL_CONFIG_PATH/g, variables.SHELL_CONFIG_PATH)
+		}
+
+		if (variables.SHELL_CONFIG_CONTENT !== undefined) {
+			result = result.replace(/SHELL_CONFIG_CONTENT/g, variables.SHELL_CONFIG_CONTENT)
+		}
+
 		return result
 	}
 
 	/**
 	 * Process conditional sections in template
 	 * Format: {{#IF ONE_SHOT_MODE}}content{{/IF ONE_SHOT_MODE}}
-	 * 
+	 *
 	 * Note: /s flag allows . to match newlines
 	 */
 	private processConditionalSections(template: string, variables: TemplateVariables): string {
@@ -130,6 +160,28 @@ export class PromptTemplateManager {
 			result = result.replace(oneShotRegex, '')
 		}
 
+		// Process SETTINGS_JSON conditionals
+		const settingsJsonRegex = /\{\{#IF SETTINGS_JSON\}\}(.*?)\{\{\/IF SETTINGS_JSON\}\}/gs
+
+		if (variables.SETTINGS_JSON !== undefined && variables.SETTINGS_JSON !== '') {
+			// Include the content, remove the conditional markers
+			result = result.replace(settingsJsonRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(settingsJsonRegex, '')
+		}
+
+		// Process SETTINGS_LOCAL_JSON conditionals
+		const settingsLocalJsonRegex = /\{\{#IF SETTINGS_LOCAL_JSON\}\}(.*?)\{\{\/IF SETTINGS_LOCAL_JSON\}\}/gs
+
+		if (variables.SETTINGS_LOCAL_JSON !== undefined && variables.SETTINGS_LOCAL_JSON !== '') {
+			// Include the content, remove the conditional markers
+			result = result.replace(settingsLocalJsonRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(settingsLocalJsonRegex, '')
+		}
+
 		return result
 	}
 
@@ -137,7 +189,7 @@ export class PromptTemplateManager {
 	 * Get a fully processed prompt for a workflow type
 	 */
 	async getPrompt(
-		type: 'issue' | 'pr' | 'regular',
+		type: 'issue' | 'pr' | 'regular' | 'init',
 		variables: TemplateVariables
 	): Promise<string> {
 		const template = await this.loadTemplate(type)
