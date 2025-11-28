@@ -137,7 +137,16 @@ export const IloomSettingsSchema = z.object({
 		.record(z.string(), AgentSettingsSchema)
 		.optional()
 		.nullable()
-		.describe('Per-agent configuration overrides'),
+		.describe(
+			'Per-agent configuration overrides. Available agents: ' +
+				'iloom-issue-analyzer (analyzes issues), ' +
+				'iloom-issue-planner (creates implementation plans), ' +
+				'iloom-issue-analyze-and-plan (combined analysis and planning), ' +
+				'iloom-issue-complexity-evaluator (evaluates complexity), ' +
+				'iloom-issue-enhancer (enhances issue descriptions), ' +
+				'iloom-issue-implementer (implements code changes), ' +
+				'iloom-issue-reviewer (reviews code changes against requirements)',
+		),
 	capabilities: CapabilitiesSettingsSchema.describe('Project capability configurations'),
 })
 
