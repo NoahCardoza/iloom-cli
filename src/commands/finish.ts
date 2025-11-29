@@ -12,11 +12,13 @@ import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { EnvironmentManager } from '../lib/EnvironmentManager.js'
 import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
-import { findMainWorktreePathWithSettings } from '../utils/git.js'
+import { PRManager } from '../lib/PRManager.js'
+import { findMainWorktreePathWithSettings, pushBranchToRemote } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
+import { promptConfirmation } from '../utils/prompt.js'
 import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions, PullRequest } from '../types/index.js'
 import type { ResourceCleanupOptions, CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
@@ -522,6 +524,16 @@ export class FinishCommand {
 			logger.debug('No uncommitted changes found')
 		}
 
+		// Step 3.5: Check merge mode from settings and branch workflow
+		const settings = await this.settingsManager.loadSettings(worktree.path)
+		const mergeBehavior = settings.mergeBehavior ?? { mode: 'local' }
+
+		if (mergeBehavior.mode === 'github-pr') {
+			// Execute github-pr workflow instead of local merge
+			await this.executeGitHubPRWorkflow(parsed, options, worktree, settings)
+			return
+		}
+
 		// Step 4: Rebase branch on main
 		logger.info('Rebasing branch on main...')
 
@@ -634,6 +646,163 @@ export class FinishCommand {
 			logger.success(`PR #${parsed.number} updated successfully`)
 			logger.info('Worktree remains active for continued work')
 			logger.info(`To cleanup when done: il cleanup ${parsed.number}`)
+		}
+	}
+
+	/**
+	 * Execute workflow for GitHub PR creation (github-pr merge mode)
+	 * Validates → Commits → Pushes → Creates PR → Prompts for cleanup
+	 */
+	private async executeGitHubPRWorkflow(
+		parsed: ParsedFinishInput,
+		options: FinishOptions,
+		worktree: GitWorktree,
+		settings: import('../lib/SettingsManager.js').IloomSettings
+	): Promise<void> {
+		// Step 1: Push branch to origin
+		if (options.dryRun) {
+			logger.info('[DRY RUN] Would push branch to origin')
+		} else {
+			logger.info('Pushing branch to origin...')
+			await pushBranchToRemote(worktree.branch, worktree.path, { dryRun: false })
+			logger.success('Branch pushed successfully')
+		}
+
+		// Step 2: Initialize PRManager with settings
+		const prManager = new PRManager(settings)
+
+		// Step 3: Generate PR title from issue if available
+		let prTitle = `Work from ${worktree.branch}`
+		if (parsed.type === 'issue' && parsed.number) {
+			// Try to fetch issue title for better PR title
+			try {
+				const issue = await this.gitHubService.fetchIssue(parsed.number)
+				prTitle = issue.title
+			} catch (error) {
+				logger.debug('Could not fetch issue title, using branch name', { error })
+			}
+		}
+
+		// Step 4: Create or open PR
+		if (options.dryRun) {
+			logger.info('[DRY RUN] Would create GitHub PR')
+			logger.info(`  Title: ${prTitle}`)
+			logger.info(`  Base: ${settings.mainBranch ?? 'main'}`)
+		} else {
+			const baseBranch = settings.mainBranch ?? 'main'
+			const openInBrowser = options.noBrowser !== true
+
+			const result = await prManager.createOrOpenPR(
+				worktree.branch,
+				prTitle,
+				parsed.type === 'issue' ? parsed.number : undefined,
+				baseBranch,
+				worktree.path,
+				openInBrowser
+			)
+
+			if (result.wasExisting) {
+				logger.success(`Existing pull request: ${result.url}`)
+			} else {
+				logger.success(`Pull request created: ${result.url}`)
+			}
+
+			// Step 5: Interactive cleanup prompt (unless flags override)
+			await this.handlePRCleanupPrompt(parsed, options, worktree)
+		}
+	}
+
+	/**
+	 * Handle cleanup prompt after PR creation
+	 * Respects --cleanup and --no-cleanup flags, otherwise prompts user
+	 */
+	private async handlePRCleanupPrompt(
+		parsed: ParsedFinishInput,
+		options: FinishOptions,
+		worktree: GitWorktree
+	): Promise<void> {
+		if (options.cleanup === true) {
+			// Explicit --cleanup flag: perform cleanup
+			logger.info('Cleaning up worktree (--cleanup flag)...')
+			await this.performWorktreeCleanup(parsed, options, worktree)
+		} else if (options.cleanup === false) {
+			// Explicit --no-cleanup flag: keep worktree
+			logger.info('Worktree kept active for continued work (--no-cleanup flag)')
+			logger.info(`To cleanup later: il cleanup ${parsed.originalInput}`)
+		} else {
+			// No flag: prompt user for decision
+			logger.info('')
+			logger.info('PR created successfully. Would you like to clean up the worktree?')
+			logger.info(`  Worktree: ${worktree.path}`)
+			logger.info(`  Branch: ${worktree.branch}`)
+			logger.info('')
+
+			const shouldCleanup = await promptConfirmation(
+				'Clean up worktree now?',
+				false // Default to keeping worktree (safer option)
+			)
+
+			if (shouldCleanup) {
+				await this.performWorktreeCleanup(parsed, options, worktree)
+			} else {
+				logger.info('Worktree kept active. Run `il cleanup` when ready.')
+			}
+		}
+	}
+
+	/**
+	 * Perform worktree cleanup (used by GitHub PR workflow)
+	 * Similar to performPostMergeCleanup but for PR workflow
+	 */
+	private async performWorktreeCleanup(
+		parsed: ParsedFinishInput,
+		options: FinishOptions,
+		worktree: GitWorktree
+	): Promise<void> {
+		// Convert ParsedFinishInput to ParsedInput
+		const cleanupInput: ParsedInput = {
+			type: parsed.type,
+			originalInput: parsed.originalInput,
+			...(parsed.number !== undefined && { number: parsed.number }),
+			...(parsed.branchName !== undefined && { branchName: parsed.branchName }),
+		}
+
+		const cleanupOptions: ResourceCleanupOptions = {
+			dryRun: options.dryRun ?? false,
+			deleteBranch: false, // Don't delete branch - PR still needs it
+			keepDatabase: false, // Clean up database
+			force: options.force ?? false,
+		}
+
+		try {
+			logger.info('Starting worktree cleanup...')
+
+			await this.ensureResourceCleanup()
+			if (!this.resourceCleanup) {
+				throw new Error('Failed to initialize ResourceCleanup')
+			}
+
+			const result = await this.resourceCleanup.cleanupWorktree(cleanupInput, cleanupOptions)
+
+			// Report cleanup results
+			this.reportCleanupResults(result)
+
+			if (!result.success) {
+				logger.warn('Some cleanup operations failed - manual cleanup may be required')
+				this.showManualCleanupInstructions(worktree)
+			} else {
+				logger.success('Worktree cleanup completed successfully')
+			}
+
+			// Warn if running from within the worktree being finished
+			if (this.isRunningFromWithinWorktree(worktree.path)) {
+				this.showTerminalCloseWarning(worktree)
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			logger.warn(`Cleanup failed: ${errorMessage}`)
+			logger.warn('Manual cleanup may be required')
+			this.showManualCleanupInstructions(worktree)
 		}
 	}
 

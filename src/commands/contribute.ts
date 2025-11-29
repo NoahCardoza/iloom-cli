@@ -312,12 +312,15 @@ export class ContributeCommand {
 		// Create .iloom directory
 		await mkdir(iloomDir, { recursive: true })
 
-		// Create settings.json with upstream remote configuration
+		// Create settings.json with upstream remote configuration and github-pr mode
 		const settings = {
 			issueManagement: {
 				github: {
 					remote: 'upstream',
 				},
+			},
+			mergeBehavior: {
+				mode: 'github-pr',
 			},
 		}
 

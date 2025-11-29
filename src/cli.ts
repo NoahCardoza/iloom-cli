@@ -281,6 +281,9 @@ program
   .option('-n, --dry-run', 'Preview actions without executing')
   .option('--pr <number>', 'Treat input as PR number', parseFloat)
   .option('--skip-build', 'Skip post-merge build verification')
+  .option('--no-browser', 'Skip opening PR in browser (github-pr mode only)')
+  .option('--cleanup', 'Clean up worktree after PR creation (github-pr mode only)')
+  .option('--no-cleanup', 'Keep worktree after PR creation (github-pr mode only)')
   .action(async (identifier: string | undefined, options: FinishOptions) => {
     try {
       const { FinishCommand } = await import('./commands/finish.js')

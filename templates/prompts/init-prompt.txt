@@ -94,6 +94,7 @@ Extract these current values if they exist:
 - `currentWorktreePrefix` from `worktreePrefix` field (default: "" which means use default)
 - `currentPermissionMode` from `workflows.issue.permissionMode` field (default: "acceptEdits")
 - `currentBasePort` from `capabilities.web.basePort` field (default: 3000)
+- `currentMergeMode` from `mergeBehavior.mode` field (default: "local")
 
 **If configuration already exists, display current configuration summary:**
 
@@ -203,6 +204,16 @@ Use AskUserQuestion to ask ALL essential settings questions **IN A SINGLE BATCH*
    - Default: currentBasePort or 3000
    - Validation: Number between 1 and 65535
    - Store answer as: `capabilities.web.basePort`
+
+5. **Merge Mode** (only ask if multiple remotes detected OR user requests advanced config)
+   - Question format: "How should iloom handle finishing work?{{#IF currentMergeMode}} (Currently: [currentMergeMode]){{/IF currentMergeMode}}"
+   - Options:
+     - "local" - Merge changes locally (traditional workflow)
+     - "github-pr" - Create GitHub PR instead of merging locally (for PR-based workflows or forks)
+   - Default: currentMergeMode or "local"
+   - Validation: Must be one of: local, github-pr
+   - Store answer as: `mergeBehavior.mode`
+   - Context: Fork workflows (with upstream remote) should typically use "github-pr" mode
 
 **Implementation Details:**
 - Set multiSelect: false for all questions (user picks one answer per question)

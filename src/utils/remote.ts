@@ -132,3 +132,17 @@ export async function validateConfiguredRemote(remoteName: string, cwd?: string)
 		)
 	}
 }
+
+/**
+ * Get the effective PR target remote based on settings
+ * Priority: mergeBehavior.remote > issueManagement.github.remote > 'origin'
+ */
+export async function getEffectivePRTargetRemote(
+	settings: IloomSettings,
+	cwd?: string,
+): Promise<string> {
+	const prRemote =
+		settings.mergeBehavior?.remote ?? settings.issueManagement?.github?.remote ?? 'origin'
+	await validateConfiguredRemote(prRemote, cwd)
+	return prRemote
+}

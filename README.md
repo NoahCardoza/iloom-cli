@@ -316,7 +316,17 @@ iloom start <issue-number | pr-number | issue-description | branch-name>
 
 iloom finish
 # AI assisted validation, commit, merge steps, as well as loom cleanup (run this from the loom directory)
+# Behavior depends on mergeBehavior.mode setting:
+#   local (default): Merge locally and cleanup
+#   github-pr: Push branch, create PR, prompt for cleanup
 # Alias: dn
+# Options:
+#   -f, --force        - Skip confirmation prompts
+#   -n, --dry-run      - Preview actions without executing
+#   --skip-build       - Skip post-merge build verification
+#   --no-browser       - Skip opening PR in browser (github-pr mode only)
+#   --cleanup          - Clean up worktree after PR creation (github-pr mode only)
+#   --no-cleanup       - Keep worktree after PR creation (github-pr mode only)
 
 iloom rebase
 # Rebase current branch on main with Claude-assisted conflict resolution (run this from a loom directory)
@@ -443,6 +453,10 @@ This allows teams to share project defaults via `settings.json` while individual
 ```jsonc
 {
   "mainBranch": "main",
+  "mergeBehavior": {
+    "mode": "local",  // or "github-pr" for PR-based workflows
+    "remote": "upstream"  // optional, defaults to issueManagement.github.remote
+  },
   "capabilities": {
     "web": { "basePort": 3000 },
     "database": { "databaseUrlEnvVarName": "DATABASE_URL" }
@@ -477,6 +491,8 @@ This allows teams to share project defaults via `settings.json` while individual
 
 ** Common configuration options:**
 - `mainBranch` - Primary branch for merging (default: "main")
+- `mergeBehavior.mode` - How to finish work: "local" (merge locally) or "github-pr" (create PR) (default: "local")
+- `mergeBehavior.remote` - Remote to target for PRs (optional, defaults to `issueManagement.github.remote`)
 - `capabilities.web.basePort` - Base port for dev servers (default: 3000)
 - `capabilities.database.databaseUrlEnvVarName` - Name of environment variable for database connection URL (default: "DATABASE_URL")
 - `databaseProviders.neon.projectId` - Neon project ID (found in project URL, e.g., "fantastic-fox-3566354")

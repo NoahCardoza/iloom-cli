@@ -188,6 +188,13 @@ export const IloomSettingsSchema = z.object({
 		})
 		.optional()
 		.describe('Issue management configuration'),
+	mergeBehavior: z
+		.object({
+			mode: z.enum(['local', 'github-pr']).default('local'),
+			remote: z.string().optional(),
+		})
+		.optional()
+		.describe('Merge behavior configuration: local (merge locally) or github-pr (create PR)'),
 })
 
 /**
