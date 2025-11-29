@@ -205,7 +205,16 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
 1. Execute: @agent-iloom-issue-enhancer ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.
 2. Upon completion: Extract issue+comment link (including comment ID) from agent output and provide link to GitHub issue comment
 3. Mark todo #2 and #3 as completed
-4. **STOP HERE** - Request explicit approval before proceeding to analysis
+4. Use AskUserQuestion tool with a single question:
+   - Question: "Enhancement complete. See results at: [GitHub comment URL]. How would you like to proceed?"
+   - Options:
+     - "Continue to complexity evaluation" (default)
+     - "Provide feedback on enhancement"
+     - "Exit workflow"
+   - multiSelect: false
+   - If user chooses "Provide feedback on enhancement": Process their input and re-run enhancement if needed, telling the agent to edit their comment and provide the comment id
+   - If user chooses "Exit workflow": End workflow gracefully
+   - If user chooses "Continue to complexity evaluation": Proceed to next step
 
 If workflow plan determined SKIP_ENHANCEMENT:
 1. Mark todos #2 and #3 as completed
@@ -233,10 +242,20 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 
    Reasoning: [reasoning text from evaluator]
    ```
-5. Prompt user for confirmation:
-   Ask: "The evaluator assessed this as a [SIMPLE/COMPLEX] task. Do you agree? If not, tell me how you'd like me to classify it."
+5. Use AskUserQuestion tool with a single question:
+   - Question: "Complexity evaluated as [SIMPLE/COMPLEX]. See assessment at: [GitHub comment URL]. Do you agree with this classification?"
+   - Options:
+     - "Yes, proceed with [SIMPLE/COMPLEX] workflow" (default)
+     - "No, reclassify as SIMPLE"
+     - "No, reclassify as COMPLEX"
+     - "Provide feedback before deciding"
+     - "Exit workflow"
+   - multiSelect: false
+   - If user reclassifies: Update confirmed complexity accordingly
+   - If user chooses "Provide feedback before deciding": Process and re-evaluate if needed, telling the agent to edit their comment and provide the comment id
+   - If user chooses "Exit workflow": End workflow gracefully
 6. Mark todos #5, #6, and #7 as completed
-7. **STOP HERE** - Inform user of confirmed complexity and request explicit approval before proceeding to next phase
+7. Proceed to ROUTING DECISION POINT with confirmed complexity
 
 If workflow plan determined SKIP_COMPLEXITY_EVAL:
 1. Mark todos #5, #6, and #7 as completed
@@ -255,7 +274,16 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
 1. Execute: @agent-iloom-issue-analyzer ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.
 2. Upon completion: Extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
 3. Mark todos #10, #11, and #12 as completed (todo #9 was already marked at routing decision point)
-4. **STOP HERE** - Request explicit approval before proceeding to planning phase
+4. Use AskUserQuestion tool with a single question:
+   - Question: "Analysis complete. See findings at: [GitHub comment URL]. How would you like to proceed?"
+   - Options:
+     - "Continue to planning phase" (default)
+     - "Provide feedback on analysis"
+     - "Exit workflow"
+   - multiSelect: false
+   - If user chooses "Provide feedback on analysis": Process their input and re-run analysis if needed, telling the agent to edit their comment and provide the comment id
+   - If user chooses "Exit workflow": End workflow gracefully
+   - If user chooses "Continue to planning phase": Proceed to planning phase
 
 If workflow plan determined SKIP_ANALYSIS:
 1. Mark todos #10, #11, and #12 as completed (todo #9 was already marked at routing decision point)
@@ -294,9 +322,16 @@ Execute combined analyze-and-plan agent:
 2. Execute: @agent-iloom-issue-analyze-and-plan ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.
 3. Upon completion: Extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
 4. Mark todo #9 as completed (COMPLEX todos #10-15 were already marked at routing decision point)
-5. Provide summary: "Combined analysis and planning complete. See results at: [GitHub comment URL]"
-6. **STOP HERE** - Request explicit approval before proceeding to implementation
-7. After approval, proceed to STEP 4 (Implementation Phase)
+5. Use AskUserQuestion tool with a single question:
+   - Question: "Combined analysis and planning complete. See results at: [GitHub comment URL]. How would you like to proceed?"
+   - Options:
+     - "Continue to implementation" (default)
+     - "Provide feedback on plan"
+     - "Exit workflow"
+   - multiSelect: false
+   - If user chooses "Provide feedback on plan": Process their input and re-run planning if needed, telling the agent to edit their comment and provide the comment id
+   - If user chooses "Exit workflow": End workflow gracefully
+   - If user chooses "Continue to implementation": Proceed to STEP 4 (Implementation Phase)
 
 ---
 
@@ -308,7 +343,16 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
 1. Execute: @agent-iloom-issue-planner ISSUE_NUMBER instructing them to add their own answers to any questions they asked in the question tables they create in their GitHub comments. This documents assumptions made during execution.
 2. Upon completion: Extract issue+comment link from agent output and provide link to GitHub issue comment (including comment ID)
 3. Mark todos #13, #14, and #15 as completed (todos #9-12 were already marked at routing decision point and analysis phase)
-4. **STOP HERE** - Request explicit approval before proceeding to implementation
+4. Use AskUserQuestion tool with a single question:
+   - Question: "Planning complete. See implementation plan at: [GitHub comment URL]. How would you like to proceed?"
+   - Options:
+     - "Continue to implementation" (default)
+     - "Provide feedback on plan"
+     - "Exit workflow"
+   - multiSelect: false
+   - If user chooses "Provide feedback on plan": Process their input and re-run planning if needed, telling the agent to edit their comment and provide the comment id
+   - If user chooses "Exit workflow": End workflow gracefully
+   - If user chooses "Continue to implementation": Proceed to STEP 4 (Implementation Phase)
 
 If workflow plan determined SKIP_PLANNING AND complexity is COMPLEX:
 1. Mark todos #13, #14, and #15 as completed (todos #9-12 were already marked at routing decision point and analysis phase)
