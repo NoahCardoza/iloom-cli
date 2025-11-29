@@ -66,7 +66,7 @@ async function validateSettingsForCommand(command: Command): Promise<void> {
   const commandName = command.args[0] ?? ''
 
   // Tier 1: Commands that bypass ALL validation
-  const bypassCommands = ['help', 'init', 'update']
+  const bypassCommands = ['help', 'init', 'update', 'contribute']
 
   if (bypassCommands.includes(commandName)) {
     return
@@ -438,6 +438,20 @@ program
       await command.execute()
     } catch (error) {
       logger.error(`Failed to initialize: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
+  .command('contribute')
+  .description('Set up local development environment for contributing to iloom')
+  .action(async () => {
+    try {
+      const { ContributeCommand } = await import('./commands/contribute.js')
+      const command = new ContributeCommand()
+      await command.execute()
+    } catch (error) {
+      logger.error(`Failed to set up contributor environment: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
     }
   })

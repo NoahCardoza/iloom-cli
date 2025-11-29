@@ -388,6 +388,12 @@ iloom init
 # Alias: il config
 # Run this once per project
 
+iloom contribute
+# Set up local development environment for contributing to iloom
+# Automatically forks the repository, clones it locally, configures upstream remote,
+# and runs il init to complete setup
+# Streamlines contributor onboarding with a single command
+
 iloom update
 # Update iloom-cli to the latest version
 ```

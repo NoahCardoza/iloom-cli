@@ -36,15 +36,61 @@ export async function checkGhAuth(): Promise<GitHubAuthStatus> {
 	try {
 		const output = await executeGhCommand<string>(['auth', 'status'])
 
-		// Parse auth status output
-		const scopeMatch = output.match(/Token scopes: (.+)/)
-		const userMatch = output.match(/Logged in to github\.com as ([^\s]+)/)
+		// Parse auth status output - handle both old and new formats
+		// Old format: "Logged in to github.com as username"
+		// New format: "✓ Logged in to github.com account username (keyring)"
 
-		const username = userMatch?.[1]
+		// Split output into lines to find the active account
+		const lines = output.split('\n')
+		let username: string | undefined
+		let scopes: string[] = []
+
+		// Find the active account (look for "Active account: true" or first account if none marked)
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i]
+
+			// Match new format: "✓ Logged in to github.com account username"
+			const newFormatMatch = line?.match(/Logged in to github\.com account ([^\s(]+)/)
+			if (newFormatMatch) {
+				const accountName = newFormatMatch[1]
+
+				// Check if this is the active account
+				const nextFewLines = lines.slice(i + 1, i + 5).join('\n')
+				const isActive = nextFewLines.includes('Active account: true')
+
+				// If this is the active account, or we haven't found one yet and there's no "Active account" marker
+				if (isActive || (!username && !output.includes('Active account:'))) {
+					username = accountName
+
+					// Find scopes for this account
+					const scopeMatch = nextFewLines.match(/Token scopes: (.+)/)
+					if (scopeMatch?.[1]) {
+						scopes = scopeMatch[1].split(', ').map(scope => scope.replace(/^'|'$/g, ''))
+					}
+
+					// If this is the active account, we're done
+					if (isActive) break
+				}
+			}
+
+			// Fallback: match old format
+			if (!username) {
+				const oldFormatMatch = line?.match(/Logged in to github\.com as ([^\s]+)/)
+				if (oldFormatMatch) {
+					username = oldFormatMatch[1]
+				}
+			}
+		}
+
+		// If scopes not yet extracted, try the old "Token scopes" format
+		if (scopes.length === 0) {
+			const scopeMatch = output.match(/Token scopes: (.+)/)
+			scopes = scopeMatch?.[1]?.split(', ').map(scope => scope.replace(/^'|'$/g, '')) ?? []
+		}
 
 		return {
 			hasAuth: true,
-			scopes: scopeMatch?.[1]?.split(', ').map(scope => scope.replace(/^'|'$/g, '')) ?? [],
+			scopes,
 			...(username && { username }),
 		}
 	} catch (error) {

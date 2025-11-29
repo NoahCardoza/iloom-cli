@@ -120,9 +120,53 @@ describe('github utils', () => {
 	})
 
 	describe('checkGhAuth', () => {
-		it('should return auth status when authenticated', async () => {
+		it('should return auth status when authenticated (old format)', async () => {
 			vi.mocked(execa).mockResolvedValueOnce({
 				stdout: 'Logged in to github.com as testuser\nToken scopes: repo, project',
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const status = await checkGhAuth()
+
+			expect(status.hasAuth).toBe(true)
+			expect(status.scopes).toEqual(['repo', 'project'])
+			expect(status.username).toBe('testuser')
+		})
+
+		it('should return auth status when authenticated (new format - single account)', async () => {
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: `github.com
+  ✓ Logged in to github.com account testuser (keyring)
+  - Active account: true
+  - Git operations protocol: ssh
+  - Token: gho_************************************
+  - Token scopes: 'repo', 'project'`,
+				stderr: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const status = await checkGhAuth()
+
+			expect(status.hasAuth).toBe(true)
+			expect(status.scopes).toEqual(['repo', 'project'])
+			expect(status.username).toBe('testuser')
+		})
+
+		it('should return active account when multiple accounts (new format)', async () => {
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: `github.com
+  ✓ Logged in to github.com account testuser (keyring)
+  - Active account: true
+  - Git operations protocol: ssh
+  - Token: gho_************************************
+  - Token scopes: 'repo', 'project'
+
+  ✓ Logged in to github.com account otheruser (keyring)
+  - Active account: false
+  - Git operations protocol: ssh
+  - Token: gho_************************************
+  - Token scopes: 'gist', 'read:org'`,
 				stderr: '',
 				exitCode: 0,
 			} as MockExecaReturn)

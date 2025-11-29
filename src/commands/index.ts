@@ -20,3 +20,5 @@ export { IgniteCommand } from './ignite.js'
 
 export { TestTabsCommand } from './test-tabs.js'
 export type { TestTabsCommandInput } from './test-tabs.js'
+
+export { ContributeCommand } from './contribute.js'

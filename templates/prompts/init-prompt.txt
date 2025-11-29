@@ -232,11 +232,13 @@ Then ask: "Does this configuration look correct?"
 
 ### Phase 3: Choose Configuration File
 
+**Fork/Contributor Check:** If "GitHub Remote Configuration" shows both "origin" and "upstream" remotes (classic fork pattern), display: "It looks like you're working on a fork (origin + upstream remotes detected). For contributors, we recommend saving to settings.local.json to avoid including personal settings in PRs to upstream, but you can still choose shared if needed."
+
 **CRITICAL: You MUST ask the user where to save the configuration. DO NOT make assumptions or decide for them.**
 
 Ask the user this exact question: "Should this configuration be committed to git?
   - yes: Save to .iloom/settings.json (shared with team)
-  - no: Save to .iloom/settings.local.json (local only, gitignored)"
+  - no: Save to .iloom/settings.local.json (local only, gitignored)" <-- recommend this for fork setups
 
 **DO NOT:**
 - Assume what the user wants based on the type of setting
