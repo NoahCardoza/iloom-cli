@@ -259,4 +259,49 @@ describe('InitCommand', () => {
       )
     })
   })
+
+  describe('custom initial message', () => {
+    beforeEach(() => {
+      vi.mocked(mockShellCompletion.detectShell).mockReturnValue('bash')
+      vi.mocked(mockShellCompletion.readShellConfig).mockResolvedValue({
+        path: '/home/user/.bashrc',
+        content: '',
+      })
+      vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue('Test prompt')
+      vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValue(true)
+      vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(readFile).mockResolvedValue('')
+    })
+
+    it('should pass custom initial message to Claude when provided', async () => {
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
+      await initCommand.execute('Configure database settings for Neon')
+
+      expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+        'Configure database settings for Neon',
+        expect.any(Object)
+      )
+    })
+
+    it('should use default message when no custom prompt provided', async () => {
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
+      await initCommand.execute()
+
+      expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+        'Help me configure iloom settings.',
+        expect.any(Object)
+      )
+    })
+
+    it('should use default message when custom prompt is undefined', async () => {
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
+      await initCommand.execute(undefined)
+
+      expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+        'Help me configure iloom settings.',
+        expect.any(Object)
+      )
+    })
+  })
 })
