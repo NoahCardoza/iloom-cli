@@ -10,9 +10,8 @@
 </div>
 
 <div align="center">
-  <img width="327" height="328" alt="iloom-ai-logo" src="https://raw.githubusercontent.com/iloom-ai/iloom-cli/main/assets/iloom-logo.png" />
+  <img width="600" alt="iloom-ai-screenshot" src="https://raw.githubusercontent.com/iloom-ai/iloom-cli/main/assets/iloom-screenshot.png" />
   <div>Scale understanding, not just output.</div>
-
 </div>
 
 #### Links to key sections
