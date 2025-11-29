@@ -8,6 +8,8 @@ import { generateGitHubCommentMcpConfig } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
+import { FirstRunManager } from '../utils/FirstRunManager.js'
+import { readFile } from 'fs/promises'
 
 /**
  * IgniteCommand: Auto-detect workspace context and launch Claude
@@ -26,18 +28,21 @@ export class IgniteCommand {
 	private gitWorktreeManager: GitWorktreeManager
 	private agentManager: AgentManager
 	private settingsManager: SettingsManager
+	private firstRunManager: FirstRunManager
 	private settings?: import('../lib/SettingsManager.js').IloomSettings
 
 	constructor(
 		templateManager?: PromptTemplateManager,
 		gitWorktreeManager?: GitWorktreeManager,
 		agentManager?: AgentManager,
-		settingsManager?: SettingsManager
+		settingsManager?: SettingsManager,
+		firstRunManager?: FirstRunManager
 	) {
 		this.templateManager = templateManager ?? new PromptTemplateManager()
 		this.gitWorktreeManager = gitWorktreeManager ?? new GitWorktreeManager()
 		this.agentManager = agentManager ?? new AgentManager()
 		this.settingsManager = settingsManager ?? new SettingsManager()
+		this.firstRunManager = firstRunManager ?? new FirstRunManager('spin')
 	}
 
 	/**
@@ -46,6 +51,12 @@ export class IgniteCommand {
 	async execute(oneShot: import('../types/index.js').OneShotMode = 'default'): Promise<void> {
 		try {
 			logger.info('🚀 Your loom is spinning up, please wait...')
+
+			// Step 0.5: Check if this is first-time user
+			const isFirstRun = await this.firstRunManager.isFirstRun()
+			if (isFirstRun) {
+				logger.success('Welcome to iloom! Preparing first-time experience...')
+			}
 
 			// Step 1: Auto-detect workspace context
 			const context = await this.detectWorkspaceContext()
@@ -59,6 +70,14 @@ export class IgniteCommand {
 
 			// Step 2: Get prompt template with variable substitution
 			const variables = this.buildTemplateVariables(context, oneShot)
+
+			// Step 2.5: Add first-time user context if needed
+			if (isFirstRun) {
+				variables.FIRST_TIME_USER = true
+				variables.README_CONTENT = await this.loadReadmeContent()
+				variables.SETTINGS_SCHEMA_CONTENT = await this.loadSettingsSchemaContent()
+			}
+
 			const systemInstructions = await this.templateManager.getPrompt(context.type, variables)
 
 			// User prompt to trigger the workflow (includes one-shot bypass instructions if needed)
@@ -174,6 +193,11 @@ export class IgniteCommand {
 				...(disallowedTools && { disallowedTools }),
 				...(agents && { agents }),
 			})
+
+			// Step 6: Mark as run after successful launch
+			if (isFirstRun) {
+				await this.firstRunManager.markAsRun()
+			}
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 			logger.error(`Failed to launch Claude: ${errorMessage}`)
@@ -477,5 +501,66 @@ export class IgniteCommand {
 
 		// Default mode: simple "Go!" prompt
 		return 'Guide the user through the iloom workflow!'
+	}
+
+	/**
+	 * Load README.md content for first-time users
+	 * Walks up from dist directory to find README.md in project root
+	 */
+	private async loadReadmeContent(): Promise<string> {
+		try {
+			// Walk up from current file location to find README.md
+			// Use same pattern as PromptTemplateManager for finding files
+			let currentDir = path.dirname(new URL(import.meta.url).pathname)
+
+			// Walk up to find README.md
+			while (currentDir !== path.dirname(currentDir)) {
+				const readmePath = path.join(currentDir, 'README.md')
+				try {
+					const content = await readFile(readmePath, 'utf-8')
+					logger.debug('Loaded README.md for first-time user', { readmePath })
+					return content
+				} catch {
+					currentDir = path.dirname(currentDir)
+				}
+			}
+
+			logger.debug('README.md not found, returning empty string')
+			return ''
+		} catch (error) {
+			// Graceful degradation - return empty string on error
+			logger.debug(`Failed to load README.md: ${error}`)
+			return ''
+		}
+	}
+
+	/**
+	 * Load settings schema content for first-time users
+	 * Walks up from dist directory to find .iloom/README.md
+	 */
+	private async loadSettingsSchemaContent(): Promise<string> {
+		try {
+			// Walk up from current file location to find .iloom/README.md
+			let currentDir = path.dirname(new URL(import.meta.url).pathname)
+
+			// Walk up to find .iloom/README.md
+			while (currentDir !== path.dirname(currentDir)) {
+				const schemaPath = path.join(currentDir, '.iloom', 'README.md')
+				try {
+					const content = await readFile(schemaPath, 'utf-8')
+					logger.debug('Loaded .iloom/README.md for first-time user', { schemaPath })
+					return content
+				} catch {
+					currentDir = path.dirname(currentDir)
+				}
+			}
+
+			logger.debug('.iloom/README.md not found, returning empty string')
+			return ''
+		} catch (error) {
+			// Graceful degradation - return empty string on error
+			logger.debug(`Failed to load .iloom/README.md: ${error}`)
+			return ''
+		}
 	}
 }

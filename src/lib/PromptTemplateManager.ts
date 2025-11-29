@@ -24,6 +24,9 @@ export interface TemplateVariables {
 	SINGLE_REMOTE_NAME?: string
 	SINGLE_REMOTE_URL?: string
 	NO_REMOTES?: string
+	README_CONTENT?: string
+	SETTINGS_SCHEMA_CONTENT?: string
+	FIRST_TIME_USER?: boolean
 }
 
 export class PromptTemplateManager {
@@ -167,6 +170,14 @@ export class PromptTemplateManager {
 			result = result.replace(/NO_REMOTES/g, variables.NO_REMOTES)
 		}
 
+		if (variables.README_CONTENT !== undefined) {
+			result = result.replace(/README_CONTENT/g, variables.README_CONTENT)
+		}
+
+		if (variables.SETTINGS_SCHEMA_CONTENT !== undefined) {
+			result = result.replace(/SETTINGS_SCHEMA_CONTENT/g, variables.SETTINGS_SCHEMA_CONTENT)
+		}
+
 		return result
 	}
 
@@ -243,6 +254,17 @@ export class PromptTemplateManager {
 		} else {
 			// Remove the entire conditional block
 			result = result.replace(noRemotesRegex, '')
+		}
+
+		// Process FIRST_TIME_USER conditionals
+		const firstTimeUserRegex = /\{\{#IF FIRST_TIME_USER\}\}(.*?)\{\{\/IF FIRST_TIME_USER\}\}/gs
+
+		if (variables.FIRST_TIME_USER === true) {
+			// Include the content, remove the conditional markers
+			result = result.replace(firstTimeUserRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(firstTimeUserRegex, '')
 		}
 
 		return result

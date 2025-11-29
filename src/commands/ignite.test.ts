@@ -1578,4 +1578,174 @@ describe('IgniteCommand', () => {
 			}
 		})
 	})
+
+	describe('First-time user experience', () => {
+		it('should set FIRST_TIME_USER variable when isFirstRun returns true', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockFirstRunManager = {
+				isFirstRun: vi.fn().mockResolvedValue(true),
+				markAsRun: vi.fn().mockResolvedValue(undefined),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100-firstrun')
+
+			// Create command with mock first-run manager
+			const commandWithFirstRun = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined, // agentManager
+				undefined, // settingsManager
+				mockFirstRunManager as never
+			)
+
+			try {
+				await commandWithFirstRun.execute()
+
+				// Verify isFirstRun was checked
+				expect(mockFirstRunManager.isFirstRun).toHaveBeenCalled()
+
+				// Verify template manager was called with FIRST_TIME_USER=true
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						FIRST_TIME_USER: true,
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should not set FIRST_TIME_USER when isFirstRun returns false', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockFirstRunManager = {
+				isFirstRun: vi.fn().mockResolvedValue(false),
+				markAsRun: vi.fn().mockResolvedValue(undefined),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100-notfirstrun')
+
+			const commandWithFirstRun = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined, // agentManager
+				undefined, // settingsManager
+				mockFirstRunManager as never
+			)
+
+			try {
+				await commandWithFirstRun.execute()
+
+				// Verify isFirstRun was checked
+				expect(mockFirstRunManager.isFirstRun).toHaveBeenCalled()
+
+				// Verify template manager was NOT called with FIRST_TIME_USER
+				const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]
+				expect(templateCall[1].FIRST_TIME_USER).toBeUndefined()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should mark as run after successful launch for first-time users', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockFirstRunManager = {
+				isFirstRun: vi.fn().mockResolvedValue(true),
+				markAsRun: vi.fn().mockResolvedValue(undefined),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100-firstrun')
+
+			const commandWithFirstRun = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined,
+				undefined,
+				mockFirstRunManager as never
+			)
+
+			try {
+				await commandWithFirstRun.execute()
+
+				// Verify markAsRun was called after successful launch
+				expect(mockFirstRunManager.markAsRun).toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should not mark as run for non-first-time users', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockFirstRunManager = {
+				isFirstRun: vi.fn().mockResolvedValue(false),
+				markAsRun: vi.fn().mockResolvedValue(undefined),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100-notfirstrun')
+
+			const commandWithFirstRun = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined,
+				undefined,
+				mockFirstRunManager as never
+			)
+
+			try {
+				await commandWithFirstRun.execute()
+
+				// Verify markAsRun was NOT called
+				expect(mockFirstRunManager.markAsRun).not.toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should load README and settings schema content for first-time users', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockFirstRunManager = {
+				isFirstRun: vi.fn().mockResolvedValue(true),
+				markAsRun: vi.fn().mockResolvedValue(undefined),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100-firstrun')
+
+			const commandWithFirstRun = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined,
+				undefined,
+				mockFirstRunManager as never
+			)
+
+			try {
+				await commandWithFirstRun.execute()
+
+				// Verify template manager was called with README_CONTENT and SETTINGS_SCHEMA_CONTENT
+				const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]
+				expect(templateCall[1]).toHaveProperty('README_CONTENT')
+				expect(templateCall[1]).toHaveProperty('SETTINGS_SCHEMA_CONTENT')
+				// Content should be strings (even if empty due to file not found in test env)
+				expect(typeof templateCall[1].README_CONTENT).toBe('string')
+				expect(typeof templateCall[1].SETTINGS_SCHEMA_CONTENT).toBe('string')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+	})
 })

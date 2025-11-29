@@ -429,6 +429,7 @@ program
 
 program
   .command('init')
+  .alias('config')
   .description('Initialize iloom configuration and setup shell autocomplete')
   .action(async () => {
     try {

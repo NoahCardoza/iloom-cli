@@ -35,7 +35,7 @@ The promise of AI-assisted development is profound: write more code, ship featur
 
 **AI agents write code quickly. They struggle to stay in sync with their humans.**
 
-When you juggle multiple issues, the hard part is not branches or ports. It is keeping you and your AI aligned on the goal.
+The hard part is not writing a ton of code. It's knowing what decisions your AI is making, what assumptions it's operating under, and why it's producing what it produces.
 
 Friction piles up:
 - You open new chats for each problem and rebuild context in your head.
@@ -47,7 +47,7 @@ The outcome is familiar: more time briefing the AI than building, more time fixi
 
 **The bottleneck isn't output velocity. It's maintaining shared understanding between human and AI at scale.**
 
-*iloom treats context as a first-class concern. It's not a tool for managing branches - it's a control plane for maintaining alignment between you and your AI assistant as you work across multiple issues simultaneously.*
+*iloom treats context as a first-class concern. It's not a tool for managing branches - it's a control plane for maintaining alignment between you and your AI assistant.*
 
 ## How iloom Solves This
 
@@ -382,7 +382,10 @@ Your feedback helps make iloom better for everyone! Issues created through `iloo
 
 ```bash
 iloom init
-# Setup guide for shell autocomplete, settings file initialization (will do much more soon)
+# Interactive Claude-powered configuration wizard
+# Sets up settings.json, .gitignore, and guides you through all configuration options
+# Automatically detects multi-remote setups and helps you configure GitHub integration
+# Alias: il config
 # Run this once per project
 
 iloom update
@@ -391,11 +394,29 @@ iloom update
 
 ## Configuration
 
-iloom uses a flexible configuration system with clear priority ordering.
+### Interactive Configuration Wizard
 
-### Configuration Priority
+The recommended way to configure iloom:
 
-Settings are loaded in this order (highest to lowest priority):
+```bash
+iloom init
+# or
+il config
+```
+
+This Claude-powered assistant will guide you through all configuration options and automatically:
+- Create and configure `.iloom/settings.json` and `.iloom/settings.local.json`
+- Set up `.gitignore` entries
+- Help you choose the right GitHub remote (if you have multiple)
+- Configure database providers (Neon, etc.)
+- Set workflow permissions and preferences
+- Explain each option as you go
+
+For most users, this is all you need. The wizard creates the files and explains everything as you configure it.
+
+### Manual Configuration Files
+
+If you prefer manual configuration, iloom uses these files (highest to lowest priority):
 
 1. **CLI arguments** - Command-line flags (e.g., `--one-shot bypassPermissions`)
 2. **`.iloom/settings.local.json`** - Local machine settings (gitignored, not committed)
@@ -722,3 +743,7 @@ This project follows Test-Driven Development. All code must:
 For commercial licensing inquiries, contact Adam Creeger.
 
 See [LICENSE](https://raw.githubusercontent.com/iloom-ai/iloom-cli/main/LICENSE) for complete terms.
+
+## About the Name
+
+**iloom** comes from "illuminate" - it illuminates the mysterious AI coding process - and "intelligent loom" that weaves artificial and human intelligence together.
