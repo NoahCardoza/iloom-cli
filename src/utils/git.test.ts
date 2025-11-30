@@ -3,6 +3,7 @@ import {
   parseWorktreeList,
   isPRBranch,
   extractPRNumber,
+  extractIssueNumber,
   isWorktreePath,
   generateWorktreePath,
   findMainWorktreePath,
@@ -341,6 +342,48 @@ describe('Git Utility Functions', () => {
 
       invalidCases.forEach(branch => {
         expect(extractPRNumber(branch)).toBeNull()
+      })
+    })
+  })
+
+  describe('extractIssueNumber', () => {
+    it('should extract issue numbers from various formats', () => {
+      const testCases = [
+        { branch: 'issue-42', expected: 42 },
+        { branch: 'feat/issue-42-description', expected: 42 },
+        { branch: 'ISSUE-123', expected: 123 },
+        { branch: 'issue_456', expected: 456 },
+        { branch: '42-feature-name', expected: 42 },
+        { branch: '123-add-new-component', expected: 123 },
+      ]
+
+      testCases.forEach(({ branch, expected }) => {
+        expect(extractIssueNumber(branch)).toBe(expected)
+      })
+    })
+
+    it('should return null for branches without issue numbers', () => {
+      const nonIssueBranches = [
+        'main',
+        'master',
+        'develop',
+        'feature-branch',
+        'hotfix-urgent',
+        'feature/new-component',
+        'pr/123',  // PR format, not issue format
+        'pull/456',
+      ]
+
+      nonIssueBranches.forEach(branch => {
+        expect(extractIssueNumber(branch)).toBeNull()
+      })
+    })
+
+    it('should handle invalid issue numbers', () => {
+      const invalidCases = ['issue-abc', 'issue_', 'issue-']
+
+      invalidCases.forEach(branch => {
+        expect(extractIssueNumber(branch)).toBeNull()
       })
     })
   })

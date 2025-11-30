@@ -154,6 +154,25 @@ export function extractPRNumber(branchName: string): number | null {
 }
 
 /**
+ * Extract issue number from branch name
+ */
+export function extractIssueNumber(branchName: string): number | null {
+  const patterns = [
+    /issue-(\d+)/i,       // issue-42, feat/issue-42-description
+    /issue_(\d+)/i,       // issue_42
+    /^(\d+)-/,            // 42-feature-name (leading number)
+  ]
+  for (const pattern of patterns) {
+    const match = branchName.match(pattern)
+    if (match?.[1]) {
+      const num = parseInt(match[1], 10)
+      if (!isNaN(num)) return num
+    }
+  }
+  return null
+}
+
+/**
  * Check if a path follows worktree naming patterns
  */
 export function isWorktreePath(path: string): boolean {

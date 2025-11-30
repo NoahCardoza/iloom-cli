@@ -344,7 +344,19 @@ export class CleanupCommand {
     const { force, dryRun } = parsed.options
 
     // Step 1: Parse identifier using pattern-based detection
-    const parsedInput: ParsedInput = await this.identifierParser.parseForPatternDetection(identifier)
+    let parsedInput: ParsedInput = await this.identifierParser.parseForPatternDetection(identifier)
+
+    // If type is 'branch', try to extract issue number for CLI symlink cleanup
+    if (parsedInput.type === 'branch' && parsedInput.branchName) {
+      const { extractIssueNumber } = await import('../utils/git.js')
+      const extractedNumber = extractIssueNumber(parsedInput.branchName)
+      if (extractedNumber !== null) {
+        parsedInput = {
+          ...parsedInput,
+          number: extractedNumber  // Add number for CLI symlink cleanup
+        }
+      }
+    }
 
     // Step 2: Display worktree details
     logger.info(`Preparing to cleanup worktree: ${identifier}`)
@@ -505,8 +517,14 @@ export class CleanupCommand {
 
       // Cleanup worktree using ResourceCleanup with ParsedInput
       try {
-        // Parse the branch name using IdentifierParser
-        const parsedInput: ParsedInput = await this.identifierParser.parseForPatternDetection(target.branchName)
+        // Use the known issue number directly instead of parsing from branch name
+        // This ensures CLI symlinks (created with issue number) are properly cleaned up
+        const parsedInput: ParsedInput = {
+          type: 'issue',
+          number: issueNumber,  // Use the known issue number, not parsed from branch
+          branchName: target.branchName,
+          originalInput: String(issueNumber)
+        }
 
         await this.ensureResourceCleanup()
         if (!this.resourceCleanup) {
