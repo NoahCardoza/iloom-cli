@@ -139,7 +139,9 @@ describe('LoomManager - Database Integration', () => {
       // THEN: DatabaseManager.createBranchIfConfigured is called with correct branch name and env path
       expect(mockDatabase.createBranchIfConfigured).toHaveBeenCalledWith(
         'issue-123-test',
-        `${expectedPath}/.env`
+        `${expectedPath}/.env`,
+        undefined, // cwd
+        undefined  // fromBranch (no parent loom)
       )
 
       // THEN: Connection string is written to .env via EnvironmentManager.setEnvVar
@@ -400,7 +402,9 @@ describe('LoomManager - Database Integration', () => {
 
       expect(mockDatabase.createBranchIfConfigured).toHaveBeenCalledWith(
         'feature-branch',
-        `${expectedPath}/.env`
+        `${expectedPath}/.env`,
+        undefined, // cwd
+        undefined  // fromBranch (no parent loom)
       )
       expect(mockEnvironment.setEnvVar).toHaveBeenCalledWith(
         `${expectedPath}/.env`,
@@ -432,7 +436,9 @@ describe('LoomManager - Database Integration', () => {
 
       expect(mockDatabase.createBranchIfConfigured).toHaveBeenCalledWith(
         'feature-xyz',
-        `${expectedPath}/.env`
+        `${expectedPath}/.env`,
+        undefined, // cwd
+        undefined  // fromBranch (no parent loom)
       )
       expect(mockEnvironment.setEnvVar).toHaveBeenCalledWith(
         `${expectedPath}/.env`,

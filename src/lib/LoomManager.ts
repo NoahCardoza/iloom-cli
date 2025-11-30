@@ -35,6 +35,36 @@ export class LoomManager {
   ) {}
 
   /**
+   * Get database branch name for a loom by reading its .env file
+   * Returns null if database is not configured or branch cannot be determined
+   *
+   * @param loomPath - Path to the loom worktree
+   */
+  async getDatabaseBranchForLoom(loomPath: string): Promise<string | null> {
+    if (!this.database) {
+      return null
+    }
+
+    try {
+      const envFilePath = path.join(loomPath, '.env')
+      const settings = await this.settings.loadSettings()
+      const databaseUrlVarName = settings.capabilities?.database?.databaseUrlEnvVarName ?? 'DATABASE_URL'
+
+      // Get database connection string from loom's .env file
+      const connectionString = await this.environment.getEnvVariable(envFilePath, databaseUrlVarName)
+
+      if (!connectionString) {
+        return null
+      }
+
+      return await this.database.getBranchNameFromConnectionString(connectionString, loomPath)
+    } catch (error) {
+      logger.debug(`Could not get database branch for loom at ${loomPath}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      return null
+    }
+  }
+
+  /**
    * Create a new loom (isolated workspace)
    * Orchestrates worktree creation, environment setup, and Claude context generation
    * NEW: Checks for existing worktrees and reuses them if found
@@ -73,7 +103,8 @@ export class LoomManager {
     await this.copyEnvironmentFiles(worktreePath)
 
     // 7. Copy Loom settings (settings.local.json) - ALWAYS done regardless of capabilities
-    await this.copyIloomSettings(worktreePath)
+    // Pass parent branch name if this is a child loom
+    await this.copyIloomSettings(worktreePath, input.parentLoom?.branchName)
 
     // 8. Setup PORT environment variable - ONLY for web projects
     // Load base port from settings
@@ -99,7 +130,9 @@ export class LoomManager {
       try {
         const connectionString = await this.database.createBranchIfConfigured(
           branchName,
-          path.join(worktreePath, '.env')
+          path.join(worktreePath, '.env'),
+          undefined, // cwd
+          input.parentLoom?.databaseBranch // fromBranch - use parent's database branch for child looms
         )
 
         if (connectionString) {
@@ -261,6 +294,84 @@ export class LoomManager {
   }
 
   /**
+   * Find child looms for a given parent loom
+   * Child looms are worktrees created with the parent loom as their base
+   *
+   * @param parentBranchName - The parent loom's branch name
+   * @returns Array of child loom worktrees
+   */
+  async findChildLooms(parentBranchName: string): Promise<GitWorktree[]> {
+    try {
+      const worktrees = await this.gitWorktree.listWorktrees()
+      if (!worktrees) {
+        return []
+      }
+
+      // Sanitize parent branch name the same way as in createWorktreeOnly (lines 361-363)
+      const sanitizedBranchName = parentBranchName
+        .replace(/\//g, '-')
+        .replace(/[^a-zA-Z0-9-_]/g, '-')
+
+      // Child looms are in directory: {sanitizedBranchName}-looms/
+      const pattern = `${sanitizedBranchName}-looms/`
+
+      return worktrees.filter(wt => wt.path.includes(pattern))
+    } catch (error) {
+      logger.debug(`Failed to find child looms: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      return []
+    }
+  }
+
+  /**
+   * Check for child looms and warn user if any exist
+   * This is useful before finishing or cleaning up a parent loom
+   *
+   * @param branchName - Optional branch name to check. If not provided, uses current branch.
+   * @returns true if child looms were found, false otherwise
+   */
+  async checkAndWarnChildLooms(branchName?: string): Promise<boolean> {
+    // Use provided branch name or get current branch
+    let targetBranch: string | null | undefined = branchName
+    if (!targetBranch) {
+      const { getCurrentBranch } = await import('../utils/git.js')
+      targetBranch = await getCurrentBranch()
+    }
+
+    // Skip if not on a branch
+    if (!targetBranch) {
+      return false
+    }
+
+    const childLooms = await this.findChildLooms(targetBranch)
+    if (childLooms.length > 0) {
+      logger.warn(`Found ${childLooms.length} child loom(s) that should be finished first:`)
+      for (const child of childLooms) {
+        logger.warn(`  - ${child.path}`)
+      }
+      logger.warn('')
+      logger.warn('To finish child looms:')
+      for (const child of childLooms) {
+        // Extract identifier from child branch for finish command
+        // Check PR first since PR branches often contain issue numbers too
+        const prMatch = child.branch.match(/_pr_(\d+)/)
+        const issueMatch = child.branch.match(/issue-(\d+)/)
+
+        const childIdentifier = prMatch
+          ? prMatch[1]  // PR: use number
+          : issueMatch
+          ? issueMatch[1]  // Issue: use number
+          : child.branch  // Branch: use full branch name
+
+        logger.warn(`  il finish ${childIdentifier}`)
+      }
+      logger.warn('')
+      return true
+    }
+
+    return false
+  }
+
+  /**
    * Fetch GitHub data based on input type
    */
   private async fetchGitHubData(
@@ -320,7 +431,17 @@ export class LoomManager {
 
     // Load worktree prefix from settings
     const settingsData = await this.settings.loadSettings()
-    const worktreePrefix = settingsData.worktreePrefix
+    let worktreePrefix = settingsData.worktreePrefix
+
+    // If this is a child loom, compute dynamic prefix based on parent
+    if (input.parentLoom) {
+      // Sanitize branch name for directory use
+      const sanitizedBranchName = input.parentLoom.branchName
+        .replace(/\//g, '-')
+        .replace(/[^a-zA-Z0-9-_]/g, '-')
+      worktreePrefix = `${sanitizedBranchName}-looms/`
+      logger.info(`Creating child loom with prefix: ${worktreePrefix}`)
+    }
 
     // Build options object, only including prefix if it's defined
     const pathOptions: { isPR?: boolean; prNumber?: number; prefix?: string } =
@@ -365,11 +486,14 @@ export class LoomManager {
       )
     }
 
+    // Determine base branch: use parent's branch for child looms, otherwise use explicit baseBranch or default (main)
+    const baseBranch = input.parentLoom?.branchName ?? input.baseBranch
+
     await this.gitWorktree.createWorktree({
       path: worktreePath,
       branch: branchName,
       createBranch: input.type !== 'pr', // PRs use existing branches
-      ...(input.baseBranch && { baseBranch: input.baseBranch }),
+      ...(baseBranch && { baseBranch }),
     })
 
     // Reset PR branch to match remote exactly (if we created a new local branch)
@@ -412,8 +536,10 @@ export class LoomManager {
   /**
    * Copy iloom configuration (settings.local.json) from main repo to worktree
    * Always called regardless of project capabilities
+   * @param worktreePath Path to the worktree
+   * @param parentBranchName Optional parent branch name for child looms (sets mainBranch)
    */
-  private async copyIloomSettings(worktreePath: string): Promise<void> {
+  private async copyIloomSettings(worktreePath: string, parentBranchName?: string): Promise<void> {
     const mainSettingsLocalPath = path.join(process.cwd(), '.iloom', 'settings.local.json')
 
     try {
@@ -423,11 +549,32 @@ export class LoomManager {
       await fs.ensureDir(worktreeIloomDir)
 
       const worktreeSettingsLocalPath = path.join(worktreeIloomDir, 'settings.local.json')
+
       // Check if settings.local.json already exists in worktree
       if (await fs.pathExists(worktreeSettingsLocalPath)) {
         logger.warn('settings.local.json already exists in worktree, skipping copy')
       } else {
         await this.environment.copyIfExists(mainSettingsLocalPath, worktreeSettingsLocalPath)
+      }
+
+      // If this is a child loom, update mainBranch setting
+      if (parentBranchName) {
+        let existingSettings = {}
+
+        try {
+          const content = await fs.readFile(worktreeSettingsLocalPath, 'utf8')
+          existingSettings = JSON.parse(content)
+        } catch {
+          // File doesn't exist or invalid, start fresh
+        }
+
+        const updatedSettings = {
+          ...existingSettings,
+          mainBranch: parentBranchName,
+        }
+
+        await fs.writeFile(worktreeSettingsLocalPath, JSON.stringify(updatedSettings, null, 2))
+        logger.info(`Set mainBranch to ${parentBranchName} for child loom`)
       }
     } catch (error) {
       logger.warn(`Warning: Failed to copy settings.local.json: ${error instanceof Error ? error.message : 'Unknown error'}`)

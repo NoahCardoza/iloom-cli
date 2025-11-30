@@ -27,6 +27,13 @@ export interface CreateLoomInput {
   identifier: string | number
   originalInput: string
   baseBranch?: string
+  parentLoom?: {
+    type: 'issue' | 'pr' | 'branch'
+    identifier: string | number
+    branchName: string
+    worktreePath: string
+    databaseBranch?: string
+  }
   options?: {
     skipDatabase?: boolean
     skipColorSync?: boolean

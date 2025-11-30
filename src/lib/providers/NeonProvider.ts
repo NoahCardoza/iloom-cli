@@ -277,8 +277,29 @@ export class NeonProvider implements DatabaseProvider {
   }
 
   /**
+   * Remove expiration date from a Neon branch
+   * Used when parent branches need to have child branches created
+   * Neon limitation: "Branches with an expiration date cannot have child branches"
+   *
+   * @param branchName - Name of the branch to remove expiration from
+   * @param cwd - Optional working directory to run commands from
+   */
+  private async removeExpiration(branchName: string, cwd?: string): Promise<void> {
+    logger.info(`Removing expiration date from branch: ${branchName}`)
+    await this.executeNeonCommand([
+      'branches',
+      'set-expiration',
+      branchName,
+      '--project-id',
+      this.config.projectId,
+    ], cwd)
+    logger.success(`Expiration date removed from ${branchName}`)
+  }
+
+  /**
    * Create a new database branch
    * ALWAYS checks for Vercel preview database first
+   * Handles Neon limitation where parent branches with expiration dates cannot have children
    * Returns connection string for the branch
    * Ports: create_neon_database_branch() from bash/utils/neon-utils.sh:126-187
    *
@@ -303,17 +324,45 @@ export class NeonProvider implements DatabaseProvider {
     logger.info(`  Source branch: ${parentBranch}`)
     logger.info(`  New branch: ${sanitizedName}`)
 
-    // Create the database branch
-    await this.executeNeonCommand([
-      'branches',
-      'create',
-      '--name',
-      sanitizedName,
-      '--parent',
-      parentBranch,
-      '--project-id',
-      this.config.projectId,
-    ], cwd)
+    try {
+      // Create the database branch
+      await this.executeNeonCommand([
+        'branches',
+        'create',
+        '--name',
+        sanitizedName,
+        '--parent',
+        parentBranch,
+        '--project-id',
+        this.config.projectId,
+      ], cwd)
+    } catch (error) {
+      // Check if error is about parent branch having an expiration date
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      if (errorMessage.toLowerCase().includes('expiration') &&
+          errorMessage.toLowerCase().includes('child')) {
+        logger.warn('Parent branch has an expiration date - removing it to allow child branch creation')
+
+        // Remove expiration from parent branch
+        await this.removeExpiration(parentBranch, cwd)
+
+        // Retry branch creation
+        logger.info('Retrying database branch creation...')
+        await this.executeNeonCommand([
+          'branches',
+          'create',
+          '--name',
+          sanitizedName,
+          '--parent',
+          parentBranch,
+          '--project-id',
+          this.config.projectId,
+        ], cwd)
+      } else {
+        // Re-throw if it's a different error
+        throw error
+      }
+    }
 
     logger.success('Database branch created successfully')
 
@@ -466,5 +515,21 @@ export class NeonProvider implements DatabaseProvider {
     }
 
     return null
+  }
+
+  /**
+   * Get branch name from a connection string (reverse lookup)
+   * Extracts endpoint ID from connection string and finds matching branch
+   *
+   * @param connectionString - Neon connection string (e.g., postgres://...@ep-abc-123.region.neon.tech/...)
+   * @param cwd - Optional working directory to run commands from
+   */
+  async getBranchNameFromConnectionString(connectionString: string, cwd?: string): Promise<string | null> {
+    const endpointId = this.extractEndpointId(connectionString)
+    if (!endpointId) {
+      logger.debug('Could not extract endpoint ID from connection string')
+      return null
+    }
+    return this.getBranchNameFromEndpoint(endpointId, cwd)
   }
 }

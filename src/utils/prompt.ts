@@ -115,3 +115,11 @@ export async function waitForKeypress(
 		})
 	})
 }
+
+/**
+ * Check if running in an interactive environment
+ * Returns false if CI environment or no TTY
+ */
+export function isInteractiveEnvironment(): boolean {
+	return process.stdin.isTTY === true && process.env.CI !== 'true'
+}

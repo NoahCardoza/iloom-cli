@@ -549,6 +549,90 @@ describe('NeonProvider', () => {
         expect.any(Object)
       )
     })
+
+    it('should remove parent expiration and retry when child branch creation fails due to expiration', async () => {
+      const mockConnectionString = 'postgresql://user:pass@ep-child-123.us-east-1.neon.tech/dbname'
+      // First call: listBranches for slash pattern preview check
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '[]',
+        stderr: '',
+      } as ExecaReturnValue<string>)
+      // Second call: listBranches for underscore pattern preview check
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '[]',
+        stderr: '',
+      } as ExecaReturnValue<string>)
+      // Third call: create branch fails with expiration error
+      vi.mocked(execa).mockRejectedValueOnce(
+        new Error('Branches with an expiration date cannot have child branches')
+      )
+      // Fourth call: remove expiration
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'Expiration removed',
+        stderr: '',
+      } as ExecaReturnValue<string>)
+      // Fifth call: retry create branch (succeeds)
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'Branch created successfully',
+        stderr: '',
+      } as ExecaReturnValue<string>)
+      // Sixth call: get connection string
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: mockConnectionString,
+        stderr: '',
+      } as ExecaReturnValue<string>)
+
+      const result = await provider.createBranch('child-branch', 'parent-branch')
+
+      expect(result).toBe(mockConnectionString)
+      // Verify expiration was removed
+      expect(execa).toHaveBeenCalledWith(
+        'neon',
+        [
+          'branches',
+          'set-expiration',
+          'parent-branch',
+          '--project-id',
+          'test-project-id',
+        ],
+        expect.any(Object)
+      )
+      // Verify branch creation was retried
+      expect(execa).toHaveBeenCalledWith(
+        'neon',
+        [
+          'branches',
+          'create',
+          '--name',
+          'child-branch',
+          '--parent',
+          'parent-branch',
+          '--project-id',
+          'test-project-id',
+        ],
+        expect.any(Object)
+      )
+      expect(execa).toHaveBeenCalledTimes(6)
+    })
+
+    it('should rethrow non-expiration errors without retry', async () => {
+      // First call: listBranches for slash pattern preview check
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '[]',
+        stderr: '',
+      } as ExecaReturnValue<string>)
+      // Second call: listBranches for underscore pattern preview check
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '[]',
+        stderr: '',
+      } as ExecaReturnValue<string>)
+      // Third call: create branch fails with different error
+      vi.mocked(execa).mockRejectedValueOnce(new Error('Network error'))
+
+      await expect(provider.createBranch('feat-issue-5')).rejects.toThrow('Network error')
+      // Should not call set-expiration or retry
+      expect(execa).toHaveBeenCalledTimes(3)
+    })
   })
 
   describe('deleteBranch', () => {

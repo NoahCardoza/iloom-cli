@@ -45,6 +45,7 @@ export interface ParsedCleanupInput {
 export class CleanupCommand {
   private readonly gitWorktreeManager: GitWorktreeManager
   private resourceCleanup?: ResourceCleanup
+  private loomManager?: import('../lib/LoomManager.js').LoomManager
   private readonly identifierParser: IdentifierParser
 
   constructor(
@@ -73,10 +74,10 @@ export class CleanupCommand {
   }
 
   /**
-   * Lazy initialization of ResourceCleanup with properly configured DatabaseManager
+   * Lazy initialization of ResourceCleanup and LoomManager with properly configured DatabaseManager
    */
   private async ensureResourceCleanup(): Promise<void> {
-    if (this.resourceCleanup) {
+    if (this.resourceCleanup && this.loomManager) {
       return
     }
 
@@ -89,12 +90,68 @@ export class CleanupCommand {
     const databaseManager = new DatabaseManager(neonProvider, environmentManager, databaseUrlEnvVarName)
     const cliIsolationManager = new CLIIsolationManager()
 
-    this.resourceCleanup = new ResourceCleanup(
+    this.resourceCleanup ??= new ResourceCleanup(
       this.gitWorktreeManager,
       new ProcessManager(),
       databaseManager,
       cliIsolationManager
     )
+
+    // Initialize LoomManager if not provided (for child loom detection)
+    if (!this.loomManager) {
+      const { LoomManager } = await import('../lib/LoomManager.js')
+      const { GitHubService } = await import('../lib/GitHubService.js')
+      const { ClaudeContextManager } = await import('../lib/ClaudeContextManager.js')
+      const { ProjectCapabilityDetector } = await import('../lib/ProjectCapabilityDetector.js')
+
+      this.loomManager = new LoomManager(
+        this.gitWorktreeManager,
+        new GitHubService(),
+        environmentManager,
+        new ClaudeContextManager(),
+        new ProjectCapabilityDetector(),
+        cliIsolationManager,
+        settingsManager,
+        databaseManager
+      )
+    }
+  }
+
+  /**
+   * Check for child looms and exit gracefully if any exist
+   * Always checks the TARGET loom (the one being cleaned up), not the current directory's loom
+   *
+   * @param parsed - The parsed input identifying the loom being cleaned up
+   */
+  private async checkForChildLooms(parsed: ParsedCleanupInput): Promise<void> {
+    await this.ensureResourceCleanup()
+    if (!this.loomManager) {
+      throw new Error('Failed to initialize LoomManager')
+    }
+
+    // Determine which branch is being cleaned up based on parsed input
+    let targetBranch: string | undefined
+
+    if (parsed.branchName) {
+      targetBranch = parsed.branchName
+    } else if (parsed.mode === 'issue' && parsed.issueNumber !== undefined) {
+      // For issues, try to find the worktree by issue number to get the branch name
+      const worktree = await this.gitWorktreeManager.findWorktreeForIssue(parsed.issueNumber)
+      targetBranch = worktree?.branch
+    }
+
+    // If we can't determine the target branch, skip the check
+    if (!targetBranch) {
+      logger.debug(`Cannot determine target branch for child loom check`)
+      return
+    }
+
+    // Check if the TARGET loom has any child looms
+    const hasChildLooms = await this.loomManager.checkAndWarnChildLooms(targetBranch)
+    if (hasChildLooms) {
+      logger.error('Cannot cleanup loom while child looms exist. Please finish child looms first.')
+      process.exit(1)
+    }
   }
 
   /**
@@ -108,6 +165,10 @@ export class CleanupCommand {
 
       // Step 2: Validate option combinations
       this.validateInput(parsed)
+
+      // Step 2.5: Check for child looms AFTER parsing input
+      // This ensures we only block when cleaning the CURRENT loom (parent), not a child
+      await this.checkForChildLooms(parsed)
 
       // Step 3: Execute based on mode
       logger.info(`Cleanup mode: ${parsed.mode}`)

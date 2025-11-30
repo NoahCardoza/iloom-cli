@@ -175,6 +175,8 @@ program
   .option('--no-dev-server', 'Disable dev server')
   .option('--terminal', 'Enable terminal without dev server (default: false)')
   .option('--no-terminal', 'Disable terminal')
+  .option('--child-loom', 'Force create as child loom (skip prompt)')
+  .option('--no-child-loom', 'Force create as independent loom (skip prompt)')
   .addOption(
     new Option('--one-shot <mode>', 'One-shot automation mode')
       .choices(['default', 'noReview', 'bypassPermissions'])

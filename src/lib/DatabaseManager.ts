@@ -65,11 +65,13 @@ export class DatabaseManager {
    * @param branchName - Name of the branch to create
    * @param envFilePath - Path to .env file for configuration checks
    * @param cwd - Optional working directory to run commands from
+   * @param fromBranch - Optional parent branch to create from (for child looms)
    */
   async createBranchIfConfigured(
     branchName: string,
     envFilePath: string,
-    cwd?: string
+    cwd?: string,
+    fromBranch?: string
   ): Promise<string | null> {
     // Guard condition: check if database branching should be used
     if (!(await this.shouldUseDatabaseBranching(envFilePath))) {
@@ -99,7 +101,8 @@ export class DatabaseManager {
 
     try {
       // Create the branch (which checks for preview first)
-      const connectionString = await this.provider.createBranch(branchName, undefined, cwd)
+      // Pass fromBranch if provided (for child looms), otherwise undefined (uses configured parent)
+      const connectionString = await this.provider.createBranch(branchName, fromBranch, cwd)
       logger.success(`Database branch ready: ${this.provider.sanitizeBranchName(branchName)}`)
       return connectionString
     } catch (error) {
@@ -200,6 +203,29 @@ export class DatabaseManager {
         branchName
       }
     }
+  }
+
+  /**
+   * Get database branch name from connection string (reverse lookup)
+   * Returns branch name if provider supports reverse lookup, null otherwise
+   *
+   * @param connectionString - Database connection string
+   * @param cwd - Optional working directory to run commands from
+   */
+  async getBranchNameFromConnectionString(connectionString: string, cwd?: string): Promise<string | null> {
+    // Check if provider supports reverse lookup (duck typing)
+    if (!this.provider.isConfigured()) {
+      logger.debug('Provider not configured, skipping reverse lookup')
+      return null
+    }
+
+    if ('getBranchNameFromConnectionString' in this.provider &&
+        typeof this.provider.getBranchNameFromConnectionString === 'function') {
+      return this.provider.getBranchNameFromConnectionString(connectionString, cwd)
+    }
+
+    logger.debug('Provider does not support reverse lookup')
+    return null
   }
 
   /**

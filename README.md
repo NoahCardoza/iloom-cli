@@ -15,7 +15,7 @@
 </div>
 
 #### Links to key sections
-[How It Works](#how-it-works) • [Installation](#installation) • [Commands](#commands) • [Feedback](#providing-feedback) • [Limitations](#platform--integration-support) • [Configuration](#configuration)
+[How It Works](#how-it-works) • [Installation](#installation) • [Commands](#commands) • [Nested Looms](#child-looms-nested-looms) • [Limitations](#platform--integration-support) • [Configuration](#configuration) • [Feedback](#providing-feedback)
 
 
 ## Built For Modern Tools...
@@ -312,6 +312,8 @@ iloom start <issue-number | pr-number | issue-description | branch-name>
 #                        default: Standard behavior with prompts
 #                        noReview: Skip phase approval prompts
 #                        bypassPermissions: Full automation, skip all permission prompts. Be careful!
+#   --child-loom       - Force create as child loom (skip prompt, requires parent loom)
+#   --no-child-loom    - Force create as independent loom (skip prompt)
 
 iloom finish
 # AI assisted validation, commit, merge steps, as well as loom cleanup (run this from the loom directory)
@@ -359,6 +361,100 @@ iloom add-issue <description>
 iloom enhance <issue-number>
 # Apply AI enhancement agent to existing GitHub issue
 # Expands requirements, asks clarifying questions and adds implementation context
+```
+
+## Child Looms (Nested Looms)
+
+Child looms let you create isolated workspaces from within an existing loom. This is useful when you need to work on a subtask, bug fix, or experiment while keeping your parent work intact.
+
+### When to Use Child Looms
+
+- **Break down complex issues**: Large features can spawn smaller issues that become child looms
+- **Fix bugs discovered during work**: Create a child loom to fix a bug without mixing commits
+- **Experiment safely**: Try different approaches in child looms without affecting parent work
+- **Handle interrupts**: Start urgent work from your current context without losing it
+
+### How Child Looms Work
+
+When you run `il start` from inside an existing loom, iloom detects the parent context and prompts you:
+
+```bash
+# Inside a loom working on issue #25
+> il start 42
+? Create as child loom of issue #25? (Y/n)
+```
+
+**Automatic inheritance:**
+- **Database branch**: Child looms branch from the parent's database state, not the main branch
+- **Base branch**: Git branch is created from the parent's branch
+- **Main branch config**: Child's `mainBranch` setting points to parent branch (for `il finish`)
+
+### CLI Flags
+
+Skip the prompt with explicit flags:
+
+```bash
+# Force child loom creation (no prompt)
+il start 42 --child-loom
+
+# Force independent loom (no prompt)
+il start 42 --no-child-loom
+```
+
+The `--child-loom` flag is ignored when not running from inside a loom.
+
+### Directory Structure
+
+Child looms are created in a dedicated subdirectory based on the parent branch name:
+
+```
+~/project-looms/
+├── feat-issue-25-auth-refactor/           # Parent loom
+├── feat-issue-25-auth-refactor-looms/     # Child looms directory
+│   ├── fix-issue-42-token-validation/     # Child loom 1
+│   └── feat-issue-43-oauth-support/       # Child loom 2
+```
+
+### Finishing Child Looms
+
+When finishing a parent loom, iloom warns about existing child looms:
+
+```bash
+> il finish
+⚠ Found 2 child loom(s) that should be cleaned up first:
+  - ~/project-looms/feat-issue-25-auth-refactor-looms/fix-issue-42-token-validation
+  - ~/project-looms/feat-issue-25-auth-refactor-looms/feat-issue-43-oauth-support
+
+To clean up child looms:
+  il cleanup 42
+  il cleanup 43
+```
+
+Child looms should typically be finished or cleaned up before finishing the parent.
+
+### Example Workflow
+
+```bash
+# Start working on a feature
+> il start 25
+# ... working on authentication refactor
+
+# Discover a bug that needs immediate attention
+> il start 42
+? Create as child loom of issue #25? Y
+# Creates child loom with parent's database state
+
+# Fix the bug in isolation
+> cd ~/project-looms/feat-issue-25-auth-refactor-looms/fix-issue-42-...
+
+# Finish the child work (merges to parent branch, not main)
+> il finish
+
+# Return to parent loom
+> cd ~/project-looms/feat-issue-25-auth-refactor
+
+# Continue feature work, then finish
+> il finish
 ```
 
 ## Providing Feedback

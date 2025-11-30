@@ -129,6 +129,8 @@ export interface StartOptions {
   code?: boolean
   devServer?: boolean
   terminal?: boolean
+  // Child loom control flag
+  childLoom?: boolean
   // One-shot automation mode
   oneShot?: OneShotMode
 }

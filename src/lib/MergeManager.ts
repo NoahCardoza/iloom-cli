@@ -19,10 +19,11 @@ export class MergeManager {
 
 	/**
 	 * Get the main branch name from settings (defaults to 'main')
+	 * @param worktreePath - Optional path to load settings from (defaults to process.cwd())
 	 * @private
 	 */
-	private async getMainBranch(): Promise<string> {
-		const settings = await this.settingsManager.loadSettings()
+	private async getMainBranch(worktreePath?: string): Promise<string> {
+		const settings = await this.settingsManager.loadSettings(worktreePath)
 		return settings.mainBranch ?? 'main'
 	}
 
@@ -36,7 +37,7 @@ export class MergeManager {
 	 */
 	async rebaseOnMain(worktreePath: string, options: MergeOptions = {}): Promise<void> {
 		const { dryRun = false, force = false } = options
-		const mainBranch = await this.getMainBranch()
+		const mainBranch = await this.getMainBranch(worktreePath)
 
 		logger.info(`Starting rebase on ${mainBranch} branch...`)
 
@@ -161,7 +162,7 @@ export class MergeManager {
 	 * @throws Error if fast-forward is not possible
 	 */
 	async validateFastForwardPossible(branchName: string, mainWorktreePath: string): Promise<void> {
-		const mainBranch = await this.getMainBranch()
+		const mainBranch = await this.getMainBranch(mainWorktreePath)
 
 		// Step 1: Get merge-base between main and branch
 		const mergeBase = await executeGitCommand(['merge-base', mainBranch, branchName], {
@@ -205,7 +206,6 @@ export class MergeManager {
 		options: MergeOptions = {}
 	): Promise<void> {
 		const { dryRun = false, force = false } = options
-		const mainBranch = await this.getMainBranch()
 
 		logger.info('Starting fast-forward merge...')
 
@@ -213,6 +213,10 @@ export class MergeManager {
 		// This copies the bash script approach: find main worktree, run commands from there
 		const mainWorktreePath = options.repoRoot ??
 			await findMainWorktreePathWithSettings(worktreePath, this.settingsManager)
+
+		// Load mainBranch from settings in the worktree being finished (not cwd)
+		// This ensures we use the correct settings when finishing a child loom from parent
+		const mainBranch = await this.getMainBranch(worktreePath)
 
 		// Step 3: No need to checkout main - it's already checked out in mainWorktreePath
 		logger.debug(`Using ${mainBranch} branch location: ${mainWorktreePath}`)

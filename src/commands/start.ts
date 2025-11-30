@@ -1,3 +1,4 @@
+import path from 'path'
 import { logger } from '../utils/logger.js'
 import { GitHubService } from '../lib/GitHubService.js'
 import { LoomManager } from '../lib/LoomManager.js'
@@ -135,11 +136,57 @@ export class StartCommand {
 			// Step 0.5: Initialize LoomManager with main worktree path
 			const loomManager = await this.initializeLoomManager()
 
+			// Step 0.6: Detect if running from inside an existing loom (for nested loom support)
+			let parentLoom = await this.detectParentLoom(loomManager)
+
 			// Step 1: Parse and validate input (pass repo to methods)
 			const parsed = await this.parseInput(input.identifier, repo)
 
 			// Step 2: Validate based on type
 			await this.validateInput(parsed, repo)
+
+			// Step 2.4: Handle child loom decision
+			if (parentLoom) {
+				const { isInteractiveEnvironment, promptConfirmation } = await import('../utils/prompt.js')
+
+				// Format display message based on parent type
+				const parentDisplay = parentLoom.type === 'issue'
+					? `issue #${parentLoom.identifier}`
+					: parentLoom.type === 'pr'
+					? `PR #${parentLoom.identifier}`
+					: `branch ${parentLoom.identifier}`
+
+				// Check for explicit flag first
+				if (input.options.childLoom === true) {
+					// --child-loom flag: force child loom (no prompt)
+					logger.info(`Creating as child loom of ${parentDisplay} (--child-loom flag)`)
+				} else if (input.options.childLoom === false) {
+					// --no-child-loom flag: force independent (no prompt)
+					parentLoom = null
+					logger.info('Creating as independent loom (--no-child-loom flag)')
+				} else {
+					// No flag: use existing behavior (prompt or error if non-interactive)
+					let createAsChild = true // Default for non-interactive
+					if (isInteractiveEnvironment()) {
+						createAsChild = await promptConfirmation(
+							`Create as child loom of ${parentDisplay}?`,
+							true // Default yes
+						)
+					} else {
+						logger.error(`Non-interactive environment detected, use either --child-loom or --no-child-loom to specify behavior`)
+						process.exit(1)
+					}
+
+					if (!createAsChild) {
+						parentLoom = null // User declined, proceed as normal loom
+						logger.info('Creating as independent loom')
+					}
+				}
+			} else if (input.options.childLoom === true) {
+				// --child-loom flag but not in a parent loom - ignore silently (per requirements)
+				logger.debug('--child-loom flag provided but not running from inside an existing loom (ignored)')
+			}
+			// Note: --no-child-loom when no parent is a no-op (already independent)
 
 			// Step 2.5: Handle description input - create GitHub issue
 			if (parsed.type === 'description') {
@@ -199,6 +246,7 @@ export class StartCommand {
 				type: parsed.type,
 				identifier,
 				originalInput: parsed.originalInput,
+				...(parentLoom && { parentLoom }),
 				options: {
 					enableClaude,
 					enableCode,
@@ -394,6 +442,80 @@ export class StartCommand {
 		await this.enhancementService.waitForReviewAndOpen(result.number, true)
 
 		return result.number
+	}
+
+	/**
+	 * Detect if running from inside an existing loom worktree
+	 * Returns parent loom info if detected, null otherwise
+	 */
+	private async detectParentLoom(loomManager: LoomManager): Promise<{
+		type: 'issue' | 'pr' | 'branch'
+		identifier: string | number
+		branchName: string
+		worktreePath: string
+		databaseBranch?: string
+	} | null> {
+		try {
+			const cwd = process.cwd()
+			const looms = await loomManager.listLooms()
+
+			if (!looms) {
+				return null
+			}
+
+			// Get main worktree path to exclude it from valid parents
+			const mainWorktreePath = await findMainWorktreePathWithSettings()
+
+			// Find loom containing current directory
+			// Fix #2: Add path.sep check to prevent false positives (e.g., issue-123 vs issue-1234)
+			// Exclude main worktree from being a valid parent
+			const parentLoom = looms.find(loom => {
+				// Skip main worktree - it shouldn't be a parent for child looms
+				if (loom.path === mainWorktreePath) {
+					return false
+				}
+				// Either exact match OR cwd starts with loom.path followed by path separator
+				return cwd === loom.path || cwd.startsWith(loom.path + path.sep)
+			})
+			if (!parentLoom) {
+				return null
+			}
+
+			logger.debug(`Detected parent loom: ${parentLoom.type} ${parentLoom.identifier} at ${parentLoom.path}`)
+
+			const result: {
+				type: 'issue' | 'pr' | 'branch'
+				identifier: string | number
+				branchName: string
+				worktreePath: string
+				databaseBranch?: string
+			} = {
+				type: parentLoom.type,
+				identifier: parentLoom.identifier,
+				branchName: parentLoom.branch,
+				worktreePath: parentLoom.path,
+			}
+
+			// Only include databaseBranch if it exists (exactOptionalPropertyTypes compatibility)
+			if (parentLoom.databaseBranch) {
+				result.databaseBranch = parentLoom.databaseBranch
+			}
+
+			// Try to get database branch from parent's .env file via reverse lookup
+			if (!result.databaseBranch) {
+				const databaseBranch = await loomManager.getDatabaseBranchForLoom(parentLoom.path)
+				if (databaseBranch) {
+					result.databaseBranch = databaseBranch
+					logger.debug(`Detected parent database branch: ${databaseBranch}`)
+				}
+			}
+
+			return result
+		} catch (error) {
+			// If detection fails for any reason, just return null (don't break the start workflow)
+			logger.debug(`Failed to detect parent loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			return null
+		}
 	}
 
 }

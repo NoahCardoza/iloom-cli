@@ -125,6 +125,15 @@ export class EnvironmentManager {
   }
 
   /**
+   * Get a specific environment variable from a .env file
+   * Returns null if file doesn't exist or variable is not found
+   */
+  async getEnvVariable(filePath: string, variableName: string): Promise<string | null> {
+    const envVars = await this.readEnvFile(filePath)
+    return envVars.get(variableName) ?? null
+  }
+
+  /**
    * Generic file copy helper that only copies if source exists
    * Does not throw if source file doesn't exist - just logs and returns
    * @private

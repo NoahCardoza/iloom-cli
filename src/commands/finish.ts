@@ -13,6 +13,9 @@ import { EnvironmentManager } from '../lib/EnvironmentManager.js'
 import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { PRManager } from '../lib/PRManager.js'
+import { LoomManager } from '../lib/LoomManager.js'
+import { ClaudeContextManager } from '../lib/ClaudeContextManager.js'
+import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { findMainWorktreePathWithSettings, pushBranchToRemote } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { installDependencies } from '../utils/package-manager.js'
@@ -47,6 +50,7 @@ export class FinishCommand {
 	private resourceCleanup?: ResourceCleanup
 	private buildRunner: BuildRunner
 	private settingsManager: SettingsManager
+	private loomManager?: LoomManager
 
 	constructor(
 		gitHubService?: GitHubService,
@@ -57,7 +61,8 @@ export class FinishCommand {
 		identifierParser?: IdentifierParser,
 		resourceCleanup?: ResourceCleanup,
 		buildRunner?: BuildRunner,
-		settingsManager?: SettingsManager
+		settingsManager?: SettingsManager,
+		loomManager?: LoomManager
 	) {
 		// Load environment variables first
 		const envResult = loadEnvIntoProcess()
@@ -85,13 +90,18 @@ export class FinishCommand {
 		}
 
 		this.buildRunner = buildRunner ?? new BuildRunner()
+		// LoomManager will be initialized lazily if not provided
+		if (loomManager) {
+			this.loomManager = loomManager
+		}
 	}
 
 	/**
 	 * Lazy initialization of ResourceCleanup with properly configured DatabaseManager
 	 */
 	private async ensureResourceCleanup(): Promise<void> {
-		if (this.resourceCleanup) {
+		// Early return only if both are initialized
+		if (this.resourceCleanup && this.loomManager) {
 			return
 		}
 
@@ -103,7 +113,19 @@ export class FinishCommand {
 		const databaseManager = new DatabaseManager(neonProvider, environmentManager, databaseUrlEnvVarName)
 		const cliIsolationManager = new CLIIsolationManager()
 
-		this.resourceCleanup = new ResourceCleanup(
+		// Initialize LoomManager if not provided
+		this.loomManager ??= new LoomManager(
+			this.gitWorktreeManager,
+			this.gitHubService,
+			environmentManager,
+			new ClaudeContextManager(),
+			new ProjectCapabilityDetector(),
+			cliIsolationManager,
+			this.settingsManager,
+			databaseManager
+		)
+
+		this.resourceCleanup ??= new ResourceCleanup(
 			this.gitWorktreeManager,
 			new ProcessManager(),
 			databaseManager,
@@ -112,11 +134,52 @@ export class FinishCommand {
 	}
 
 	/**
+	 * Check for child looms and exit gracefully if any exist
+	 * Always checks the TARGET loom (the one being finished), not the current directory's loom
+	 *
+	 * @param parsed - The parsed input identifying the loom being finished
+	 */
+	private async checkForChildLooms(parsed: ParsedFinishInput): Promise<void> {
+		await this.ensureResourceCleanup()
+		if (!this.loomManager) {
+			throw new Error('Failed to initialize LoomManager')
+		}
+
+		// Determine which branch is being finished based on parsed input
+		let targetBranch: string | undefined
+
+		if (parsed.branchName) {
+			targetBranch = parsed.branchName
+		} else if (parsed.type === 'issue' && parsed.number !== undefined) {
+			// For issues, try to find the worktree by issue number to get the branch name
+			const worktree = await this.gitWorktreeManager.findWorktreeForIssue(parsed.number)
+			targetBranch = worktree?.branch
+		} else if (parsed.type === 'pr' && parsed.number !== undefined) {
+			// For PRs, try to find the worktree by PR number to get the branch name
+			const worktree = await this.gitWorktreeManager.findWorktreeForPR(parsed.number, '')
+			targetBranch = worktree?.branch
+		}
+
+		// If we can't determine the target branch, skip the check
+		if (!targetBranch) {
+			logger.debug(`Cannot determine target branch for child loom check`)
+			return
+		}
+
+		// Check if the TARGET loom has any child looms
+		const hasChildLooms = await this.loomManager.checkAndWarnChildLooms(targetBranch)
+		if (hasChildLooms) {
+			logger.error('Cannot finish loom while child looms exist. Please finish child looms first.')
+			process.exit(1)
+		}
+	}
+
+	/**
 	 * Main entry point for finish command
 	 */
 	public async execute(input: FinishCommandInput): Promise<void> {
 		try {
-			// Step 0: Load settings and get configured repo for GitHub operations
+			// Step 1: Load settings and get configured repo for GitHub operations
 			const settings = await this.settingsManager.loadSettings()
 			let repo: string | undefined
 
@@ -126,8 +189,12 @@ export class FinishCommand {
 				logger.info(`Using GitHub repository: ${repo}`)
 			}
 
-			// Step 1: Parse input (or auto-detect from current directory)
+			// Step 2: Parse input (or auto-detect from current directory)
 			const parsed = await this.parseInput(input.identifier, input.options)
+
+			// Step 2.5: Check for child looms AFTER parsing input
+			// This ensures we only block when finishing the CURRENT loom (parent), not a child
+			await this.checkForChildLooms(parsed)
 
 			// Step 2: Validate based on type and get worktrees
 			const worktrees = await this.validateInput(parsed, input.options, repo)
@@ -896,6 +963,16 @@ export class FinishCommand {
 		options: FinishOptions,
 		worktree: GitWorktree
 	): Promise<void> {
+		// Ensure loomManager is initialized first
+		await this.ensureResourceCleanup()
+		if (!this.loomManager) {
+			throw new Error('Failed to initialize LoomManager')
+		}
+
+		// Check for child looms again (second check - first was at start of execute)
+		// This is a no-op if child looms were already checked and cleaned up
+		await this.checkForChildLooms(parsed)
+
 		// Convert ParsedFinishInput to ParsedInput (drop autoDetected field)
 		const cleanupInput: ParsedInput = {
 			type: parsed.type,
@@ -914,7 +991,6 @@ export class FinishCommand {
 		try {
 			logger.info('Starting post-merge cleanup...')
 
-			await this.ensureResourceCleanup()
 			if (!this.resourceCleanup) {
 				throw new Error('Failed to initialize ResourceCleanup')
 			}
