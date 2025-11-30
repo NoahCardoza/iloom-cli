@@ -259,6 +259,7 @@ export const IloomSettingsSchema = z.object({
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
 		.object({
+			provider: z.enum(['github']).optional().default('github').describe('Issue tracker provider (github, linear, jira)'),
 			github: z
 				.object({
 					remote: z
@@ -374,6 +375,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
 		.object({
+			provider: z.enum(['github']).optional().describe('Issue tracker provider (github, linear, jira)'),
 			github: z
 				.object({
 					remote: z
