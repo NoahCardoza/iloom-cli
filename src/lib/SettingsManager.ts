@@ -46,6 +46,37 @@ export const WorkflowPermissionSchema = z.object({
 })
 
 /**
+ * Non-defaulting variant for pre-merge validation
+ * This prevents Zod from polluting partial settings with default values before merge
+ */
+export const WorkflowPermissionSchemaNoDefaults = z.object({
+	permissionMode: z
+		.enum(['plan', 'acceptEdits', 'bypassPermissions', 'default'])
+		.optional()
+		.describe('Permission mode for Claude CLI in this workflow type'),
+	noVerify: z
+		.boolean()
+		.optional()
+		.describe('Skip pre-commit hooks (--no-verify) when committing during finish workflow'),
+	startIde: z
+		.boolean()
+		.optional()
+		.describe('Launch IDE (code) when starting this workflow type'),
+	startDevServer: z
+		.boolean()
+		.optional()
+		.describe('Launch development server when starting this workflow type'),
+	startAiAgent: z
+		.boolean()
+		.optional()
+		.describe('Launch Claude AI agent when starting this workflow type'),
+	startTerminal: z
+		.boolean()
+		.optional()
+		.describe('Launch terminal window without dev server when starting this workflow type'),
+})
+
+/**
  * Zod schema for workflows settings
  */
 export const WorkflowsSettingsSchema = z
@@ -53,6 +84,17 @@ export const WorkflowsSettingsSchema = z
 		issue: WorkflowPermissionSchema.optional(),
 		pr: WorkflowPermissionSchema.optional(),
 		regular: WorkflowPermissionSchema.optional(),
+	})
+	.optional()
+
+/**
+ * Non-defaulting variant for pre-merge validation
+ */
+export const WorkflowsSettingsSchemaNoDefaults = z
+	.object({
+		issue: WorkflowPermissionSchemaNoDefaults.optional(),
+		pr: WorkflowPermissionSchemaNoDefaults.optional(),
+		regular: WorkflowPermissionSchemaNoDefaults.optional(),
 	})
 	.optional()
 
@@ -79,6 +121,34 @@ export const CapabilitiesSettingsSchema = z
 					.regex(/^[A-Z_][A-Z0-9_]*$/, 'Must be valid env var name (uppercase, underscores)')
 					.optional()
 					.default('DATABASE_URL')
+					.describe('Name of environment variable for database connection URL'),
+			})
+			.optional(),
+	})
+	.optional()
+
+/**
+ * Non-defaulting variant for pre-merge validation
+ */
+export const CapabilitiesSettingsSchemaNoDefaults = z
+	.object({
+		web: z
+			.object({
+				basePort: z
+					.number()
+					.min(1, 'Base port must be >= 1')
+					.max(65535, 'Base port must be <= 65535')
+					.optional()
+					.describe('Base port for web workspace port calculations (default: 3000)'),
+			})
+			.optional(),
+		database: z
+			.object({
+				databaseUrlEnvVarName: z
+					.string()
+					.min(1, 'Database URL variable name cannot be empty')
+					.regex(/^[A-Z_][A-Z0-9_]*$/, 'Must be valid env var name (uppercase, underscores)')
+					.optional()
 					.describe('Name of environment variable for database connection URL'),
 			})
 			.optional(),
@@ -198,6 +268,93 @@ export const IloomSettingsSchema = z.object({
 })
 
 /**
+ * Non-defaulting variant for pre-merge validation
+ * This prevents Zod from polluting partial settings with default values before merge
+ */
+export const IloomSettingsSchemaNoDefaults = z.object({
+	mainBranch: z
+		.string()
+		.min(1, "Settings 'mainBranch' cannot be empty")
+		.optional()
+		.describe('Name of the main/primary branch for the repository'),
+	worktreePrefix: z
+		.string()
+		.optional()
+		.refine(
+			(val) => {
+				if (val === undefined) return true // undefined = use default calculation
+				if (val === '') return true // empty string = no prefix mode
+
+				// Allowlist: only alphanumeric, hyphens, underscores, and forward slashes
+				const allowedChars = /^[a-zA-Z0-9\-_/]+$/
+				if (!allowedChars.test(val)) return false
+
+				// Reject if only special characters (no alphanumeric content)
+				if (/^[-_/]+$/.test(val)) return false
+
+				// Check each segment (split by /) contains at least one alphanumeric character
+				const segments = val.split('/')
+				for (const segment of segments) {
+					if (segment && /^[-_]+$/.test(segment)) {
+						// Segment exists but contains only hyphens/underscores
+						return false
+					}
+				}
+
+				return true
+			},
+			{
+				message:
+					"worktreePrefix contains invalid characters. Only alphanumeric characters, hyphens (-), underscores (_), and forward slashes (/) are allowed. Use forward slashes for nested directories.",
+			},
+		)
+		.describe(
+			'Prefix for worktree directories. Empty string disables prefix. Defaults to <repo-name>-looms if not set.',
+		),
+	protectedBranches: z
+		.array(z.string().min(1, 'Protected branch name cannot be empty'))
+		.optional()
+		.describe('List of branches that cannot be deleted (defaults to [mainBranch, "main", "master", "develop"])'),
+	workflows: WorkflowsSettingsSchemaNoDefaults.describe('Per-workflow-type permission configurations'),
+	agents: z
+		.record(z.string(), AgentSettingsSchema)
+		.optional()
+		.nullable()
+		.describe(
+			'Per-agent configuration overrides. Available agents: ' +
+				'iloom-issue-analyzer (analyzes issues), ' +
+				'iloom-issue-planner (creates implementation plans), ' +
+				'iloom-issue-analyze-and-plan (combined analysis and planning), ' +
+				'iloom-issue-complexity-evaluator (evaluates complexity), ' +
+				'iloom-issue-enhancer (enhances issue descriptions), ' +
+				'iloom-issue-implementer (implements code changes), ' +
+				'iloom-issue-reviewer (reviews code changes against requirements)',
+		),
+	capabilities: CapabilitiesSettingsSchemaNoDefaults.describe('Project capability configurations'),
+	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
+	issueManagement: z
+		.object({
+			github: z
+				.object({
+					remote: z
+						.string()
+						.min(1, 'Remote name cannot be empty')
+						.describe('Git remote name to use for GitHub operations'),
+				})
+				.optional(),
+		})
+		.optional()
+		.describe('Issue management configuration'),
+	mergeBehavior: z
+		.object({
+			mode: z.enum(['local', 'github-pr']).optional(),
+			remote: z.string().optional(),
+		})
+		.optional()
+		.describe('Merge behavior configuration: local (merge locally) or github-pr (create PR)'),
+})
+
+/**
  * TypeScript type for Neon settings derived from Zod schema
  */
 export type NeonSettings = z.infer<typeof NeonSettingsSchema>
@@ -300,11 +457,12 @@ export class SettingsManager {
 	/**
 	 * Load and parse a single settings file
 	 * Returns empty object if file doesn't exist (not an error)
+	 * Uses non-defaulting schema to prevent polluting partial settings with defaults before merge
 	 */
 	private async loadSettingsFile(
 		projectRoot: string,
 		filename: string,
-	): Promise<Partial<IloomSettings>> {
+	): Promise<z.infer<typeof IloomSettingsSchemaNoDefaults>> {
 		const settingsPath = path.join(projectRoot, '.iloom', filename)
 
 		try {
@@ -320,9 +478,9 @@ export class SettingsManager {
 			}
 
 			// Validate individual file with strict mode to catch unknown keys
-			// Note: Schema already has all fields as optional, so no need for .partial()
+			// Use non-defaulting schema to prevent polluting partial settings with defaults before merge
 			try {
-				const validated = IloomSettingsSchema.strict().parse(parsed)
+				const validated = IloomSettingsSchemaNoDefaults.strict().parse(parsed)
 				return validated
 			} catch (error) {
 				if (error instanceof z.ZodError) {
@@ -348,11 +506,13 @@ export class SettingsManager {
 	 * Uses deepmerge library with array replacement strategy
 	 */
 	private mergeSettings(
-		base: Partial<IloomSettings>,
-		override: Partial<IloomSettings>,
+		base: Partial<IloomSettings> | z.infer<typeof IloomSettingsSchemaNoDefaults>,
+		override: Partial<IloomSettings> | z.infer<typeof IloomSettingsSchemaNoDefaults>,
 	): IloomSettings {
 		// Use deepmerge with array replacement (not concatenation)
-		return deepmerge(base, override, {
+		// Type assertion is safe because the merged result will be validated with IloomSettingsSchema
+		// which applies all the defaults after merging
+		return deepmerge(base as Record<string, unknown>, override as Record<string, unknown>, {
 			// Replace arrays instead of concatenating them
 			arrayMerge: (_destinationArray, sourceArray) => sourceArray,
 		}) as IloomSettings

@@ -1507,6 +1507,40 @@ describe('SettingsManager', () => {
 			expect(result.workflows?.pr?.permissionMode).toBe('acceptEdits') // Inherited
 		})
 
+		it('should preserve base values when local overrides do not specify them (issue #235)', async () => {
+			const projectRoot = '/test/project'
+			// Base has NON-DEFAULT values (startDevServer: false, startTerminal: true)
+			const baseSettings = {
+				workflows: {
+					issue: {
+						startDevServer: false, // Default is true
+						startTerminal: true, // Default is false
+						startIde: true,
+					},
+				},
+			}
+			// Local only specifies permissionMode - should NOT pollute with defaults
+			const localSettings = {
+				workflows: {
+					issue: {
+						permissionMode: 'bypassPermissions',
+					},
+				},
+			}
+
+			vi.mocked(readFile)
+				.mockResolvedValueOnce(JSON.stringify(baseSettings))
+				.mockResolvedValueOnce(JSON.stringify(localSettings))
+
+			const result = await settingsManager.loadSettings(projectRoot)
+
+			// Values from base should be preserved, NOT overwritten by Zod defaults
+			expect(result.workflows?.issue?.startDevServer).toBe(false) // NOT true (default)
+			expect(result.workflows?.issue?.startTerminal).toBe(true) // NOT false (default)
+			expect(result.workflows?.issue?.startIde).toBe(true) // Preserved from base
+			expect(result.workflows?.issue?.permissionMode).toBe('bypassPermissions') // From local
+		})
+
 		it('should deep merge agents with partial overrides', async () => {
 			const projectRoot = '/test/project'
 			const baseSettings = {
