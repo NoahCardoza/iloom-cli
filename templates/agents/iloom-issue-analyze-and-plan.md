@@ -27,15 +27,19 @@ Extract:
 
 NOTE: If no issue number has been provided, use the current branch name to look for an issue number (i.e issue-NN). If there is a pr_NN suffix, look at both the PR and the issue (if one is also referenced in the branch name).
 
-### Step 2: Perform Lightweight Analysis
+### Step 2: Perform Lightweight Research
 
 **IMPORTANT: Keep analysis BRIEF - this is a SIMPLE task.**
 
-Perform focused research:
-1. **Quick codebase scan** to identify affected files
-2. **Review existing code** in relevant areas (avoid reading entire files unless necessary)
-3. **Check for regressions** ONLY if this is a bug (check recent commits on main/master/develop branch - commit hash only)
-4. **Identify key dependencies** (React contexts, third-party libraries if relevant)
+Follow the **Research Framework (Lightweight)** below. Even SIMPLE tasks require research thoroughness.
+
+**Required Research (in order):**
+1. **Problem Space** - Understand WHY before HOW (5 min max)
+2. **Third-Party Tools** - When external dependencies are involved
+3. **Codebase** - Systematically explore affected code (10 min max)
+
+Additionally:
+4. **Check for regressions** ONLY if this is a bug (check recent commits on main/master/develop branch - commit hash only)
 5. **CRITICAL: Map cross-cutting changes** - If the feature involves passing data/parameters through multiple layers, trace the complete flow (see Cross-Cutting Change Analysis below)
 6. **CRITICAL: Check for complexity escalation** - If cross-cutting analysis reveals 3+ layers affected, exit early (see Early Exit for Complexity Escalation)
 
@@ -152,6 +156,36 @@ With this analysis, you will:
 
 **IMPORTANT**: Once you post this escalation comment, STOP WORKING and let the calling process know about the complexity escalation with the comment URL.
 
+#### Research Framework (Lightweight)
+
+**PURPOSE**: Even SIMPLE tasks require research thoroughness. Complete these research steps quickly but completely.
+
+### Research Checklist (in order)
+
+**1. Problem Space (5 min max)**
+- [ ] What problem does this solve? Who benefits?
+- [ ] Any architectural constraints or principles to follow?
+- [ ] Edge cases to consider?
+- [ ] Check README, CLAUDE.md, related issues for context
+
+**2. Third-Party Tools (if applicable)**
+- [ ] Skills: Check for relevant approach guidance
+- [ ] Context7: Look up library docs for APIs involved
+- [ ] WebSearch: Fill gaps if Context7 insufficient
+
+**3. Codebase (10 min max)**
+- [ ] Entry point: Where does this manifest? (file:line)
+- [ ] Dependencies: What uses this? What does it use?
+- [ ] Similar patterns: Grep for similar implementations
+- [ ] Historical: Why is the code this way? (git blame if unclear)
+
+**Output**: Document findings briefly in Section 2. One sentence per finding. File:line references required.
+
+**CONSTRAINTS:**
+- Do NOT assume behavior without verification
+- Do NOT skip because "it's common" - always verify
+- Do NOT include irrelevant research - this is slop
+
 ### Step 3: Create Implementation Plan
 
 Based on the lightweight analysis, create a detailed plan following the project's development approach (check CLAUDE.md):
@@ -266,7 +300,21 @@ Brief overview of major phases (3-5 phases maximum for SIMPLE tasks):
 <details>
 <summary>📋 Complete Analysis & Implementation Details (click to expand)</summary>
 
-## Analysis Findings
+## Research Findings
+
+### Problem Space
+- **Problem**: [One sentence: what problem this solves]
+- **Architectural context**: [One sentence: where this fits]
+- **Edge cases**: [Bullet list if any]
+
+### Third-Party Research (if applicable)
+- **[Library/Tool]**: [One sentence: key finding]
+- **Source**: Skills / Context7 / WebSearch
+
+### Codebase Research
+- **Entry point**: [file:line] - [one sentence]
+- **Dependencies**: Uses [X], Used by [Y]
+- **Similar patterns**: [file:line] - [one sentence]
 
 ### Affected Files
 List each file with:
@@ -386,12 +434,34 @@ If structure is >5 lines:
 ```
 
 **CRITICAL CONSTRAINTS for Section 2:**
-- Be CONCISE and ACTIONABLE - not exhaustive documentation
-- Use one-sentence descriptions where possible
+- Be EXHAUSTIVE in content, CONCISE in presentation - include ALL technical details but without filler
+- Section 2 is for implementation agents who need complete information - do not omit to save space
+- Use terse, fact-dense descriptions - present findings without verbose explanation
 - Only include code when the change cannot be understood from description alone
-- Avoid repeating information - trust the implementer
-- NO "AI slop": No time estimates, excessive reasoning, over-explanation
+- Avoid repeating information already in Section 1
+- NO "AI slop": No time estimates, excessive reasoning, over-explanation, or filler content
 - Code blocks >5 lines must be wrapped in nested `<details>` tags
+
+### Avoiding "AI Slop"
+
+**AI slop = generic content that adds no value.** Be substantive.
+
+**SLOP (DO NOT INCLUDE):**
+- Generic risks: "Ensure proper testing" / "Consider edge cases"
+- Obvious statements: "This change affects the codebase"
+- Filler questions: Questions already answered in the issue
+- Low-importance items: Trivial or unlikely risks
+- Templated sections: Sections included "just in case"
+
+**SUBSTANTIVE (INCLUDE):**
+- Specific risks: "`parseConfig()` at line 42 throws on null input"
+- Precise findings: "gh CLI returns 404 for private repos without auth"
+- Critical questions: Questions that block implementation
+- Evidence-based claims: "Commit abc123 changed return type"
+
+**The test**: Would removing this lose important information? If no, it's slop.
+
+**Questions/Risks filter**: Only HIGH/CRITICAL. Omit section if none exist.
 
 ## HOW TO UPDATE THE USER OF YOUR PROGRESS
 * AS SOON AS YOU CAN, once you have formulated an initial plan/todo list for your task, you should create a comment as described in the <comment_tool_info> section above.
@@ -420,12 +490,14 @@ If structure is >5 lines:
 - Identify relevant React Contexts with useful state
 - Note any third-party UI libraries in use
 
-### Context7 Usage
-Always use context7 when you need:
-- Code generation guidance
-- Setup or configuration steps
-- Library/API documentation
-- Third-party integration details
+### Research Framework Reference
+
+See **Research Framework (Lightweight)** section for the complete research checklist covering:
+1. Problem Space (5 min max)
+2. Third-Party Tools (if applicable)
+3. Codebase (10 min max)
+
+**Research is NOT optional** - even for SIMPLE tasks.
 
 ## Planning Guidelines
 
@@ -525,6 +597,14 @@ When including code, configuration, or examples:
 ## Quality Assurance
 
 Before submitting your combined analysis and plan, verify (DO NOT print this checklist in your output):
+
+### Research Completeness (Lightweight)
+- Problem space: Understood problem, constraints, edge cases
+- Third-party: External dependencies researched (if applicable)
+- Codebase: Entry points, dependencies, similar patterns documented
+- All findings in Section 2 with file:line references
+
+### Documentation Quality
 - Section 1 is scannable in <5 minutes (executive summary, questions, risks, high-level phases, quick stats)
 - Section 2 is wrapped in `<details><summary>` tags
 - Analysis is concise and focused (not exhaustive)
@@ -545,7 +625,9 @@ Before submitting your combined analysis and plan, verify (DO NOT print this che
 - If you cannot access the issue, verify the issue number and repository context
 - If specifications are unclear, note questions in the Questions table
 - If code files are missing, note this as a finding
-- If Context7 is unavailable, note which research could not be completed
+- If Skills are unavailable (Code Execution disabled), proceed with Context7 as primary research
+- If Context7 is unavailable, attempt WebSearch as fallback before noting incomplete research
+- If Skills, Context7, and WebSearch all fail, document: "Third-party research incomplete for [library]: [reason]"
 
 ## Critical Reminders
 
