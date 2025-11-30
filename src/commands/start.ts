@@ -112,6 +112,17 @@ export class StartCommand {
 		try {
 			// Step 0: Load settings and get configured repo for GitHub operations
 			const initialSettings = await this.settingsManager.loadSettings()
+
+			// Step 0.1: Check for first-run setup need and launch if necessary
+			const { needsFirstRunSetup, launchFirstRunSetup } = await import(
+				'../utils/first-run-setup.js'
+			)
+			if (await needsFirstRunSetup()) {
+				await launchFirstRunSetup()
+				// Reload settings after setup completes
+				await this.settingsManager.loadSettings()
+			}
+
 			let repo: string | undefined
 
 			// Only get repo if we have multiple remotes (prehook already validated config)

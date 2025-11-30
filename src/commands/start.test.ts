@@ -82,6 +82,12 @@ vi.mock('../utils/prompt.js', () => ({
 	promptConfirmation: vi.fn(),
 }))
 
+// Mock first-run-setup utilities
+vi.mock('../utils/first-run-setup.js', () => ({
+	needsFirstRunSetup: vi.fn().mockResolvedValue(false),
+	launchFirstRunSetup: vi.fn().mockResolvedValue(undefined),
+}))
+
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
 	logger: {
@@ -114,6 +120,48 @@ describe('StartCommand', () => {
 	})
 
 	describe('execute', () => {
+		describe('first-run setup', () => {
+			it('should trigger first-run setup when needsFirstRunSetup returns true', async () => {
+				const { needsFirstRunSetup, launchFirstRunSetup } = await import(
+					'../utils/first-run-setup.js'
+				)
+				vi.mocked(needsFirstRunSetup).mockResolvedValue(true)
+				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					rawInput: '123',
+				})
+
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				expect(needsFirstRunSetup).toHaveBeenCalled()
+				expect(launchFirstRunSetup).toHaveBeenCalled()
+			})
+
+			it('should continue normally when needsFirstRunSetup returns false', async () => {
+				const { needsFirstRunSetup, launchFirstRunSetup } = await import(
+					'../utils/first-run-setup.js'
+				)
+				vi.mocked(needsFirstRunSetup).mockResolvedValue(false)
+				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					rawInput: '123',
+				})
+
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				expect(needsFirstRunSetup).toHaveBeenCalled()
+				expect(launchFirstRunSetup).not.toHaveBeenCalled()
+			})
+		})
+
 		describe('input parsing', () => {
 			it('should parse plain number as GitHub entity (issue)', async () => {
 				vi.mocked(mockGitHubService.detectInputType).mockResolvedValue({
