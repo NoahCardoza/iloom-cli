@@ -270,6 +270,7 @@ export class MergeManager {
 
 		// Execute fast-forward merge
 		try {
+			logger.debug(`Executing fast-forward merge of ${branchName} into ${mainBranch} using cwd: ${mainWorktreePath}...`)
 			await executeGitCommand(['merge', '--ff-only', branchName], { cwd: mainWorktreePath })
 			logger.success(`Fast-forward merge completed! Merged ${commitLines.length} commit(s).`)
 		} catch (error) {
