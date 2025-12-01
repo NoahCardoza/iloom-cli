@@ -1,5 +1,12 @@
+/**
+ * CLI Integration Tests
+ *
+ * These tests spawn the actual CLI process (dist/cli.js) to test end-to-end behavior.
+ * Unlike unit tests which mock dependencies, these integration tests verify the CLI
+ * works correctly when executed as a real subprocess.
+ */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { spawn, execSync } from 'child_process'
+import { spawn } from 'child_process'
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -134,10 +141,6 @@ describe('Settings validation on CLI startup', () => {
     // Create test directory structure
     mkdirSync(testDir, { recursive: true })
     mkdirSync(iloomDirectory, { recursive: true })
-
-    // Initialize git repository to avoid "not a git repository" errors
-    execSync('git init', { cwd: testDir, stdio: 'ignore' })
-    execSync('git remote add origin https://github.com/test/repo.git', { cwd: testDir, stdio: 'ignore' })
   })
 
   afterEach(() => {

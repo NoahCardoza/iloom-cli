@@ -79,8 +79,15 @@ function extractOwnerRepoFromUrl(url: string): { owner: string; repo: string } |
  * Check if repository has multiple remotes
  */
 export async function hasMultipleRemotes(cwd?: string): Promise<boolean> {
-	const remotes = await parseGitRemotes(cwd)
-	return remotes.length > 1
+	try {
+		const remotes = await parseGitRemotes(cwd)
+		return remotes.length > 1
+	} catch (error) {
+		// Log the error for debugging but don't fail - this is used during CLI startup
+		// where we need graceful handling for non-git directories
+		console.warn(`Warning: Unable to check git remotes: ${error instanceof Error ? error.message : String(error)}`)
+		return false
+	}
 }
 
 /**

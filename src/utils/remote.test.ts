@@ -150,6 +150,14 @@ describe('remote utils', () => {
 
 			expect(result).toBe(true)
 		})
+
+		it('should return false when git command fails', async () => {
+			vi.mocked(execa).mockRejectedValue(new Error('fatal: not a git repository'))
+
+			const result = await hasMultipleRemotes()
+
+			expect(result).toBe(false)
+		})
 	})
 
 	describe('getConfiguredRepoFromSettings', () => {

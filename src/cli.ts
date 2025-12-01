@@ -426,6 +426,15 @@ program
         logger.info(`    Commit: ${formatted.commit}`)
       }
     } catch (error) {
+      // Handle "not a git repository" gracefully
+      if (error instanceof Error && error.message.includes('not a git repository')) {
+        if (options.json) {
+          console.log('[]')
+        } else {
+          logger.info('No worktrees found')
+        }
+        return
+      }
       logger.error(`Failed to list worktrees: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
     }
