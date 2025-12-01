@@ -190,6 +190,17 @@ export const IloomSettingsSchema = z.object({
 		.min(1, "Settings 'mainBranch' cannot be empty")
 		.optional()
 		.describe('Name of the main/primary branch for the repository'),
+	sourceEnvOnStart: z
+		.boolean()
+		.default(false)
+		.describe(
+			'Source .env file when launching terminal processes (Claude, dev server, terminal). ' +
+				'NOTE TO AI AGENTS: Before making changes to settings files, YOU MUST OFFER to check  .env compatibility. ' +
+				'WARNING: Unquoted values in .env files may break sourcing in bash/zsh shells. ' +
+				'Before enabling, verify your .env file does not contain unquoted special characters ' +
+				'(e.g., database URLs with ?, &, or other shell metacharacters). ' +
+				'Shell compatibility issues may cause processes to fail or behave unexpectedly.',
+		),
 	worktreePrefix: z
 		.string()
 		.optional()
@@ -277,6 +288,17 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.min(1, "Settings 'mainBranch' cannot be empty")
 		.optional()
 		.describe('Name of the main/primary branch for the repository'),
+	sourceEnvOnStart: z
+		.boolean()
+		.optional()
+		.describe(
+			'Source .env file when launching terminal processes (Claude, dev server, terminal). ' +
+				'NOTE TO AI AGENTS: Before making changes to settings files, YOU MUST OFFER to check  .env compatibility. ' +
+				'WARNING: Unquoted values in .env files may break sourcing in bash/zsh shells. ' +
+				'Before enabling, verify your .env file does not contain unquoted special characters ' +
+				'(e.g., database URLs with ?, &, or other shell metacharacters). ' +
+				'Shell compatibility issues may cause processes to fail or behave unexpectedly.',
+		),
 	worktreePrefix: z
 		.string()
 		.optional()

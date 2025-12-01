@@ -548,6 +548,7 @@ This allows teams to share project defaults via `settings.json` while individual
 ```jsonc
 {
   "mainBranch": "main",
+  "sourceEnvOnStart": false,  // Source .env in terminal launches (default: false)
   "mergeBehavior": {
     "mode": "local",  // or "github-pr" for PR-based workflows
     "remote": "upstream"  // optional, defaults to issueManagement.github.remote
@@ -586,6 +587,7 @@ This allows teams to share project defaults via `settings.json` while individual
 
 ** Common configuration options:**
 - `mainBranch` - Primary branch for merging (default: "main")
+- `sourceEnvOnStart` - Source .env file when launching terminal processes (default: false)
 - `mergeBehavior.mode` - How to finish work: "local" (merge locally) or "github-pr" (create PR) (default: "local")
 - `mergeBehavior.remote` - Remote to target for PRs (optional, defaults to `issueManagement.github.remote`)
 - `capabilities.web.basePort` - Base port for dev servers (default: 3000)

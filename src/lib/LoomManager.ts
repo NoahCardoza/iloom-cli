@@ -230,6 +230,7 @@ export class LoomManager {
         oneShot,
         ...(setArguments && { setArguments }),
         ...(executablePath && { executablePath }),
+        sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
       })
     }
 
@@ -817,6 +818,7 @@ export class LoomManager {
         oneShot,
         ...(setArguments && { setArguments }),
         ...(executablePath && { executablePath }),
+        sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
       })
     }
 

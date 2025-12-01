@@ -48,6 +48,8 @@ export interface CreateLoomInput {
     setArguments?: string[]
     // Executable path to use for spin command (e.g., 'il', 'il-125', or '/path/to/dist/cli.js')
     executablePath?: string
+    // Control .env sourcing in terminal launches
+    sourceEnvOnStart?: boolean
   }
 }
 

@@ -24,6 +24,7 @@ export interface LaunchLoomOptions {
 	oneShot?: import('../types/index.js').OneShotMode
 	setArguments?: string[] // Raw --set arguments to forward
 	executablePath?: string // Executable path to use for spin command
+	sourceEnvOnStart?: boolean // defaults to false if undefined
 }
 
 /**
@@ -149,7 +150,7 @@ export class LoomLauncher {
 			workspacePath: options.worktreePath,
 			command: devServerCommand,
 			backgroundColor: colorData.rgb,
-			includeEnvSetup: existsSync(join(options.worktreePath, '.env')),
+			includeEnvSetup: (options.sourceEnvOnStart ?? false) && existsSync(join(options.worktreePath, '.env')),
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
 		})
@@ -165,7 +166,7 @@ export class LoomLauncher {
 		await openTerminalWindow({
 			workspacePath: options.worktreePath,
 			backgroundColor: colorData.rgb,
-			includeEnvSetup: existsSync(join(options.worktreePath, '.env')),
+			includeEnvSetup: (options.sourceEnvOnStart ?? false) && existsSync(join(options.worktreePath, '.env')),
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
 		})
@@ -198,7 +199,7 @@ export class LoomLauncher {
 			command: claudeCommand,
 			backgroundColor: colorData.rgb,
 			title: claudeTitle,
-			includeEnvSetup: hasEnvFile,
+			includeEnvSetup: (options.sourceEnvOnStart ?? false) && hasEnvFile,
 			...(options.port !== undefined && { port: options.port, includePortExport: true }),
 		}
 	}
@@ -223,7 +224,7 @@ export class LoomLauncher {
 			command: devServerCommand,
 			backgroundColor: colorData.rgb,
 			title: devServerTitle,
-			includeEnvSetup: hasEnvFile,
+			includeEnvSetup: (options.sourceEnvOnStart ?? false) && hasEnvFile,
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
 		}
@@ -243,7 +244,7 @@ export class LoomLauncher {
 			workspacePath: options.worktreePath,
 			backgroundColor: colorData.rgb,
 			title: terminalTitle,
-			includeEnvSetup: hasEnvFile,
+			includeEnvSetup: (options.sourceEnvOnStart ?? false) && hasEnvFile,
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
 		}

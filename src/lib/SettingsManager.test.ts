@@ -48,7 +48,8 @@ describe('SettingsManager', () => {
 				.mockRejectedValueOnce(error) // settings.local.json (doesn't exist)
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result).toEqual(validSettings)
+			// sourceEnvOnStart defaults to false, so it will be added
+			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false })
 		})
 
 		it('should return empty object when settings file does not exist', async () => {
@@ -62,7 +63,8 @@ describe('SettingsManager', () => {
 				.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result).toEqual({})
+			// sourceEnvOnStart defaults to false
+			expect(result).toEqual({ sourceEnvOnStart: false })
 		})
 
 		it('should return empty object when .iloom directory does not exist', async () => {
@@ -76,7 +78,8 @@ describe('SettingsManager', () => {
 				.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result).toEqual({})
+			// sourceEnvOnStart defaults to false
+			expect(result).toEqual({ sourceEnvOnStart: false })
 		})
 
 		it('should throw error for malformed JSON in settings file', async () => {
@@ -126,7 +129,8 @@ describe('SettingsManager', () => {
 				.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result).toEqual(emptyAgentsSettings)
+			// sourceEnvOnStart defaults to false
+			expect(result).toEqual({ ...emptyAgentsSettings, sourceEnvOnStart: false })
 		})
 
 		it('should handle settings file with null agents value', async () => {
@@ -144,7 +148,8 @@ describe('SettingsManager', () => {
 				.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result).toEqual(nullAgentsSettings)
+			// sourceEnvOnStart defaults to false
+			expect(result).toEqual({ ...nullAgentsSettings, sourceEnvOnStart: false })
 		})
 
 		it('should use process.cwd() when projectRoot not provided', async () => {
@@ -165,7 +170,8 @@ describe('SettingsManager', () => {
 				.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings()
-			expect(result).toEqual(validSettings)
+			// sourceEnvOnStart defaults to false
+			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false })
 		})
 
 		it('should load settings with mainBranch field', async () => {
@@ -1468,7 +1474,8 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 
-			expect(result).toEqual({})
+			// sourceEnvOnStart defaults to false
+			expect(result).toEqual({ sourceEnvOnStart: false })
 		})
 
 		it('should deep merge workflows with partial overrides', async () => {
@@ -2023,6 +2030,68 @@ describe('SettingsManager', () => {
 				expect(err.message).toContain('CLI overrides were applied')
 				expect(err.message).toContain('Check your --set arguments')
 			}
+		})
+	})
+
+	describe('sourceEnvOnStart setting', () => {
+		it('should default to false when not specified', async () => {
+			const projectRoot = '/test/project'
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.sourceEnvOnStart).toBe(false)
+		})
+
+		it('should accept false value', async () => {
+			const projectRoot = '/test/project'
+			const settings = { sourceEnvOnStart: false }
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.sourceEnvOnStart).toBe(false)
+		})
+
+		it('should accept true value explicitly', async () => {
+			const projectRoot = '/test/project'
+			const settings = { sourceEnvOnStart: true }
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.sourceEnvOnStart).toBe(true)
+		})
+
+		it('should reject non-boolean values', async () => {
+			const projectRoot = '/test/project'
+			const settings = { sourceEnvOnStart: 'yes' }
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
+				/received string/,
+			)
 		})
 	})
 })
