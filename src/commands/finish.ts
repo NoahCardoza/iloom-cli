@@ -702,7 +702,6 @@ export class FinishCommand {
 				logger.info(`[DRY RUN] Would push changes to origin/${pr.branch}`)
 			} else {
 				logger.info('Pushing changes to remote...')
-				const { pushBranchToRemote } = await import('../utils/git.js')
 				await pushBranchToRemote(pr.branch, worktree.path, {
 					dryRun: false
 				})

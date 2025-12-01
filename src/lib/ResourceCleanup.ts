@@ -5,6 +5,8 @@ import { ProcessManager } from './process/ProcessManager.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import { logger } from '../utils/logger.js'
+import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings } from '../utils/git.js'
+
 import type {
 	ResourceCleanupOptions,
 	CleanupResult,
@@ -160,7 +162,6 @@ export class ResourceCleanup {
 		let mainWorktreePath: string | null = null
 		if (!options.dryRun) {
 			try {
-				const { findMainWorktreePathWithSettings } = await import('../utils/git.js')
 				mainWorktreePath = await findMainWorktreePathWithSettings(worktree.path, this.settingsManager)
 			} catch (error) {
 				logger.warn(
@@ -459,8 +460,6 @@ export class ResourceCleanup {
 
 		// Use GitWorktreeManager's removeWorktree with removeBranch option
 		// Or execute git branch -D directly via executeGitCommand
-		const { executeGitCommand, findMainWorktreePathWithSettings } = await import('../utils/git.js')
-
 		try {
 			// Use provided cwd, or find main worktree path as fallback
 			// This ensures we're not running git commands from a deleted directory
@@ -521,7 +520,6 @@ export class ResourceCleanup {
 			// Find main worktree path to avoid running commands from potentially deleted directories
 			let cwd: string | undefined
 			try {
-				const { findMainWorktreePathWithSettings } = await import('../utils/git.js')
 				cwd = await findMainWorktreePathWithSettings(worktreePath, this.settingsManager)
 			} catch (error) {
 				// If we can't find main worktree, commands will run from current directory
@@ -601,7 +599,6 @@ export class ResourceCleanup {
 		}
 
 		// Check for uncommitted changes
-		const { hasUncommittedChanges } = await import('../utils/git.js')
 		const hasChanges = await hasUncommittedChanges(worktree.path)
 		if (hasChanges) {
 			// Create simple blocker message with actionable guidance
