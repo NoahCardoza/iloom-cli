@@ -10,7 +10,6 @@ import { CLIIsolationManager } from '../lib/CLIIsolationManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { DatabaseManager } from '../lib/DatabaseManager.js'
-import { IssueEnhancementService } from '../lib/IssueEnhancementService.js'
 import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
@@ -33,25 +32,17 @@ export interface ParsedInput {
 export class StartCommand {
 	private gitHubService: GitHubService
 	private loomManager: LoomManager | null = null
-	private agentManager: AgentManager
 	private settingsManager: SettingsManager
-	private enhancementService: IssueEnhancementService
 	private providedLoomManager: LoomManager | undefined
 
 	constructor(
 		gitHubService?: GitHubService,
 		loomManager?: LoomManager,
-		agentManager?: AgentManager,
+		_agentManager?: AgentManager,  // Kept for API compatibility
 		settingsManager?: SettingsManager
 	) {
 		this.gitHubService = gitHubService ?? new GitHubService()
-		this.agentManager = agentManager ?? new AgentManager()
 		this.settingsManager = settingsManager ?? new SettingsManager()
-		this.enhancementService = new IssueEnhancementService(
-			this.gitHubService,
-			this.agentManager,
-			this.settingsManager
-		)
 		// Store provided LoomManager for testing, but don't initialize yet
 		this.providedLoomManager = loomManager
 
@@ -188,12 +179,17 @@ export class StartCommand {
 			}
 			// Note: --no-child-loom when no parent is a no-op (already independent)
 
-			// Step 2.5: Handle description input - create GitHub issue
+			// Step 2.5: Handle description input - create GitHub issue (without enhancement)
 			if (parsed.type === 'description') {
-				const issueNumber = await this.enhanceAndCreateIssue(parsed.originalInput)
+				logger.info('Creating GitHub issue from description...')
+				const result = await this.gitHubService.createIssue(
+					parsed.originalInput,  // Use description as title
+					""                     // Empty body
+				)
+				logger.success(`Created issue #${result.number}: ${result.url}`)
 				// Update parsed to be an issue type with the new number
 				parsed.type = 'issue'
-				parsed.number = issueNumber
+				parsed.number = result.number
 			}
 
 			// Step 2.7: Confirm bypassPermissions mode if applicable
@@ -424,19 +420,6 @@ export class StartCommand {
 			default:
 				return 'Unknown input'
 		}
-	}
-
-	/**
-	 * Enhance description using Claude AI and create GitHub issue
-	 * Returns the new issue number
-	 */
-	private async enhanceAndCreateIssue(description: string): Promise<number> {
-		// Use IssueEnhancementService for the workflow
-		const enhancedDescription = await this.enhancementService.enhanceDescription(description)
-		const result = await this.enhancementService.createEnhancedIssue(description, enhancedDescription)
-		await this.enhancementService.waitForReviewAndOpen(result.number, true)
-
-		return result.number
 	}
 
 	/**

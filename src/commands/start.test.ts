@@ -9,18 +9,6 @@ import { branchExists, findMainWorktreePathWithSettings } from '../utils/git.js'
 // Mock the GitHubService
 vi.mock('../lib/GitHubService.js')
 
-// Mock the IssueEnhancementService
-vi.mock('../lib/IssueEnhancementService.js', () => ({
-	IssueEnhancementService: vi.fn(() => ({
-		validateDescription: vi.fn().mockReturnValue(true),
-		enhanceDescription: vi.fn().mockResolvedValue('Enhanced description'),
-		createEnhancedIssue: vi.fn().mockResolvedValue({
-			number: 123,
-			url: 'https://github.com/owner/repo/issues/123',
-		}),
-		waitForReviewAndOpen: vi.fn().mockResolvedValue(undefined),
-	})),
-}))
 
 // Mock the LoomManager and its dependencies
 vi.mock('../lib/LoomManager.js', () => ({
@@ -293,23 +281,27 @@ describe('StartCommand', () => {
 			it('should detect description when >25 chars with >2 spaces', async () => {
 				const description = 'Users cannot filter the dashboard by date range making reports difficult'
 
-				// Re-create command to get access to the mocked service instance
-				const newCommand = new StartCommand(mockGitHubService)
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const enhancementService = (newCommand as any).enhancementService
+				// Mock GitHubService.createIssue to return issue data
+				vi.mocked(mockGitHubService.createIssue).mockResolvedValue({
+					number: 123,
+					url: 'https://github.com/owner/repo/issues/123',
+				})
 
-				// Mock GitHubService methods
+				// Mock GitHubService methods for issue validation
 				mockGitHubService.getIssueTitle = vi.fn().mockResolvedValue('Issue title')
 
 				await expect(
-					newCommand.execute({
+					command.execute({
 						identifier: description,
 						options: {},
 					})
 				).resolves.not.toThrow()
 
-				// Should create issue with description using IssueEnhancementService
-				expect(enhancementService.createEnhancedIssue).toHaveBeenCalled()
+				// Should create issue directly via GitHubService (no enhancement)
+				expect(mockGitHubService.createIssue).toHaveBeenCalledWith(
+					description, // title
+					''           // empty body
+				)
 			})
 
 			it('should NOT detect description for short text with spaces', async () => {
@@ -366,52 +358,29 @@ describe('StartCommand', () => {
 				expect(description.length).toBe(26)
 				expect((description.match(/ /g) || []).length).toBe(3)
 
-				// Re-create command to get access to the mocked service instance
-				const newCommand = new StartCommand(mockGitHubService)
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const enhancementService = (newCommand as any).enhancementService
+				// Mock GitHubService.createIssue to return issue data
+				vi.mocked(mockGitHubService.createIssue).mockResolvedValue({
+					number: 456,
+					url: 'https://github.com/owner/repo/issues/456',
+				})
 
-				// Mock GitHubService methods
+				// Mock GitHubService methods for issue validation
 				mockGitHubService.getIssueTitle = vi.fn().mockResolvedValue('Issue title')
 
 				await expect(
-					newCommand.execute({
+					command.execute({
 						identifier: description,
 						options: {},
 					})
 				).resolves.not.toThrow()
 
-				// Should create issue using IssueEnhancementService
-				expect(enhancementService.createEnhancedIssue).toHaveBeenCalled()
+				// Should create issue directly via GitHubService (no enhancement)
+				expect(mockGitHubService.createIssue).toHaveBeenCalledWith(
+					description, // title
+					''           // empty body
+				)
 			})
 
-			it('should call waitForReviewAndOpen with confirm=true (double keypress) when creating issue from description', async () => {
-				const description = 'Users need to be able to export reports in PDF format with custom branding'
-
-				// Re-create command to get access to the mocked service instance
-				const newCommand = new StartCommand(mockGitHubService)
-				// Access the private enhancementService via the command instance
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const enhancementService = (newCommand as any).enhancementService
-
-				// Mock the createEnhancedIssue to return a specific issue number
-				enhancementService.createEnhancedIssue.mockResolvedValueOnce({
-					number: 456,
-					url: 'https://github.com/owner/repo/issues/456',
-				})
-
-				// Mock GitHubService
-				mockGitHubService.getIssueTitle = vi.fn().mockResolvedValue('Issue title')
-
-				await newCommand.execute({
-					identifier: description,
-					options: {},
-				})
-
-				// start <description> should use double keypress method with confirm=true
-				expect(enhancementService.waitForReviewAndOpen).toHaveBeenCalledWith(456, true)
-				expect(enhancementService.waitForReviewAndOpen).toHaveBeenCalledTimes(1)
-			})
 		})
 
 		describe('validation', () => {
