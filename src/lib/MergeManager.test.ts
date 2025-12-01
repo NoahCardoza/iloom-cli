@@ -211,7 +211,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce(mainHead) // rev-parse main
 
 			// Should not throw
-			await manager.validateFastForwardPossible('feature-branch', '/test/repo')
+			await manager.validateFastForwardPossible('main','feature-branch', '/test/repo')
 
 			// Verify: both commands called
 			expect(git.executeGitCommand).toHaveBeenCalledWith(
@@ -235,7 +235,7 @@ describe('MergeManager', () => {
 
 			// Expect: should throw with clear explanation
 			await expect(
-				manager.validateFastForwardPossible('feature-branch', '/test/repo')
+				manager.validateFastForwardPossible('main','feature-branch', '/test/repo')
 			).rejects.toThrow(/cannot perform fast-forward merge/i)
 		})
 
@@ -246,7 +246,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('def456')
 
 			try {
-				await manager.validateFastForwardPossible('feature-branch', '/test/repo')
+				await manager.validateFastForwardPossible('main','feature-branch', '/test/repo')
 				expect.fail('Should have thrown')
 			} catch (error) {
 				const message = (error as Error).message
@@ -562,7 +562,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('abc123') // rev-parse
 
-			await manager.validateFastForwardPossible('feature-branch', customRoot)
+			await manager.validateFastForwardPossible('main', 'feature-branch', customRoot)
 
 			// Verify: custom repo root was used
 			expect(git.executeGitCommand).toHaveBeenCalledWith(
@@ -635,7 +635,7 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce(mergeBase) // merge-base
 				.mockResolvedValueOnce(mainHead) // rev-parse trunk
 
-			await manager.validateFastForwardPossible('feature-branch', '/test/repo')
+			await manager.validateFastForwardPossible('trunk', 'feature-branch', '/test/repo')
 
 			// Verify: commands used 'trunk' instead of 'main'
 			expect(git.executeGitCommand).toHaveBeenCalledWith(

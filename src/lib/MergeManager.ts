@@ -161,8 +161,7 @@ export class MergeManager {
 	 * @param mainWorktreePath - Path where main branch is checked out
 	 * @throws Error if fast-forward is not possible
 	 */
-	async validateFastForwardPossible(branchName: string, mainWorktreePath: string): Promise<void> {
-		const mainBranch = await this.getMainBranch(mainWorktreePath)
+	async validateFastForwardPossible(mainBranch: string, branchName: string, mainWorktreePath: string): Promise<void> {
 
 		// Step 1: Get merge-base between main and branch
 		const mergeBase = await executeGitCommand(['merge-base', mainBranch, branchName], {
@@ -235,7 +234,7 @@ export class MergeManager {
 		}
 
 		// Step 5: Validate fast-forward is possible
-		await this.validateFastForwardPossible(branchName, mainWorktreePath)
+		await this.validateFastForwardPossible(mainBranch, branchName, mainWorktreePath)
 
 		// Step 6: Show commits to be merged
 		const commitsOutput = await executeGitCommand(['log', '--oneline', `${mainBranch}..${branchName}`], {
