@@ -381,8 +381,6 @@ export class MergeManager {
 				return false
 			}
 
-			// Success: no conflicts, rebase completed
-			logger.success('Claude successfully resolved conflicts and completed rebase')
 			return true
 		} catch (error) {
 			logger.warn('Claude conflict resolution failed', {
