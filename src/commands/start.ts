@@ -11,7 +11,7 @@ import { SettingsManager } from '../lib/SettingsManager.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { IssueEnhancementService } from '../lib/IssueEnhancementService.js'
-import { branchExists, findMainWorktreePathWithSettings } from '../utils/git.js'
+import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
@@ -380,11 +380,6 @@ export class StartCommand {
 					throw new Error(
 						'Invalid branch name. Use only letters, numbers, hyphens, underscores, and slashes'
 					)
-				}
-				// Check if branch already exists
-				const exists = await branchExists(parsed.branchName)
-				if (exists) {
-					throw new Error(`Branch '${parsed.branchName}' already exists`)
 				}
 				logger.debug(`Validated branch name: ${parsed.branchName}`)
 				break

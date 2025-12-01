@@ -75,7 +75,7 @@ export class LoomManager {
     const githubData = await this.fetchGitHubData(input)
 
     // NEW: Check for existing worktree BEFORE generating branch name (for efficiency)
-    if (input.type === 'issue' || input.type === 'pr') {
+    if (input.type === 'issue' || input.type === 'pr' || input.type === 'branch') {
       logger.info('Checking for existing worktree...')
       const existing = await this.findExistingIloom(input, githubData)
       if (existing) {
@@ -729,6 +729,8 @@ export class LoomManager {
         input.identifier as number,
         githubData.branch
       )
+    } else if (input.type === 'branch') {
+      return await this.gitWorktree.findWorktreeForBranch(input.identifier as string)
     }
     return null
   }

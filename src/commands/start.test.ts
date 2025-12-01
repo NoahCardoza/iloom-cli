@@ -920,8 +920,9 @@ describe('StartCommand', () => {
 		})
 
 		describe('branch existence checking', () => {
-			it('should check if branch exists before creation', async () => {
-
+			it('should reuse existing branch worktree when branch exists', async () => {
+				// Branch reuse is now handled by LoomManager.findExistingIloom
+				// The command should not throw when a branch exists - it will be reused
 				vi.mocked(branchExists).mockResolvedValue(true)
 
 				await expect(
@@ -929,13 +930,10 @@ describe('StartCommand', () => {
 						identifier: 'existing-branch',
 						options: {},
 					})
-				).rejects.toThrow("Branch 'existing-branch' already exists")
-
-				expect(branchExists).toHaveBeenCalledWith('existing-branch')
+				).resolves.not.toThrow()
 			})
 
-			it('should not throw when branch does not exist', async () => {
-
+			it('should create new worktree when branch does not exist', async () => {
 				vi.mocked(branchExists).mockResolvedValue(false)
 
 				await expect(
@@ -944,8 +942,6 @@ describe('StartCommand', () => {
 						options: {},
 					})
 				).resolves.not.toThrow()
-
-				expect(branchExists).toHaveBeenCalledWith('new-branch')
 			})
 
 			it('should not check branch existence for PRs', async () => {

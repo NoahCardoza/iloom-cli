@@ -1088,14 +1088,47 @@ describe('LoomManager', () => {
       expect(installDependencies).not.toHaveBeenCalled()
     })
 
-    it('should return null for branch input (branches always create new)', async () => {
+    it('should find existing loom for branch input', async () => {
       const input: CreateLoomInput = {
         type: 'branch',
         identifier: 'test-branch',
         originalInput: 'test-branch',
       }
 
-      const expectedPath = '/test/worktree-test-branch'
+      const existingWorktree = {
+        path: '/test/worktree-test-branch',
+        branch: 'test-branch',
+        commit: 'xyz789',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitWorktree.findWorktreeForBranch).mockResolvedValue(existingWorktree)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: ['web'],
+        binEntries: {},
+      })
+
+      const result = await manager.createIloom(input)
+
+      expect(result.path).toBe('/test/worktree-test-branch')
+      expect(result.branch).toBe('test-branch')
+      expect(mockGitWorktree.findWorktreeForBranch).toHaveBeenCalledWith('test-branch')
+      expect(mockGitWorktree.createWorktree).not.toHaveBeenCalled()
+      expect(installDependencies).not.toHaveBeenCalled()
+    })
+
+    it('should create new worktree when no existing found for branch', async () => {
+      const input: CreateLoomInput = {
+        type: 'branch',
+        identifier: 'new-branch',
+        originalInput: 'new-branch',
+      }
+
+      vi.mocked(mockGitWorktree.findWorktreeForBranch).mockResolvedValue(null)
+
+      const expectedPath = '/test/worktree-new-branch'
       vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
       vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
       vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3000)
@@ -1106,9 +1139,9 @@ describe('LoomManager', () => {
 
       await manager.createIloom(input)
 
-      expect(mockGitWorktree.findWorktreeForIssue).not.toHaveBeenCalled()
-      expect(mockGitWorktree.findWorktreeForPR).not.toHaveBeenCalled()
+      expect(mockGitWorktree.findWorktreeForBranch).toHaveBeenCalledWith('new-branch')
       expect(mockGitWorktree.createWorktree).toHaveBeenCalled()
+      expect(installDependencies).toHaveBeenCalled()
     })
 
     it('should create new worktree when no existing found for issue', async () => {
