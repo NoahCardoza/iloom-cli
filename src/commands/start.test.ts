@@ -54,6 +54,8 @@ vi.mock('../utils/git.js', async () => {
 		...actual,
 		branchExists: vi.fn().mockResolvedValue(false),
 		findMainWorktreePathWithSettings: vi.fn().mockResolvedValue('/test/main'),
+		// Prevent real git commands from running during tests
+		executeGitCommand: vi.fn().mockResolvedValue(''),
 	}
 })
 
