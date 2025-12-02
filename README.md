@@ -486,19 +486,6 @@ Your feedback helps make iloom better for everyone! Issues created through `iloo
 ### Maintenance
 
 ```bash
-iloom init
-# Interactive Claude-powered configuration wizard
-# Sets up settings.json, .gitignore, and guides you through all configuration options
-# Automatically detects multi-remote setups and helps you configure GitHub integration
-# Alias: il config
-# Run this once per project
-
-iloom contribute
-# Set up local development environment for contributing to iloom
-# Automatically forks the repository, clones it locally, configures upstream remote,
-# and runs il init to complete setup
-# Streamlines contributor onboarding with a single command
-
 iloom update
 # Update iloom-cli to the latest version
 ```
@@ -512,7 +499,7 @@ The recommended way to configure iloom:
 ```bash
 iloom init
 # or
-il config
+iloom config
 ```
 
 This Claude-powered assistant will guide you through all configuration options and automatically:
@@ -640,6 +627,8 @@ This is an early stage product - platform/tech stack support is limited for now.
 - 🔧 **Other tech stacks** - Can work now via package.json scripts, native support coming later (open to help!)
 
 We (Claude and I) are actively working on expanding platform and integration support. Contributions welcome!
+
+**Known limitations** include agent customization, Linear and JIRA issue tracking integration, alternative LLM provider support, and IDE choice flexibility. See all [`known-limitation`](https://github.com/iloom-ai/iloom-cli/issues?q=is%3Aissue+is%3Aopen+label%3Aknown-limitation) issues for details and to [contribute](CONTRIBUTING.md) solutions.
 
 ## Installation
 
@@ -837,11 +826,31 @@ Other tools increase code output with minimal process change. iloom increases **
 
 ## Contributing
 
-This project follows Test-Driven Development. All code must:
-- Be written test-first with comprehensive unit tests
-- Achieve >70% code coverage
-- Include regression tests against bash script behavior
-- Use mock factories for all external dependencies
+We welcome contributions! Whether you're fixing a bug, adding a feature, or improving documentation, there are multiple ways to get involved.
+
+### Quick Start for Contributors
+
+The fastest way to get started contributing:
+
+```bash
+iloom contribute # requires the github CLI (gh)
+```
+
+This automated command handles forking, cloning, and setting up your development environment.
+
+### Finding Your First Issue
+
+New contributors should start with issues labeled [`starter-task`](https://github.com/iloom-ai/iloom-cli/issues?q=is%3Aissue+is%3Aopen+label%3Astarter-task) - these are designed to help you learn the iloom workflow and codebase while making meaningful contributions.
+
+### Full Contributing Guide
+
+For detailed information about our development process, testing requirements, and workflow, see our comprehensive [Contributing Guide](CONTRIBUTING.md).
+
+**Key highlights:**
+- Behavior-focused testing principles
+- AI-assisted development workflow using iloom itself
+- Clear PR process and code quality standards
+- Test-Driven Development with >70% coverage requirement
 
 ## License
 
