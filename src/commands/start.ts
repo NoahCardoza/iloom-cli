@@ -160,7 +160,7 @@ export class StartCommand {
 					let createAsChild = true // Default for non-interactive
 					if (isInteractiveEnvironment()) {
 						createAsChild = await promptConfirmation(
-							`Create as child loom of ${parentDisplay}?`,
+							`You are not in your main worktree. Create as a child loom of ${parentDisplay}?`,
 							true // Default yes
 						)
 					} else {
