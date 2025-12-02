@@ -179,12 +179,13 @@ export class StartCommand {
 			}
 			// Note: --no-child-loom when no parent is a no-op (already independent)
 
-			// Step 2.5: Handle description input - create GitHub issue (without enhancement)
+			// Step 2.5: Handle description input - create GitHub issue
 			if (parsed.type === 'description') {
 				logger.info('Creating GitHub issue from description...')
+				const body = input.options.body ?? ""  // Use provided body or empty string
 				const result = await this.gitHubService.createIssue(
 					parsed.originalInput,  // Use description as title
-					""                     // Empty body
+					body                   // Use provided body or empty
 				)
 				logger.success(`Created issue #${result.number}: ${result.url}`)
 				// Update parsed to be an issue type with the new number

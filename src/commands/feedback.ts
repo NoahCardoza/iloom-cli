@@ -53,9 +53,10 @@ export class FeedbackCommand {
 		const diagnosticsMarkdown = formatDiagnosticsAsMarkdown(diagnostics)
 
 		// Step 3: Create enhanced issue body with marker and diagnostics
+		const userBody = input.options.body ?? description
 		const enhancedBody = `${diagnosticsMarkdown}
 
-${description}`
+${userBody}`
 
 		// Step 4: Create GitHub issue in iloom-cli repo (no label needed)
 		// The GitHub Action workflow will detect the CLI marker and enhance the issue

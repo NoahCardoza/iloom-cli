@@ -133,6 +133,8 @@ export interface StartOptions {
   childLoom?: boolean
   // One-shot automation mode
   oneShot?: OneShotMode
+  // Optional body text for issue creation
+  body?: string
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -141,10 +143,9 @@ export interface AddIssueOptions {
   // Currently empty - command accepts no options
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface FeedbackOptions {
-  // Reserved for future flags like --no-enhance, --no-browser
-  // Currently empty - command accepts no options
+  // Optional body text for feedback (added after diagnostics)
+  body?: string
 }
 
 export interface EnhanceOptions {

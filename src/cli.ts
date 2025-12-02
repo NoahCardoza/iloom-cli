@@ -177,6 +177,7 @@ program
   .option('--no-terminal', 'Disable terminal')
   .option('--child-loom', 'Force create as child loom (skip prompt)')
   .option('--no-child-loom', 'Force create as independent loom (skip prompt)')
+  .option('--body <text>', 'Body text for issue (skips AI enhancement)')
   .addOption(
     new Option('--one-shot <mode>', 'One-shot automation mode')
       .choices(['default', 'noReview', 'bypassPermissions'])
@@ -233,13 +234,18 @@ program
   .alias('f')
   .description('Submit feedback/bug report to iloom-cli repository')
   .argument('<description>', 'Natural language description of feedback (>50 chars, >2 spaces)')
-  .action(async (description: string) => {
+  .option('--body <text>', 'Body text for feedback (added after diagnostics)')
+  .action(async (description: string, options: { body?: string }) => {
     try {
       const { FeedbackCommand } = await import('./commands/feedback.js')
       const command = new FeedbackCommand()
+      const feedbackOptions: import('./types/index.js').FeedbackOptions = {}
+      if (options.body !== undefined) {
+        feedbackOptions.body = options.body
+      }
       const issueNumber = await command.execute({
         description,
-        options: {}
+        options: feedbackOptions
       })
       logger.success(`Feedback submitted as issue #${issueNumber} in iloom-cli repository`)
       process.exit(0)
