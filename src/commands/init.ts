@@ -289,15 +289,16 @@ export class InitCommand {
       let shellConfigContent = ''
 
       if (shell !== 'unknown') {
-        logger.debug('Reading shell config file')
-        const shellConfig = await this.shellCompletion.readShellConfig(shell)
+        logger.debug('Grepping shell config for completion setup')
+        const shellConfig = await this.shellCompletion.grepCompletionConfig(shell)
         if (shellConfig) {
           shellConfigPath = shellConfig.path
           shellConfigContent = shellConfig.content
-          logger.debug('Shell config loaded', {
+          logger.debug('Shell config completion grep completed', {
             path: shellConfigPath,
             contentLength: shellConfigContent.length,
-            configExists: existsSync(shellConfigPath)
+            configExists: existsSync(shellConfigPath),
+            hasMatches: shellConfigContent.trim().length > 0
           })
         } else {
           logger.debug('Could not read shell config')
@@ -333,6 +334,13 @@ export class InitCommand {
           remotes.map(r => `- **${r.name}**: ${r.url} (${r.owner}/${r.repo})`).join('\n')
       }
 
+      // Load README content for comprehensive documentation
+      logger.info('Loading iloom documentation...')
+      const readmeContent = await this.loadReadmeContent()
+      logger.debug('README content loaded', {
+        readmeContentLength: readmeContent.length,
+      })
+
       // Build template variables
       const variables = {
         SETTINGS_SCHEMA: schemaContent,
@@ -346,7 +354,8 @@ export class InitCommand {
         SINGLE_REMOTE: singleRemote,
         SINGLE_REMOTE_NAME: singleRemoteName,
         SINGLE_REMOTE_URL: singleRemoteUrl,
-        NO_REMOTES: noRemotes
+        NO_REMOTES: noRemotes,
+        README_CONTENT: readmeContent,
       }
 
       logger.debug('Building template variables', {
@@ -395,4 +404,36 @@ export class InitCommand {
 
     logger.debug('launchGuidedInit() completed')
   }
+
+  /**
+   * Load README.md content for init prompt
+   * Walks up from dist directory to find README.md in project root
+   */
+  private async loadReadmeContent(): Promise<string> {
+    try {
+      // Walk up from current file location to find README.md
+      // Use same pattern as PromptTemplateManager for finding files
+      let currentDir = path.dirname(fileURLToPath(import.meta.url))
+
+      // Walk up to find README.md
+      while (currentDir !== path.dirname(currentDir)) {
+        const readmePath = path.join(currentDir, 'README.md')
+        try {
+          const content = await readFile(readmePath, 'utf-8')
+          logger.debug('Loaded README.md for init prompt', { readmePath })
+          return content
+        } catch {
+          currentDir = path.dirname(currentDir)
+        }
+      }
+
+      logger.debug('README.md not found, returning empty string')
+      return ''
+    } catch (error) {
+      // Graceful degradation - return empty string on error
+      logger.debug(`Failed to load README.md: ${error}`)
+      return ''
+    }
+  }
+
 }

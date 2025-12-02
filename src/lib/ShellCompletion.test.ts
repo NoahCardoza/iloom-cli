@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { ShellCompletion } from './ShellCompletion.js'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import omelette from 'omelette'
+import { readFile } from 'fs/promises'
+import { existsSync } from 'fs'
 
 // Mock omelette
 vi.mock('omelette', () => ({
@@ -27,6 +29,15 @@ vi.mock('../utils/logger.js', () => ({
     error: vi.fn(),
     info: vi.fn(),
   },
+}))
+
+// Mock fs functions
+vi.mock('fs/promises', () => ({
+  readFile: vi.fn(),
+}))
+
+vi.mock('fs', () => ({
+  existsSync: vi.fn(),
 }))
 
 describe('ShellCompletion', () => {
@@ -326,6 +337,305 @@ describe('ShellCompletion', () => {
     it('should initialize completion without throwing', () => {
       shellCompletion = new ShellCompletion()
       expect(() => shellCompletion.init()).not.toThrow()
+    })
+  })
+
+  describe('grepCompletionConfig', () => {
+    beforeEach(() => {
+      shellCompletion = new ShellCompletion()
+      vi.clearAllMocks()
+    })
+
+    it('should return null for unknown shell', async () => {
+      const result = await shellCompletion.grepCompletionConfig('unknown')
+      expect(result).toBeNull()
+    })
+
+    it('should return empty content when file does not exist', async () => {
+      vi.mocked(existsSync).mockReturnValue(false)
+
+      const result = await shellCompletion.grepCompletionConfig('bash')
+
+      expect(result).toEqual({
+        path: expect.stringContaining('.bashrc'),
+        content: ''
+      })
+      expect(readFile).not.toHaveBeenCalled()
+    })
+
+    it('should return empty content when no matches found', async () => {
+      const fileContent = `
+# Some bash config
+export PATH=/usr/local/bin:$PATH
+alias ll='ls -la'
+# End of config
+`.trim()
+
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue(fileContent)
+
+      const result = await shellCompletion.grepCompletionConfig('bash')
+
+      expect(result).toEqual({
+        path: expect.stringContaining('.bashrc'),
+        content: ''
+      })
+    })
+
+    it('should return single match with context', async () => {
+      const fileContent = `
+# Start of file
+export PATH=/usr/local/bin:$PATH
+eval "$(iloom --completion)"
+alias ll='ls -la'
+# End of file
+`.trim()
+
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue(fileContent)
+
+      const result = await shellCompletion.grepCompletionConfig('bash')
+
+      expect(result).toEqual({
+        path: expect.stringContaining('.bashrc'),
+        content: `# Start of file
+export PATH=/usr/local/bin:$PATH
+eval "$(iloom --completion)"
+alias ll='ls -la'
+# End of file`
+      })
+    })
+
+    it('should handle matches at file boundaries correctly', async () => {
+      const fileContent = `eval "$(il --completion)"
+second line
+third line`
+
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue(fileContent)
+
+      const result = await shellCompletion.grepCompletionConfig('zsh')
+
+      // Should only include available context (no negative indices)
+      expect(result).toEqual({
+        path: expect.stringContaining('.zshrc'),
+        content: `eval "$(il --completion)"
+second line
+third line`
+      })
+    })
+
+    it('should handle matches at end of file correctly', async () => {
+      const fileContent = `first line
+second line
+eval "$(iloom --completion)"`
+
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue(fileContent)
+
+      const result = await shellCompletion.grepCompletionConfig('zsh')
+
+      expect(result).toEqual({
+        path: expect.stringContaining('.zshrc'),
+        content: `first line
+second line
+eval "$(iloom --completion)"`
+      })
+    })
+
+    it('should handle multiple non-overlapping matches with separators', async () => {
+      const fileContent = `
+# First section
+eval "$(iloom --completion)"
+alias ll='ls -la'
+
+# Middle section
+export PATH=/usr/bin:$PATH
+
+# Second completion section
+eval "$(il --completion)"
+source ~/.profile
+# End
+`.trim()
+
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue(fileContent)
+
+      const result = await shellCompletion.grepCompletionConfig('bash')
+
+      // Should show both matches with separator
+      expect(result?.content).toContain('eval "$(iloom --completion)"')
+      expect(result?.content).toContain('eval "$(il --completion)"')
+      expect(result?.content).toContain('--') // Separator between sections
+    })
+
+    it('should merge overlapping matches correctly', async () => {
+      const fileContent = `# Config start
+eval "$(iloom --completion)"
+eval "$(il --completion)"
+alias ll='ls -la'
+# Config end`
+
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue(fileContent)
+
+      const result = await shellCompletion.grepCompletionConfig('bash')
+
+      // Should be merged into single section (no separator)
+      // Line indices: 0=start, 1=iloom, 2=il, 3=alias, 4=end
+      // Match 1 context: 0-3, Match 2 context: 0-4 -> should merge to 0-4
+      expect(result?.content).toEqual(`# Config start
+eval "$(iloom --completion)"
+eval "$(il --completion)"
+alias ll='ls -la'
+# Config end`)
+      expect(result?.content).toContain('eval "$(iloom --completion)"')
+      expect(result?.content).toContain('eval "$(il --completion)"')
+      expect(result?.content).toContain('# Config start')
+      expect(result?.content).toContain('# Config end')
+    })
+
+    it('should handle adjacent matches (merge ranges)', async () => {
+      const fileContent = `line1
+line2
+eval "$(iloom --completion)"
+line4
+line5
+eval "$(il --completion)"
+line7
+line8`
+
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue(fileContent)
+
+      const result = await shellCompletion.grepCompletionConfig('bash')
+
+      // Line indices: 0=line1, 1=line2, 2=iloom, 3=line4, 4=line5, 5=il, 6=line7, 7=line8
+      // Match 1 context: 0-4, Match 2 context: 3-7 -> should merge to 0-7
+      expect(result?.content).toEqual(`line1
+line2
+eval "$(iloom --completion)"
+line4
+line5
+eval "$(il --completion)"
+line7
+line8`)
+      expect(result?.content).toContain('line1')
+      expect(result?.content).toContain('line8')
+    })
+
+    it('should handle Windows line endings (CRLF)', async () => {
+      const fileContent = '# Start\r\neval "$(iloom --completion)"\r\n# End'
+
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue(fileContent)
+
+      const result = await shellCompletion.grepCompletionConfig('bash')
+
+      expect(result).toEqual({
+        path: expect.stringContaining('.bashrc'),
+        content: '# Start\neval "$(iloom --completion)"\n# End'
+      })
+    })
+
+    it('should handle file read errors gracefully', async () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFile).mockRejectedValue(new Error('Permission denied'))
+
+      const result = await shellCompletion.grepCompletionConfig('bash')
+
+      expect(result).toEqual({
+        path: expect.stringContaining('.bashrc'),
+        content: ''
+      })
+    })
+  })
+
+  describe('mergeOverlappingRanges', () => {
+    let shellCompletion: ShellCompletion
+
+    beforeEach(() => {
+      shellCompletion = new ShellCompletion()
+    })
+
+    it('should return empty array for empty input', () => {
+      // Access private method for testing
+      const result = (shellCompletion as { mergeOverlappingRanges: (ranges: Array<{ start: number; end: number }>) => Array<{ start: number; end: number }> }).mergeOverlappingRanges([])
+      expect(result).toEqual([])
+    })
+
+    it('should return single range unchanged', () => {
+      const ranges = [{ start: 5, end: 10 }]
+      const result = (shellCompletion as { mergeOverlappingRanges: (ranges: Array<{ start: number; end: number }>) => Array<{ start: number; end: number }> }).mergeOverlappingRanges(ranges)
+      expect(result).toEqual([{ start: 5, end: 10 }])
+    })
+
+    it('should merge overlapping ranges', () => {
+      const ranges = [
+        { start: 5, end: 10 },
+        { start: 8, end: 15 }
+      ]
+      const result = (shellCompletion as { mergeOverlappingRanges: (ranges: Array<{ start: number; end: number }>) => Array<{ start: number; end: number }> }).mergeOverlappingRanges(ranges)
+      expect(result).toEqual([{ start: 5, end: 15 }])
+    })
+
+    it('should merge adjacent ranges', () => {
+      const ranges = [
+        { start: 5, end: 10 },
+        { start: 11, end: 15 }
+      ]
+      const result = (shellCompletion as { mergeOverlappingRanges: (ranges: Array<{ start: number; end: number }>) => Array<{ start: number; end: number }> }).mergeOverlappingRanges(ranges)
+      expect(result).toEqual([{ start: 5, end: 15 }])
+    })
+
+    it('should keep separate non-overlapping ranges', () => {
+      const ranges = [
+        { start: 5, end: 10 },
+        { start: 15, end: 20 }
+      ]
+      const result = (shellCompletion as { mergeOverlappingRanges: (ranges: Array<{ start: number; end: number }>) => Array<{ start: number; end: number }> }).mergeOverlappingRanges(ranges)
+      expect(result).toEqual([
+        { start: 5, end: 10 },
+        { start: 15, end: 20 }
+      ])
+    })
+
+    it('should handle multiple overlapping ranges', () => {
+      const ranges = [
+        { start: 5, end: 10 },
+        { start: 8, end: 15 },
+        { start: 12, end: 20 },
+        { start: 25, end: 30 }
+      ]
+      const result = (shellCompletion as { mergeOverlappingRanges: (ranges: Array<{ start: number; end: number }>) => Array<{ start: number; end: number }> }).mergeOverlappingRanges(ranges)
+      expect(result).toEqual([
+        { start: 5, end: 20 },
+        { start: 25, end: 30 }
+      ])
+    })
+
+    it('should handle unsorted ranges', () => {
+      const ranges = [
+        { start: 15, end: 20 },
+        { start: 5, end: 10 },
+        { start: 8, end: 12 }
+      ]
+      const result = (shellCompletion as { mergeOverlappingRanges: (ranges: Array<{ start: number; end: number }>) => Array<{ start: number; end: number }> }).mergeOverlappingRanges(ranges)
+      // Should merge first two ranges, but not the third (gap between 12 and 15)
+      expect(result).toEqual([
+        { start: 5, end: 12 },
+        { start: 15, end: 20 }
+      ])
+    })
+
+    it('should handle ranges that completely contain others', () => {
+      const ranges = [
+        { start: 5, end: 20 },
+        { start: 8, end: 12 },
+        { start: 10, end: 15 }
+      ]
+      const result = (shellCompletion as { mergeOverlappingRanges: (ranges: Array<{ start: number; end: number }>) => Array<{ start: number; end: number }> }).mergeOverlappingRanges(ranges)
+      expect(result).toEqual([{ start: 5, end: 20 }])
     })
   })
 })

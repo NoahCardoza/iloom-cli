@@ -285,4 +285,100 @@ Please consult your shell's documentation for setting up custom completions.
     }
   }
 
+  /**
+   * Grep for completion-related content in shell configuration file
+   * Returns only lines containing '--completion' with 2 lines of context before and after
+   * Properly handles overlapping matches
+   */
+  async grepCompletionConfig(shell: ShellType): Promise<{ path: string; content: string } | null> {
+    const configPath = this.getShellConfigPath(shell)
+
+    if (!configPath) {
+      return null
+    }
+
+    try {
+      let content = ''
+      if (existsSync(configPath)) {
+        const fullContent = await readFile(configPath, 'utf-8')
+        const lines = fullContent.split(/\r?\n/)
+
+        // Find all matching line indices
+        const matchingIndices: number[] = []
+        lines.forEach((line, index) => {
+          if (line.includes('--completion')) {
+            matchingIndices.push(index)
+          }
+        })
+
+        if (matchingIndices.length === 0) {
+          content = ''
+        } else {
+          // Create ranges with context, handling overlaps
+          const ranges: { start: number; end: number }[] = []
+
+          matchingIndices.forEach(matchIndex => {
+            const start = Math.max(0, matchIndex - 2)
+            const end = Math.min(lines.length - 1, matchIndex + 2)
+            ranges.push({ start, end })
+          })
+
+          // Merge overlapping ranges
+          const mergedRanges = this.mergeOverlappingRanges(ranges)
+
+          // Extract lines for each merged range
+          const resultSections = mergedRanges.map(range =>
+            lines.slice(range.start, range.end + 1).join('\n')
+          )
+
+          content = resultSections.join('\n--\n')
+        }
+      }
+
+      return {
+        path: configPath,
+        content
+      }
+    } catch (error) {
+      logger.debug(`Failed to grep shell config file ${configPath}: ${error}`)
+      return {
+        path: configPath,
+        content: ''
+      }
+    }
+  }
+
+  /**
+   * Merge overlapping ranges to avoid duplicate lines
+   */
+  private mergeOverlappingRanges(ranges: { start: number; end: number }[]): { start: number; end: number }[] {
+    if (ranges.length === 0) return []
+
+    // Sort ranges by start position
+    const sorted = [...ranges].sort((a, b) => a.start - b.start)
+    const firstRange = sorted[0]
+    if (!firstRange) return []
+
+    const merged: { start: number; end: number }[] = [firstRange]
+
+    for (let i = 1; i < sorted.length; i++) {
+      const current = sorted[i]
+      const last = merged[merged.length - 1]
+
+      // Both current and last should exist, but TypeScript needs explicit checks
+      if (!current || !last) continue
+
+      // If current range overlaps or is adjacent to the last merged range
+      if (current.start <= last.end + 1) {
+        // Merge ranges by extending the end
+        last.end = Math.max(last.end, current.end)
+      } else {
+        // No overlap, add as new range
+        merged.push(current)
+      }
+    }
+
+    return merged
+  }
+
 }
