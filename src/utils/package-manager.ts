@@ -80,11 +80,13 @@ export async function detectPackageManager(cwd: string = process.cwd()): Promise
  * Install dependencies using the detected package manager
  * @param cwd Working directory to run install in
  * @param frozen Whether to use frozen lockfile (for production installs)
+ * @param quiet Whether to suppress command output (default: false)
  * @returns true if installation succeeded, throws Error on failure
  */
 export async function installDependencies(
   cwd: string,
-  frozen: boolean = true
+  frozen: boolean = true,
+  quiet: boolean = false
 ): Promise<void> {
   // Check if package.json exists before attempting installation
   if (!cwd) {
@@ -123,7 +125,7 @@ export async function installDependencies(
   try {
     await execa(packageManager, args, {
       cwd,
-      stdio: 'inherit',  // Show output to user
+      stdio: quiet ? 'pipe' : 'inherit',
       timeout: 300000,   // 5 minute timeout for install
     })
 

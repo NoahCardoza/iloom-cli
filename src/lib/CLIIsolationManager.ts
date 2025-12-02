@@ -62,7 +62,7 @@ export class CLIIsolationManager {
     }
 
     logger.info('Building CLI tool...')
-    await runScript('build', worktreePath)
+    await runScript('build', worktreePath, [], { quiet: true })
     logger.success('Build completed')
   }
 

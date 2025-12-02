@@ -2950,8 +2950,8 @@ describe('FinishCommand', () => {
 				// Verify findMainWorktreePathWithSettings was called with worktree path and settingsManager
 				expect(findMainWorktreePathWithSettings).toHaveBeenCalledWith(mockWorktree.path, expect.any(Object))
 
-				// Verify installDependencies was called with main worktree path and frozen=true
-				expect(installDependencies).toHaveBeenCalledWith('/test/main', true)
+				// Verify installDependencies was called with main worktree path, frozen=true, quiet=true
+				expect(installDependencies).toHaveBeenCalledWith('/test/main', true, true)
 			})
 
 			it('should install dependencies before running post-merge build', async () => {

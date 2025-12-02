@@ -623,7 +623,7 @@ export class FinishCommand {
 		} else {
 			logger.info('Installing dependencies in main worktree...')
 			const mainWorktreePath = await findMainWorktreePathWithSettings(worktree.path, this.settingsManager)
-			await installDependencies(mainWorktreePath, true)
+			await installDependencies(mainWorktreePath, true, true)
 		}
 
 		// Step 5.6: Run post-merge build verification (CLI projects only)

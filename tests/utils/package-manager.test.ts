@@ -512,6 +512,46 @@ describe('package-manager utilities', () => {
       expect(execa).not.toHaveBeenCalled()
       expect(logger.debug).toHaveBeenCalledWith('Skipping dependency installation - no package.json found')
     })
+
+    it('should use pipe stdio when quiet option is true', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+        packageManager: 'pnpm@8.0.0'
+      }))
+      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+      await installDependencies('/test/path', true, true)
+
+      expect(execa).toHaveBeenCalledWith(
+        'pnpm',
+        ['install', '--frozen-lockfile'],
+        expect.objectContaining({
+          cwd: '/test/path',
+          stdio: 'pipe',
+          timeout: 300000
+        })
+      )
+    })
+
+    it('should use inherit stdio when quiet option is false', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+        packageManager: 'pnpm@8.0.0'
+      }))
+      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+      await installDependencies('/test/path', true, false)
+
+      expect(execa).toHaveBeenCalledWith(
+        'pnpm',
+        ['install', '--frozen-lockfile'],
+        expect.objectContaining({
+          cwd: '/test/path',
+          stdio: 'inherit',
+          timeout: 300000
+        })
+      )
+    })
   })
 
   describe('runScript', () => {

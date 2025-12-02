@@ -141,8 +141,8 @@ describe('LoomManager', () => {
       expect(result.githubData?.title).toBe('Test Issue')
       expect(result.createdAt).toBeInstanceOf(Date)
 
-      // Verify installDependencies was called with the correct path
-      expect(installDependencies).toHaveBeenCalledWith(expectedPath, true)
+      // Verify installDependencies was called with the correct path and quiet=true
+      expect(installDependencies).toHaveBeenCalledWith(expectedPath, true, true)
     })
 
     it('should create loom for PR successfully', async () => {
@@ -182,8 +182,8 @@ describe('LoomManager', () => {
       expect(result.port).toBe(3456)
       expect(result.branch).toBe('feature-branch')
 
-      // Verify installDependencies was called with the correct path
-      expect(installDependencies).toHaveBeenCalledWith(expectedPath, true)
+      // Verify installDependencies was called with the correct path and quiet=true
+      expect(installDependencies).toHaveBeenCalledWith(expectedPath, true, true)
     })
 
     it('should create loom for branch successfully', async () => {
@@ -211,8 +211,8 @@ describe('LoomManager', () => {
       expect(result.branch).toBe('feature-xyz')
       expect(result.port).toBeGreaterThanOrEqual(3000)
 
-      // Verify installDependencies was called with the correct path
-      expect(installDependencies).toHaveBeenCalledWith(expectedPath, true)
+      // Verify installDependencies was called with the correct path and quiet=true
+      expect(installDependencies).toHaveBeenCalledWith(expectedPath, true, true)
     })
 
     it('should calculate correct port for issue', async () => {
@@ -315,7 +315,7 @@ describe('LoomManager', () => {
       const result = await manager.createIloom(baseInput)
 
       expect(result.path).toBe(expectedPath)
-      expect(installDependencies).toHaveBeenCalledWith(expectedPath, true)
+      expect(installDependencies).toHaveBeenCalledWith(expectedPath, true, true)
 
       // Reset mock for next tests
       vi.mocked(installDependencies).mockResolvedValue(undefined)

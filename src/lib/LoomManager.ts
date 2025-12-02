@@ -118,7 +118,7 @@ export class LoomManager {
 
     // 9. Install dependencies AFTER environment setup (like bash script line 757-769)
     try {
-      await installDependencies(worktreePath, true)
+      await installDependencies(worktreePath, true, true)
     } catch (error) {
       // Log warning but don't fail - matches bash script behavior
       logger.warn(`Failed to install dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`, error)

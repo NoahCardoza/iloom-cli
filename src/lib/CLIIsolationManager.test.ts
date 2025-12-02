@@ -58,7 +58,7 @@ describe('CLIIsolationManager', () => {
 
       const result = await manager.setupCLIIsolation(worktreePath, 42, binEntries)
 
-      expect(packageManager.runScript).toHaveBeenCalledWith('build', worktreePath)
+      expect(packageManager.runScript).toHaveBeenCalledWith('build', worktreePath, [], { quiet: true })
       expect(logger.info).toHaveBeenCalledWith('Building CLI tool...')
       expect(logger.success).toHaveBeenCalledWith('Build completed')
       expect(result).toEqual(['test-cli-42'])
