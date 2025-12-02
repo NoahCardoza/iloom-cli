@@ -628,7 +628,7 @@ This is an early stage product - platform/tech stack support is limited for now.
 
 We (Claude and I) are actively working on expanding platform and integration support. Contributions welcome!
 
-**Known limitations** include agent customization, Linear and JIRA issue tracking integration, alternative LLM provider support, and IDE choice flexibility. See all [`known-limitation`](https://github.com/iloom-ai/iloom-cli/issues?q=is%3Aissue+is%3Aopen+label%3Aknown-limitation) issues for details and to [contribute](CONTRIBUTING.md) solutions.
+See all [`known-limitation`](https://github.com/iloom-ai/iloom-cli/issues?q=is%3Aissue+is%3Aopen+label%3Aknown-limitation) issues for details and to [contribute](CONTRIBUTING.md) solutions.
 
 ## Installation
 
