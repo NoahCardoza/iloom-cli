@@ -276,6 +276,23 @@ export const IloomSettingsSchema = z.object({
 		})
 		.optional()
 		.describe('Merge behavior configuration: local (merge locally) or github-pr (create PR)'),
+	ide: z
+		.object({
+			type: z
+				.enum(['vscode', 'cursor', 'webstorm', 'sublime', 'intellij', 'windsurf'])
+				.default('vscode')
+				.describe(
+					'IDE to launch when starting a loom. Options: vscode (Visual Studio Code), cursor (Cursor AI editor), ' +
+						'webstorm (JetBrains WebStorm), sublime (Sublime Text), intellij (JetBrains IntelliJ IDEA), ' +
+						'windsurf (Windsurf editor).'
+				),
+		})
+		.optional()
+		.describe(
+			'IDE configuration for workspace launches. Controls which editor opens when you start a loom. ' +
+				'Supports VSCode, Cursor, WebStorm, Sublime Text, IntelliJ, and Windsurf. ' +
+				'Note: Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf).'
+		),
 })
 
 /**
@@ -374,6 +391,23 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		})
 		.optional()
 		.describe('Merge behavior configuration: local (merge locally) or github-pr (create PR)'),
+	ide: z
+		.object({
+			type: z
+				.enum(['vscode', 'cursor', 'webstorm', 'sublime', 'intellij', 'windsurf'])
+				.optional()
+				.describe(
+					'IDE to launch when starting a loom. Options: vscode (Visual Studio Code), cursor (Cursor AI editor), ' +
+						'webstorm (JetBrains WebStorm), sublime (Sublime Text), intellij (JetBrains IntelliJ IDEA), ' +
+						'windsurf (Windsurf editor).'
+				),
+		})
+		.optional()
+		.describe(
+			'IDE configuration for workspace launches. Controls which editor opens when you start a loom. ' +
+				'Supports VSCode, Cursor, WebStorm, Sublime Text, IntelliJ, and Windsurf. ' +
+				'Note: Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf).'
+		),
 })
 
 /**
@@ -405,6 +439,11 @@ export type WorkflowsSettings = z.infer<typeof WorkflowsSettingsSchema>
  * TypeScript type for capabilities settings derived from Zod schema
  */
 export type CapabilitiesSettings = z.infer<typeof CapabilitiesSettingsSchema>
+
+/**
+ * TypeScript type for IDE settings derived from Zod schema
+ */
+export type IdeSettings = z.infer<typeof IloomSettingsSchema>['ide']
 
 /**
  * TypeScript type for iloom settings derived from Zod schema

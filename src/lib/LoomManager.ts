@@ -213,7 +213,7 @@ export class LoomManager {
 
       // Create ClaudeContextManager with shared SettingsManager to ensure CLI overrides work
       const claudeContext = new ClaudeContextManager(undefined, undefined, this.settings)
-      const launcher = new LoomLauncher(claudeContext)
+      const launcher = new LoomLauncher(claudeContext, this.settings)
 
       await launcher.launchLoom({
         enableClaude,
@@ -803,7 +803,7 @@ export class LoomManager {
 
       // Create ClaudeContextManager with shared SettingsManager to ensure CLI overrides work
       const claudeContext = new ClaudeContextManager(undefined, undefined, this.settings)
-      const launcher = new LoomLauncher(claudeContext)
+      const launcher = new LoomLauncher(claudeContext, this.settings)
 
       await launcher.launchLoom({
         enableClaude,

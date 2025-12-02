@@ -2,11 +2,12 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { openTerminalWindow, openMultipleTerminalWindows } from '../utils/terminal.js'
 import type { TerminalWindowOptions } from '../utils/terminal.js'
-import { openVSCodeWindow } from '../utils/vscode.js'
+import { openIdeWindow } from '../utils/ide.js'
 import { getDevServerLaunchCommand } from '../utils/dev-server.js'
 import { generateColorFromBranchName } from '../utils/color.js'
 import { logger } from '../utils/logger.js'
 import { ClaudeContextManager } from './ClaudeContextManager.js'
+import type { SettingsManager } from './SettingsManager.js'
 import type { Capability } from '../types/loom.js'
 
 export interface LaunchLoomOptions {
@@ -32,9 +33,13 @@ export interface LaunchLoomOptions {
  */
 export class LoomLauncher {
 	private claudeContext: ClaudeContextManager
+	private settings?: SettingsManager
 
-	constructor(claudeContext?: ClaudeContextManager) {
+	constructor(claudeContext?: ClaudeContextManager, settings?: SettingsManager) {
 		this.claudeContext = claudeContext ?? new ClaudeContextManager()
+		if (settings !== undefined) {
+			this.settings = settings
+		}
 	}
 
 	/**
@@ -110,11 +115,12 @@ export class LoomLauncher {
 	}
 
 	/**
-	 * Launch VSCode
+	 * Launch IDE (VSCode or configured alternative)
 	 */
 	private async launchVSCode(options: LaunchLoomOptions): Promise<void> {
-		await openVSCodeWindow(options.worktreePath)
-		logger.info('VSCode opened')
+		const ideConfig = await this.settings?.loadSettings().then((s) => s.ide)
+		await openIdeWindow(options.worktreePath, ideConfig)
+		logger.info('IDE opened')
 	}
 
 	/**

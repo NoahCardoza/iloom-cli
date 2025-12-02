@@ -3,15 +3,17 @@ import { LoomLauncher } from './LoomLauncher.js'
 import type { LaunchLoomOptions } from './LoomLauncher.js'
 import * as terminal from '../utils/terminal.js'
 import type { TerminalWindowOptions } from '../utils/terminal.js'
-import * as vscode from '../utils/vscode.js'
+import * as ide from '../utils/ide.js'
 import * as devServer from '../utils/dev-server.js'
 import { ClaudeContextManager } from './ClaudeContextManager.js'
+import { SettingsManager } from './SettingsManager.js'
 
 // Mock all external dependencies
 vi.mock('../utils/terminal.js')
-vi.mock('../utils/vscode.js')
+vi.mock('../utils/ide.js')
 vi.mock('../utils/dev-server.js')
 vi.mock('./ClaudeContextManager.js')
+vi.mock('./SettingsManager.js')
 vi.mock('../utils/color.js', () => ({
 	generateColorFromBranchName: vi.fn(() => ({
 		rgb: { r: 0.5, g: 0.3, b: 0.7 },
@@ -71,7 +73,7 @@ describe('LoomLauncher', () => {
 				})
 
 				// Should launch VSCode
-				expect(vscode.openVSCodeWindow).toHaveBeenCalledWith(baseOptions.worktreePath)
+				expect(ide.openIdeWindow).toHaveBeenCalledWith(baseOptions.worktreePath, undefined)
 
 				// Should launch multiple terminals (not individual Claude/terminal calls)
 				expect(terminal.openMultipleTerminalWindows).toHaveBeenCalled()
@@ -115,7 +117,7 @@ describe('LoomLauncher', () => {
 				})
 
 				expect(mockClaudeContext.launchWithContext).toHaveBeenCalled()
-				expect(vscode.openVSCodeWindow).not.toHaveBeenCalled()
+				expect(ide.openIdeWindow).not.toHaveBeenCalled()
 				expect(terminal.openTerminalWindow).not.toHaveBeenCalled()
 			})
 
@@ -128,7 +130,7 @@ describe('LoomLauncher', () => {
 					enableTerminal: false,
 				})
 
-				expect(vscode.openVSCodeWindow).toHaveBeenCalledWith(baseOptions.worktreePath)
+				expect(ide.openIdeWindow).toHaveBeenCalledWith(baseOptions.worktreePath, undefined)
 				expect(mockClaudeContext.launchWithContext).not.toHaveBeenCalled()
 				expect(terminal.openTerminalWindow).not.toHaveBeenCalled()
 			})
@@ -148,7 +150,7 @@ describe('LoomLauncher', () => {
 
 				expect(terminal.openTerminalWindow).toHaveBeenCalled()
 				expect(mockClaudeContext.launchWithContext).not.toHaveBeenCalled()
-				expect(vscode.openVSCodeWindow).not.toHaveBeenCalled()
+				expect(ide.openIdeWindow).not.toHaveBeenCalled()
 			})
 
 			it('should launch nothing when all components disabled', async () => {
@@ -161,7 +163,7 @@ describe('LoomLauncher', () => {
 				})
 
 				expect(mockClaudeContext.launchWithContext).not.toHaveBeenCalled()
-				expect(vscode.openVSCodeWindow).not.toHaveBeenCalled()
+				expect(ide.openIdeWindow).not.toHaveBeenCalled()
 				expect(terminal.openTerminalWindow).not.toHaveBeenCalled()
 			})
 		})
@@ -183,7 +185,7 @@ describe('LoomLauncher', () => {
 				})
 
 				expect(mockClaudeContext.launchWithContext).toHaveBeenCalled()
-				expect(vscode.openVSCodeWindow).toHaveBeenCalledWith(baseOptions.worktreePath)
+				expect(ide.openIdeWindow).toHaveBeenCalledWith(baseOptions.worktreePath, undefined)
 				expect(terminal.openTerminalWindow).not.toHaveBeenCalled()
 			})
 
@@ -200,7 +202,7 @@ describe('LoomLauncher', () => {
 				expect(terminal.openMultipleTerminalWindows).toHaveBeenCalled()
 				expect(mockClaudeContext.launchWithContext).not.toHaveBeenCalled()
 				expect(terminal.openTerminalWindow).not.toHaveBeenCalled()
-				expect(vscode.openVSCodeWindow).not.toHaveBeenCalled()
+				expect(ide.openIdeWindow).not.toHaveBeenCalled()
 			})
 
 			it('should launch VSCode + DevServer when both enabled', async () => {
@@ -212,7 +214,7 @@ describe('LoomLauncher', () => {
 					enableTerminal: false,
 				})
 
-				expect(vscode.openVSCodeWindow).toHaveBeenCalled()
+				expect(ide.openIdeWindow).toHaveBeenCalled()
 				expect(terminal.openTerminalWindow).toHaveBeenCalled()
 				expect(mockClaudeContext.launchWithContext).not.toHaveBeenCalled()
 			})
@@ -296,7 +298,7 @@ describe('LoomLauncher', () => {
 			})
 
 			it('should throw when VSCode required but not available', async () => {
-				vi.mocked(vscode.openVSCodeWindow).mockRejectedValue(
+				vi.mocked(ide.openIdeWindow).mockRejectedValue(
 					new Error('VSCode is not available')
 				)
 
@@ -576,6 +578,96 @@ describe('LoomLauncher', () => {
 			// All terminals should respect sourceEnvOnStart
 			calls.forEach((tab: TerminalWindowOptions) => {
 				expect(tab.includeEnvSetup).toBe(false)
+			})
+		})
+	})
+
+	describe('IDE configuration', () => {
+		let mockSettings: Pick<SettingsManager, 'loadSettings'>
+
+		beforeEach(() => {
+			vi.clearAllMocks()
+
+			// Mock SettingsManager
+			mockSettings = {
+				loadSettings: vi.fn(),
+			}
+			vi.mocked(SettingsManager).mockImplementation(() => mockSettings)
+		})
+
+		it('should use vscode by default when ide setting not configured', async () => {
+			mockSettings.loadSettings.mockResolvedValue({})
+			const launcherWithSettings = new LoomLauncher(undefined, mockSettings)
+
+			await launcherWithSettings.launchLoom({
+				...baseOptions,
+				enableCode: true,
+				enableClaude: false,
+				enableDevServer: false,
+				enableTerminal: false,
+			})
+
+			expect(ide.openIdeWindow).toHaveBeenCalledWith(baseOptions.worktreePath, undefined)
+		})
+
+		it('should use configured IDE preset from settings', async () => {
+			mockSettings.loadSettings.mockResolvedValue({
+				ide: { type: 'cursor' },
+			})
+			const launcherWithSettings = new LoomLauncher(undefined, mockSettings)
+
+			await launcherWithSettings.launchLoom({
+				...baseOptions,
+				enableCode: true,
+				enableClaude: false,
+				enableDevServer: false,
+				enableTerminal: false,
+			})
+
+			expect(ide.openIdeWindow).toHaveBeenCalledWith(baseOptions.worktreePath, {
+				type: 'cursor',
+			})
+		})
+
+		it('should throw descriptive error when configured IDE is not available', async () => {
+			mockSettings.loadSettings.mockResolvedValue({
+				ide: { type: 'cursor' },
+			})
+			vi.mocked(ide.openIdeWindow).mockRejectedValue(
+				new Error('Cursor is not available. The "cursor" command was not found in PATH.')
+			)
+
+			const launcherWithSettings = new LoomLauncher(undefined, mockSettings)
+
+			await expect(
+				launcherWithSettings.launchLoom({
+					...baseOptions,
+					enableCode: true,
+					enableClaude: false,
+					enableDevServer: false,
+					enableTerminal: false,
+				})
+			).rejects.toThrow('Cursor is not available')
+		})
+
+		it('should pass workspace path to configured IDE', async () => {
+			const customPath = '/Users/test/custom-workspace'
+			mockSettings.loadSettings.mockResolvedValue({
+				ide: { type: 'webstorm' },
+			})
+			const launcherWithSettings = new LoomLauncher(undefined, mockSettings)
+
+			await launcherWithSettings.launchLoom({
+				...baseOptions,
+				worktreePath: customPath,
+				enableCode: true,
+				enableClaude: false,
+				enableDevServer: false,
+				enableTerminal: false,
+			})
+
+			expect(ide.openIdeWindow).toHaveBeenCalledWith(customPath, {
+				type: 'webstorm',
 			})
 		})
 	})

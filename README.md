@@ -591,6 +591,39 @@ Example: Issue #25 with basePort 3000 = port 3025
 
 For complete configuration reference, see [.iloom/README.md](./.iloom/README.md)
 
+### IDE Configuration
+
+Configure which IDE launches when starting a loom:
+
+```jsonc
+{
+  "ide": {
+    "type": "cursor"  // or: vscode, webstorm, sublime, intellij, windsurf
+  }
+}
+```
+
+**Supported IDEs:**
+
+| Type | Command | Notes |
+|------|---------|-------|
+| `vscode` | `code` | Default. Visual Studio Code |
+| `cursor` | `cursor` | Cursor AI editor |
+| `webstorm` | `webstorm` | JetBrains WebStorm (launches with --nosplash) |
+| `sublime` | `subl` | Sublime Text |
+| `intellij` | `idea` | JetBrains IntelliJ IDEA (launches with --nosplash) |
+| `windsurf` | `windsurf` | Windsurf editor |
+
+**Configure via CLI:** Use the existing `--set` flag:
+
+```bash
+il start 25 --set ide.type=cursor
+```
+
+**Configure during setup:** Run `il init` to configure IDE preference interactively along with other settings.
+
+**Note:** Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf). Other IDEs will launch without color theming.
+
 ## Requirements
 
 **Essential:**

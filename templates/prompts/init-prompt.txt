@@ -195,6 +195,7 @@ Extract these current values if they exist:
 - `currentPermissionMode` from `workflows.issue.permissionMode` field (default: "acceptEdits")
 - `currentBasePort` from `capabilities.web.basePort` field (default: 3000)
 - `currentMergeMode` from `mergeBehavior.mode` field (default: "local")
+- `currentIdeType` from `ide.type` field (default: "vscode")
 
 **If configuration already exists, display current configuration summary:**
 
@@ -205,6 +206,7 @@ Main Branch: [currentMainBranch or "main (default)"]
 Worktree Prefix: [currentWorktreePrefix or "default (repo-name-looms)"]
 Permission Mode (Issues): [currentPermissionMode or "acceptEdits (default)"]
 Base Port: [currentBasePort or "3000 (default)"]
+IDE: [currentIdeType or "vscode (default)"]
 GitHub Remote: [currentGitHubRemote or "not configured"]
 ```
 
@@ -261,7 +263,7 @@ If the user has no `issueManagement.github.remote` configured you MUST ask the u
 
 Use AskUserQuestion to ask ALL essential settings questions **IN A SINGLE BATCH**. **ALWAYS include current values in questions as shown below:**
 
-**Create a single AskUserQuestion call with these 4 questions:**
+**Create a single AskUserQuestion call with these 5 questions:**
 
 1. **Main Branch**
    - Question format: "What is your main/primary branch name?{{#IF currentMainBranch}} (Currently: [currentMainBranch]){{/IF currentMainBranch}}"
@@ -305,7 +307,21 @@ Use AskUserQuestion to ask ALL essential settings questions **IN A SINGLE BATCH*
    - Validation: Number between 1 and 65535
    - Store answer as: `capabilities.web.basePort`
 
-5. **Merge Mode** (only ask if multiple remotes detected OR user requests advanced config)
+5. **IDE Selection**
+   - Question format: "Which IDE should iloom launch when starting a loom?{{#IF currentIdeType}} (Currently: [currentIdeType]){{/IF currentIdeType}}"
+   - Options:
+     - "vscode" - Visual Studio Code (default)
+     - "cursor" - Cursor AI editor
+     - "webstorm" - JetBrains WebStorm
+     - "sublime" - Sublime Text
+     - "intellij" - JetBrains IntelliJ IDEA
+     - "windsurf" - Windsurf editor
+   - Default: currentIdeType or "vscode"
+   - Validation: Must be one of the listed options
+   - Store answer as: `ide.type`
+   - Note: Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf). Other IDEs will launch without color theming.
+
+6. **Merge Mode** (only ask if multiple remotes detected OR user requests advanced config)
    - Question format: "How should iloom handle finishing work?{{#IF currentMergeMode}} (Currently: [currentMergeMode]){{/IF currentMergeMode}}"
    - Options:
      - "local" - Merge changes locally (traditional workflow)
@@ -317,7 +333,7 @@ Use AskUserQuestion to ask ALL essential settings questions **IN A SINGLE BATCH*
 
 **Implementation Details:**
 - Set multiSelect: false for all questions (user picks one answer per question)
-- Use the AskUserQuestion tool with all 4 questions in the questions array
+- Use the AskUserQuestion tool with all 5 questions in the questions array
 - Users can select "Other" on any question to provide custom input
 - Process all answers at once when the user submits
 
@@ -332,6 +348,7 @@ Main Branch: [value]
 Worktree Prefix: [value or "default (repo-name-looms)"]
 Permission Mode (Issues): [value]
 Base Port: [value]
+IDE: [value or "vscode (default)"]
 {{#IF MULTIPLE_REMOTES}}GitHub Remote: [value]{{/IF MULTIPLE_REMOTES}}
 ```
 
@@ -573,10 +590,17 @@ If users ask about specific configurations, help them add these sections to thei
    "protectedBranches": ["main", "production", "release/*"]
    ```
 
+5. **IDE Configuration:**
+   ```json
+   "ide": {
+     "type": "cursor"
+   }
+   ```
+
 ## Important Notes
 
 - **Validate ALL inputs** against the schema before writing files
-- **Use batch mode** for AskUserQuestion - ask all 4 essential settings questions in a single call for faster setup
+- **Use batch mode** for AskUserQuestion - ask all 5 essential settings questions in a single call for faster setup
 - **ALWAYS follow Phase 0** - Extract current settings and check if configuration exists
 - **For existing users** - Ask what they want to do (modify, add advanced config, start fresh, or exit) instead of forcing them through the entire flow
 - **For new users** - Skip directly to Phase 0.5 (GitHub Remote Configuration) and proceed with setup
