@@ -7,6 +7,8 @@ import path from 'path'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import { fileURLToPath } from 'url'
+import { GitRemote, parseGitRemotes } from '../utils/remote.js'
+import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
 
 /**
  * Initialize iloom configuration and setup shell autocomplete
@@ -62,7 +64,6 @@ export class InitCommand {
     // Migrate legacy .hatchbox settings to .iloom (BEFORE creating new files)
     try {
       logger.debug('Loading SettingsMigrationManager for legacy migration')
-      const { SettingsMigrationManager } = await import('../lib/SettingsMigrationManager.js')
       const migrationManager = new SettingsMigrationManager()
       logger.debug('Running settings migration check')
       await migrationManager.migrateSettingsIfNeeded()
@@ -307,29 +308,35 @@ export class InitCommand {
         logger.debug('Unknown shell detected, skipping config read')
       }
 
-      // Detect git remotes for GitHub configuration
-      logger.debug('Detecting git remotes for GitHub configuration')
-      const { parseGitRemotes } = await import('../utils/remote.js')
-      const remotes = await parseGitRemotes()
-      logger.debug('Git remotes detected', { count: remotes.length, remotes })
+      let remotes: GitRemote[] = []
+      try {
+        // Detect git remotes for GitHub configuration
+        logger.debug('Detecting git remotes for GitHub configuration')
+        remotes = await parseGitRemotes()
+        logger.debug('Git remotes detected', { count: remotes.length, remotes })
+      } catch (error) {
+        const message = error instanceof Error ? error.stack : 'Unknown error'
+        logger.debug("Error occured while getting remote info: ", message)
+      }
+
 
       let remotesInfo = ''
-      let multipleRemotes = ''
-      let singleRemote = ''
+      let multipleRemotes = false
+      let singleRemote = false
       let singleRemoteName = ''
       let singleRemoteUrl = ''
-      let noRemotes = ''
+      let noRemotes = false
 
       if (remotes.length === 0) {
-        noRemotes = 'true'
+        noRemotes = true
         remotesInfo = 'No git remotes detected in this repository.'
       } else if (remotes.length === 1 && remotes[0]) {
-        singleRemote = 'true'
+        singleRemote = true
         singleRemoteName = remotes[0].name
         singleRemoteUrl = remotes[0].url
         remotesInfo = `Detected Remote:\n- **${remotes[0].name}**: ${remotes[0].url} (${remotes[0].owner}/${remotes[0].repo})`
       } else {
-        multipleRemotes = 'true'
+        multipleRemotes = true
         remotesInfo = `Detected Remotes (${remotes.length}):\n` +
           remotes.map(r => `- **${r.name}**: ${r.url} (${r.owner}/${r.repo})`).join('\n')
       }
@@ -350,11 +357,11 @@ export class InitCommand {
         SHELL_CONFIG_PATH: shellConfigPath,
         SHELL_CONFIG_CONTENT: shellConfigContent,
         REMOTES_INFO: remotesInfo,
-        MULTIPLE_REMOTES: multipleRemotes,
-        SINGLE_REMOTE: singleRemote,
+        MULTIPLE_REMOTES: multipleRemotes.toString(),
+        SINGLE_REMOTE: singleRemote.toString(),
         SINGLE_REMOTE_NAME: singleRemoteName,
         SINGLE_REMOTE_URL: singleRemoteUrl,
-        NO_REMOTES: noRemotes,
+        NO_REMOTES: noRemotes.toString(),
         README_CONTENT: readmeContent,
       }
 
@@ -398,7 +405,7 @@ export class InitCommand {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       logger.warn(`Guided configuration failed: ${message}`)
-      logger.debug('launchGuidedInit() error details', { error })
+      logger.debug('launchGuidedInit() error details', error instanceof Error ? error.stack : {error})
       logger.info('You can manually edit .iloom/settings.json to configure iloom.')
     }
 

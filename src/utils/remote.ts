@@ -1,5 +1,6 @@
 import { execa } from 'execa'
 import type { IloomSettings } from '../lib/SettingsManager.js'
+import logger from './logger.js'
 
 /**
  * Represents a parsed git remote
@@ -83,9 +84,13 @@ export async function hasMultipleRemotes(cwd?: string): Promise<boolean> {
 		const remotes = await parseGitRemotes(cwd)
 		return remotes.length > 1
 	} catch (error) {
-		// Log the error for debugging but don't fail - this is used during CLI startup
-		// where we need graceful handling for non-git directories
-		console.warn(`Warning: Unable to check git remotes: ${error instanceof Error ? error.message : String(error)}`)
+		// if error is "not a git repository" then just log a debug message, otherwise log a warning message
+		const errMsg = error instanceof Error ? error.message : String(error)
+		if (/not a git repository/i.test(errMsg)) {
+			logger.debug('Skipping git remote check: not a git repository')
+		} else {
+			logger.warn(`Unable to check git remotes: ${errMsg}`)
+		}
 		return false
 	}
 }
