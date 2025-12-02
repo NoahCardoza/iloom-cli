@@ -13,6 +13,7 @@ export interface TemplateVariables {
 	PORT?: number
 	ONE_SHOT_MODE?: boolean
 	SETTINGS_SCHEMA?: string
+	SETTINGS_GLOBAL_JSON?: string
 	SETTINGS_JSON?: string
 	SETTINGS_LOCAL_JSON?: string
 	SHELL_TYPE?: string
@@ -126,6 +127,10 @@ export class PromptTemplateManager {
 			result = result.replace(/SETTINGS_SCHEMA/g, variables.SETTINGS_SCHEMA)
 		}
 
+		if (variables.SETTINGS_GLOBAL_JSON !== undefined) {
+			result = result.replace(/SETTINGS_GLOBAL_JSON/g, variables.SETTINGS_GLOBAL_JSON)
+		}
+
 		if (variables.SETTINGS_JSON !== undefined) {
 			result = result.replace(/SETTINGS_JSON/g, variables.SETTINGS_JSON)
 		}
@@ -210,6 +215,17 @@ export class PromptTemplateManager {
 		} else {
 			// Remove the entire conditional block
 			result = result.replace(settingsJsonRegex, '')
+		}
+
+		// Process SETTINGS_GLOBAL_JSON conditionals
+		const settingsGlobalJsonRegex = /\{\{#IF SETTINGS_GLOBAL_JSON\}\}(.*?)\{\{\/IF SETTINGS_GLOBAL_JSON\}\}/gs
+
+		if (variables.SETTINGS_GLOBAL_JSON !== undefined && variables.SETTINGS_GLOBAL_JSON !== '') {
+			// Include the content, remove the conditional markers
+			result = result.replace(settingsGlobalJsonRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(settingsGlobalJsonRegex, '')
 		}
 
 		// Process SETTINGS_LOCAL_JSON conditionals

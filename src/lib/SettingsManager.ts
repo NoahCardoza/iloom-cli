@@ -1,5 +1,6 @@
 import { readFile } from 'fs/promises'
 import path from 'path'
+import os from 'os'
 import { z } from 'zod'
 import deepmerge from 'deepmerge'
 import { logger } from '../utils/logger.js'
@@ -455,16 +456,24 @@ export type IloomSettings = z.infer<typeof IloomSettingsSchema>
  */
 export class SettingsManager {
 	/**
-	 * Load settings from <PROJECT_ROOT>/.iloom/settings.json and settings.local.json
-	 * Merges settings.local.json over settings.json with priority
-	 * CLI overrides have highest priority if provided
-	 * Returns empty object if both files don't exist (not an error)
+	 * Load settings from global, project, and local sources with proper precedence
+	 * Merge hierarchy (lowest to highest priority):
+	 * 1. Global settings (~/.config/iloom-ai/settings.json)
+	 * 2. Project settings (<PROJECT_ROOT>/.iloom/settings.json)
+	 * 3. Local settings (<PROJECT_ROOT>/.iloom/settings.local.json)
+	 * 4. CLI overrides (--set flags)
+	 * Returns empty object if all files don't exist (not an error)
 	 */
 	async loadSettings(
 		projectRoot?: string,
 		cliOverrides?: Partial<IloomSettings>,
 	): Promise<IloomSettings> {
 		const root = this.getProjectRoot(projectRoot)
+
+		// Load global settings (lowest priority)
+		const globalSettings = await this.loadGlobalSettingsFile()
+		const globalSettingsPath = this.getGlobalSettingsPath()
+		logger.debug(`🌍 Global settings from ${globalSettingsPath}:`, JSON.stringify(globalSettings, null, 2))
 
 		// Load base settings from settings.json
 		const baseSettings = await this.loadSettingsFile(root, 'settings.json')
@@ -476,9 +485,9 @@ export class SettingsManager {
 		const localSettingsPath = path.join(root, '.iloom', 'settings.local.json')
 		logger.debug(`📄 Local settings from ${localSettingsPath}:`, JSON.stringify(localSettings, null, 2))
 
-		// Deep merge with priority: cliOverrides > localSettings > baseSettings
-		let merged = this.mergeSettings(baseSettings, localSettings)
-		logger.debug('🔄 After merging base + local settings:', JSON.stringify(merged, null, 2))
+		// Deep merge with priority: cliOverrides > localSettings > baseSettings > globalSettings
+		let merged = this.mergeSettings(this.mergeSettings(globalSettings, baseSettings), localSettings)
+		logger.debug('🔄 After merging global + base + local settings:', JSON.stringify(merged, null, 2))
 
 		if (cliOverrides && Object.keys(cliOverrides).length > 0) {
 			logger.debug('⚙️ CLI overrides to apply:', JSON.stringify(cliOverrides, null, 2))
@@ -615,6 +624,67 @@ export class SettingsManager {
 	 */
 	private getProjectRoot(projectRoot?: string): string {
 		return projectRoot ?? process.cwd()
+	}
+
+	/**
+	 * Get global config directory path (~/.config/iloom-ai)
+	 */
+	private getGlobalConfigDir(): string {
+		return path.join(os.homedir(), '.config', 'iloom-ai')
+	}
+
+	/**
+	 * Get global settings file path (~/.config/iloom-ai/settings.json)
+	 */
+	private getGlobalSettingsPath(): string {
+		return path.join(this.getGlobalConfigDir(), 'settings.json')
+	}
+
+	/**
+	 * Load and parse global settings file
+	 * Returns empty object if file doesn't exist (not an error)
+	 * Warns but returns empty object on validation/parse errors (graceful degradation)
+	 */
+	private async loadGlobalSettingsFile(): Promise<z.infer<typeof IloomSettingsSchemaNoDefaults>> {
+		const settingsPath = this.getGlobalSettingsPath()
+
+		try {
+			const content = await readFile(settingsPath, 'utf-8')
+			let parsed: unknown
+
+			try {
+				parsed = JSON.parse(content)
+			} catch (error) {
+				logger.warn(
+					`Failed to parse global settings file at ${settingsPath}: ${error instanceof Error ? error.message : 'Invalid JSON'}. Ignoring global settings.`,
+				)
+				return {}
+			}
+
+			// Validate with non-defaulting schema
+			try {
+				const validated = IloomSettingsSchemaNoDefaults.strict().parse(parsed)
+				return validated
+			} catch (error) {
+				if (error instanceof z.ZodError) {
+					const errorMsg = this.formatAllZodErrors(error, 'global settings')
+					logger.warn(`${errorMsg.message}. Ignoring global settings.`)
+				} else {
+					logger.warn(`Validation error in global settings: ${error instanceof Error ? error.message : 'Unknown error'}. Ignoring global settings.`)
+				}
+				return {}
+			}
+		} catch (error) {
+			// File not found is not an error - return empty settings
+			if ((error as { code?: string }).code === 'ENOENT') {
+				logger.debug(`No global settings file found at ${settingsPath}`)
+				return {}
+			}
+
+			// Other file system errors - warn and continue
+			logger.warn(`Error reading global settings file at ${settingsPath}: ${error instanceof Error ? error.message : 'Unknown error'}. Ignoring global settings.`)
+			return {}
+		}
 	}
 
 	/**

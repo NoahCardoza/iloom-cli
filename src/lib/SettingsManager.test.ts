@@ -44,8 +44,9 @@ describe('SettingsManager', () => {
 				message: 'ENOENT: no such file or directory',
 			}
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(validSettings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json (doesn't exist)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(validSettings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json (doesn't exist)
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// sourceEnvOnStart defaults to false, so it will be added
@@ -59,8 +60,9 @@ describe('SettingsManager', () => {
 				message: 'ENOENT: no such file or directory',
 			}
 			vi.mocked(readFile)
-				.mockRejectedValueOnce(error) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockRejectedValueOnce(error) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// sourceEnvOnStart defaults to false
@@ -74,8 +76,9 @@ describe('SettingsManager', () => {
 				message: 'ENOENT: no such file or directory',
 			}
 			vi.mocked(readFile)
-				.mockRejectedValueOnce(error) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockRejectedValueOnce(error) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// sourceEnvOnStart defaults to false
@@ -90,8 +93,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce('invalid json {') // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce('invalid json {') // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Failed to parse settings file/,
@@ -106,8 +110,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify('not an object')) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify('not an object')) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*Expected object, received string/,
@@ -125,8 +130,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(emptyAgentsSettings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(emptyAgentsSettings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// sourceEnvOnStart defaults to false
@@ -144,8 +150,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(nullAgentsSettings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(nullAgentsSettings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// sourceEnvOnStart defaults to false
@@ -166,8 +173,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(validSettings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(validSettings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings()
 			// sourceEnvOnStart defaults to false
@@ -186,8 +194,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.mainBranch).toBe('develop')
@@ -647,8 +656,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.noVerify).toBe(true)
@@ -671,8 +681,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.pr?.noVerify).toBe(false)
@@ -694,8 +705,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.noVerify).toBeUndefined()
@@ -718,8 +730,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*workflows\.issue\.noVerify[\s\S]*Expected boolean, received string/,
@@ -751,8 +764,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.noVerify).toBe(true)
@@ -782,8 +796,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.permissionMode).toBe('bypassPermissions')
@@ -813,8 +828,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.permissionMode).toBe('plan')
@@ -837,8 +853,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.pr?.permissionMode).toBe('acceptEdits')
@@ -863,8 +880,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities?.web?.basePort).toBe(8080)
@@ -886,8 +904,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities?.web?.basePort).toBe(3000)
@@ -909,8 +928,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities?.web?.basePort).toBe(65535)
@@ -932,8 +952,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities?.web?.basePort).toBe(1)
@@ -955,8 +976,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities?.web?.basePort).toBe(80)
@@ -978,8 +1000,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*capabilities\.web\.basePort[\s\S]*Base port must be >= 1/,
@@ -1002,8 +1025,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*capabilities\.web\.basePort[\s\S]*Base port must be <= 65535/,
@@ -1026,8 +1050,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*capabilities\.web\.basePort[\s\S]*Expected number, received string/,
@@ -1046,8 +1071,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities?.web?.basePort).toBeUndefined()
@@ -1066,8 +1092,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.capabilities).toBeUndefined()
@@ -1100,8 +1127,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.mainBranch).toBe('develop')
@@ -1130,8 +1158,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.startIde).toBe(true)
@@ -1157,8 +1186,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.startIde).toBe(false)
@@ -1184,8 +1214,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.startIde).toBe(true)
@@ -1209,8 +1240,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.startIde).toBe(true)
@@ -1246,8 +1278,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.startIde).toBe(true)
@@ -1277,8 +1310,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*workflows\.issue\.startIde[\s\S]*Expected boolean, received string/,
@@ -1301,8 +1335,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*workflows\.issue\.startDevServer[\s\S]*Expected boolean, received number/,
@@ -1325,8 +1360,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Settings validation failed[\s\S]*workflows\.issue\.startAiAgent[\s\S]*Expected boolean/,
@@ -1353,8 +1389,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.workflows?.issue?.permissionMode).toBe('bypassPermissions')
@@ -1385,10 +1422,16 @@ describe('SettingsManager', () => {
 				},
 			}
 
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
 			// Mock readFile to return different content for each file
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
-				.mockResolvedValueOnce(JSON.stringify(localSettings)) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+			.mockResolvedValueOnce(JSON.stringify(localSettings)) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 
@@ -1414,6 +1457,7 @@ describe('SettingsManager', () => {
 				message: 'ENOENT: no such file or directory',
 			}
 			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
 				.mockRejectedValueOnce(error) // settings.json
 				.mockResolvedValueOnce(JSON.stringify(localSettings)) // settings.local.json
 
@@ -1452,8 +1496,9 @@ describe('SettingsManager', () => {
 				message: 'ENOENT: no such file or directory',
 			}
 			vi.mocked(readFile)
-				.mockRejectedValueOnce(error) // settings.json
-				.mockResolvedValueOnce('invalid json {') // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockRejectedValueOnce(error) // settings.json
+			.mockResolvedValueOnce('invalid json {') // settings.local.json
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/Failed to parse settings file.*settings\.local\.json/,
@@ -1469,8 +1514,9 @@ describe('SettingsManager', () => {
 				message: 'ENOENT: no such file or directory',
 			}
 			vi.mocked(readFile)
-				.mockRejectedValueOnce(error) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockRejectedValueOnce(error) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 
@@ -1502,9 +1548,15 @@ describe('SettingsManager', () => {
 				},
 			}
 
+const error: { code?: string; message: string } = {
+	code: 'ENOENT',
+	message: 'ENOENT: no such file or directory',
+}
+
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(baseSettings))
-				.mockResolvedValueOnce(JSON.stringify(localSettings))
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(baseSettings))
+			.mockResolvedValueOnce(JSON.stringify(localSettings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 
@@ -1535,9 +1587,15 @@ describe('SettingsManager', () => {
 				},
 			}
 
+const error: { code?: string; message: string } = {
+	code: 'ENOENT',
+	message: 'ENOENT: no such file or directory',
+}
+
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(baseSettings))
-				.mockResolvedValueOnce(JSON.stringify(localSettings))
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(baseSettings))
+			.mockResolvedValueOnce(JSON.stringify(localSettings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 
@@ -1569,9 +1627,15 @@ describe('SettingsManager', () => {
 				},
 			}
 
+const error: { code?: string; message: string } = {
+	code: 'ENOENT',
+	message: 'ENOENT: no such file or directory',
+}
+
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(baseSettings))
-				.mockResolvedValueOnce(JSON.stringify(localSettings))
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(baseSettings))
+			.mockResolvedValueOnce(JSON.stringify(localSettings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 
@@ -1596,9 +1660,15 @@ describe('SettingsManager', () => {
 				},
 			}
 
+const error: { code?: string; message: string } = {
+	code: 'ENOENT',
+	message: 'ENOENT: no such file or directory',
+}
+
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(baseSettings))
-				.mockResolvedValueOnce(JSON.stringify(localSettings))
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(baseSettings))
+			.mockResolvedValueOnce(JSON.stringify(localSettings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 
@@ -1614,9 +1684,15 @@ describe('SettingsManager', () => {
 				protectedBranches: ['production', 'staging'],
 			}
 
+const error: { code?: string; message: string } = {
+	code: 'ENOENT',
+	message: 'ENOENT: no such file or directory',
+}
+
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(baseSettings))
-				.mockResolvedValueOnce(JSON.stringify(localSettings))
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(baseSettings))
+			.mockResolvedValueOnce(JSON.stringify(localSettings))
 
 			const result = await settingsManager.loadSettings(projectRoot)
 
@@ -1633,8 +1709,9 @@ describe('SettingsManager', () => {
 				message: 'ENOENT: no such file or directory',
 			}
 			vi.mocked(readFile)
-				.mockRejectedValueOnce(error) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockRejectedValueOnce(error) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1654,8 +1731,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1676,8 +1754,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1698,8 +1777,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1720,8 +1800,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1742,8 +1823,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1763,8 +1845,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.getProtectedBranches()
 
@@ -1785,8 +1868,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1807,8 +1891,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1829,8 +1914,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.getProtectedBranches(projectRoot)
 
@@ -1858,8 +1944,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const cliOverrides = {
 				mainBranch: 'develop',
@@ -1888,8 +1975,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			// Invalid CLI overrides (invalid model name)
 			const cliOverrides = {
@@ -1925,9 +2013,15 @@ describe('SettingsManager', () => {
 				},
 			}
 
+const error: { code?: string; message: string } = {
+	code: 'ENOENT',
+	message: 'ENOENT: no such file or directory',
+}
+
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
-				.mockResolvedValueOnce(JSON.stringify(localSettings)) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+			.mockResolvedValueOnce(JSON.stringify(localSettings)) // settings.local.json
 
 			const cliOverrides = {
 				mainBranch: 'develop',
@@ -1960,8 +2054,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const cliOverrides = {
 				workflows: {
@@ -1990,8 +2085,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot, {})
 			expect(result.mainBranch).toBe('main')
@@ -2009,8 +2105,9 @@ describe('SettingsManager', () => {
 			}
 
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const cliOverrides = {
 				capabilities: {
@@ -2041,8 +2138,9 @@ describe('SettingsManager', () => {
 				message: 'ENOENT: no such file or directory',
 			}
 			vi.mocked(readFile)
-				.mockRejectedValueOnce(error) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockRejectedValueOnce(error) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.sourceEnvOnStart).toBe(false)
@@ -2056,8 +2154,9 @@ describe('SettingsManager', () => {
 				message: 'ENOENT: no such file or directory',
 			}
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.sourceEnvOnStart).toBe(false)
@@ -2071,8 +2170,9 @@ describe('SettingsManager', () => {
 				message: 'ENOENT: no such file or directory',
 			}
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.sourceEnvOnStart).toBe(true)
@@ -2086,12 +2186,310 @@ describe('SettingsManager', () => {
 				message: 'ENOENT: no such file or directory',
 			}
 			vi.mocked(readFile)
-				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
 
 			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
 				/received string/,
 			)
+		})
+	})
+
+	describe('global settings', () => {
+		describe('getGlobalSettingsPath', () => {
+			it('should return path in ~/.config/iloom-ai/settings.json', () => {
+				const settingsPath = settingsManager['getGlobalSettingsPath']()
+				expect(settingsPath).toContain('.config')
+				expect(settingsPath).toContain('iloom-ai')
+				expect(settingsPath).toContain('settings.json')
+			})
+		})
+
+		describe('loadGlobalSettingsFile', () => {
+			it('should load and parse valid global settings file', async () => {
+				const validGlobalSettings = {
+					workflows: {
+						issue: {
+							permissionMode: 'bypassPermissions',
+						},
+					},
+				}
+
+				vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(validGlobalSettings))
+
+				const result = await settingsManager['loadGlobalSettingsFile']()
+				expect(result).toEqual(validGlobalSettings)
+			})
+
+			it('should return empty object when global settings file does not exist', async () => {
+				const error: { code?: string; message: string } = {
+					code: 'ENOENT',
+					message: 'ENOENT: no such file or directory',
+				}
+				vi.mocked(readFile).mockRejectedValueOnce(error)
+
+				const result = await settingsManager['loadGlobalSettingsFile']()
+				expect(result).toEqual({})
+			})
+
+			it('should warn but return empty object on invalid JSON', async () => {
+				vi.mocked(readFile).mockResolvedValueOnce('invalid json {')
+
+				const result = await settingsManager['loadGlobalSettingsFile']()
+				expect(result).toEqual({})
+			})
+
+			it('should warn but return empty object on validation error', async () => {
+				const invalidSettings = {
+					mainBranch: 123, // Invalid: should be string
+				}
+				vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(invalidSettings))
+
+				const result = await settingsManager['loadGlobalSettingsFile']()
+				expect(result).toEqual({})
+			})
+		})
+
+		describe('loadSettings with global settings', () => {
+			it('should merge global settings at lowest priority', async () => {
+				const projectRoot = '/test/project'
+				const globalSettings = {
+					mainBranch: 'global-branch',
+					workflows: {
+						issue: {
+							permissionMode: 'plan',
+						},
+					},
+				}
+				const baseSettings = {
+					mainBranch: 'main',
+				}
+
+				const error: { code?: string; message: string } = {
+					code: 'ENOENT',
+					message: 'ENOENT: no such file or directory',
+				}
+
+				vi.mocked(readFile)
+					.mockResolvedValueOnce(JSON.stringify(globalSettings)) // global settings
+					.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+					.mockRejectedValueOnce(error) // settings.local.json
+
+				const result = await settingsManager.loadSettings(projectRoot)
+				// Project settings should override global
+				expect(result.mainBranch).toBe('main')
+				// Global workflows should be preserved (not overridden)
+				expect(result.workflows?.issue?.permissionMode).toBe('plan')
+			})
+
+			it('should allow project settings to override global settings', async () => {
+				const projectRoot = '/test/project'
+				const globalSettings = {
+					workflows: {
+						issue: {
+							permissionMode: 'plan',
+							startIde: false,
+						},
+					},
+				}
+				const baseSettings = {
+					workflows: {
+						issue: {
+							permissionMode: 'bypassPermissions',
+						},
+					},
+				}
+
+				const error: { code?: string; message: string } = {
+					code: 'ENOENT',
+					message: 'ENOENT: no such file or directory',
+				}
+
+				vi.mocked(readFile)
+					.mockResolvedValueOnce(JSON.stringify(globalSettings)) // global settings
+					.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+					.mockRejectedValueOnce(error) // settings.local.json
+
+				const result = await settingsManager.loadSettings(projectRoot)
+				// Project setting should override global
+				expect(result.workflows?.issue?.permissionMode).toBe('bypassPermissions')
+				// Global startIde should be preserved (not in project settings)
+				expect(result.workflows?.issue?.startIde).toBe(false)
+			})
+
+			it('should allow local settings to override both global and project settings', async () => {
+				const projectRoot = '/test/project'
+				const globalSettings = {
+					mainBranch: 'global-branch',
+					workflows: {
+						issue: {
+							permissionMode: 'plan',
+						},
+					},
+				}
+				const baseSettings = {
+					mainBranch: 'main',
+				}
+				const localSettings = {
+					mainBranch: 'local-branch',
+					workflows: {
+						issue: {
+							permissionMode: 'acceptEdits',
+						},
+					},
+				}
+
+				vi.mocked(readFile)
+					.mockResolvedValueOnce(JSON.stringify(globalSettings)) // global settings
+					.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+					.mockResolvedValueOnce(JSON.stringify(localSettings)) // settings.local.json
+
+				const result = await settingsManager.loadSettings(projectRoot)
+				// Local settings should override both
+				expect(result.mainBranch).toBe('local-branch')
+				expect(result.workflows?.issue?.permissionMode).toBe('acceptEdits')
+			})
+
+			it('should allow CLI overrides to override all other settings', async () => {
+				const projectRoot = '/test/project'
+				const globalSettings = {
+					mainBranch: 'global-branch',
+				}
+				const baseSettings = {
+					mainBranch: 'main',
+				}
+				const localSettings = {
+					mainBranch: 'local-branch',
+				}
+				const cliOverrides = {
+					mainBranch: 'cli-branch',
+				}
+
+				vi.mocked(readFile)
+					.mockResolvedValueOnce(JSON.stringify(globalSettings)) // global settings
+					.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+					.mockResolvedValueOnce(JSON.stringify(localSettings)) // settings.local.json
+
+				const result = await settingsManager.loadSettings(projectRoot, cliOverrides)
+				// CLI override should win
+				expect(result.mainBranch).toBe('cli-branch')
+			})
+
+			it('should deep merge nested global settings (workflows, agents)', async () => {
+				const projectRoot = '/test/project'
+				const globalSettings = {
+					workflows: {
+						issue: {
+							startIde: false,
+							startDevServer: false,
+						},
+						pr: {
+							permissionMode: 'plan',
+						},
+					},
+					agents: {
+						'agent-1': {
+							model: 'opus',
+						},
+					},
+				}
+				const baseSettings = {
+					workflows: {
+						issue: {
+							permissionMode: 'bypassPermissions',
+						},
+					},
+				}
+
+				const error: { code?: string; message: string } = {
+					code: 'ENOENT',
+					message: 'ENOENT: no such file or directory',
+				}
+
+				vi.mocked(readFile)
+					.mockResolvedValueOnce(JSON.stringify(globalSettings)) // global settings
+					.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+					.mockRejectedValueOnce(error) // settings.local.json
+
+				const result = await settingsManager.loadSettings(projectRoot)
+				// Deep merge should preserve global values not in project
+				expect(result.workflows?.issue?.startIde).toBe(false) // From global
+				expect(result.workflows?.issue?.startDevServer).toBe(false) // From global
+				expect(result.workflows?.issue?.permissionMode).toBe('bypassPermissions') // From project
+				expect(result.workflows?.pr?.permissionMode).toBe('plan') // From global
+				expect(result.agents?.['agent-1']?.model).toBe('opus') // From global
+			})
+
+			it('should handle missing global file gracefully', async () => {
+				const projectRoot = '/test/project'
+				const baseSettings = {
+					mainBranch: 'main',
+				}
+
+				const error: { code?: string; message: string } = {
+					code: 'ENOENT',
+					message: 'ENOENT: no such file or directory',
+				}
+
+				vi.mocked(readFile)
+					.mockRejectedValueOnce(error) // global settings (missing)
+					.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+					.mockRejectedValueOnce(error) // settings.local.json
+
+				const result = await settingsManager.loadSettings(projectRoot)
+				expect(result.mainBranch).toBe('main')
+			})
+
+			it('should handle missing project files with only global settings', async () => {
+				const projectRoot = '/test/project'
+				const globalSettings = {
+					mainBranch: 'global-main',
+					workflows: {
+						issue: {
+							permissionMode: 'bypassPermissions',
+						},
+					},
+				}
+
+				const error: { code?: string; message: string } = {
+					code: 'ENOENT',
+					message: 'ENOENT: no such file or directory',
+				}
+
+				vi.mocked(readFile)
+					.mockResolvedValueOnce(JSON.stringify(globalSettings)) // global settings
+					.mockRejectedValueOnce(error) // settings.json (missing)
+					.mockRejectedValueOnce(error) // settings.local.json (missing)
+
+				const result = await settingsManager.loadSettings(projectRoot)
+				expect(result.mainBranch).toBe('global-main')
+				expect(result.workflows?.issue?.permissionMode).toBe('bypassPermissions')
+			})
+
+			it('should replace arrays from global with project arrays', async () => {
+				const projectRoot = '/test/project'
+				const globalSettings = {
+					protectedBranches: ['global-1', 'global-2'],
+				}
+				const baseSettings = {
+					protectedBranches: ['project-1', 'project-2'],
+				}
+
+				const error: { code?: string; message: string } = {
+					code: 'ENOENT',
+					message: 'ENOENT: no such file or directory',
+				}
+
+				vi.mocked(readFile)
+					.mockResolvedValueOnce(JSON.stringify(globalSettings)) // global settings
+					.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+					.mockRejectedValueOnce(error) // settings.local.json
+
+				const result = await settingsManager.loadSettings(projectRoot)
+				// Arrays should be replaced, not concatenated
+				expect(result.protectedBranches).toEqual(['project-1', 'project-2'])
+			})
 		})
 	})
 })

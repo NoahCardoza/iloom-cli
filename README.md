@@ -519,14 +519,18 @@ If you prefer manual configuration, iloom uses these files (highest to lowest pr
 1. **CLI arguments** - Command-line flags (e.g., `--one-shot bypassPermissions`)
 2. **`.iloom/settings.local.json`** - Local machine settings (gitignored, not committed)
 3. **`.iloom/settings.json`** - Project-wide settings (committed to repository)
-4. **Built-in defaults** - Hardcoded fallback values
+4. **`~/.config/iloom-ai/settings.json`** - Global user settings (applies to all projects)
+5. **Built-in defaults** - Hardcoded fallback values
 
-This allows teams to share project defaults via `settings.json` while individual developers maintain personal overrides in `settings.local.json`.
+This allows teams to share project defaults via `settings.json` while individual developers maintain personal overrides in `settings.local.json` or global preferences in `~/.config/iloom-ai/settings.json`.
 
 **Example Use Cases:**
-- Developer needs different `basePort` due to port conflicts
-- Local database connection strings that differ from team defaults
-- Personal preferences for `permissionMode` or component launch flags
+- **Global settings**: Default agent models or workflow permission modes that apply to all your projects
+- **Project settings**: Team defaults like `mainBranch`, database configuration, GitHub remote
+- **Local settings**: Machine-specific overrides like different `basePort` due to port conflicts, local database URLs, personal workflow preferences
+
+**Global Settings:**
+Global settings are stored in `~/.config/iloom-ai/settings.json` and apply to all iloom projects on your machine. Use these for personal preferences like default agent models or workflow permission modes. Project-specific settings (like database configuration) should remain in project config files.
 
 **Note:** The `.iloom/settings.local.json` file is automatically created and gitignored when you run `il init`.
 

@@ -114,6 +114,38 @@ SETTINGS_LOCAL_JSON
 ```
 {{/IF SETTINGS_LOCAL_JSON}}
 
+{{#IF SETTINGS_GLOBAL_JSON}}
+## Global Configuration (User-Level)
+
+**CRITICAL: DO NOT read ~/.config/iloom-ai/settings.json just to get information - the content is provided below. Only read it when you need to modify it.**
+
+The user has global configuration at `~/.config/iloom-ai/settings.json`:
+
+```json
+SETTINGS_GLOBAL_JSON
+```
+{{/IF SETTINGS_GLOBAL_JSON}}
+
+## Settings Hierarchy & Recommendations
+
+**Precedence (highest to lowest):**
+1. CLI arguments (--set flags)
+2. `.iloom/settings.local.json` (local overrides, gitignored)
+3. `.iloom/settings.json` (project-wide, committed)
+4. `~/.config/iloom-ai/settings.json` (global, user-level)
+
+**When to use global settings:**
+- Personal preferences that apply across all projects (IDE preference when implemented, preferred agent models)
+- Default permission modes for your workflow style
+
+**When to use project settings:**
+- Project-specific configuration (mainBranch, databaseProviders, issueManagement)
+- Team defaults that should be shared via git
+
+**When to use local settings:**
+- Machine-specific overrides (port conflicts, local database URLs)
+- Personal preferences that differ from team defaults
+
 {{#IF SETTINGS_JSON}}{{#IF SETTINGS_LOCAL_JSON}}
 **Configuration Priority**: Local settings (settings.local.json) override shared settings (settings.json) when both exist.
 {{/IF SETTINGS_LOCAL_JSON}}{{/IF SETTINGS_JSON}}
@@ -364,14 +396,22 @@ Then ask: "Does this configuration look correct?"
 
 **CRITICAL: You MUST ask the user where to save the configuration. DO NOT make assumptions or decide for them.**
 
-Ask the user this exact question: "Should this configuration be committed to git?
-  - yes: Save to .iloom/settings.json (shared with team)
-  - no: Save to .iloom/settings.local.json (local only, gitignored)" <-- recommend this for fork setups
+Ask the user: "Where should this configuration be saved?
+  - **Global**: Save to ~/.config/iloom-ai/settings.json (applies to all your projects)
+  - **Project**: Save to .iloom/settings.json (shared with team, committed to git)
+  - **Local**: Save to .iloom/settings.local.json (project-specific, local only, gitignored)"
+
+**Provide guidance based on the settings being configured:**
+- **Recommend Global for**: IDE preferences, default permission modes, personal workflow preferences
+- **Recommend Project for**: Main branch, worktree prefix, base port (when standardized for the team)
+- **Recommend Local for**: Machine-specific overrides, personal preferences that differ from team defaults
+
+**Fork/Contributor Note:** For fork setups, recommend Local over Project to avoid including personal settings in PRs to upstream.
 
 **DO NOT:**
 - Assume what the user wants based on the type of setting
 - Make decisions about what "should" be shared with the team
-- Skip this question and auto-save to either file
+- Skip this question and auto-save to any file
 
 Store the user's answer to determine which file to write in Phase 5.
 
@@ -487,11 +527,14 @@ Reason: mainBranch has same value in both files, so it's removed from local
 ```
 
 **Write steps:**
-1. Ensure `.iloom/` directory exists (create if needed)
+1. Ensure appropriate directory exists:
+   - For global: Ensure `~/.config/iloom-ai/` directory exists (create if needed)
+   - For project/local: Ensure `.iloom/` directory exists (create if needed)
 2. Perform duplication check as described above
 3. Write the deduplicated settings to the chosen file:
-   - `.iloom/settings.json` if user chose to commit
-   - `.iloom/settings.local.json` if user chose local-only
+   - `~/.config/iloom-ai/settings.json` if user chose Global
+   - `.iloom/settings.json` if user chose Project
+   - `.iloom/settings.local.json` if user chose Local
 4. Use the Write tool to create/update the file
 
 ### Phase 6: Update .gitignore
@@ -515,8 +558,9 @@ Next steps:
   - Edit [filename] directly to modify settings
   - Run 'iloom init' again to reconfigure interactively
 
-[If settings.json]: This configuration will be shared with your team via git.
-[If settings.local.json]: This configuration is local-only and won't be committed.
+[If ~/.config/iloom-ai/settings.json]: This global configuration applies to all your iloom projects.
+[If .iloom/settings.json]: This configuration will be shared with your team via git.
+[If .iloom/settings.local.json]: This configuration is local-only and won't be committed.
 ```
 
 ### Phase 8: Wrap Up and Next Steps

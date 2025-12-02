@@ -254,3 +254,32 @@ The settings file is validated when loaded. Common validation errors:
 - Settings are loaded from `<project-root>/.iloom/settings.json`
 - If the file doesn't exist, iloom will use default behavior without error
 - Changes to settings take effect the next time you run an iloom command
+
+## Global Settings
+
+iloom also supports global user-level settings that apply to all projects.
+
+### Location
+
+Global settings are stored at: `~/.config/iloom-ai/settings.json`
+
+### Precedence
+
+Global settings have the lowest precedence in the merge hierarchy:
+1. CLI arguments (highest)
+2. `.iloom/settings.local.json`
+3. `.iloom/settings.json`
+4. `~/.config/iloom-ai/settings.json` (lowest)
+
+### Recommended Use Cases
+
+Use global settings for:
+- Default agent model preferences (e.g., prefer opus for analysis agents)
+- Default workflow permission modes
+- Personal preferences that should apply to all your projects
+
+Keep in project settings:
+- `mainBranch` - varies per project
+- `databaseProviders` - project-specific credentials
+- `issueManagement.github.remote` - project-specific
+- `protectedBranches` - varies per project

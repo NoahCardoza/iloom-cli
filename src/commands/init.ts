@@ -4,6 +4,7 @@ import chalk from 'chalk'
 import { mkdir, writeFile, readFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
+import os from 'os'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import { fileURLToPath } from 'url'
@@ -209,19 +210,48 @@ export class InitCommand {
         logger.debug('Schema file not found at expected path', { schemaPath })
       }
 
-      // Check for existing settings - read BOTH files if they exist
+      // Check for existing settings - read ALL three files if they exist (global, project, local)
+      const settingsGlobalPath = path.join(os.homedir(), '.config', 'iloom-ai', 'settings.json')
       const settingsLocalPath = path.join(process.cwd(), '.iloom', 'settings.local.json')
       const settingsCommittedPath = path.join(process.cwd(), '.iloom', 'settings.json')
 
+      let settingsGlobalJson = ''
       let settingsJson = ''
       let settingsLocalJson = ''
 
       logger.debug('Checking for settings files', {
+        settingsGlobalPath,
         settingsLocalPath,
         settingsCommittedPath,
+        globalExists: existsSync(settingsGlobalPath),
         localExists: existsSync(settingsLocalPath),
         committedExists: existsSync(settingsCommittedPath)
       })
+
+      // Read global settings.json if it exists
+      if (existsSync(settingsGlobalPath)) {
+        logger.debug('Reading global settings.json')
+        const content = await readFile(settingsGlobalPath, 'utf-8')
+        const trimmed = content.trim()
+        if (trimmed !== '{}' && trimmed !== '') {
+          settingsGlobalJson = content
+          logger.debug('global settings.json loaded', {
+            contentLength: content.length,
+            isValidJson: ((): boolean => {
+              try {
+                JSON.parse(content)
+                return true
+              } catch {
+                return false
+              }
+            })()
+          })
+        } else {
+          logger.debug('global settings.json is empty, skipping')
+        }
+      } else {
+        logger.debug('global settings.json does not exist')
+      }
 
       // Read settings.json if it exists
       if (existsSync(settingsCommittedPath)) {
@@ -275,8 +305,10 @@ export class InitCommand {
 
       // Log summary
       logger.debug('Settings files summary', {
+        hasSettingsGlobalJson: !!settingsGlobalJson,
         hasSettingsJson: !!settingsJson,
         hasSettingsLocalJson: !!settingsLocalJson,
+        settingsGlobalJsonLength: settingsGlobalJson.length,
         settingsJsonLength: settingsJson.length,
         settingsLocalJsonLength: settingsLocalJson.length
       })
@@ -351,6 +383,7 @@ export class InitCommand {
       // Build template variables
       const variables = {
         SETTINGS_SCHEMA: schemaContent,
+        SETTINGS_GLOBAL_JSON: settingsGlobalJson,
         SETTINGS_JSON: settingsJson,
         SETTINGS_LOCAL_JSON: settingsLocalJson,
         SHELL_TYPE: shell,
@@ -368,6 +401,7 @@ export class InitCommand {
       logger.debug('Building template variables', {
         variableKeys: Object.keys(variables),
         schemaContentLength: schemaContent.length,
+        settingsGlobalJsonLength: settingsGlobalJson.length,
         settingsJsonLength: settingsJson.length,
         settingsLocalJsonLength: settingsLocalJson.length
       })
