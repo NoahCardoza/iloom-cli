@@ -39,7 +39,7 @@ export const WorkflowPermissionSchema = z.object({
 	startAiAgent: z
 		.boolean()
 		.default(true)
-		.describe('Launch Claude AI agent when starting this workflow type'),
+		.describe('Launch Claude Code agent when starting this workflow type'),
 	startTerminal: z
 		.boolean()
 		.default(false)
@@ -70,7 +70,7 @@ export const WorkflowPermissionSchemaNoDefaults = z.object({
 	startAiAgent: z
 		.boolean()
 		.optional()
-		.describe('Launch Claude AI agent when starting this workflow type'),
+		.describe('Launch Claude Code agent when starting this workflow type'),
 	startTerminal: z
 		.boolean()
 		.optional()

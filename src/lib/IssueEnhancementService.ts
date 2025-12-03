@@ -29,12 +29,12 @@ export class IssueEnhancementService {
 	}
 
 	/**
-	 * Enhances a description using Claude AI in headless mode.
+	 * Enhances a description using Claude Code in headless mode.
 	 * Falls back to original description if enhancement fails.
 	 */
 	public async enhanceDescription(description: string): Promise<string> {
 		try {
-			logger.info('Enhancing description with Claude AI. This may take a moment...')
+			logger.info('Enhancing description with Claude Code. This may take a moment...')
 
 			// Load agent configurations
 			const settings = await this.settingsManager.loadSettings()

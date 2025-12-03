@@ -174,7 +174,7 @@ export class CommitManager {
   }
 
   /**
-   * Generate commit message using Claude AI
+   * Generate commit message using Claude Code
    * Claude examines the git repository directly via --add-dir option
    * Returns null if Claude unavailable or fails validation
    */

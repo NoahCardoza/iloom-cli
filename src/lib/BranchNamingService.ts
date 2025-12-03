@@ -23,7 +23,7 @@ export class SimpleBranchNameStrategy implements BranchNameStrategy {
 }
 
 /**
- * Claude AI-powered branch naming strategy
+ * Claude Code-powered branch naming strategy
  * Uses Claude CLI to generate semantic branch names
  */
 export class ClaudeBranchNameStrategy implements BranchNameStrategy {

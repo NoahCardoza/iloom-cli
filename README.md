@@ -1,5 +1,5 @@
-# iloom
-
+iloom
+=====
 <div align="center">
 
 [![npm](https://img.shields.io/npm/v/%40iloom%2Fcli?label=npm)](https://www.npmjs.com/package/@iloom/cli)
@@ -15,8 +15,8 @@
 </div>
 
 #### Links to key sections
-[How It Works](#how-it-works) • [Installation](#installation) • [Commands](#commands) • [Nested Looms](#child-looms-nested-looms) • [Limitations](#platform--integration-support) • [Configuration](#configuration) • [Feedback](#providing-feedback)
 
+[How It Works](#how-it-works-the-multi-agent-workflow) • [Installation](#quick-start) • [Configuration](#configuration) • [Advanced Features](#advanced-features) • [Limitations](#system-requirements--limitations)
 
 ## Built For Modern Tools...
 
@@ -26,990 +26,313 @@
 [![Neon](https://img.shields.io/badge/Neon-00E699?style=for-the-badge)](https://neon.tech/)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-8A6FFF?style=for-the-badge)](https://claude.ai/)
 
-*These companies and projects do not endorse iloom.*
+...To Solve A Very Modern Problem
+---------------------------------
 
-## ...To Solve A Very Modern Problem
+The promise of AI-assisted development is profound: write more code, ship features faster. But there is a hidden cost. **AI agents write code quickly, but they struggle to stay in sync with their humans.**
 
-The promise of AI-assisted development is profound: write more code, ship features faster, handle complexity at scale. But there's a hidden cost that many tools ignore.
+The hard part isn't generating code, it's maintaining the shared mental model of _why_ that code exists. When you rely on ephemeral chat windows, friction piles up:
 
-**AI agents write code quickly. They struggle to stay in sync with their humans.**
+*   You constantly re-brief the AI on the same context.
+    
+*   Hidden assumptions creep in (e.g., "Why did it use Axios instead of fetch?").
+    
+*   You spend more time reviewing and "babysitting" the AI than building.
+    
 
-The hard part is not writing a ton of code. It's knowing what decisions your AI is making, what assumptions it's operating under, and why it's producing what it produces.
+**The bottleneck isn't output velocity. It's maintaining alignment between human and AI at scale.**
 
-Friction piles up:
-- You open new chats for each problem and rebuild context in your head.
-- Mental overhead grows. Stress rises. Momentum drops.
-- Hidden assumptions creep in. The AI picks Axios when your team standardizes on fetch. It reaches for the wrong auth pattern.
-- Hit a context limit and the model forgets what matters.
+### The iloom Approach: Context as Infrastructure
 
-The outcome is familiar: more time briefing the AI than building, more time fixing than shipping. Work can look finished while somehow shrouded in mystery.
+iloom stops the "Context Window Tetris." It treats context as a first-class concern, persisting your AI's reasoning in **issue comments** rather than temporary chats.
 
-**The bottleneck isn't output velocity. It's maintaining shared understanding between human and AI at scale.**
+*   **Stop Babysitting, Start Collaborating:** Instead of arguing with Claude in a chat, you review structured analysis plans in your issue tracker _before_ a single line of code is written.
+    
+*   **Scale Understanding:** Because every loom holds its own isolated environment (Git worktree, DB branch, local server), you can switch between 5 complex features without losing your place or your AI's context.
+    
+*   **Visible Reasoning:** The AI's decisions are documented publicly. Your team sees the plan, and "future you" knows exactly why a decision was made.
+    
 
-*iloom treats context as a first-class concern. It's not a tool for managing branches - it's a control plane for maintaining alignment between you and your AI assistant.*
+_iloom is not just a tool for managing git worktrees - it's a control plane for maintaining alignment between you and your AI assistant._
 
-## How iloom Solves This
+Quick Start
+-----------
 
-iloom uses your existing Claude subscription, takes what context you already have, and works with you to build a shared mental model of the task at hand.
+iloom uses your existing Claude subscription to build a shared mental model of your task.
+```bash
+ # 1. Install iloom
+ npm install -g @iloom/cli
+ 
+ # 2. Authenticate (iloom uses the GitHub CLI) 
+ gh auth login 
+ 
+ # 3. Start a Loom 
+ # Spins up an isolated environment (Git worktree, DB branch, unique port).
+ # Analyzes the issue, plans the work, and documents the plan in issue comments.
+ il start 25 
+
+ # ... You, the iloom agents and Claude build the feature together in the isolated environment ...
+ 
+ # 4. Finish & Merge  # Validates code (test/lint), handles merge conflicts, and cleans up the worktree/DB.
+ il finish 
+ ```
+
+**The iloom Difference:** il start doesn't just create a branch. It launches a multi-agent workflow that surfaces assumptions and creates a structured plan in your issue tracker **before you even need to look at your IDE.**
+
+**→ [Want to know how you'll benefit from iloom?](docs/is-iloom-right-for-you.md)**
+
+How It Works: The Multi-Agent Workflow
+--------------------------------------
+
+When you run il start, iloom orchestrates specialized AI agents. Each has a specific role and writes structured output to **issue comments**, creating permanent project knowledge.
+
+### 1. The Agents
+
+Instead of a single generic prompt, iloom uses a pipeline of agents:
+
+*   **Enhancer (iloom-issue-enhancer):** Expands brief one-liners into detailed requirements.
+    
+*   **Evaluator (iloom-issue-complexity-evaluator):** Determines the workflow approach:
+    
+    *   **Simple:** Combines analysis and planning into one step for efficiency.
+        
+    *   **Complex:** Separates deep root-cause analysis from detailed implementation planning.
+        
+*   **Implementer:** Executes the plan using the context established in the previous steps.
+    
+
+### 2\ Interactive Control
+
+You are in the loop at every stage. You can review the AI's analysis, edit the plan in GitHub/Linear, and adjust course before implementation begins.
+
+*   **Default Mode:** You approve each phase (Enhance → Plan → Implement).
+    
+*   **--one-shot Mode:** Feeling lucky? Automate the entire pipeline from start to finish without prompts.
+    
+
+### 3. The Environment
+
+Each loom is a fully isolated container for your work:
+
+*   **Git Worktree:** A separate filesystem at ~/project-looms/issue-25/. No stashing, no branch switching overhead.
+    
+*   **Database Branch:** (Neon support) Schema changes in this loom are isolated—they won't break your main environment or your other active looms.
+    
+*   **Unique Runtime:**
+    
+    *   **Web Apps:** Runs on a deterministic port (e.g., base port 3000 + issue #25 = 3025).
+        
+    *   **CLI Tools:** Creates an isolated binary copy (e.g., my-tool-25). You can run issue #25's version of your CLI alongside issue #99's version without conflicts. (Fun fact: iloom was built with iloom using this feature).
+        
+*   **Context Persistence:** All reasoning is stored in issue comments. This makes the "why" behind the code visible to your teammates and your future self.
+    
+
+Command Reference
+-----------------
+
+| **Command** | **Alias** |  **Description** |
+| ------ | ----- | -----|
+| `il start` | `up` | Create loom, run analysis agents, and launch IDE. |
+| `il finish` | `dn` | Validate tests/lint, commit, handle conflicts, and merge/PR. |
+| `il cleanup` |  | Safely remove a loom and its database branch without merging. |
+| `il list` |  | Show active looms and paths. |
+| `il spin` |  | Launch Claude inside the current loom with context auto-detected. |
+| `il open` | `run` | Open loom in browser (web) or run your CLI tool. |
+| `il add-issue` | `a` | Create and AI-enhance a new issue without starting work yet. |
+| `il init` | `config` | Interactive configuration wizard. |
+| `il feedback` | `f` | Submit bug reports/feedback directly from the CLI. |
+| `il update` |  | Update iloom CLI to the latest version. |
+
+For detailed documentation including all command options, flags, and examples, see the [Complete Command Reference](docs/iloom-commands.md).
+
+Configuration
+-------------
+
+### 1. Interactive Setup (Recommended)
+
+The easiest way to configure iloom is the interactive wizard. It guides you through setting up your environment (GitHub/Linear, Neon, IDE).
+
+You can even use natural language to jump-start the process:
 
 ```bash
-> npm install -g @iloom/cli
+# Standard wizard
+il init 
 
-# iloom doesn't need your GitHub access token - it uses the GitHub CLI instead.
-> gh auth login 
+# Natural language wizard
+il init "set my IDE to windsurf and help me configure linear"
+```   
 
-# Spins up an isolated dev environment.
-# Pulls in issue 25 from GitHub, even if it's just an issue title.
-# Fills in the blanks with you.
-> iloom start 25 
+### 2. Manual Configuration
 
-# or 
+Settings are loaded in this order (highest priority first):
 
-# Creates an issue, builds that same shared mental model from scratch.
-> iloom start "user auth broken" 
+1.  **CLI Flags:** il start --permissionMode=acceptEdits
+    
+2.  **Local Overrides:** .iloom/settings.local.json (gitignored; for API keys & local preferences)
+    
+3.  **Project Settings:** .iloom/settings.json (committed; for shared team defaults)
+    
+4.  **Global Settings:** ~/.config/iloom-ai/settings.json (for user-specific defaults)
+    
 
-# or
+### Key Settings Example
 
-# Grabs context from this PR and its original issue, then iterates on it alongside you 
-> iloom start 34 
+This example shows how to configure a project-wide default (e.g., GitHub remote) while keeping sensitive keys (Linear API token) or personal preferences (IDE choice) local.
 
-# then
+**.iloom/settings.json (Committed)**
 
-# Knows which loom you're in, validates, merges your code back to your primary branch.
-# If you hit compilation/lint/test failures or merge conflicts along the way,
-# Claude will help resolve them automatically.
-> iloom finish 
-```
-
-**The iloom difference**: Surface hidden assumptions up front, then persist all the analysis and reasoning in issue comments - visible and editable - rather than burning tokens in the context window where they're invisible and set in stone.
-
-### One Command, Parallel Work, Predictable Flow
-
-Each loom follows the same workflow - structured, visible, repeatable.
-
-`iloom start` doesn't just create a git worktree. It spins up a loom. Here's what happens:
-
-- Fetches the full issue (or PR) including all comments and requirements - or not, if they don't exist.
-- Creates an isolated environment (Git worktree, database branch, web server on a deterministic unique port)
-- Enhances the issue with a better description, and structured analysis & planning. Asking questions and stating assumptions along the way, all in issue comments.
-- Launches Claude with this context preloaded from the issue, guides you through a structured workflow. You can stop at any time, pick up where you left off.
-- Each loom is color-coded, from terminal windows to VS Code, so you visually know which context you're in.
-
-**When you switch to this loom, both you and Claude know exactly what you're working on and why.**
-
-### Merge with Confidence
-
-```bash
-> iloom finish
-# ✅ Runs tests, types, lint - Claude helps fix any failures automatically
-# ✅ Generates commit message from the issue context
-# ✅ Handles merge conflicts with AI assistance
-# ✅ Merges to main, installs dependencies
-# ✅ Cleans up everything - worktree, database branch, and the web server you were using to test your work
-```
-(as you can see, using iloom does not spare you from copious emoji)
-
-This isn't just convenience automation. You know you're merging the correct code, correctly - the commit message is auto-generated from the issue context, and any build/test/merge failures get fixed automatically with Claude's help. It helps keep resources in check too, local and remote, by safely shutting down servers and cleaning up Neon DB branches.
-
-## What This Means for How You Work
-
-### You Stop Babysitting Your AI, Start Collaborating With It
-
-Traditional approach:
-1. Start a feature, brief Claude on context.
-2. Review code, fix misunderstandings. Argue with Claude.
-3. Get pulled into a bug - stash or WIP commit, switch branches, start a new Claude chat.
-4. Lose context on both tasks, repeat the same explanations.
-
-iloom approach:
-1. `il start 45` - begin the feature. Note: `il` is an alias for `iloom`.
-2. Review iloom's structured analysis in GitHub or Linear, clarify assumptions.
-3. `il start 99` - urgent bug; Claude already knows the issue context from your issue tracker.
-4. Switch between looms freely - color coding and context persistence keep everything clear.
-5. `il finish` - work validated, merged, cleaned up.
-6. Return to your feature loom - context, reasoning, and AI alignment all intact.
-
-**The difference**: Your AI becomes a persistent collaborator rather than a tool you're constantly playing catch-up with.
-
-**Plus, your AI's reasoning is now visible to everyone, including future you:**
-The AI analysis gets posted as issue comments, so anyone on your team can see the context and planning without having to ask you for background.
-
-### You Scale Understanding, Not Just Output
-
-Without iloom, adding AI to your workflow increases code production but also increases cognitive load. You're managing what the AI knows, correcting misaligned suggestions, and second-guessing its understanding. Not to mention managing its context window.
-
-With iloom, the cognitive load stays constant as you scale. Each loom holds a complete shared understanding between you and your AI. Five issues in flight feel (almost) as calm and clear as one.
-
-**This is how you achieve sustainable velocity with AI assistance.**
-
-### You Reduce Rework and Chaos
-
-When you and your AI are in lockstep:
-- Features get built right the first time because you spot when the AI is going off course, way before it writes a line of code.
-- Reviews focus on the quality of the AI's thinking, not just its code.
-- Fewer surprises caused by AI agents inventing requirements or inconsistently implementing existing patterns
-- If the AI takes a wrong turn - you don't spend hours arguing with Claude and playing context window Tetris. You just start the process again with better issue descriptions, different assumptions and better context for your AI assistant.
-
-### The Power of Predictable Flow
-
-Every loom follows the same rhythm - Start → Enhance → Analyze → Plan → Implement → Human review → Finish.  
-The steps never change. The tools stay aligned.  
-Predictability becomes muscle memory - you focus on ideas, not process.
-
-## How It Works
-
-iloom orchestrates specialized AI agents that analyze issues, evaluate complexity, create implementation plans, and document everything directly in GitHub or Linear comments. Each agent has a specific role and writes structured output that becomes permanent project and team knowledge.
-
-### Creating Context
-
-```bash
-> il start 25
-```
-
-iloom executes a multi-phase context-establishment workflow:
-
-1. **Fetch complete requirements** - GitHub or Linear issue body + all comments
-2. **Create isolated loom** - Git worktree at `~/project-looms/issue-25-auth-bugs/` (branch names are generated)
-3. **Run AI workflow agents** - Enhance, analyze, plan, and document directly in issue comments:
-   - **Enhancement Agent**: Expands brief issues into detailed requirements (if needed)
-   - **Complexity Evaluator**: Assesses scope and determines workflow approach
-     - **Simple workflow**: Combined analysis and planning in one step
-     - **Complex workflow**: Separate analysis phase, then detailed planning phase
-4. **Establish environment** - Unique web server port (e.g., 3025), isolated database branch, `.env` file with correct DATABASE_URL environment variable
-5. **Launch tools** - VS Code with color theme, dev server, Claude with preloaded context from issue comments
-
-**Result**: A continer where both you and your AI share understanding, with all context stored as structured issue comments. Open the issue in your browser to see:
-- Enhancement analysis (if the issue was brief)
-- Complexity evaluation with metrics
-- Root cause analysis and technical findings
-- Implementation plan
-- All context is editable, reviewable, and persists across machines
-
-### Maintaining Context
-
-Each loom is isolated:
-
-- **Git worktree** - Separate filesystem, different branch checked out, no switching overhead
-- **Database branch** - Schema changes don't affect other contexts (optional, requires Neon - other provider support coming soon)
-- **Unique port** - Multiple dev servers run simultaneously (base port + issue number)
-- **Environment variables** - Each loom has correct database URL
-- **Visual identity** - Color-coded VS Code window (40 distinct pastel colors)
-- **Issue comments** - Multi-phase context (enhancement, analysis, planning) persists and is editable by team members
-
-**When you switch looms, the context switches with you.**
-
-### Context That Scales With Your Team
-
-Traditional AI workflows store context locally in chat history or Markdown files. iloom stores context where it belongs - in your issue tracker.
-
-**Benefits:**
-
-- **Transparency**: All AI analysis and planning is visible to your entire team
-- **Collaboration**: Team members can review, comment on, and refine AI-generated context
-- **Persistence**: Context survives repository clones, machine switches, and team member changes
-- **Version Control**: Your issue tracker tracks all context changes with timestamps and authors
-- **Searchability**: Search finds AI insights across all your issues
-- **Integration**: Context appears in notifications, project boards, and automation workflows
-- **No Sync Issues**: Everyone sees the same context - no local file drift
-
-When Claude analyzes your issue and creates a comment with "### Root Cause Analysis", that insight becomes permanent project knowledge. When you switch machines, clone the repo elsewhere, or bring in a new team member - the context is already there.
-
-**This is context as infrastructure, not files.**
-
-### Understanding the Multi-Agent Workflow
-
-When you run `il start 25`, iloom orchestrates specialized AI agents that work through a structured analysis and planning process:
-
-**Phase 1: Enhancement (optional)** - `iloom-issue-enhancer`
-- Checks if issue needs more detail (word count, structure, clarity)
-- Expands brief descriptions into comprehensive requirements
-- Posts enhancement as an issue comment
-- **Used for:** All issues that need enhancement
-
-**Phase 2: Complexity Evaluation** - `iloom-issue-complexity-evaluator`
-- Analyzes scope, file changes, breaking changes, risks
-- Classifies as Simple or Complex
-- Posts evaluation as an issue comment with metrics
-- **Used for:** All issues
-
-#### For complex issues
-
-**Phase 3: Dedicated Analysis** - `iloom-issue-analyzer`
-- Investigates root causes and technical constraints
-- Documents findings and implementation considerations
-- Posts analysis as an issue comment
-- **Used for:** Complex issues only
-
-**Phase 4: Dedicated Planning** - `iloom-issue-planner`
-- Creates detailed implementation roadmap
-- Breaks work into phases with validation points
-- Posts plan as an issue comment
-- **Used for:** Complex issues only
-
-#### For simple issues
-
-**Phase 3+4: Combined Analysis & Planning** - `iloom-issue-analyze-and-plan`
-- Combines analysis and planning in a single step to shorten time and reduce review checkpoints
-- Posts combined analysis and plan as an issue comment
-- **Used for:** Simple issues only
-
-#### For all issues
-
-**Phase 5: Implementation** - `iloom-issue-implementer`
-- Executes the implementation plan created in previous phases
-- Updates progress in an issue comment
-- Documents decisions and completion status
-- **Used for:** All issues
-
-**Phase 6: Review (optional)** - `iloom-issue-reviewer`
-- Reviews completed implementation against issue requirements
-- Posts review findings as an issue comment
-- **Used for:** All issues (when review is requested)
-
-All agent output is written to issue comments using markdown, making the AI's reasoning process transparent and collaborative. You can review, edit, or refine any comment before proceeding to the next phase.
-
-### A Note on Token Usage and Model Selection
-
-iloom optimizes for **building shared understanding** and **long-term efficiency** over short-term token economy. The multi-phase workflow deliberately front-loads analysis and planning to reduce expensive implementation rework.
-
-You can [configure](#configuration) the models used by the agents:
-
-- **Default**: All agents run on the latest Sonnet model to balance capability and cost
-- **Haiku for Implementation**: The `iloom-issue-implementer` agent is a good candidate for the latest Haiku model for token-conscious users, as it follows detailed plans created by analysis/planning agents
-- **Maximum Power**: Override to Opus for complex architectural work (more expensive)
-
-**Available agents** (all configurable):
-- `iloom-issue-enhancer` - Structures issue descriptions from user perspective
-- `iloom-issue-complexity-evaluator` - Assesses scope and determines workflow approach
-- `iloom-issue-analyzer` - Investigates root causes (complex issues only)
-- `iloom-issue-planner` - Creates implementation roadmap (complex issues only)
-- `iloom-issue-analyze-and-plan` - Combined analysis and planning (simple issues only)
-- `iloom-issue-implementer` - Executes implementation plans (good candidate for Haiku)
-- `iloom-issue-reviewer` - Reviews completed implementations
-
-**Hard-coded model usage** (not configurable):
-- **Branch naming** - Uses the latest Haiku model to generate descriptive branch names from issue titles
-- **Commit message generation** - Uses the latest Haiku model to create commit messages
-
-Both operations use Haiku for fast, cost-effective AI assistance.
-
-**Fun Fact**: iloom originally used Opus (over the latest Sonnet model) for analysis and planning phases. As agent prompts improved, we switched entirely to Sonnet with equivalent results at lower cost.
-
-**Recommendation**: A Claude Max subscription is recommended. The theory is that token investment in structured/shared context pays dividends through reduced debugging, rework, and cognitive overhead.
-
-## Commands
-
-### Loom Management
-
-```bash
-iloom start <issue-number | pr-number | issue-description | branch-name>
-# Create loom with complete context
-# Orchestrates AI agents that analyze the issue and post structured comments
-# Phases: Enhancement → Analysis → Planning → Implementation with review checkpoints at every step
-# Aliases: create, up
-# Options:
-#   --one-shot <mode>  - Automation level for Claude CLI
-#                        default: Standard behavior with prompts
-#                        noReview: Skip phase approval prompts
-#                        bypassPermissions: Full automation, skip all permission prompts. Be careful!
-#   --child-loom       - Force create as child loom (skip prompt, requires parent loom)
-#   --no-child-loom    - Force create as independent loom (skip prompt)
-
-iloom finish
-# AI assisted validation, commit, merge steps, as well as loom cleanup (run this from the loom directory)
-# Behavior depends on mergeBehavior.mode setting:
-#   local (default): Merge locally and cleanup
-#   github-pr: Push branch, create PR, prompt for cleanup
-# Alias: dn
-# Options:
-#   -f, --force        - Skip confirmation prompts
-#   -n, --dry-run      - Preview actions without executing
-#   --skip-build       - Skip post-merge build verification
-#   --no-browser       - Skip opening PR in browser (github-pr mode only)
-#   --cleanup          - Clean up worktree after PR creation (github-pr mode only)
-#   --no-cleanup       - Keep worktree after PR creation (github-pr mode only)
-
-iloom rebase
-# Rebase current branch on main with Claude-assisted conflict resolution (run this from a loom directory)
-# Options:
-#   -f, --force    - Skip confirmation prompts
-#   -n, --dry-run  - Preview actions without executing
-
-iloom cleanup [identifier...]
-# Remove a loom without merging (safely, by default)
-
-iloom list
-# Show active looms with their ports and paths
-
-iloom spin
-# Launch Claude with auto-detected loom context
-# Options:
-#   --one-shot=<mode>  - Same automation modes as 'start'
-
-iloom open [identifier]
-# Open loom in browser (web projects) or run configured CLI tool
-```
-
-### Issue Management
-
-```bash
-iloom add-issue <description>
-# Create and AI-enhance issue (doesn't spin up a loom)
-# Alias: a
-# Example: il add-issue "Add dark mode toggle to settings"
-
-iloom enhance <issue-number>
-# Apply AI enhancement agent to existing issue
-# Expands requirements, asks clarifying questions and adds implementation context
-```
-
-## Child Looms (Nested Looms)
-
-Child looms let you create isolated workspaces from within an existing loom. This is useful when you need to work on a subtask, bug fix, or experiment while keeping your parent work intact.
-
-### When to Use Child Looms
-
-- **Break down complex issues**: Large features can spawn smaller issues that become child looms
-- **Fix bugs discovered during work**: Create a child loom to fix a bug without mixing commits
-- **Experiment safely**: Try different approaches in child looms without affecting parent work
-- **Handle interrupts**: Start urgent work from your current context without losing it
-
-### How Child Looms Work
-
-When you run `il start` from inside an existing loom, iloom detects the parent context and prompts you:
-
-```bash
-# Inside a loom working on issue #25
-> il start 42
-? Create as child loom of issue #25? (Y/n)
-```
-
-**Automatic inheritance:**
-- **Database branch**: Child looms branch from the parent's database state, not the main branch
-- **Base branch**: Git branch is created from the parent's branch
-- **Main branch config**: Child's `mainBranch` setting points to parent branch (for `il finish`)
-
-### CLI Flags
-
-Skip the prompt with explicit flags:
-
-```bash
-# Force child loom creation (no prompt)
-il start 42 --child-loom
-
-# Force independent loom (no prompt)
-il start 42 --no-child-loom
-```
-
-The `--child-loom` flag is ignored when not running from inside a loom.
-
-### Directory Structure
-
-Child looms are created in a dedicated subdirectory based on the parent branch name:
-
-```
-~/project-looms/
-├── feat-issue-25-auth-refactor/           # Parent loom
-├── feat-issue-25-auth-refactor-looms/     # Child looms directory
-│   ├── fix-issue-42-token-validation/     # Child loom 1
-│   └── feat-issue-43-oauth-support/       # Child loom 2
-```
-
-### Finishing Child Looms
-
-When finishing a parent loom, iloom warns about existing child looms:
-
-```bash
-> il finish
-⚠ Found 2 child loom(s) that should be cleaned up first:
-  - ~/project-looms/feat-issue-25-auth-refactor-looms/fix-issue-42-token-validation
-  - ~/project-looms/feat-issue-25-auth-refactor-looms/feat-issue-43-oauth-support
-
-To clean up child looms:
-  il cleanup 42
-  il cleanup 43
-```
-
-Child looms should typically be finished or cleaned up before finishing the parent.
-
-### Example Workflow
-
-```bash
-# Start working on a feature
-> il start 25
-# ... working on authentication refactor
-
-# Discover a bug that needs immediate attention
-> il start 42
-? Create as child loom of issue #25? Y
-# Creates child loom with parent's database state
-
-# Fix the bug in isolation
-> cd ~/project-looms/feat-issue-25-auth-refactor-looms/fix-issue-42-...
-
-# Finish the child work (merges to parent branch, not main)
-> il finish
-
-# Return to parent loom
-> cd ~/project-looms/feat-issue-25-auth-refactor
-
-# Continue feature work, then finish
-> il finish
-```
-
-## Providing Feedback
-
-Found a bug, have a feature request, or want to contribute ideas to improve iloom CLI? Submit feedback directly from your terminal.
-
-```bash
-iloom feedback <description>
-# Submit feedback/bug report to iloom-cli repository
-# Alias: f
-# Example: il feedback "Add support for Linear issue tracking"
-# Example: il feedback "The worktree cleanup seems to leave temp files behind"
-```
-
-**What happens when you run `iloom feedback`:**
-
-1. **Issue Creation**: Creates a new issue in the [iloom-cli repository](https://github.com/iloom-ai/iloom-cli)
-2. **Browser Opening**: Opens the created issue in your browser for you to review and add additional context
-3. **AI Enhancement**: Within a couple of minutes, your feedback gets enhanced by iloom to provide clear context and actionable details
-
-**Open the browser to provide additional context. Please:**
-- Be specific about what you expected vs. what happened
-- Include your environment details if reporting a bug (OS, Node version, etc.)
-- Mention the command or workflow that had issues
-- Suggest improvements or alternative approaches if you have ideas
-
-Your feedback helps make iloom better for everyone! Issues created through `iloom feedback` are prioritized and reviewed regularly.
-
-### Maintenance
-
-```bash
-iloom update
-# Update iloom-cli to the latest version
-```
-
-## Configuration
-
-### Interactive Configuration Wizard
-
-The recommended way to configure iloom:
-
-```bash
-iloom init
-# or
-iloom config
-```
-
-This Claude-powered assistant will guide you through all configuration options and automatically:
-- Create and configure `.iloom/settings.json` and `.iloom/settings.local.json`
-- Set up `.gitignore` entries
-- Help you choose the right GitHub remote (if you have multiple)
-- Configure database providers (Neon, etc.)
-- Set workflow permissions and preferences
-- Explain each option as you go
-
-For most users, this is all you need. The wizard creates the files and explains everything as you configure it.
-
-### Manual Configuration Files
-
-If you prefer manual configuration, iloom uses these files (highest to lowest priority):
-
-1. **CLI arguments** - Command-line flags (e.g., `--one-shot bypassPermissions`)
-2. **`.iloom/settings.local.json`** - Local machine settings (gitignored, not committed)
-3. **`.iloom/settings.json`** - Project-wide settings (committed to repository)
-4. **`~/.config/iloom-ai/settings.json`** - Global user settings (applies to all projects)
-5. **Built-in defaults** - Hardcoded fallback values
-
-This allows teams to share project defaults via `settings.json` while individual developers maintain personal overrides in `settings.local.json` or global preferences in `~/.config/iloom-ai/settings.json`.
-
-**Example Use Cases:**
-- **Global settings**: Default agent models or workflow permission modes that apply to all your projects
-- **Project settings**: Team defaults like `mainBranch`, database configuration, GitHub remote
-- **Local settings**: Machine-specific overrides like different `basePort` due to port conflicts, local database URLs, personal workflow preferences
-
-**Global Settings:**
-Global settings are stored in `~/.config/iloom-ai/settings.json` and apply to all iloom projects on your machine. Use these for personal preferences like default agent models or workflow permission modes. Project-specific settings (like database configuration) should remain in project config files.
-
-**Note:** The `.iloom/settings.local.json` file is automatically created and gitignored when you run `il init`.
-
-### Key Configuration:
-
-```jsonc
+```json
 {
   "mainBranch": "main",
-  "sourceEnvOnStart": false,  // Source .env in terminal launches (default: false)
-  "mergeBehavior": {
-    "mode": "local",  // or "github-pr" for PR-based workflows
-    "remote": "upstream"  // optional, defaults to issueManagement.github.remote
+  "issueManagement": {
+    "provider": "github"
   },
   "capabilities": {
-    "web": { "basePort": 3000 },
-    "database": { "databaseUrlEnvVarName": "DATABASE_URL" }
+    "web": {
+      "basePort": 3000
+    },
+    "database": {
+      "databaseUrlEnvVarName": "DATABASE_URL"
+    }
   },
   "databaseProviders": {
     "neon": {
-      "projectId": "fantastic-fox-3566354",
-      "parentBranch": "main"
+      "projectId": "fantastic-fox-3566354"
+    }
+  }
+}
+```
+
+**.iloom/settings.local.json (Gitignored)**
+
+```json
+{
+  "issueManagement": {
+    "linear": {
+      "apiToken": "lin_api_..." // Only if using Linear
     }
   },
   "workflows": {
     "issue": {
-      "permissionMode": "default",
-      "startIde": true,
-      "startDevServer": true,
-      "startAiAgent": true,
-      "startTerminal": false
-    }
-  },
-  "agents": {
-    "iloom-issue-enhancer": {"model":"opus"},
-    "iloom-issue-analyzer": {"model":"opus"},
-    "iloom-issue-analyze-and-plan":  {"model":"opus"},
-    "iloom-issue-implementer":  {"model":"haiku"}
-  }
-}
-```
-
-**Note on agent configuration:** All agents use the latest Sonnet model by default, except complexity evaluator which uses Haiku. You could also try a some different configurations:
-- **Opus for analysis/enhancement** - Maximum reasoning capability for understanding requirements and planning
-- **Haiku for implementation** - Cost-effective execution of detailed plans (recommended for token-conscious users)
-
-** Common configuration options:**
-- `mainBranch` - Primary branch for merging (default: "main")
-- `sourceEnvOnStart` - Source .env file when launching terminal processes (default: false)
-- `mergeBehavior.mode` - How to finish work: "local" (merge locally) or "github-pr" (create PR) (default: "local")
-- `mergeBehavior.remote` - Remote to target for PRs (optional, defaults to `issueManagement.github.remote`)
-- `capabilities.web.basePort` - Base port for dev servers (default: 3000)
-- `capabilities.database.databaseUrlEnvVarName` - Name of environment variable for database connection URL (default: "DATABASE_URL")
-- `databaseProviders.neon.projectId` - Neon project ID (found in project URL, e.g., "fantastic-fox-3566354")
-- `databaseProviders.neon.parentBranch` - Branch from which new database branches are created (default: "main")
-- `workflows` - Per-workflow Claude CLI permission modes and tool launching
-- `agents` - Claude model selection (sonnet/opus/haiku) per agent type
-
-All options can be specified in either `settings.json` (project-wide) or `settings.local.json` (local overrides, gitignored).
-
-Port calculation: `assignedPort = basePort + issueNumber`
-Example: Issue #25 with basePort 3000 = port 3025
-
-For complete configuration reference, see [.iloom/README.md](./.iloom/README.md)
-
-### IDE Configuration
-
-Configure which IDE launches when starting a loom:
-
-```jsonc
-{
-  "ide": {
-    "type": "cursor"  // or: vscode, webstorm, sublime, intellij, windsurf
-  }
-}
-```
-
-**Supported IDEs:**
-
-| Type | Command | Notes |
-|------|---------|-------|
-| `vscode` | `code` | Default. Visual Studio Code |
-| `cursor` | `cursor` | Cursor AI editor |
-| `webstorm` | `webstorm` | JetBrains WebStorm (launches with --nosplash) |
-| `sublime` | `subl` | Sublime Text |
-| `intellij` | `idea` | JetBrains IntelliJ IDEA (launches with --nosplash) |
-| `windsurf` | `windsurf` | Windsurf editor |
-
-**Configure via CLI:** Use the existing `--set` flag:
-
-```bash
-il start 25 --set ide.type=cursor
-```
-
-**Configure during setup:** Run `il init` to configure IDE preference interactively along with other settings.
-
-**Note:** Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf). Other IDEs will launch without color theming.
-
-## Issue Tracker Integration
-
-iloom supports multiple issue tracking systems through a provider abstraction. Choose GitHub or Linear based on your team's workflow.
-
-### GitHub (Default)
-
-GitHub is the default issue tracker and requires no additional configuration beyond authentication with the `gh` CLI.
-
-**Setup:**
-```bash
-# Authenticate with GitHub CLI
-gh auth login
-
-# Start using iloom with GitHub issues
-il start 123
-il start PR-456
-```
-
-**Configuration:**
-```jsonc
-{
-  "issueManagement": {
-    "provider": "github",  // Default, can be omitted
-    "github": {
-      "remote": "origin"  // Optional, defaults to "origin"
+      "permissionMode": "acceptEdits" // Control Claude Code permissions
     }
   }
 }
 ```
 
-### Linear
+Integrations
+------------
 
-iloom integrates with Linear through the official `@linear/sdk`, enabling full Linear issue tracking support.
+### Issue Trackers
 
-**Setup:**
+iloom supports the tools you already use. Unless you use JIRA.
 
-1. Get your Linear API token from [Linear Settings → API → Personal API Keys](https://linear.app/settings/api)
+| **Provider** | **Setup** | **Notes** |
+|--------------|-----------|-----------|
+| **GitHub**   | `gh auth login` | Default. Supports Issues and Pull Requests automatically. |
+| **Linear**   | `il init` | Requires API token. Supports full read/write on Linear issues. |
 
-2. Configure iloom to use Linear:
-   ```bash
-   il init
-   # Follow prompts to:
-   # - Select Linear as your issue tracker
-   # - Enter your Linear team ID (e.g., "ENG")
-   # - Enter your Linear API token (saved securely to settings.local.json)
-   ```
 
-   Or manually configure:
+### IDE Support
+iloom creates isolated workspace settings for your editor. Color synchronization (visual context) only works best VS Code-based editors.
 
-   Edit `.iloom/settings.local.json` (for sensitive data):
-   ```jsonc
-   {
-     "issueManagement": {
-       "provider": "linear",
-       "linear": {
-         "teamId": "ENG",  // Required: Your Linear team key
-         "apiToken": "lin_api_..."  // Required: Your Linear API token
-       }
-     }
-   }
-   ```
+*   **Supported:** VS Code, Cursor, Windsurf, WebStorm, IntelliJ, Sublime Text.
+    
+*   **Config:** Set your preference via `il init` or `il start --set ide.type=cursor`.
+    
 
-   **Important:** The `apiToken` should be stored in `settings.local.json` (not committed to git), not in `settings.json`. The init command will automatically save it to the correct location.
+Advanced Features
+-----------------
 
-   Alternatively, use an environment variable:
-   ```bash
-   export LINEAR_API_TOKEN="lin_api_..."
-   ```
+### Child Looms (Nested Contexts)
 
-   Settings take precedence over environment variables.
+Sometimes a task spawns sub-tasks, or you get interrupted by an urgent bug while deep in a feature. Child looms let you create a workspace _within_ a workspace.
 
-**Usage:**
+**When to use:**
+
+*   Breaking down a massive feature into smaller PRs.
+    
+*   Fixing a bug discovered during feature work without losing context.
+    
+
+**How it works:**If you run il start 42 while inside loom-25, iloom asks if you want to create a child loom.
+
+*  **Inheritance:** The child inherits the database state and git branch from the parent (not main).
+    
+*  **Structure**
+```
+    ~/my-project-looms/
+    ├── feat-issue-25-auth/           # Parent Loom
+    └── feat-issue-25-auth-looms/     # Child Looms Directory
+      ├── fix-issue-42-bug/         # Child Loom (inherits from #25)
+      └── feat-issue-43-subtask/    # Another Child Loom
+```
+
+### CLI Tool Development
+
+iloom provides first-class support for building CLI tools. When you start a loom for a CLI project, iloom creates workspace-specific binaries so you can test each issue's version independently.
+
 
 ```bash
-# Start working on a Linear issue
-il start ENG-123
+> il start 52 # Working on CLI feature in issue 52 
 
-# Create a new Linear issue
-il start "Add user authentication"
-
-# Finish and merge
-il finish
-```
-
-**Features:**
-
-- Full CRUD operations on issues and comments via the official Linear SDK
-- MCP integration for Claude AI assistance with Linear issues
-- Automatic workspace creation with Linear issue context
-
-**Limitations:**
-
-- Linear does not have pull requests. Use `il finish` with `mergeBehavior.mode: "local"` or `"github-pr"` to merge your code.
-
-**Port Calculation:**
-
-Linear issue identifiers (e.g., ENG-123) use hash-based port calculation instead of simple numeric addition. The port is deterministically generated from the branch name, ensuring consistency across sessions.
-
-## Requirements
-
-**Essential:**
-- Claude CLI - AI assistance with issue context preloaded
-- Node.js 16+
-- Git 2.5+ (for worktree support)
-
-**Issue Tracker (choose one):**
-- **GitHub CLI (`gh`)** - For GitHub issue tracking (default)
-- **Linear CLI (`linearis`)** - For Linear issue tracking (install with `npm install -g linearis`)
-
-**Recommended:**
-- A Claude Max subscription - iloom uses your own subscription
-
-**Optional (auto-detected):**
-- **Neon CLI** - Isolated database branches per loom
-- **VS Code** - Color-coded editor windows for visual context
-- **iTerm2** (macOS only) - Enhanced terminal experience with dual tabs in a single window (when configured to open both Claude and start a dev server)
-
-Optional features activate automatically when detected.
-
-## Platform & Integration Support
-
-This is an early stage product - platform/tech stack support is limited for now.
-
-**Current Platform Support:**
-- ✅ **macOS** - Fully tested and supported
-- ⚠️ **Linux/Windows** - Not yet tested, may work with modifications
-
-**Issue Tracking Integration:**
-- ✅ **GitHub Issues** - Full support with AI enhancement, analysis, and planning
-- ✅ **Linear** - Full support with AI enhancement, analysis, and planning
-
-**Project Type Support:**
-- ✅ **Node.js web projects** - First-class support via package.json scripts (`dev`, `test`, `build`)
-- ✅ **Node.js CLI tools** - Full support with isolated executables (see below)
-- 🔧 **Other tech stacks** - Can work now via package.json scripts, native support coming later (open to help!)
-
-We (Claude and I) are actively working on expanding platform and integration support. Contributions welcome!
-
-See all [`known-limitation`](https://github.com/iloom-ai/iloom-cli/issues?q=is%3Aissue+is%3Aopen+label%3Aknown-limitation) issues for details and to [contribute](CONTRIBUTING.md) solutions.
-
-## Installation
-
-```bash
-# Install globally
-> npm install -g @iloom/cli
-
-# Authenticate with GitHub
-> gh auth login
-# do `gh auth login --scopes project` to automatically move issues to in progress
-
-# Initialize in your project
-> cd your-project
-> il init
-
-# Start working
-> il start 25 # existing issue
-> il start "Enable log in/sign up with Google account" # new issue
-```
-
-## Pull Request Support
-
-iloom works identically with GitHub pull requests:
-
-```bash
-> il start 125  # PR number instead of issue number
-```
-
-Automatically detects PR, fetches the branch, and creates loom with PR context. Everything else works the same.
-
-## Architecture
-
-**Technologies:**
-- TypeScript CLI built with Commander.js
-- Git worktrees for loom isolation
-- GitHub CLI integration for issues/PRs
-- Integration with node-based web servers via standard package.json scripts
-- Database branching (Neon) - optional
-- Claude CLI integration for AI assistance to resolve compilation/test/lint/merge errors
-
-**Project structure:**
-```
-src/
-├── commands/          # CLI commands (start, finish, cleanup, list, add-issue, enhance, spin, init, open)
-├── lib/              # Core business logic (WorkspaceManager, GitWorktreeManager, etc.)
-├── utils/            # Utility functions (git, github, env, database, shell)
-└── types/            # TypeScript definitions
-```
-
-For development guidelines and testing strategy, see [CLAUDE.md](./CLAUDE.md).
-
-### Node.js Web Project Support
-
-iloom provides first-class support for Node.js web applications (next/express/vite, etc) through standardized package.json scripts:
-
-**Required scripts** (auto-detected):
-- `dev` - Start development server (launched automatically with unique port)
-- `test` - Run test suite (executed during `il finish` validation)
-
-**Optional scripts**:
-- `lint` - Code quality checks (run during `il finish` if present)
-- `typecheck` - TypeScript validation (run during `il finish` if present)
-
-**How it integrates:**
-
-```bash
-> il start 25
-# ✅ Runs `pnpm install` in worktree
-# ✅ Launches `pnpm dev` on port 3025 (3000 + issue number)
-# ✅ Sets up database branch with correct DATABASE_URL
-
-> il finish
-# ✅ Runs `pnpm test` (fails if tests fail)
-# ✅ Runs `pnpm typecheck` if configured
-# ✅ Runs `pnpm lint` if configured
-# ✅ AI assists with any failures automatically
-```
-
-### Node.js CLI Tool Support
-
-iloom was built using iloom itself. CLI tools get the same isolation benefits as web projects, plus **isolated executable access per loom**.
-
-**How it works:**
-
-When you create a loom for a CLI project, iloom creates workspace-specific binaries so you can test each issue's version independently:
-
-```bash
-> il start 52  # Working on CLI feature in issue 52
-> cli-tool-52 --version  # Test issue 52's version
+> my-cli-52 --version  # Test issue 52's version 
 
 > il start 137  # Switch to different CLI issue
-> cli-tool-137 --help    # Test issue 137's version
+
+> my-cli-137 --help    # Test issue 137's version
 
 # Original binary still works from main branch
-> cli-tool --version     # Unaffected by iloom CLIs
+> my-cli --version     # Unaffected by other looms' CLIs
 ```
 
-**Binary naming**: `<original-name>-<issue/pr-number>`
-- Binary named in package.json's "bin" object: `cli-tool`
-- Issue 52: `cli-tool-52`
-- Issue 137: `cli-tool-137`
-- PR 200: `cli-tool-200`
+System Requirements & Limitations
+---------------------------------
 
-**Cleanup**: When you run `il finish`, the workspace-specific binary is automatically removed along with the worktree and any database branches.
+This is an early-stage product.
 
-This enables parallel development and testing of CLI features without conflicts or manual PATH manipulation.
+**Requirements:**
 
+*   ✅ **OS:** macOS (Fully supported). ⚠️ Linux/Windows are untested.
+    
+*   ✅ **Runtime:** Node.js 16+, Git 2.5+.
+    
+*   ✅ **AI:** Claude CLI installed. A Claude Max subscription is recommended (iloom uses your subscription).
+    
 
+**Project Support:**
 
-**Other tech stacks**: Projects using different languages/frameworks can work with iloom by providing compatible package.json scripts that wrap their native tooling. Native support for additional tech stacks is planned (but probably not for a while).
+*   ✅ **Node.js Web Projects:** First-class support via package.json scripts (dev, test, build).
+    
+*   ✅ **Node.js CLI Tools:** Full support with isolated binary generation.
+    
+*   ⚠️ **Other Stacks:** Python/Go/Rust etc. can work via generic package.json scripts, but are not natively supported yet.    
 
-## Roadmap
+See all [known limitations](https://github.com/iloom-ai/iloom-cli/issues?q=is:issue+is:open+label:known-limitation) on GitHub. If you're feeling left out - you're absolutely right! The best way to complain about something is to fix it. So...
 
-**Currently in Development** - Actively developing this CLI tool, with the intent to support more workflow flexibility and different tech stacks, task management tools and DB providers.
+Contributing
+------------
 
-### Understanding Git Worktrees
-
-A Git worktree is a separate working directory for the same repository. Instead of switching branches in one directory, you have multiple directories with different branches checked out simultaneously.
-
-Traditional approach:
-```bash
-> git checkout feature-a    # Switch branch
-# Edit files
-> git stash                 # Save work
-> git checkout feature-b    # Switch branch again
-# Edit different files
-> git stash pop             # Restore work
-> git checkout feature-a    # Switch back
-```
-
-Git worktree approach:
-```bash
-# All exist simultaneously:
-~/project-looms/issue-25/  # feature-a checked out
-~/project-looms/issue-30/  # feature-b checked out
-~/project/                      # main branch
-
-# No branch switching, no stashing, less confusion
-```
-
-This is the foundation that enables loom isolation and persistent context. Other awesome tools use worktrees too.
-
-### When to Choose Other Git Worktree Solutions
-
-iloom isn't the only tool that makes git worktrees more accessible. Several excellent alternatives exist, each with different trade-offs:
-
-**Editor-Integrated Solutions:**
-- [VS Code Git Worktrees](https://marketplace.visualstudio.com/items?itemName=GitWorktrees.git-worktrees) - Enhanced Git worktree support in VS Code
-- [git-worktree.nvim](https://github.com/ThePrimeagen/git-worktree.nvim) - Neovim plugin for rapid worktree management
-
-**Apps**
-- [Crystal](https://github.com/stravu/crystal) - Run multiple Codex and Claude Code AI sessions in parallel git worktrees
-- [Conductor](https://conductor.build/) - Run a team of coding agents on your Mac
-
-**CLI Helpers:**
-- [git-worktree-wrapper](https://github.com/lu0/git-worktree-wrapper) - Manage Git worktrees with `git checkout` and `git branch` commands.
-
-**What They Do Well:**
-- Reduce friction of git worktree CLI commands
-- Integrate tightly with your editor workflow
-- Minimal learning curve if you know git
-- Lightweight - just worktree management, nothing more
-- Conductor and Crystal help you with Agentic coding too
-
-**Where iloom Differs:**
-
-Most tools focus on **making git worktrees easier to use**, some add-in Agentic coding too. iloom focuses on **making multi-issue AI-assisted development sustainable**.
-
-**Beyond Worktrees:**
-- **Database isolation**: Neon branch integration for schema/data separation
-- **AI context persistence**: Structured analysis stored in issue comments, not local chat history
-- **Cognitive overhead reduction**: Color coding, port assignment, environment setup handled automatically
-- **Human-AI alignment**: Multi-phase workflow surfaces assumptions before code is written
-- **Validation automation**: AI-assisted error fixing during merge process
-
-**The Trade-off:**
-
-Other tools increase code output with minimal process change. iloom increases **sustainable velocity** with a prescriptive workflow. You trade flexibility for:
-- Persistent shared understanding between you and your AI
-- Reduced time debugging AI misunderstandings
-- Less context switching mental overhead
-- Complete environment isolation (not just git)
-
-**Choose other solutions if:**
-- You primarily work solo without AI assistance
-- You want minimal workflow changes
-- You just need easier git worktree commands
-- You don't see yourself working on multiple tasks at once
-
-**Choose iloom if:**
-- You're scaling AI-assisted development across multiple issues
-- Cognitive overhead is limiting your velocity more than coding speed
-- You work on projects with database schemas that change per feature
-- You want AI analysis and planning visible to your whole team
-
-## Contributing
-
-We welcome contributions! Whether you're fixing a bug, adding a feature, or improving documentation, there are multiple ways to get involved.
-
-### Quick Start for Contributors
-
-The fastest way to get started contributing:
+We (Claude and I) welcome contributions! We've made it easy to get started — iloom can even set up its own dev environment.
 
 ```bash
-iloom contribute # requires the github CLI (gh)
+iloom contribute   # Handles forking, cloning, and setting up the dev environment automatically.
 ```
 
-This automated command handles forking, cloning, and setting up your development environment.
+New contributors should start with issues labeled [starter-task](https://github.com/iloom-ai/iloom-cli/issues?q=is%3Aissue+is%3Aopen+label%3Astarter-task). For details, see our [Contributing Guide](CONTRIBUTING.md).
 
-### Finding Your First Issue
+License & Name
+--------------
 
-New contributors should start with issues labeled [`starter-task`](https://github.com/iloom-ai/iloom-cli/issues?q=is%3Aissue+is%3Aopen+label%3Astarter-task) - these are designed to help you learn the iloom workflow and codebase while making meaningful contributions.
+**iloom** comes from "illuminate" (illuminating the AI coding process) and "intelligent loom" (weaving artificial and human intelligence together).
 
-### Full Contributing Guide
+**License: Business Source License 1.1**
 
-For detailed information about our development process, testing requirements, and workflow, see our comprehensive [Contributing Guide](CONTRIBUTING.md).
-
-**Key highlights:**
-- Behavior-focused testing principles
-- AI-assisted development workflow using iloom itself
-- Clear PR process and code quality standards
-- Test-Driven Development with >70% coverage requirement
-
-## License
-
-**Business Source License 1.1** - Free to use for any purpose, including commercial use within your organization.
-
-**You can:**
-- ✅ Use freely in your organization and commercial projects
-- ✅ Modify and distribute internally
-- ✅ Build paid applications with it
-
-**You cannot:**
-- ❌ Resell iloom itself as a product or service
-- ❌ Incorporate into products/services you sell to others
-- ❌ Offer as a hosted service or SaaS
-
-**Converts to Apache 2.0 on 2029-01-01** - Becomes fully open source automatically.
-
-For commercial licensing inquiries, contact Adam Creeger.
+*   ✅ Free to use for any internal or commercial project.
+    
+*   ❌ You cannot resell iloom itself as a product or SaaS.
+    
+*   Converts to Apache 2.0 on 2029-01-01.
+    
 
 See [LICENSE](https://raw.githubusercontent.com/iloom-ai/iloom-cli/main/LICENSE) for complete terms.
-
-## About the Name
-
-**iloom** comes from "illuminate" - it illuminates the mysterious AI coding process - and "intelligent loom" that weaves artificial and human intelligence together.

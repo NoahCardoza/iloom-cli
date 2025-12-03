@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-iloom is a TypeScript CLI tool that converts existing bash workflow scripts into a robust, testable system for managing isolated Git worktrees with Claude AI integration. The tool enables developers to work on multiple issues simultaneously without context confusion.
+iloom is a TypeScript CLI tool that converts existing bash workflow scripts into a robust, testable system for managing isolated Git worktrees with Claude Code integration. The tool enables developers to work on multiple issues simultaneously without context confusion.
 
 ## DEVELOPMENT GUIDELINES
 * DO NOT SWALLOW ERRORS
@@ -175,7 +175,7 @@ MockFileSystem         # Mock file operations
 **From new-branch-workflow.sh**:
 
 - GitHub issue/PR detection and fetching
-- Branch name generation using Claude AI
+- Branch name generation using Claude Code
 - Git worktree creation with sanitized naming
 - Environment setup (port calculation: 3000 + issue number)
 - Database branch creation (Neon integration)

@@ -82,7 +82,7 @@ Configure per-workflow permission modes for Claude CLI. This allows you to contr
 **Component launch settings**:
 - `startIde` - Launch IDE (VSCode) when starting workflow (default: true)
 - `startDevServer` - Launch development server in terminal when starting workflow (default: true)
-- `startAiAgent` - Launch Claude AI agent when starting workflow (default: true)
+- `startAiAgent` - Launch Claude Code agent when starting workflow (default: true)
 - `startTerminal` - Launch terminal window without dev server when starting workflow (default: false)
 
 **Example**:

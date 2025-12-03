@@ -57,7 +57,7 @@ vi.mock('../utils/remote.js', () => ({
 
 // Mock claude utilities
 vi.mock('../utils/claude.js', () => ({
-	launchClaude: vi.fn().mockResolvedValue('Enhanced description from Claude AI'),
+	launchClaude: vi.fn().mockResolvedValue('Enhanced description from Claude Code'),
 }))
 
 // Mock browser utilities
