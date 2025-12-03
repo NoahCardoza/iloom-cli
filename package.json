@@ -65,6 +65,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@linear/sdk": "^65.1.0",
     "@modelcontextprotocol/sdk": "^1.0.4",
     "chalk": "^5.3.0",
     "commander": "^11.1.0",

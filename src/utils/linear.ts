@@ -1,9 +1,9 @@
 /**
- * Linear CLI utilities
- * Wrapper functions for the linearis CLI tool
+ * Linear SDK utilities
+ * Wrapper functions for the @linear/sdk
  */
 
-import { execa } from 'execa'
+import { LinearClient } from '@linear/sdk'
 import type { LinearIssue, LinearComment } from '../types/linear.js'
 import { LinearServiceError } from '../types/linear.js'
 import { logger } from './logger.js'
@@ -57,108 +57,111 @@ export function buildLinearIssueUrl(identifier: string, title?: string): string 
 }
 
 /**
- * Check if linearis CLI is installed and available
+ * Get Linear API token from environment
+ * @returns API token
+ * @throws LinearServiceError if token not found
  */
-export async function isLinearisCLIInstalled(): Promise<boolean> {
-  try {
-    await execa('which', ['linearis'])
-    return true
-  } catch {
-    return false
+function getLinearApiToken(): string {
+  const token = process.env.LINEAR_API_TOKEN
+  if (!token) {
+    throw new LinearServiceError(
+      'UNAUTHORIZED',
+      'LINEAR_API_TOKEN not set. Configure in settings.local.json or set environment variable.',
+    )
   }
+  return token
 }
 
 /**
- * Execute a linearis CLI command with error handling
- * @param args - Command arguments for linearis
- * @param options - Execution options
- * @returns Parsed JSON output from linearis
- * @throws LinearServiceError on CLI errors
+ * Create a Linear SDK client instance
+ * @returns Configured LinearClient
  */
-export async function executeLinearisCommand<T>(
-  args: string[],
-  options?: { cwd?: string; timeout?: number },
-): Promise<T> {
-  try {
-    // Check if CLI is installed first
-    logger.debug(`executeLinearisCommand: Checking if linearis CLI is installed`)
-    const isInstalled = await isLinearisCLIInstalled()
-    if (!isInstalled) {
-      logger.debug(`executeLinearisCommand: linearis CLI NOT installed`)
-      throw new LinearServiceError(
-        'CLI_NOT_FOUND',
-        'linearis CLI is not installed. Install with: npm install -g linearis',
-      )
-    }
+function createLinearClient(): LinearClient {
+  return new LinearClient({ apiKey: getLinearApiToken() })
+}
 
-    logger.debug(`executeLinearisCommand: Running: linearis ${args.join(' ')}`)
-    const { stdout } = await execa('linearis', args, {
-      ...(options?.cwd && { cwd: options.cwd }),
-      timeout: options?.timeout ?? 30000,
-    })
+/**
+ * Handle SDK errors and convert to LinearServiceError
+ * @param error - Error from SDK
+ * @param context - Context string for debugging
+ * @throws LinearServiceError
+ */
+function handleLinearError(error: unknown, context: string): never {
+  logger.debug(`${context}: Handling error`, { error })
 
-    logger.debug(`executeLinearisCommand: Success, parsing JSON response`)
-    // linearis returns JSON by default
-    return JSON.parse(stdout) as T
-  } catch (error) {
-    // Re-throw LinearServiceError as-is
-    if (error instanceof LinearServiceError) {
-      logger.debug(`executeLinearisCommand: LinearServiceError: ${error.code} - ${error.message}`)
-      throw error
-    }
+  // SDK errors typically have a message property
+  const errorMessage = error instanceof Error ? error.message : String(error)
 
-    // Handle execa errors
-    if (error && typeof error === 'object' && 'stderr' in error) {
-      const execaError = error as { stderr?: string; message?: string }
-      const stderr = execaError.stderr ?? execaError.message ?? 'Unknown error'
-      logger.debug(`executeLinearisCommand: CLI error stderr: ${stderr}`)
-
-      // Map common Linear API errors
-      if (stderr.includes('not found') || stderr.includes('Not found')) {
-        logger.debug(`executeLinearisCommand: Mapped to NOT_FOUND error`)
-        throw new LinearServiceError('NOT_FOUND', 'Linear issue or resource not found', {
-          stderr,
-        })
-      }
-
-      if (stderr.includes('unauthorized') || stderr.includes('Unauthorized')) {
-        logger.debug(`executeLinearisCommand: Mapped to UNAUTHORIZED error`)
-        throw new LinearServiceError(
-          'UNAUTHORIZED',
-          'Linear authentication failed. Check LINEAR_API_KEY environment variable.',
-          { stderr },
-        )
-      }
-
-      if (stderr.includes('rate limit')) {
-        logger.debug(`executeLinearisCommand: Mapped to RATE_LIMITED error`)
-        throw new LinearServiceError('RATE_LIMITED', 'Linear API rate limit exceeded', {
-          stderr,
-        })
-      }
-
-      // Generic CLI error
-      logger.debug(`executeLinearisCommand: Generic CLI_ERROR`)
-      throw new LinearServiceError('CLI_ERROR', `Linear CLI error: ${stderr}`, { stderr })
-    }
-
-    // Unknown error type
-    logger.debug(`executeLinearisCommand: Unknown error type: ${error}`)
-    throw new LinearServiceError('CLI_ERROR', 'Unknown error executing linearis CLI', {
-      error,
-    })
+  // Map common error patterns
+  if (errorMessage.includes('not found') || errorMessage.includes('Not found')) {
+    throw new LinearServiceError('NOT_FOUND', 'Linear issue or resource not found', { error })
   }
+
+  if (
+    errorMessage.includes('unauthorized') ||
+    errorMessage.includes('Unauthorized') ||
+    errorMessage.includes('Invalid API key')
+  ) {
+    throw new LinearServiceError(
+      'UNAUTHORIZED',
+      'Linear authentication failed. Check LINEAR_API_TOKEN.',
+      { error },
+    )
+  }
+
+  if (errorMessage.includes('rate limit')) {
+    throw new LinearServiceError('RATE_LIMITED', 'Linear API rate limit exceeded', { error })
+  }
+
+  // Generic SDK error
+  throw new LinearServiceError('CLI_ERROR', `Linear SDK error: ${errorMessage}`, { error })
 }
 
 /**
  * Fetch a Linear issue by identifier
  * @param identifier - Linear issue identifier (e.g., "ENG-123")
  * @returns Linear issue details
- * @throws LinearServiceError if issue not found or CLI error
+ * @throws LinearServiceError if issue not found or SDK error
  */
 export async function fetchLinearIssue(identifier: string): Promise<LinearIssue> {
-  logger.debug(`Fetching Linear issue: ${identifier}`)
-  return executeLinearisCommand<LinearIssue>(['issues', 'read', identifier])
+  try {
+    logger.debug(`Fetching Linear issue: ${identifier}`)
+    const client = createLinearClient()
+    const issue = await client.issue(identifier)
+
+    if (!issue) {
+      throw new LinearServiceError('NOT_FOUND', `Linear issue ${identifier} not found`)
+    }
+
+    // Convert SDK issue to our LinearIssue type
+    const result: LinearIssue = {
+      id: issue.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      url: issue.url,
+      createdAt: issue.createdAt.toISOString(),
+      updatedAt: issue.updatedAt.toISOString(),
+    }
+
+    // Add optional fields if present
+    if (issue.description) {
+      result.description = issue.description
+    }
+
+    if (issue.state) {
+      const state = await issue.state
+      if (state?.name) {
+        result.state = state.name
+      }
+    }
+
+    return result
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'fetchLinearIssue')
+  }
 }
 
 /**
@@ -174,28 +177,50 @@ export async function createLinearIssue(
   title: string,
   body: string,
   teamKey: string,
-  labels?: string[],
+  _labels?: string[],
 ): Promise<{ identifier: string; url: string }> {
-  logger.debug(`Creating Linear issue in team ${teamKey}: ${title}`)
+  try {
+    logger.debug(`Creating Linear issue in team ${teamKey}: ${title}`)
+    const client = createLinearClient()
 
-  const args = ['issues', 'create', title, '--team', teamKey]
+    // Get team by key
+    const teams = await client.teams()
+    const team = teams.nodes.find((t) => t.key === teamKey)
 
-  if (body) {
-    args.push('--description', body)
-  }
+    if (!team) {
+      throw new LinearServiceError('NOT_FOUND', `Linear team ${teamKey} not found`)
+    }
 
-  if (labels && labels.length > 0) {
-    args.push('--labels', labels.join(','))
-  }
+    // Create issue
+    const issueInput: { teamId: string; title: string; description?: string } = {
+      teamId: team.id,
+      title,
+    }
 
-  const issue = await executeLinearisCommand<LinearIssue>(args)
+    if (body) {
+      issueInput.description = body
+    }
 
-  // Construct URL if not provided by linearis CLI
-  const url = issue.url ?? buildLinearIssueUrl(issue.identifier, title)
+    const payload = await client.createIssue(issueInput)
 
-  return {
-    identifier: issue.identifier,
-    url,
+    const issue = await payload.issue
+
+    if (!issue) {
+      throw new LinearServiceError('CLI_ERROR', 'Failed to create Linear issue')
+    }
+
+    // Construct URL
+    const url = issue.url ?? buildLinearIssueUrl(issue.identifier, title)
+
+    return {
+      identifier: issue.identifier,
+      url,
+    }
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'createLinearIssue')
   }
 }
 
@@ -210,8 +235,41 @@ export async function createLinearComment(
   identifier: string,
   body: string,
 ): Promise<LinearComment> {
-  logger.debug(`Creating comment on Linear issue ${identifier}`)
-  return executeLinearisCommand<LinearComment>(['comments', 'create', identifier, '--body', body])
+  try {
+    logger.debug(`Creating comment on Linear issue ${identifier}`)
+    const client = createLinearClient()
+
+    // Get issue by identifier to get its ID
+    const issue = await client.issue(identifier)
+    if (!issue) {
+      throw new LinearServiceError('NOT_FOUND', `Linear issue ${identifier} not found`)
+    }
+
+    // Create comment using issue ID
+    const payload = await client.createComment({
+      issueId: issue.id,
+      body,
+    })
+
+    const comment = await payload.comment
+
+    if (!comment) {
+      throw new LinearServiceError('CLI_ERROR', 'Failed to create Linear comment')
+    }
+
+    return {
+      id: comment.id,
+      body: comment.body,
+      createdAt: comment.createdAt.toISOString(),
+      updatedAt: comment.updatedAt.toISOString(),
+      url: comment.url,
+    }
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'createLinearComment')
+  }
 }
 
 /**
@@ -224,8 +282,43 @@ export async function updateLinearIssueState(
   identifier: string,
   stateName: string,
 ): Promise<void> {
-  logger.debug(`Updating Linear issue ${identifier} state to: ${stateName}`)
-  await executeLinearisCommand(['issues', 'update', identifier, '--state', stateName])
+  try {
+    logger.debug(`Updating Linear issue ${identifier} state to: ${stateName}`)
+    const client = createLinearClient()
+
+    // Get issue by identifier
+    const issue = await client.issue(identifier)
+    if (!issue) {
+      throw new LinearServiceError('NOT_FOUND', `Linear issue ${identifier} not found`)
+    }
+
+    // Get team to find state
+    const team = await issue.team
+    if (!team) {
+      throw new LinearServiceError('CLI_ERROR', 'Issue has no team')
+    }
+
+    // Find state by name
+    const states = await team.states()
+    const state = states.nodes.find((s) => s.name === stateName)
+
+    if (!state) {
+      throw new LinearServiceError(
+        'NOT_FOUND',
+        `State "${stateName}" not found in team ${team.key}`,
+      )
+    }
+
+    // Update issue state
+    await client.updateIssue(issue.id, {
+      stateId: state.id,
+    })
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'updateLinearIssueState')
+  }
 }
 
 /**
@@ -235,8 +328,28 @@ export async function updateLinearIssueState(
  * @throws LinearServiceError if comment not found
  */
 export async function getLinearComment(commentId: string): Promise<LinearComment> {
-  logger.debug(`Fetching Linear comment: ${commentId}`)
-  return executeLinearisCommand<LinearComment>(['comments', 'read', commentId])
+  try {
+    logger.debug(`Fetching Linear comment: ${commentId}`)
+    const client = createLinearClient()
+    const comment = await client.comment({ id: commentId })
+
+    if (!comment) {
+      throw new LinearServiceError('NOT_FOUND', `Linear comment ${commentId} not found`)
+    }
+
+    return {
+      id: comment.id,
+      body: comment.body,
+      createdAt: comment.createdAt.toISOString(),
+      updatedAt: comment.updatedAt.toISOString(),
+      url: comment.url,
+    }
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'getLinearComment')
+  }
 }
 
 /**
@@ -250,6 +363,63 @@ export async function updateLinearComment(
   commentId: string,
   body: string,
 ): Promise<LinearComment> {
-  logger.debug(`Updating Linear comment: ${commentId}`)
-  return executeLinearisCommand<LinearComment>(['comments', 'update', commentId, '--body', body])
+  try {
+    logger.debug(`Updating Linear comment: ${commentId}`)
+    const client = createLinearClient()
+
+    const payload = await client.updateComment(commentId, { body })
+    const comment = await payload.comment
+
+    if (!comment) {
+      throw new LinearServiceError('CLI_ERROR', 'Failed to update Linear comment')
+    }
+
+    return {
+      id: comment.id,
+      body: comment.body,
+      createdAt: comment.createdAt.toISOString(),
+      updatedAt: comment.updatedAt.toISOString(),
+      url: comment.url,
+    }
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'updateLinearComment')
+  }
+}
+
+/**
+ * Fetch all comments for a Linear issue
+ * @param identifier - Linear issue identifier (e.g., "ENG-123")
+ * @returns Array of comments
+ * @throws LinearServiceError on fetch failure
+ */
+export async function fetchLinearIssueComments(identifier: string): Promise<LinearComment[]> {
+  try {
+    logger.debug(`Fetching comments for Linear issue: ${identifier}`)
+    const client = createLinearClient()
+
+    // Get issue by identifier
+    const issue = await client.issue(identifier)
+    if (!issue) {
+      throw new LinearServiceError('NOT_FOUND', `Linear issue ${identifier} not found`)
+    }
+
+    // Fetch comments
+    const comments = await issue.comments({ first: 100 })
+
+    return comments.nodes.map((comment) => ({
+      id: comment.id,
+      body: comment.body,
+      createdAt: comment.createdAt.toISOString(),
+      updatedAt: comment.updatedAt.toISOString(),
+      url: comment.url,
+    }))
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'fetchLinearIssueComments')
+  }
 }

@@ -40,7 +40,7 @@ Workflow Comment Strategy:
 
    * Include relevant context (current step, progress, blockers) - be BRIEF, one sentence per update
    * Include a **very aggressive** estimated time to completion
-5. When you have finished your task, update the same issue comment with a concise summary (see "Final Summary Format" below)
+5. When you have finished your task, update the same issue comment with a concise summary (see "Final Summary Format" below) - MAKE SURE YOU DO NOT ERASE THE "details" section, then let the calling process know the full web URL of the issue comment, including the comment ID. NEVER ATTEMPT CONCURRENT UPDATES OF THE COMMENT. DATA WILL BE LOST.
 6. CONSTRAINT: After you create the initial issue comment, you may not create another comment. You must always update the initial comment instead.
 
 **Progress Update Conciseness:**
@@ -126,7 +126,7 @@ Before implementing, extract and validate the implementation plan:
 ### HOW TO UPDATE THE USER OF YOUR PROGRESS
 * AS SOON AS YOU CAN, once you have formulated an initial plan/todo list for your task, you should create a comment as described in the <comment_tool_info> section above.
 * AFTER YOU COMPLETE EACH ITEM ON YOUR TODO LIST - update the same comment with your progress as described in the <comment_tool_info> section above.
-* When the whole task is complete, update the SAME comment with your final summary using the format below, then let the calling process know the full web URL of the issue comment, including the comment ID.
+* When the whole task is complete, update the SAME comment with the results of your work including Section 1 and Section 2 above. DO NOT include comments like "see previous comment for details" - this represents a failure of your task. NEVER ATTEMPT CONCURRENT UPDATES OF THE COMMENT. DATA WILL BE LOST.
 
 ### Final Summary Format
 

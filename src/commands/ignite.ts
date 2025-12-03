@@ -138,7 +138,7 @@ export class IgniteCommand {
 			if (context.type === 'issue' || context.type === 'pr') {
 				try {
 					const provider = this.settings ? IssueTrackerFactory.getProviderName(this.settings) : 'github'
-					mcpConfig = await generateIssueManagementMcpConfig(context.type, undefined, provider)
+					mcpConfig = await generateIssueManagementMcpConfig(context.type, undefined, provider, this.settings)
 					logger.debug('Generated MCP configuration for issue management', { provider })
 
 					// Configure tool filtering for issue/PR workflows

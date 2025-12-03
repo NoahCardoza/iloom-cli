@@ -660,40 +660,44 @@ il start PR-456
 
 ### Linear
 
-iloom integrates with Linear through the `linearis` CLI tool, enabling full Linear issue tracking support.
+iloom integrates with Linear through the official `@linear/sdk`, enabling full Linear issue tracking support.
 
 **Setup:**
 
-1. Install the `linearis` CLI:
-   ```bash
-   npm install -g linearis
-   ```
+1. Get your Linear API token from [Linear Settings → API → Personal API Keys](https://linear.app/settings/api)
 
-2. Set your Linear API key:
-   ```bash
-   export LINEAR_API_TOKEN="lin_api_..."
-   ```
-
-   Or save to `~/.linear_api_token` for persistence.
-
-3. Configure iloom to use Linear:
+2. Configure iloom to use Linear:
    ```bash
    il init
-   # Follow prompts to select Linear as your issue tracker
+   # Follow prompts to:
+   # - Select Linear as your issue tracker
+   # - Enter your Linear team ID (e.g., "ENG")
+   # - Enter your Linear API token (saved securely to settings.local.json)
    ```
 
-   Or manually edit `.iloom/settings.json`:
+   Or manually configure:
+
+   Edit `.iloom/settings.local.json` (for sensitive data):
    ```jsonc
    {
      "issueManagement": {
        "provider": "linear",
        "linear": {
          "teamId": "ENG",  // Required: Your Linear team key
-         "branchFormat": "feat/{{key}}__{{title}}"  // Optional
+         "apiToken": "lin_api_..."  // Required: Your Linear API token
        }
      }
    }
    ```
+
+   **Important:** The `apiToken` should be stored in `settings.local.json` (not committed to git), not in `settings.json`. The init command will automatically save it to the correct location.
+
+   Alternatively, use an environment variable:
+   ```bash
+   export LINEAR_API_TOKEN="lin_api_..."
+   ```
+
+   Settings take precedence over environment variables.
 
 **Usage:**
 
@@ -708,10 +712,15 @@ il start "Add user authentication"
 il finish
 ```
 
+**Features:**
+
+- Full CRUD operations on issues and comments via the official Linear SDK
+- MCP integration for Claude AI assistance with Linear issues
+- Automatic workspace creation with Linear issue context
+
 **Limitations:**
 
 - Linear does not have pull requests. Use `il finish` with `mergeBehavior.mode: "local"` or `"github-pr"` to merge your code.
-- The Linear MCP integration is not included in this version (CLI-only integration).
 
 **Port Calculation:**
 

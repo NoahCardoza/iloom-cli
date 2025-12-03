@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { LinearIssueManagementProvider } from './LinearIssueManagementProvider.js'
 
-// Mock the linear utils module (keep buildLinearIssueUrl as real implementation)
+// Mock the linear utils module
 vi.mock('../utils/linear.js', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('../utils/linear.js')>()
 	return {
@@ -10,7 +10,7 @@ vi.mock('../utils/linear.js', async (importOriginal) => {
 		createLinearComment: vi.fn(),
 		getLinearComment: vi.fn(),
 		updateLinearComment: vi.fn(),
-		executeLinearisCommand: vi.fn(),
+		fetchLinearIssueComments: vi.fn(),
 	}
 })
 
@@ -20,7 +20,7 @@ import {
 	createLinearComment,
 	getLinearComment,
 	updateLinearComment,
-	executeLinearisCommand,
+	fetchLinearIssueComments,
 } from '../utils/linear.js'
 
 describe('LinearIssueManagementProvider', () => {
@@ -43,21 +43,14 @@ describe('LinearIssueManagementProvider', () => {
 				identifier: 'ENG-123',
 				title: 'Test Issue',
 				description: 'Test description',
-				state: {
-					id: 'state-uuid',
-					name: 'In Progress',
-					type: 'started' as const,
-				},
-				labels: [{ name: 'bug' }],
-				assignee: { name: 'john', displayName: 'John Doe' },
-				// url omitted to test buildLinearIssueUrl fallback
+				state: 'In Progress',
+				url: 'https://linear.app/issue/ENG-123/test-issue',
 				createdAt: '2024-01-01T00:00:00Z',
 				updatedAt: '2024-01-02T00:00:00Z',
-				team: { id: 'team-uuid', key: 'ENG', name: 'Engineering' },
 			}
 
 			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
-			vi.mocked(executeLinearisCommand).mockResolvedValue([])
+			vi.mocked(fetchLinearIssueComments).mockResolvedValue([])
 
 			const result = await provider.getIssue({ number: 'ENG-123' })
 
@@ -65,12 +58,9 @@ describe('LinearIssueManagementProvider', () => {
 			expect(result.id).toBe('ENG-123')
 			expect(result.title).toBe('Test Issue')
 			expect(result.body).toBe('Test description')
-			expect(result.state).toBe('open') // 'started' maps to 'open'
+			expect(result.state).toBe('open')
 			expect(result.url).toBe('https://linear.app/issue/ENG-123/test-issue')
 			expect(result.provider).toBe('linear')
-			expect(result.labels).toEqual([{ name: 'bug' }])
-			expect(result.assignees).toHaveLength(1)
-			expect(result.assignees?.[0]?.displayName).toBe('John Doe')
 		})
 
 		it('should map completed state to closed', async () => {
@@ -78,26 +68,19 @@ describe('LinearIssueManagementProvider', () => {
 				id: 'uuid-123',
 				identifier: 'ENG-123',
 				title: 'Completed Issue',
-				description: null,
-				state: {
-					id: 'state-uuid',
-					name: 'Done',
-					type: 'completed' as const,
-				},
-				labels: [],
-				assignee: null,
+				state: 'Done',
+				url: 'https://linear.app/issue/ENG-123',
 				createdAt: '2024-01-01T00:00:00Z',
 				updatedAt: '2024-01-02T00:00:00Z',
-				team: { id: 'team-uuid', key: 'ENG', name: 'Engineering' },
 			}
 
 			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
-			vi.mocked(executeLinearisCommand).mockResolvedValue([])
+			vi.mocked(fetchLinearIssueComments).mockResolvedValue([])
 
 			const result = await provider.getIssue({ number: 'ENG-123' })
 
 			expect(result.state).toBe('closed')
-			expect(result.body).toBe('') // null description becomes empty string
+			expect(result.body).toBe('') // no description becomes empty string
 		})
 
 		it('should map canceled state to closed', async () => {
@@ -106,20 +89,14 @@ describe('LinearIssueManagementProvider', () => {
 				identifier: 'ENG-123',
 				title: 'Canceled Issue',
 				description: 'Was canceled',
-				state: {
-					id: 'state-uuid',
-					name: 'Canceled',
-					type: 'canceled' as const,
-				},
-				labels: [],
-				assignee: null,
+				state: 'Canceled',
+				url: 'https://linear.app/issue/ENG-123',
 				createdAt: '2024-01-01T00:00:00Z',
 				updatedAt: '2024-01-02T00:00:00Z',
-				team: { id: 'team-uuid', key: 'ENG', name: 'Engineering' },
 			}
 
 			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
-			vi.mocked(executeLinearisCommand).mockResolvedValue([])
+			vi.mocked(fetchLinearIssueComments).mockResolvedValue([])
 
 			const result = await provider.getIssue({ number: 'ENG-123' })
 
@@ -132,19 +109,17 @@ describe('LinearIssueManagementProvider', () => {
 				identifier: 'ENG-123',
 				title: 'Test Issue',
 				description: 'Test',
-				state: { id: 'state-uuid', name: 'Todo', type: 'unstarted' as const },
-				labels: [],
-				assignee: null,
+				state: 'Todo',
+				url: 'https://linear.app/issue/ENG-123',
 				createdAt: '2024-01-01T00:00:00Z',
 				updatedAt: '2024-01-02T00:00:00Z',
-				team: { id: 'team-uuid', key: 'ENG', name: 'Engineering' },
 			}
 
 			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
 
 			const result = await provider.getIssue({ number: 'ENG-123', includeComments: false })
 
-			expect(executeLinearisCommand).not.toHaveBeenCalled()
+			expect(fetchLinearIssueComments).not.toHaveBeenCalled()
 			expect(result.comments).toBeUndefined()
 		})
 
@@ -154,12 +129,10 @@ describe('LinearIssueManagementProvider', () => {
 				identifier: 'ENG-123',
 				title: 'Test Issue',
 				description: 'Test',
-				state: { id: 'state-uuid', name: 'Todo', type: 'unstarted' as const },
-				labels: [],
-				assignee: null,
+				state: 'Todo',
+				url: 'https://linear.app/issue/ENG-123',
 				createdAt: '2024-01-01T00:00:00Z',
 				updatedAt: '2024-01-02T00:00:00Z',
-				team: { id: 'team-uuid', key: 'ENG', name: 'Engineering' },
 			}
 
 			const mockComments = [
@@ -167,19 +140,20 @@ describe('LinearIssueManagementProvider', () => {
 					id: 'comment-uuid-1',
 					body: 'First comment',
 					createdAt: '2024-01-01T12:00:00Z',
-					user: { name: 'alice', displayName: 'Alice' },
+					updatedAt: '2024-01-01T12:00:00Z',
+					url: 'https://linear.app/comment/1',
 				},
 			]
 
 			vi.mocked(fetchLinearIssue).mockResolvedValue(mockLinearIssue)
-			vi.mocked(executeLinearisCommand).mockResolvedValue(mockComments)
+			vi.mocked(fetchLinearIssueComments).mockResolvedValue(mockComments)
 
 			const result = await provider.getIssue({ number: 'ENG-123', includeComments: true })
 
-			expect(executeLinearisCommand).toHaveBeenCalledWith(['comments', 'list', 'ENG-123'])
+			expect(fetchLinearIssueComments).toHaveBeenCalledWith('ENG-123')
 			expect(result.comments).toHaveLength(1)
 			expect(result.comments?.[0]?.body).toBe('First comment')
-			expect(result.comments?.[0]?.author?.displayName).toBe('Alice')
+			expect(result.comments?.[0]?.author).toBeNull() // SDK doesn't return author
 		})
 	})
 
@@ -189,7 +163,8 @@ describe('LinearIssueManagementProvider', () => {
 				id: 'comment-uuid',
 				body: 'Test comment body',
 				createdAt: '2024-01-01T00:00:00Z',
-				user: { name: 'bob', displayName: 'Bob Smith' },
+				updatedAt: '2024-01-01T00:00:00Z',
+				url: 'https://linear.app/comment/uuid',
 			}
 
 			vi.mocked(getLinearComment).mockResolvedValue(mockComment)
@@ -200,7 +175,7 @@ describe('LinearIssueManagementProvider', () => {
 			expect(result.id).toBe('comment-uuid')
 			expect(result.body).toBe('Test comment body')
 			expect(result.created_at).toBe('2024-01-01T00:00:00Z')
-			expect(result.author?.displayName).toBe('Bob Smith')
+			expect(result.author).toBeNull() // SDK doesn't return author
 		})
 	})
 
@@ -225,6 +200,64 @@ describe('LinearIssueManagementProvider', () => {
 			expect(result.id).toBe('new-comment-uuid')
 			expect(result.created_at).toBe('2024-01-01T00:00:00Z')
 		})
+
+		it('should convert HTML details/summary to Linear format', async () => {
+			const mockResult = {
+				id: 'new-comment-uuid',
+				body: 'Converted comment',
+				createdAt: '2024-01-01T00:00:00Z',
+				user: { name: 'alice' },
+			}
+
+			vi.mocked(createLinearComment).mockResolvedValue(mockResult)
+
+			const htmlBody = `Test plan:
+<details>
+<summary>Phase 1</summary>
+- Step 1
+- Step 2
+</details>`
+
+			await provider.createComment({
+				number: 'ENG-123',
+				body: htmlBody,
+				type: 'issue',
+			})
+
+			// Verify the HTML was converted to Linear's collapsible format
+			expect(createLinearComment).toHaveBeenCalledWith(
+				'ENG-123',
+				`Test plan:
++++ Phase 1
+
+- Step 1
+- Step 2
+
++++`
+			)
+		})
+
+		it('should pass through body without details blocks unchanged', async () => {
+			const mockResult = {
+				id: 'new-comment-uuid',
+				body: 'Regular comment',
+				createdAt: '2024-01-01T00:00:00Z',
+				user: { name: 'alice' },
+			}
+
+			vi.mocked(createLinearComment).mockResolvedValue(mockResult)
+
+			const regularBody = 'Just a regular comment with **markdown**'
+
+			await provider.createComment({
+				number: 'ENG-123',
+				body: regularBody,
+				type: 'issue',
+			})
+
+			// Should pass through unchanged
+			expect(createLinearComment).toHaveBeenCalledWith('ENG-123', regularBody)
+		})
 	})
 
 	describe('updateComment', () => {
@@ -246,6 +279,62 @@ describe('LinearIssueManagementProvider', () => {
 
 			expect(updateLinearComment).toHaveBeenCalledWith('comment-uuid', 'Updated comment')
 			expect(result.id).toBe('comment-uuid')
+		})
+
+		it('should convert HTML details/summary to Linear format when updating', async () => {
+			const mockResult = {
+				id: 'comment-uuid',
+				body: 'Updated with converted HTML',
+				createdAt: '2024-01-01T00:00:00Z',
+				user: { name: 'alice' },
+			}
+
+			vi.mocked(updateLinearComment).mockResolvedValue(mockResult)
+
+			const htmlBody = `Updated plan:
+<details>
+<summary>New Phase</summary>
+New content here
+</details>`
+
+			await provider.updateComment({
+				commentId: 'comment-uuid',
+				number: 'ENG-123',
+				body: htmlBody,
+			})
+
+			// Verify the HTML was converted to Linear's collapsible format
+			expect(updateLinearComment).toHaveBeenCalledWith(
+				'comment-uuid',
+				`Updated plan:
++++ New Phase
+
+New content here
+
++++`
+			)
+		})
+
+		it('should pass through update body without details blocks unchanged', async () => {
+			const mockResult = {
+				id: 'comment-uuid',
+				body: 'Regular update',
+				createdAt: '2024-01-01T00:00:00Z',
+				user: { name: 'alice' },
+			}
+
+			vi.mocked(updateLinearComment).mockResolvedValue(mockResult)
+
+			const regularBody = 'Regular update with **markdown**'
+
+			await provider.updateComment({
+				commentId: 'comment-uuid',
+				number: 'ENG-123',
+				body: regularBody,
+			})
+
+			// Should pass through unchanged
+			expect(updateLinearComment).toHaveBeenCalledWith('comment-uuid', regularBody)
 		})
 	})
 })

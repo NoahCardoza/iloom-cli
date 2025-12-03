@@ -1,6 +1,6 @@
 /**
  * LinearService - IssueTracker implementation for Linear
- * Implements issue tracking operations using the linearis CLI tool
+ * Implements issue tracking operations using the @linear/sdk
  */
 
 import type { Issue, PullRequest, IssueTrackerInputDetection } from '../types/index.js'
@@ -10,7 +10,6 @@ import {
   fetchLinearIssue,
   createLinearIssue,
   updateLinearIssueState,
-  buildLinearIssueUrl,
 } from '../utils/linear.js'
 import { promptConfirmation } from '../utils/prompt.js'
 import type { IssueTracker } from './IssueTracker.js'
@@ -71,7 +70,7 @@ export class LinearService implements IssueTracker {
     logger.debug(`LinearService: Matched Linear identifier: ${identifier}`)
 
     // Validate the issue exists in Linear
-    logger.debug(`LinearService: Checking if ${identifier} is a valid Linear issue via linearis CLI`)
+    logger.debug(`LinearService: Checking if ${identifier} is a valid Linear issue via SDK`)
     const issue = await this.isValidIssue(identifier)
 
     if (issue) {
@@ -80,7 +79,7 @@ export class LinearService implements IssueTracker {
     }
 
     // Not found
-    logger.debug(`LinearService: Issue ${identifier} NOT found by linearis CLI`)
+    logger.debug(`LinearService: Issue ${identifier} NOT found by SDK`)
     return { type: 'unknown', identifier: null, rawInput: input }
   }
 
@@ -199,21 +198,18 @@ export class LinearService implements IssueTracker {
 
   /**
    * Map Linear API issue to generic Issue type
-   * @param linear - Linear issue from API
+   * @param linear - Linear issue from SDK
    * @returns Generic Issue type
    */
   private mapLinearIssueToIssue(linear: LinearIssue): Issue {
-    // Construct URL if not provided by linearis CLI
-    const url = linear.url ?? buildLinearIssueUrl(linear.identifier, linear.title)
-
     return {
       number: linear.identifier, // Keep as string (e.g., "ENG-123")
       title: linear.title,
       body: linear.description ?? '',
-      state: linear.state.type === 'completed' || linear.state.type === 'canceled' ? 'closed' : 'open',
-      labels: linear.labels.map((l) => l.name),
-      assignees: linear.assignee ? [linear.assignee.displayName ?? linear.assignee.name] : [],
-      url,
+      state: linear.state ? (linear.state.toLowerCase().includes('done') || linear.state.toLowerCase().includes('completed') || linear.state.toLowerCase().includes('canceled') ? 'closed' : 'open') : 'open',
+      labels: [],
+      assignees: [],
+      url: linear.url,
     }
   }
 }

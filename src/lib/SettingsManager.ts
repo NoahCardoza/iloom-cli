@@ -278,6 +278,10 @@ export const IloomSettingsSchema = z.object({
 						.string()
 						.optional()
 						.describe('Branch naming template for Linear issues'),
+					apiToken: z
+						.string()
+						.optional()
+						.describe('Linear API token (lin_api_...). SECURITY: Store in settings.local.json only, never commit to source control.'),
 				})
 				.optional(),
 		})
@@ -406,6 +410,10 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 						.string()
 						.optional()
 						.describe('Branch naming template for Linear issues'),
+					apiToken: z
+						.string()
+						.optional()
+						.describe('Linear API token (lin_api_...). SECURITY: Store in settings.local.json only, never commit to source control.'),
 				})
 				.optional(),
 		})
@@ -573,18 +581,15 @@ export class SettingsManager {
 				)
 			}
 
-			// Validate individual file with strict mode to catch unknown keys
-			// Use non-defaulting schema to prevent polluting partial settings with defaults before merge
-			try {
-				const validated = IloomSettingsSchemaNoDefaults.strict().parse(parsed)
-				return validated
-			} catch (error) {
-				if (error instanceof z.ZodError) {
-					const errorMsg = this.formatAllZodErrors(error, filename)
-					throw errorMsg
-				}
-				throw error
+			// Basic type checking - ensure it's an object, but don't validate schema completeness
+			// Individual files may be incomplete (e.g., Linear config split between files)
+			// Final validation will happen on the merged result in loadSettings()
+			if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+				throw new Error(
+					`Settings validation failed at ${filename}:\n  - root: Expected object, received ${typeof parsed}`
+				)
 			}
+			return parsed as z.infer<typeof IloomSettingsSchemaNoDefaults>
 		} catch (error) {
 			// File not found is not an error - return empty settings
 			if ((error as { code?: string }).code === 'ENOENT') {

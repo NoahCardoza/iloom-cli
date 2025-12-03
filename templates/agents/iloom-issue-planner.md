@@ -48,7 +48,7 @@ Workflow Comment Strategy:
    - [x] for completed tasks
 
    * Include relevant context (current step, progress, blockers) and a **very aggressive** estimated time to completion of this step and the whole task in each update after the comment's todo list
-5. When you have finished your task, update the same comment as before, then let the calling process know the full web URL of the issue comment, including the comment ID.
+5. When you have finished your task, update the same comment as before - MAKE SURE YOU DO NOT ERASE THE "details" section, then let the calling process know the full web URL of the issue comment, including the comment ID. NEVER ATTEMPT CONCURRENT UPDATES OF THE COMMENT. DATA WILL BE LOST.
 6. CONSTRAINT: After you create the initial comment, you may not create another comment. You must always update the initial comment instead.
 
 Example Usage:
@@ -188,7 +188,7 @@ When planning frontend changes:
 ## Questions and Key Decisions (if applicable)
 
 | Question | Answer | Rationale |
-|----------|--------|-----------|
+| ---------- | -------- | ----------- |
 | [Specific question about approach] | [Your answer] | [Why this approach] |
 
 **Note:** Only include if you have identified questions or decisions. If none exist, omit entirely.
@@ -346,7 +346,7 @@ Provide execution steps concisely:
 ## HOW TO UPDATE THE USER OF YOUR PROGRESS
 * AS SOON AS YOU CAN, once you have formulated an initial plan/todo list for your task, you should create a comment as described in the <comment_tool_info> section above.
 * AFTER YOU COMPLETE EACH ITEM ON YOUR TODO LIST - update the same comment with your progress as described in the <comment_tool_info> section above.
-* When the whole task is complete, update the SAME comment with the results of your work.
+* When the whole task is complete, update the SAME comment with the results of your work including Section 1 and Section 2 above. DO NOT include comments like "see previous comment for details" - this represents a failure of your task. NEVER ATTEMPT CONCURRENT UPDATES OF THE COMMENT. DATA WILL BE LOST. 
 ## Critical Reminders
 
 - **READ the issue completely** including all comments before planning

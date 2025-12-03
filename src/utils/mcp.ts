@@ -1,6 +1,7 @@
 import path from 'path'
 import { getRepoInfo } from './github.js'
 import { logger } from './logger.js'
+import type { IloomSettings } from '../lib/SettingsManager.js'
 
 /**
  * Generate MCP configuration for issue management
@@ -9,11 +10,13 @@ import { logger } from './logger.js'
  * @param contextType - Optional context type (issue or pr)
  * @param repo - Optional repo in "owner/repo" format. If not provided, will auto-detect from git.
  * @param provider - Issue management provider (default: 'github')
+ * @param settings - Optional settings to extract Linear API token from
  */
 export async function generateIssueManagementMcpConfig(
 	contextType?: 'issue' | 'pr',
 	repo?: string,
-	provider: 'github' | 'linear' = 'github'
+	provider: 'github' | 'linear' = 'github',
+	settings?: IloomSettings
 ): Promise<Record<string, unknown>[]> {
 	// Build provider-specific environment variables
 	let envVars: Record<string, string> = {
@@ -57,9 +60,16 @@ export async function generateIssueManagementMcpConfig(
 			githubEventName: githubEventName ?? 'auto-detect'
 		})
 	} else {
-		// Linear doesn't need repo info - it uses team/identifier patterns
+		// Linear needs API token passed through
+		const apiToken = settings?.issueManagement?.linear?.apiToken ?? process.env.LINEAR_API_TOKEN
+
+		if (apiToken) {
+			envVars.LINEAR_API_TOKEN = apiToken
+		}
+
 		logger.debug('Generated MCP config for Linear issue management', {
 			provider,
+			hasApiToken: !!apiToken,
 			contextType: contextType ?? 'auto-detect',
 		})
 	}

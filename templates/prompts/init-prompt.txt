@@ -381,9 +381,22 @@ REMOTES_INFO
    - Store answer as: `issueManagement.linear.teamId`
    - Context: This is the team key shown in your Linear workspace (e.g., "ENG" in "ENG-123")
 
+3. **Linear API Token** (only ask if issue provider is "linear")
+   - Question format: "What is your Linear API token? (Currently: 'set' or 'unset' - do not print)"
+   - Options:
+     - Use LINEAR_API_TOKEN env var
+     - I have it now - use the "Type something" option to enter it
+     - I'll come back to it
+   - Default: currentLinearApiToken or DEFAULT (defaults to LINEAR_API_TOKEN env var)
+   - Validation: Non-empty string, should start with "lin_api_"
+   - Guidance: Choose "Type something" to enter it
+   - Store answer as: `issueManagement.linear.apiToken`
+   - **CRITICAL SECURITY REQUIREMENT:** This value MUST ALWAYS be saved to `settings.local.json`, NEVER to `settings.json`, regardless of which file the user selected for other settings. This token must never be committed to source control.
+   - Context: Get your API token from Linear Settings → API → Personal API Keys (https://linear.app/settings/api)
+
 **Step 3: IDE Selection**
 
-3. **IDE Selection**
+4. **IDE Selection**
    - Question format: "Which IDE should iloom launch when starting a loom?{{#IF currentIdeType}} (Currently: [currentIdeType]){{/IF currentIdeType}}"
    - Options:
      - "vscode" - Visual Studio Code (default)
@@ -399,7 +412,7 @@ REMOTES_INFO
 
 **Step 4: Merge Mode** (only ask if multiple remotes detected OR user requests advanced config)
 
-4. **Merge Mode**
+5. **Merge Mode**
    - Question format: "How should iloom handle finishing work?{{#IF currentMergeMode}} (Currently: [currentMergeMode]){{/IF currentMergeMode}}"
    - Options:
      - "local" - Merge changes locally (traditional workflow)
@@ -411,7 +424,7 @@ REMOTES_INFO
 
 **Implementation Details:**
 - Ask Step 1 first to determine provider
-- Then ask Step 2 based on the provider selected
+- Then ask Step 2 based on the provider selected (includes Linear API Token if Linear was selected)
 - Ask Step 3 (IDE) for all users
 - Ask Step 4 (Merge Mode) only if multiple remotes detected OR user requests advanced config
 - Set multiSelect: false for all questions
@@ -434,6 +447,7 @@ Local Development Settings (Phase 1):
 Tooling Configuration (Phase 2):
   Issue Tracker: [value]
   Linear Team ID: [value] (only if issue tracker is Linear)
+  Linear API Token: [configured/not configured] (only if issue tracker is Linear - never show actual token)
   {{#IF MULTIPLE_REMOTES}}GitHub Remote: [value] (only if issue tracker is GitHub){{/IF MULTIPLE_REMOTES}}
   IDE: [value or "vscode (default)"]
   Merge Mode: [value] (only if configured)

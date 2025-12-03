@@ -1,9 +1,9 @@
 /**
- * Linear API response types (from linearis CLI JSON output)
+ * Linear API response types (from @linear/sdk)
  */
 
 /**
- * Linear issue response from linearis CLI
+ * Linear issue response from SDK
  */
 export interface LinearIssue {
   /** Linear internal UUID */
@@ -13,47 +13,31 @@ export interface LinearIssue {
   /** Issue title */
   title: string
   /** Issue description (markdown) */
-  description: string | null
-  /** Current workflow state */
-  state: {
-    id: string
-    /** State name (e.g., "Todo", "In Progress", "Done") */
-    name: string
-    /** State type */
-    type: 'started' | 'unstarted' | 'completed' | 'canceled'
-  }
-  /** Issue labels */
-  labels: { name: string }[]
-  /** Assigned user */
-  assignee: { name: string; displayName?: string } | null
-  /** Linear web URL (may not be returned by linearis CLI) */
-  url?: string
-  /** Creation timestamp */
+  description?: string
+  /** Current workflow state name */
+  state?: string
+  /** Linear web URL */
+  url: string
+  /** Creation timestamp (ISO string) */
   createdAt: string
-  /** Last update timestamp */
+  /** Last update timestamp (ISO string) */
   updatedAt: string
-  /** Team information */
-  team: {
-    id: string
-    /** Team key (e.g., "ENG", "PLAT") */
-    key: string
-    /** Team name */
-    name: string
-  }
 }
 
 /**
- * Linear comment response from linearis CLI
+ * Linear comment response from SDK
  */
 export interface LinearComment {
   /** Comment UUID */
   id: string
   /** Comment body (markdown) */
   body: string
-  /** Creation timestamp */
+  /** Creation timestamp (ISO string) */
   createdAt: string
-  /** Comment author */
-  user: { name: string; displayName?: string }
+  /** Last update timestamp (ISO string) */
+  updatedAt: string
+  /** Comment URL */
+  url: string
 }
 
 /**

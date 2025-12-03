@@ -82,8 +82,9 @@ export class EnhanceCommand {
 		let disallowedTools: string[] | undefined
 
 		try {
-			mcpConfig = await generateIssueManagementMcpConfig('issue', repo)
-			logger.debug('Generated MCP configuration for issue management')
+			const provider = this.issueTracker.providerName as 'github' | 'linear'
+			mcpConfig = await generateIssueManagementMcpConfig('issue', repo, provider, settings)
+			logger.debug('Generated MCP configuration for issue management:', { mcpConfig })
 
 			// Configure tool filtering for issue workflows
 			allowedTools = [
