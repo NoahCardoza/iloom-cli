@@ -286,15 +286,17 @@ export class LoomManager {
 
   /**
    * Find a specific loom by identifier
+   * Case-insensitive matching for Linear IDs (MARK-1 vs mark-1)
    */
   async findIloom(identifier: string): Promise<Loom | null> {
     const looms = await this.listLooms()
+    const lowerIdentifier = identifier.toLowerCase()
     return (
       looms.find(
         h =>
-          h.id === identifier ||
-          h.identifier.toString() === identifier ||
-          h.branch === identifier
+          h.id.toLowerCase() === lowerIdentifier ||
+          h.identifier.toString().toLowerCase() === lowerIdentifier ||
+          h.branch.toLowerCase() === lowerIdentifier
       ) ?? null
     )
   }

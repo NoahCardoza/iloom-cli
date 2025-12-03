@@ -352,27 +352,29 @@ Generate a git branch name for the following issue:
 			headless: true,
 		})) as string
 
-		const branchName = result.trim()
+		// Normalize to lowercase for consistency (Linear IDs are uppercase but branches should be lowercase)
+		const branchName = result.trim().toLowerCase()
 		logger.debug('Claude returned branch name', { branchName, issueNumber })
 
 		// Validate generated name using same validation as ClaudeBranchNameStrategy
 		if (!branchName || !isValidBranchName(branchName, issueNumber)) {
 			logger.warn('Invalid branch name from Claude, using fallback', { branchName })
-			return `feat/issue-${issueNumber}`
+			return `feat/issue-${issueNumber}`.toLowerCase()
 		}
 
 		return branchName
 	} catch (error) {
 		logger.warn('Failed to generate branch name with Claude', { error })
-		return `feat/issue-${issueNumber}`
+		return `feat/issue-${issueNumber}`.toLowerCase()
 	}
 }
 
 /**
  * Validate branch name format
  * Check format: {prefix}/issue-{number}__{description}
+ * Uses case-insensitive matching for issue number (Linear uses uppercase like MARK-1)
  */
 function isValidBranchName(name: string, issueNumber: string | number): boolean {
-	const pattern = new RegExp(`^(feat|fix|docs|refactor|test|chore)/issue-${issueNumber}__[a-z0-9-]+$`)
+	const pattern = new RegExp(`^(feat|fix|docs|refactor|test|chore)/issue-${issueNumber}__[a-z0-9-]+$`, 'i')
 	return pattern.test(name) && name.length <= 50
 }

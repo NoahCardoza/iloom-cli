@@ -1050,6 +1050,39 @@ describe('GitWorktreeManager', () => {
 
       expect(result).toBeNull()
     })
+
+    it('should match case-insensitively for Linear issue IDs', async () => {
+      // Linear IDs are uppercase (MARK-1) but branches may be lowercase (issue-mark-1)
+      const targetWorktree = {
+        path: '/test/worktree-issue-mark-1',
+        branch: 'feat/issue-mark-1__nextjs-vercel',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      const mockWorktrees = [
+        {
+          path: '/test/repo',
+          branch: 'main',
+          commit: 'def456',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+        targetWorktree,
+      ]
+
+      vi.mocked(gitUtils.executeGitCommand).mockResolvedValue('mock output')
+      vi.mocked(gitUtils.parseWorktreeList).mockReturnValue(mockWorktrees)
+
+      // Search with uppercase Linear ID should find lowercase branch
+      const result = await manager.findWorktreeForIssue('MARK-1')
+
+      expect(result).toEqual(targetWorktree)
+      expect(result?.branch).toBe('feat/issue-mark-1__nextjs-vercel')
+    })
   })
 
   describe('isMainWorktree', () => {

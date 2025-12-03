@@ -1067,6 +1067,20 @@ describe('CleanupCommand', () => {
 
         expect(logger.info).toHaveBeenCalledWith('Found 2 worktree(s) related to issue/PR #25:')
       })
+
+      it('should match alphanumeric Linear IDs case-insensitively', async () => {
+        // Mock listWorktrees with lowercase Linear ID in path (as created by branch naming)
+        mockGitWorktreeManager.listWorktrees = vi.fn().mockResolvedValue([
+          { path: '/repo/worktree-issue-mark-1', branch: 'feat/issue-mark-1__nextjs-vercel', commit: 'abc', bare: false, detached: false, locked: false }
+        ])
+
+        // Search with uppercase Linear ID should find lowercase path
+        await command.execute({
+          options: { issue: 'MARK-1' }
+        })
+
+        expect(logger.info).toHaveBeenCalledWith('Found 1 worktree(s) related to issue/PR #MARK-1:')
+      })
     })
   })
 })

@@ -1555,5 +1555,28 @@ describe('claude utils', () => {
 
 			expect(result).toBe('feat/issue-456')
 		})
+
+		it('should accept lowercase branch name for uppercase Linear issue ID', async () => {
+			// Linear issue IDs are uppercase (e.g., MARK-1) but Claude generates lowercase branch names
+			const issueTitle = 'Add Next.js Vercel integration'
+			const issueNumber = 'MARK-1' // Uppercase Linear issue ID
+
+			// Mock Claude CLI detection
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: '/usr/local/bin/claude',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			// Mock Claude returning lowercase branch name (correct behavior)
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: 'feat/issue-mark-1__nextjs-vercel',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			const result = await generateBranchName(issueTitle, issueNumber)
+
+			// Should accept the lowercase branch name, not fall back
+			expect(result).toBe('feat/issue-mark-1__nextjs-vercel')
+		})
 	})
 })

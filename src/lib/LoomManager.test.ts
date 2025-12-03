@@ -426,6 +426,28 @@ describe('LoomManager', () => {
 
       expect(result).toBeNull()
     })
+
+    it('should find loom case-insensitively for Linear IDs via branch match', async () => {
+      // Loom with lowercase branch name (as created by branch naming)
+      const mockWorktrees = [
+        {
+          path: '/test/worktree-feat-issue-mark-1',
+          branch: 'feat/issue-mark-1__nextjs-vercel',
+          commit: 'abc123',
+          bare: false,
+          detached: false,
+          locked: false,
+        },
+      ]
+
+      vi.mocked(mockGitWorktree.listWorktrees).mockResolvedValue(mockWorktrees)
+
+      // Search with uppercase branch name should find lowercase branch
+      const result = await manager.findIloom('FEAT/ISSUE-MARK-1__NEXTJS-VERCEL')
+
+      expect(result).toBeDefined()
+      expect(result?.branch).toBe('feat/issue-mark-1__nextjs-vercel')
+    })
   })
 
   describe('finishIloom', () => {

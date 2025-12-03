@@ -467,12 +467,13 @@ export class CleanupCommand {
     const worktrees = await this.gitWorktreeManager.listWorktrees()
     const matchingWorktrees = worktrees.filter(wt => {
       const path = wt.path.toLowerCase()
-      const numStr = String(issueNumber)
+      // Lowercase for case-insensitive matching (Linear IDs are uppercase like MARK-1)
+      const idStr = String(issueNumber).toLowerCase()
 
-      // Check if path contains the number with proper word boundaries
-      // Matches: issue-25, pr-25, 25-feature, _pr_25, etc.
-      // Does NOT match: issue-250, 125-feature (where 25 is part of a larger number)
-      const pattern = new RegExp(`(?<!\\d)${numStr}(?!\\d)`)
+      // Check if path contains the identifier with proper word boundaries
+      // Matches: issue-25, pr-25, 25-feature, _pr_25, issue-mark-1, etc.
+      // Uses word boundary or common separators (-, _, /) for alphanumeric IDs
+      const pattern = new RegExp(`(?:^|[/_-])${idStr}(?:[/_-]|$)`)
       return pattern.test(path)
     })
 
