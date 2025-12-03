@@ -1473,12 +1473,13 @@ describe('SettingsManager', () => {
 				mainBranch: 123, // Invalid: should be string
 			}
 
-			// settings.json returns ENOENT, settings.local.json has invalid content
+			// global settings returns ENOENT, settings.json returns ENOENT, settings.local.json has invalid content
 			const error: { code?: string; message: string } = {
 				code: 'ENOENT',
 				message: 'ENOENT: no such file or directory',
 			}
 			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
 				.mockRejectedValueOnce(error) // settings.json
 				.mockResolvedValueOnce(JSON.stringify(invalidLocalSettings)) // settings.local.json
 
