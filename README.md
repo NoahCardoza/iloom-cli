@@ -255,7 +255,7 @@ Sometimes a task spawns sub-tasks, or you get interrupted by an urgent bug while
 *   Fixing a bug discovered during feature work without losing context.
     
 
-**How it works:**If you run il start 42 while inside loom-25, iloom asks if you want to create a child loom.
+**How it works:** If you run il start 42 while inside loom-25, iloom asks if you want to create a child loom.
 
 *  **Inheritance:** The child inherits the database state and git branch from the parent (not main).
     
