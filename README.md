@@ -81,7 +81,7 @@ iloom uses your existing Claude subscription, takes what context you already hav
 > iloom finish 
 ```
 
-**The iloom difference**: Surface hidden assumptions up front, then persist all the analysis and reasoning in GitHub issue comments - visible and editable - rather than burning tokens in the context window where they're invisible and set in stone.
+**The iloom difference**: Surface hidden assumptions up front, then persist all the analysis and reasoning in issue comments - visible and editable - rather than burning tokens in the context window where they're invisible and set in stone.
 
 ### One Command, Parallel Work, Predictable Flow
 
@@ -89,9 +89,9 @@ Each loom follows the same workflow - structured, visible, repeatable.
 
 `iloom start` doesn't just create a git worktree. It spins up a loom. Here's what happens:
 
-- Fetches the full GitHub issue (or PR) including all comments and requirements - or not, if they don't exist.
+- Fetches the full issue (or PR) including all comments and requirements - or not, if they don't exist.
 - Creates an isolated environment (Git worktree, database branch, web server on a deterministic unique port)
-- Enhances the GitHub issue with a better description, and structured analysis & planning. Asking questions and stating assumptions along the way, all in GitHub comments.
+- Enhances the issue with a better description, and structured analysis & planning. Asking questions and stating assumptions along the way, all in issue comments.
 - Launches Claude with this context preloaded from the issue, guides you through a structured workflow. You can stop at any time, pick up where you left off.
 - Each loom is color-coded, from terminal windows to VS Code, so you visually know which context you're in.
 
@@ -123,8 +123,8 @@ Traditional approach:
 
 iloom approach:
 1. `il start 45` - begin the feature. Note: `il` is an alias for `iloom`.
-2. Review iloom's structured analysis in GitHub, clarify assumptions.
-3. `il start 99` - urgent bug; Claude already knows the issue context from the GitHub issue.
+2. Review iloom's structured analysis in GitHub or Linear, clarify assumptions.
+3. `il start 99` - urgent bug; Claude already knows the issue context from your issue tracker.
 4. Switch between looms freely - color coding and context persistence keep everything clear.
 5. `il finish` - work validated, merged, cleaned up.
 6. Return to your feature loom - context, reasoning, and AI alignment all intact.
@@ -132,7 +132,7 @@ iloom approach:
 **The difference**: Your AI becomes a persistent collaborator rather than a tool you're constantly playing catch-up with.
 
 **Plus, your AI's reasoning is now visible to everyone, including future you:**
-The AI analysis gets posted as GitHub comments, so anyone on your team can see the context and planning without having to ask you for background.
+The AI analysis gets posted as issue comments, so anyone on your team can see the context and planning without having to ask you for background.
 
 ### You Scale Understanding, Not Just Output
 
@@ -158,7 +158,7 @@ Predictability becomes muscle memory - you focus on ideas, not process.
 
 ## How It Works
 
-iloom orchestrates specialized AI agents that analyze issues, evaluate complexity, create implementation plans, and document everything directly in GitHub comments. Each agent has a specific role and writes structured output that becomes permanent project and team knowledge.
+iloom orchestrates specialized AI agents that analyze issues, evaluate complexity, create implementation plans, and document everything directly in GitHub or Linear comments. Each agent has a specific role and writes structured output that becomes permanent project and team knowledge.
 
 ### Creating Context
 
@@ -168,17 +168,17 @@ iloom orchestrates specialized AI agents that analyze issues, evaluate complexit
 
 iloom executes a multi-phase context-establishment workflow:
 
-1. **Fetch complete requirements** - GitHub issue body + all comments
+1. **Fetch complete requirements** - GitHub or Linear issue body + all comments
 2. **Create isolated loom** - Git worktree at `~/project-looms/issue-25-auth-bugs/` (branch names are generated)
-3. **Run AI workflow agents** - Enhance, analyze, plan, and document directly in GitHub comments:
+3. **Run AI workflow agents** - Enhance, analyze, plan, and document directly in issue comments:
    - **Enhancement Agent**: Expands brief issues into detailed requirements (if needed)
    - **Complexity Evaluator**: Assesses scope and determines workflow approach
      - **Simple workflow**: Combined analysis and planning in one step
      - **Complex workflow**: Separate analysis phase, then detailed planning phase
 4. **Establish environment** - Unique web server port (e.g., 3025), isolated database branch, `.env` file with correct DATABASE_URL environment variable
-5. **Launch tools** - VS Code with color theme, dev server, Claude with preloaded context from GitHub comments
+5. **Launch tools** - VS Code with color theme, dev server, Claude with preloaded context from issue comments
 
-**Result**: A continer where both you and your AI share understanding, with all context stored as structured GitHub comments. Open the issue in your browser to see:
+**Result**: A continer where both you and your AI share understanding, with all context stored as structured issue comments. Open the issue in your browser to see:
 - Enhancement analysis (if the issue was brief)
 - Complexity evaluation with metrics
 - Root cause analysis and technical findings
@@ -194,21 +194,21 @@ Each loom is isolated:
 - **Unique port** - Multiple dev servers run simultaneously (base port + issue number)
 - **Environment variables** - Each loom has correct database URL
 - **Visual identity** - Color-coded VS Code window (40 distinct pastel colors)
-- **GitHub issue comments** - Multi-phase context (enhancement, analysis, planning) persists and is editable by team members
+- **Issue comments** - Multi-phase context (enhancement, analysis, planning) persists and is editable by team members
 
 **When you switch looms, the context switches with you.**
 
 ### Context That Scales With Your Team
 
-Traditional AI workflows store context locally in chat history or Markdown files. iloom stores context where it belongs - in the GitHub issue itself.
+Traditional AI workflows store context locally in chat history or Markdown files. iloom stores context where it belongs - in your issue tracker.
 
 **Benefits:**
 
 - **Transparency**: All AI analysis and planning is visible to your entire team
 - **Collaboration**: Team members can review, comment on, and refine AI-generated context
 - **Persistence**: Context survives repository clones, machine switches, and team member changes
-- **Version Control**: GitHub tracks all context changes with timestamps and authors
-- **Searchability**: GitHub's search finds AI insights across all your issues
+- **Version Control**: Your issue tracker tracks all context changes with timestamps and authors
+- **Searchability**: Search finds AI insights across all your issues
 - **Integration**: Context appears in notifications, project boards, and automation workflows
 - **No Sync Issues**: Everyone sees the same context - no local file drift
 
@@ -223,13 +223,13 @@ When you run `il start 25`, iloom orchestrates specialized AI agents that work t
 **Phase 1: Enhancement (optional)** - `iloom-issue-enhancer`
 - Checks if issue needs more detail (word count, structure, clarity)
 - Expands brief descriptions into comprehensive requirements
-- Posts enhancement as a GitHub comment
+- Posts enhancement as an issue comment
 - **Used for:** All issues that need enhancement
 
 **Phase 2: Complexity Evaluation** - `iloom-issue-complexity-evaluator`
 - Analyzes scope, file changes, breaking changes, risks
 - Classifies as Simple or Complex
-- Posts evaluation as a GitHub comment with metrics
+- Posts evaluation as an issue comment with metrics
 - **Used for:** All issues
 
 #### For complex issues
@@ -237,36 +237,36 @@ When you run `il start 25`, iloom orchestrates specialized AI agents that work t
 **Phase 3: Dedicated Analysis** - `iloom-issue-analyzer`
 - Investigates root causes and technical constraints
 - Documents findings and implementation considerations
-- Posts analysis as a GitHub comment
+- Posts analysis as an issue comment
 - **Used for:** Complex issues only
 
 **Phase 4: Dedicated Planning** - `iloom-issue-planner`
 - Creates detailed implementation roadmap
 - Breaks work into phases with validation points
-- Posts plan as a GitHub comment
+- Posts plan as an issue comment
 - **Used for:** Complex issues only
 
 #### For simple issues
 
 **Phase 3+4: Combined Analysis & Planning** - `iloom-issue-analyze-and-plan`
 - Combines analysis and planning in a single step to shorten time and reduce review checkpoints
-- Posts combined analysis and plan as a GitHub comment
+- Posts combined analysis and plan as an issue comment
 - **Used for:** Simple issues only
 
 #### For all issues
 
 **Phase 5: Implementation** - `iloom-issue-implementer`
 - Executes the implementation plan created in previous phases
-- Updates progress in a GitHub comment
+- Updates progress in an issue comment
 - Documents decisions and completion status
 - **Used for:** All issues
 
 **Phase 6: Review (optional)** - `iloom-issue-reviewer`
 - Reviews completed implementation against issue requirements
-- Posts review findings as a GitHub comment
+- Posts review findings as an issue comment
 - **Used for:** All issues (when review is requested)
 
-All agent output is written to GitHub issue comments using markdown, making the AI's reasoning process transparent and collaborative. You can review, edit, or refine any comment before proceeding to the next phase.
+All agent output is written to issue comments using markdown, making the AI's reasoning process transparent and collaborative. You can review, edit, or refine any comment before proceeding to the next phase.
 
 ### A Note on Token Usage and Model Selection
 
@@ -354,12 +354,12 @@ iloom open [identifier]
 
 ```bash
 iloom add-issue <description>
-# Create and AI-enhance GitHub issue (doesn't spin up a loom)
+# Create and AI-enhance issue (doesn't spin up a loom)
 # Alias: a
 # Example: il add-issue "Add dark mode toggle to settings"
 
 iloom enhance <issue-number>
-# Apply AI enhancement agent to existing GitHub issue
+# Apply AI enhancement agent to existing issue
 # Expands requirements, asks clarifying questions and adds implementation context
 ```
 
@@ -757,7 +757,7 @@ This is an early stage product - platform/tech stack support is limited for now.
 
 **Issue Tracking Integration:**
 - ✅ **GitHub Issues** - Full support with AI enhancement, analysis, and planning
-- 🚧 **Linear** - Native integration coming soon. A two way sync between Linear and your github repo works great currently.
+- ✅ **Linear** - Full support with AI enhancement, analysis, and planning
 
 **Project Type Support:**
 - ✅ **Node.js web projects** - First-class support via package.json scripts (`dev`, `test`, `build`)
@@ -937,7 +937,7 @@ Most tools focus on **making git worktrees easier to use**, some add-in Agentic 
 
 **Beyond Worktrees:**
 - **Database isolation**: Neon branch integration for schema/data separation
-- **AI context persistence**: Structured analysis stored in GitHub comments, not local chat history
+- **AI context persistence**: Structured analysis stored in issue comments, not local chat history
 - **Cognitive overhead reduction**: Color coding, port assignment, environment setup handled automatically
 - **Human-AI alignment**: Multi-phase workflow surfaces assumptions before code is written
 - **Validation automation**: AI-assisted error fixing during merge process
