@@ -2,6 +2,7 @@ import { execa } from 'execa'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { logger } from './logger.js'
+import { openTerminalWindow } from './terminal.js'
 
 export interface ClaudeCliOptions {
 	model?: string
@@ -262,9 +263,6 @@ export async function launchClaudeInNewTerminalWindow(
 	if (!workspacePath) {
 		throw new Error('workspacePath is required for terminal window launch')
 	}
-
-	// Import terminal launcher for new terminal window creation
-	const { openTerminalWindow } = await import('./terminal.js')
 
 	// Build launch command with optional --one-shot flag
 	// Use provided executable path or fallback to 'il'

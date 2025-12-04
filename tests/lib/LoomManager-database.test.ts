@@ -28,6 +28,7 @@ vi.mock('../../src/utils/git.js', () => ({
   executeGitCommand: vi.fn().mockResolvedValue(''),
   ensureRepositoryHasCommits: vi.fn().mockResolvedValue(undefined),
   isEmptyRepository: vi.fn().mockResolvedValue(false),
+  isFileTrackedByGit: vi.fn().mockResolvedValue(false),
 }))
 
 // Mock package-manager utilities
@@ -148,17 +149,17 @@ describe('LoomManager - Database Integration', () => {
       // WHEN: createIloom is called
       const result = await manager.createIloom(baseInput)
 
-      // THEN: DatabaseManager.createBranchIfConfigured is called with correct branch name and env path
+      // THEN: DatabaseManager.createBranchIfConfigured is called with correct branch name and workspace path
       expect(mockDatabase.createBranchIfConfigured).toHaveBeenCalledWith(
         'issue-123-test',
-        `${expectedPath}/.env`,
+        expectedPath, // workspace path (not .env file path)
         undefined, // cwd
         undefined  // fromBranch (no parent loom)
       )
 
-      // THEN: Connection string is written to .env via EnvironmentManager.setEnvVar
+      // THEN: Connection string is written to .env.local (safe default) via EnvironmentManager.setEnvVar
       expect(mockEnvironment.setEnvVar).toHaveBeenCalledWith(
-        `${expectedPath}/.env`,
+        `${expectedPath}/.env.local`,
         'DATABASE_URL',
         connectionString
       )
@@ -415,12 +416,13 @@ describe('LoomManager - Database Integration', () => {
 
       expect(mockDatabase.createBranchIfConfigured).toHaveBeenCalledWith(
         'feature-branch',
-        `${expectedPath}/.env`,
+        expectedPath, // workspace path (not .env file path)
         undefined, // cwd
         undefined  // fromBranch (no parent loom)
       )
+      // New behavior: writes to .env.local (safe default when variable doesn't exist)
       expect(mockEnvironment.setEnvVar).toHaveBeenCalledWith(
-        `${expectedPath}/.env`,
+        `${expectedPath}/.env.local`,
         'DATABASE_URL',
         connectionString
       )
@@ -449,12 +451,13 @@ describe('LoomManager - Database Integration', () => {
 
       expect(mockDatabase.createBranchIfConfigured).toHaveBeenCalledWith(
         'feature-xyz',
-        `${expectedPath}/.env`,
+        expectedPath, // workspace path (not .env file path)
         undefined, // cwd
         undefined  // fromBranch (no parent loom)
       )
+      // New behavior: writes to .env.local (safe default when variable doesn't exist)
       expect(mockEnvironment.setEnvVar).toHaveBeenCalledWith(
-        `${expectedPath}/.env`,
+        `${expectedPath}/.env.local`,
         'DATABASE_URL',
         connectionString
       )

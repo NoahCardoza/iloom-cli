@@ -321,7 +321,7 @@ export class NeonProvider implements DatabaseProvider {
     const parentBranch = fromBranch ?? this.config.parentBranch
 
     logger.info('Creating Neon database branch...')
-    logger.info(`  Source branch: ${parentBranch}`)
+    logger.info(`  Parent branch: ${parentBranch}`)
     logger.info(`  New branch: ${sanitizedName}`)
 
     try {

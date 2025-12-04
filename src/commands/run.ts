@@ -7,7 +7,7 @@ import { DevServerManager } from '../lib/DevServerManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { openBrowser } from '../utils/browser.js'
-import { parseEnvFile, extractPort } from '../utils/env.js'
+import { parseEnvFile, extractPort, findEnvFileContainingVariable } from '../utils/env.js'
 import { calculatePortForBranch } from '../utils/port.js'
 import { extractIssueNumber } from '../utils/git.js'
 import { logger } from '../utils/logger.js'
@@ -281,7 +281,7 @@ export class RunCommand {
 	}
 
 	/**
-	 * Get port for workspace - reads from .env or calculates based on workspace type
+	 * Get port for workspace - reads from dotenv-flow files or calculates based on workspace type
 	 */
 	private async getWorkspacePort(worktreePath: string): Promise<number> {
 		// Load base port from settings with CLI overrides
@@ -289,21 +289,32 @@ export class RunCommand {
 		const settings = await this.settingsManager.loadSettings(undefined, cliOverrides)
 		const basePort = settings.capabilities?.web?.basePort ?? 3000
 
-		// Try to read PORT from .env file (as override)
-		const envPath = path.join(worktreePath, '.env')
-		if (await fs.pathExists(envPath)) {
+		// Try to read PORT from any dotenv-flow file (as override)
+		const envFile = await findEnvFileContainingVariable(
+			worktreePath,
+			'PORT',
+			async (p) => fs.pathExists(p),
+			async (p, varName) => {
+				const content = await fs.readFile(p, 'utf8')
+				const envMap = parseEnvFile(content)
+				return envMap.get(varName) ?? null
+			}
+		)
+
+		if (envFile) {
+			const envPath = path.join(worktreePath, envFile)
 			const envContent = await fs.readFile(envPath, 'utf8')
 			const envMap = parseEnvFile(envContent)
 			const port = extractPort(envMap)
 
 			if (port) {
-				logger.debug(`Using PORT from .env: ${port}`)
+				logger.debug(`Using PORT from ${envFile}: ${port}`)
 				return port
 			}
 		}
 
-		// PORT not in .env, calculate based on workspace identifier
-		logger.debug('PORT not found in .env, calculating from workspace identifier')
+		// PORT not in any dotenv-flow file, calculate based on workspace identifier
+		logger.debug('PORT not found in any dotenv-flow file, calculating from workspace identifier')
 
 		// Get worktree to determine type
 		const worktrees = await this.gitWorktreeManager.listWorktrees()

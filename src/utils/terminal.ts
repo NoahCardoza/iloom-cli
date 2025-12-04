@@ -1,6 +1,7 @@
 import { execa } from 'execa'
 import { existsSync } from 'node:fs'
 import type { Platform } from '../types/index.js'
+import { buildEnvSourceCommands } from './env.js'
 
 export interface TerminalWindowOptions {
 	workspacePath?: string
@@ -56,8 +57,8 @@ export async function openTerminalWindow(
 
 	// Build appropriate AppleScript based on terminal availability
 	const applescript = hasITerm2
-		? buildITerm2SingleTabScript(options)
-		: buildAppleScript(options)
+		? await buildITerm2SingleTabScript(options)
+		: await buildAppleScript(options)
 
 	try {
 		await execa('osascript', ['-e', applescript])
@@ -77,7 +78,7 @@ export async function openTerminalWindow(
 /**
  * Build AppleScript for macOS Terminal.app
  */
-function buildAppleScript(options: TerminalWindowOptions): string {
+async function buildAppleScript(options: TerminalWindowOptions): Promise<string> {
 	const {
 		workspacePath,
 		command,
@@ -95,9 +96,13 @@ function buildAppleScript(options: TerminalWindowOptions): string {
 		commands.push(`cd '${escapePathForAppleScript(workspacePath)}'`)
 	}
 
-	// Source .env file
-	if (includeEnvSetup) {
-		commands.push('source .env')
+	// Source all dotenv-flow files
+	if (includeEnvSetup && workspacePath) {
+		const sourceCommands = await buildEnvSourceCommands(
+			workspacePath,
+			async (p) => existsSync(p)
+		)
+		commands.push(...sourceCommands)
 	}
 
 	// Export PORT variable
@@ -157,8 +162,8 @@ function escapeForAppleScript(command: string): string {
 /**
  * Build iTerm2 AppleScript for single tab
  */
-function buildITerm2SingleTabScript(options: TerminalWindowOptions): string {
-	const command = buildCommandSequence(options)
+async function buildITerm2SingleTabScript(options: TerminalWindowOptions): Promise<string> {
+	const command = await buildCommandSequence(options)
 
 	let script = 'tell application id "com.googlecode.iterm2"\n'
 	script += '  create window with default profile\n'
@@ -188,7 +193,7 @@ function buildITerm2SingleTabScript(options: TerminalWindowOptions): string {
 /**
  * Build command sequence for terminal
  */
-function buildCommandSequence(options: TerminalWindowOptions): string {
+async function buildCommandSequence(options: TerminalWindowOptions): Promise<string> {
 	const {
 		workspacePath,
 		command,
@@ -204,9 +209,13 @@ function buildCommandSequence(options: TerminalWindowOptions): string {
 		commands.push(`cd '${escapePathForAppleScript(workspacePath)}'`)
 	}
 
-	// Source .env file
-	if (includeEnvSetup) {
-		commands.push('source .env')
+	// Source all dotenv-flow files
+	if (includeEnvSetup && workspacePath) {
+		const sourceCommands = await buildEnvSourceCommands(
+			workspacePath,
+			async (p) => existsSync(p)
+		)
+		commands.push(...sourceCommands)
 	}
 
 	// Export PORT variable
@@ -229,9 +238,9 @@ function buildCommandSequence(options: TerminalWindowOptions): string {
 /**
  * Build iTerm2 AppleScript for multiple tabs (2+) in single window
  */
-function buildITerm2MultiTabScript(
+async function buildITerm2MultiTabScript(
 	optionsArray: TerminalWindowOptions[]
-): string {
+): Promise<string> {
 	if (optionsArray.length < 2) {
 		throw new Error('buildITerm2MultiTabScript requires at least 2 terminal options')
 	}
@@ -245,7 +254,7 @@ function buildITerm2MultiTabScript(
 	if (!options1) {
 		throw new Error('First terminal option is undefined')
 	}
-	const command1 = buildCommandSequence(options1)
+	const command1 = await buildCommandSequence(options1)
 
 	script += '  set s1 to current session of newWindow\n\n'
 
@@ -269,7 +278,7 @@ function buildITerm2MultiTabScript(
 		if (!options) {
 			throw new Error(`Terminal option at index ${i} is undefined`)
 		}
-		const command = buildCommandSequence(options)
+		const command = await buildCommandSequence(options)
 		const sessionVar = `s${i + 1}`
 
 		// Create tab
@@ -326,7 +335,7 @@ export async function openMultipleTerminalWindows(
 
 	if (hasITerm2) {
 		// Use iTerm2 with multiple tabs in single window
-		const applescript = buildITerm2MultiTabScript(optionsArray)
+		const applescript = await buildITerm2MultiTabScript(optionsArray)
 
 		try {
 			await execa('osascript', ['-e', applescript])

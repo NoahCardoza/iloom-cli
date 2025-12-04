@@ -664,3 +664,31 @@ export async function pushBranchToRemote(
     throw new Error(`Failed to push to remote: ${errorMessage}`)
   }
 }
+
+/**
+ * Check if a file is tracked by git
+ * Uses git ls-files to check if file is in the index
+ * @param filePath - Absolute or relative path to the file
+ * @param cwd - Working directory (defaults to process.cwd())
+ * @returns true if file is tracked, false otherwise
+ */
+export async function isFileTrackedByGit(
+  filePath: string,
+  cwd: string = process.cwd()
+): Promise<boolean> {
+  try {
+    const result = await executeGitCommand(
+      ['ls-files', '--error-unmatch', filePath],
+      { cwd }
+    )
+    return result.trim().length > 0
+  } catch (error) {
+    // Only return false if it's the specific "pathspec did not match" error
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (errorMessage.includes('pathspec') && errorMessage.includes('did not match')) {
+      return false
+    }
+    // Re-throw other errors
+    throw error
+  }
+}

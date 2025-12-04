@@ -1,6 +1,8 @@
 import type { DatabaseProvider } from '../types/index.js'
 import { EnvironmentManager } from './EnvironmentManager.js'
 import { createLogger } from '../utils/logger.js'
+import { hasVariableInAnyEnvFile } from '../utils/env.js'
+import fs from 'fs-extra'
 
 const logger = createLogger({ prefix: '🗂️' })
 
@@ -37,20 +39,20 @@ export class DatabaseManager {
    * Check if database branching should be used
    * Requires BOTH conditions:
    *   1. Database provider is properly configured (checked via provider.isConfigured())
-   *   2. .env file contains the configured database URL variable
+   *   2. Any dotenv-flow file contains the configured database URL variable
    */
-  async shouldUseDatabaseBranching(envFilePath: string): Promise<boolean> {
+  async shouldUseDatabaseBranching(workspacePath: string): Promise<boolean> {
     // Check for provider configuration
     if (!this.provider.isConfigured()) {
       logger.debug('Skipping database branching: Database provider not configured')
       return false
     }
 
-    // Check if .env has the configured database URL variable
-    const hasDatabaseUrl = await this.hasDatabaseUrlInEnv(envFilePath)
+    // Check if any dotenv-flow file has the configured database URL variable
+    const hasDatabaseUrl = await this.hasDatabaseUrlInEnv(workspacePath)
     if (!hasDatabaseUrl) {
       logger.debug(
-        'Skipping database branching: configured database URL variable not found in .env file'
+        'Skipping database branching: configured database URL variable not found in any env file'
       )
       return false
     }
@@ -63,18 +65,18 @@ export class DatabaseManager {
    * Returns connection string if branch was created, null if skipped
    *
    * @param branchName - Name of the branch to create
-   * @param envFilePath - Path to .env file for configuration checks
+   * @param workspacePath - Path to workspace for configuration checks (checks all dotenv-flow files)
    * @param cwd - Optional working directory to run commands from
    * @param fromBranch - Optional parent branch to create from (for child looms)
    */
   async createBranchIfConfigured(
     branchName: string,
-    envFilePath: string,
+    workspacePath: string,
     cwd?: string,
     fromBranch?: string
   ): Promise<string | null> {
     // Guard condition: check if database branching should be used
-    if (!(await this.shouldUseDatabaseBranching(envFilePath))) {
+    if (!(await this.shouldUseDatabaseBranching(workspacePath))) {
       return null
     }
 
@@ -229,14 +231,12 @@ export class DatabaseManager {
   }
 
   /**
-   * Check if .env has the configured database URL variable
+   * Check if any dotenv-flow file has the configured database URL variable
    * CRITICAL: If user explicitly configured a custom variable name (not default),
-   * throw an error if it's missing from .env
+   * throw an error if it's missing from all env files
    */
-  private async hasDatabaseUrlInEnv(envFilePath: string): Promise<boolean> {
+  private async hasDatabaseUrlInEnv(workspacePath: string): Promise<boolean> {
     try {
-      const envMap = await this.environment.readEnvFile(envFilePath)
-
       // Debug: Show what we're looking for
       if (this.databaseUrlEnvVarName !== 'DATABASE_URL') {
         logger.debug(`Looking for custom database URL variable: ${this.databaseUrlEnvVarName}`)
@@ -244,8 +244,15 @@ export class DatabaseManager {
         logger.debug('Looking for default database URL variable: DATABASE_URL')
       }
 
-      // Check configured variable first
-      if (envMap.has(this.databaseUrlEnvVarName)) {
+      // Check all dotenv-flow files for the configured variable
+      const hasConfiguredVar = await hasVariableInAnyEnvFile(
+        workspacePath,
+        this.databaseUrlEnvVarName,
+        async (p) => fs.pathExists(p),
+        async (p, v) => this.environment.getEnvVariable(p, v)
+      )
+
+      if (hasConfiguredVar) {
         if (this.databaseUrlEnvVarName !== 'DATABASE_URL') {
           logger.debug(`✅ Found custom database URL variable: ${this.databaseUrlEnvVarName}`)
         } else {
@@ -257,27 +264,33 @@ export class DatabaseManager {
       // If user explicitly configured a custom variable name (not the default)
       // and it's missing, throw an error
       if (this.databaseUrlEnvVarName !== 'DATABASE_URL') {
-        logger.debug(`❌ Custom database URL variable '${this.databaseUrlEnvVarName}' not found in .env file`)
+        logger.debug(`❌ Custom database URL variable '${this.databaseUrlEnvVarName}' not found in any env file`)
         throw new Error(
-          `Configured database URL environment variable '${this.databaseUrlEnvVarName}' not found in .env file. ` +
-          `Please add it to your .env file or update your iloom configuration.`
+          `Configured database URL environment variable '${this.databaseUrlEnvVarName}' not found in any dotenv-flow file. ` +
+          `Please add it to an .env file or update your iloom configuration.`
         )
       }
 
       // Fall back to DATABASE_URL when using default configuration
-      const hasDefaultVar = envMap.has('DATABASE_URL')
+      const hasDefaultVar = await hasVariableInAnyEnvFile(
+        workspacePath,
+        'DATABASE_URL',
+        async (p) => fs.pathExists(p),
+        async (p, v) => this.environment.getEnvVariable(p, v)
+      )
+
       if (hasDefaultVar) {
         logger.debug('✅ Found fallback DATABASE_URL variable')
       } else {
-        logger.debug('❌ No DATABASE_URL variable found in .env file')
+        logger.debug('❌ No DATABASE_URL variable found in any env file')
       }
       return hasDefaultVar
     } catch (error) {
       // Re-throw configuration errors
-      if (error instanceof Error && error.message.includes('not found in .env')) {
+      if (error instanceof Error && error.message.includes('not found in')) {
         throw error
       }
-      // Return false for file read errors
+      // Return false for other errors
       return false
     }
   }

@@ -9,6 +9,7 @@ import {
   findMainWorktreePath,
   isEmptyRepository,
   ensureRepositoryHasCommits,
+  isFileTrackedByGit,
 } from './git.js'
 import { execa } from 'execa'
 
@@ -971,6 +972,56 @@ describe('Git Utility Regression Tests', () => {
 
       await ensureRepositoryHasCommits()
       expect(execa).toHaveBeenCalledWith('git', ['rev-parse', '--verify', 'HEAD'], expect.objectContaining({ cwd: process.cwd() }))
+    })
+  })
+
+  describe('isFileTrackedByGit', () => {
+    it('returns true for tracked files', async () => {
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '.env.production',
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      const result = await isFileTrackedByGit('.env.production', '/test/repo')
+
+      expect(result).toBe(true)
+      expect(execa).toHaveBeenCalledWith('git', ['ls-files', '--error-unmatch', '.env.production'], expect.objectContaining({ cwd: '/test/repo' }))
+    })
+
+    it('returns false for untracked files', async () => {
+      vi.mocked(execa).mockRejectedValueOnce(new Error('error: pathspec \'.env.local\' did not match any file(s) known to git'))
+
+      const result = await isFileTrackedByGit('.env.local', '/test/repo')
+
+      expect(result).toBe(false)
+      expect(execa).toHaveBeenCalledWith('git', ['ls-files', '--error-unmatch', '.env.local'], expect.objectContaining({ cwd: '/test/repo' }))
+    })
+
+    it('returns false for files that do not exist', async () => {
+      vi.mocked(execa).mockRejectedValueOnce(new Error('fatal: pathspec \'.env.nonexistent\' did not match any files'))
+
+      const result = await isFileTrackedByGit('.env.nonexistent', '/test/repo')
+
+      expect(result).toBe(false)
+    })
+
+    it('uses process.cwd() when cwd is not provided', async () => {
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '.env',
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      await isFileTrackedByGit('.env')
+
+      expect(execa).toHaveBeenCalledWith('git', ['ls-files', '--error-unmatch', '.env'], expect.objectContaining({ cwd: process.cwd() }))
+    })
+
+    it('handles git command errors gracefully', async () => {
+      vi.mocked(execa).mockRejectedValueOnce(new Error('pathspec \'.env.local\' did not match any files'))
+
+      const result = await isFileTrackedByGit('.env.local', '/test/repo')
+
+      expect(result).toBe(false)
     })
   })
 })

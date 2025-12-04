@@ -1,3 +1,4 @@
+import path from 'path'
 import dotenvFlow, { type DotenvFlowConfigOptions } from 'dotenv-flow'
 import { logger } from './logger.js'
 
@@ -214,4 +215,139 @@ export function loadWorkspaceEnv(workspacePath: string): {
     nodeEnv: nodeEnv,
     defaultNodeEnv: 'development'
   })
+}
+
+// CONSTANT: Always use 'development' per critical constraint, unless overridden
+const DOTENV_FLOW_NODE_ENV = process.env.DOTENV_FLOW_NODE_ENV ?? 'development'
+
+/**
+ * Get dotenv-flow files in precedence order (lowest to highest)
+ * Always uses 'development' as NODE_ENV per constraint
+ */
+export function getDotenvFlowFiles(): string[] {
+  return [
+    '.env',
+    '.env.local',
+    `.env.${DOTENV_FLOW_NODE_ENV}`,
+    `.env.${DOTENV_FLOW_NODE_ENV}.local`
+  ]
+}
+
+/**
+ * Map a file to its "local" equivalent for git-safe writes
+ * .env -> .env.local
+ * .env.{NODE_ENV} -> .env.{NODE_ENV}.local
+ * Already local files return unchanged
+ */
+export function getLocalEquivalent(filename: string): string {
+  // Already a .local file
+  if (filename.endsWith('.local')) {
+    return filename
+  }
+  return `${filename}.local`
+}
+
+/**
+ * Find the appropriate env file to write a database URL variable to
+ * Considers dotenv-flow precedence and git tracking status
+ * Returns path relative to workspacePath
+ *
+ * Algorithm:
+ * 1. Search files in reverse precedence order (highest first)
+ * 2. Find first file containing the variable
+ * 3. If tracked by git, return its .local equivalent
+ * 4. If not tracked, return the file itself
+ * 5. If not found anywhere, return '.env.local' (safe default)
+ */
+export async function findEnvFileForDatabaseUrl(
+  workspacePath: string,
+  variableName: string,
+  isFileTracked: (filePath: string, cwd: string) => Promise<boolean>,
+  fileExists: (filePath: string) => Promise<boolean>,
+  getEnvVariable: (filePath: string, varName: string) => Promise<string | null>
+): Promise<string> {
+  // Find the highest-precedence file containing the variable
+  const file = await findEnvFileContainingVariable(workspacePath, variableName, fileExists, getEnvVariable)
+
+  if (file === null) {
+    // Variable not found anywhere - use safe default
+    return '.env.local'
+  }
+
+  // Found the variable - check git tracking
+  const isTracked = await isFileTracked(file, workspacePath)
+  if (isTracked) {
+    // Return .local equivalent for git safety
+    return getLocalEquivalent(file)
+  }
+
+  return file
+}
+
+/**
+ * Build shell source commands for all existing dotenv-flow files
+ * Returns commands in precedence order (later overrides earlier)
+ */
+export async function buildEnvSourceCommands(
+  workspacePath: string,
+  fileExists: (filePath: string) => Promise<boolean>
+): Promise<string[]> {
+  const files = getDotenvFlowFiles()
+  const commands: string[] = []
+
+  for (const file of files) {
+    const fullPath = path.join(workspacePath, file)
+    const exists = await fileExists(fullPath)
+    if (exists) {
+      commands.push(`source ${file}`)
+    }
+  }
+
+  return commands
+}
+
+/**
+ * Find the highest-precedence env file containing a variable
+ * Searches all dotenv-flow files in reverse precedence order (highest first)
+ * Returns the relative filename if found, null otherwise
+ */
+export async function findEnvFileContainingVariable(
+  workspacePath: string,
+  variableName: string,
+  fileExists: (filePath: string) => Promise<boolean>,
+  getEnvVariable: (filePath: string, varName: string) => Promise<string | null>
+): Promise<string | null> {
+  const files = getDotenvFlowFiles().reverse() // highest precedence first
+
+  for (const file of files) {
+    const fullPath = path.join(workspacePath, file)
+
+    // Skip if file doesn't exist
+    if (!(await fileExists(fullPath))) {
+      continue
+    }
+
+    // Check if file contains the variable
+    const value = await getEnvVariable(fullPath, variableName)
+    if (value !== null) {
+      return file
+    }
+  }
+
+  return null
+}
+
+/**
+ * Check if a variable exists in any dotenv-flow file
+ * Searches all dotenv-flow files (.env, .env.local, .env.{NODE_ENV}, .env.{NODE_ENV}.local)
+ * Returns true if variable is found in any file, false otherwise
+ */
+export async function hasVariableInAnyEnvFile(
+  workspacePath: string,
+  variableName: string,
+  fileExists: (filePath: string) => Promise<boolean>,
+  getEnvVariable: (filePath: string, varName: string) => Promise<string | null>
+): Promise<boolean> {
+  const file = await findEnvFileContainingVariable(workspacePath, variableName, fileExists, getEnvVariable)
+  return file !== null
 }

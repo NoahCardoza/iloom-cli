@@ -10,7 +10,8 @@ import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import type { CreateLoomInput } from '../types/loom.js'
 import { installDependencies } from '../utils/package-manager.js'
-import { branchExists, ensureRepositoryHasCommits } from '../utils/git.js'
+import { branchExists, ensureRepositoryHasCommits, isFileTrackedByGit } from '../utils/git.js'
+import fs from 'fs-extra'
 
 // Mock all dependencies
 vi.mock('./GitWorktreeManager.js')
@@ -36,6 +37,7 @@ vi.mock('../utils/git.js', () => ({
   executeGitCommand: vi.fn().mockResolvedValue(''),
   ensureRepositoryHasCommits: vi.fn().mockResolvedValue(undefined),
   isEmptyRepository: vi.fn().mockResolvedValue(false),
+  isFileTrackedByGit: vi.fn().mockResolvedValue(false),
 }))
 
 // Mock package-manager utilities
@@ -1676,6 +1678,186 @@ describe('LoomManager', () => {
       expect(ensureRepositoryHasCommits).toHaveBeenCalledWith(mockGitWorktree.workingDirectory)
       expect(result).toBeDefined()
       expect(result.path).toBe(expectedPath)
+    })
+  })
+
+  describe('Supplemental Environment File Copying', () => {
+    const baseInput: CreateLoomInput = {
+      type: 'issue',
+      identifier: 123,
+      originalInput: '123',
+    }
+
+    beforeEach(() => {
+      // Setup common mocks
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test Issue',
+        body: 'Test body',
+        state: 'open',
+        url: 'https://github.com/test/test/issues/123',
+        labels: [],
+        assignees: [],
+      })
+
+      // Mock workingDirectory getter
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => '/main/workspace'),
+        configurable: true
+      })
+
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/worktree/issue-123-test')
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/worktree/issue-123-test')
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+      vi.mocked(mockClaude.launchWithContext).mockResolvedValue()
+    })
+
+    it('copies .env.local when not tracked by git', async () => {
+      // Mock .env.local exists and is not tracked
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        if (pathStr.endsWith('.env.local') && pathStr.includes('test/worktree')) {
+          return false // doesn't exist in worktree yet
+        }
+        if (pathStr.endsWith('.env.local') && !pathStr.includes('worktree')) {
+          return true // exists in main workspace
+        }
+        return false
+      })
+      vi.mocked(isFileTrackedByGit).mockResolvedValue(false)
+
+      // Ensure copyIfExists is a spy function
+      vi.mocked(mockEnvironment.copyIfExists).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify copyIfExists was called for .env.local
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const envLocalCopy = copyIfExistsCalls.find(call =>
+        String(call[0]).endsWith('.env.local')
+      )
+      expect(envLocalCopy).toBeDefined()
+    })
+
+    it('copies .env.development when not tracked by git', async () => {
+      // Set DOTENV_FLOW_NODE_ENV to development
+      const originalEnv = process.env.DOTENV_FLOW_NODE_ENV
+      process.env.DOTENV_FLOW_NODE_ENV = 'development'
+
+      // Mock .env.development exists and is not tracked
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        if (pathStr.endsWith('.env.development') && pathStr.includes('test/worktree')) {
+          return false // doesn't exist in worktree yet
+        }
+        if (pathStr.endsWith('.env.development') && !pathStr.includes('worktree')) {
+          return true // exists in main workspace
+        }
+        return false
+      })
+      vi.mocked(isFileTrackedByGit).mockResolvedValue(false)
+
+      // Ensure copyIfExists is a spy function
+      vi.mocked(mockEnvironment.copyIfExists).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify copyIfExists was called for .env.development
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const envDevelopmentCopy = copyIfExistsCalls.find(call =>
+        String(call[0]).endsWith('.env.development')
+      )
+      expect(envDevelopmentCopy).toBeDefined()
+
+      // Restore DOTENV_FLOW_NODE_ENV
+      process.env.DOTENV_FLOW_NODE_ENV = originalEnv
+    })
+
+    it('copies .env.development.local when not tracked by git', async () => {
+      // Set DOTENV_FLOW_NODE_ENV to development
+      const originalEnv = process.env.DOTENV_FLOW_NODE_ENV
+      process.env.DOTENV_FLOW_NODE_ENV = 'development'
+
+      // Mock .env.development.local exists and is not tracked
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        if (pathStr.endsWith('.env.development.local') && pathStr.includes('test/worktree')) {
+          return false // doesn't exist in worktree yet
+        }
+        if (pathStr.endsWith('.env.development.local') && !pathStr.includes('worktree')) {
+          return true // exists in main workspace
+        }
+        return false
+      })
+      vi.mocked(isFileTrackedByGit).mockResolvedValue(false)
+
+      // Ensure copyIfExists is a spy function
+      vi.mocked(mockEnvironment.copyIfExists).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify copyIfExists was called for .env.development.local
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const envDevelopmentLocalCopy = copyIfExistsCalls.find(call =>
+        String(call[0]).endsWith('.env.development.local')
+      )
+      expect(envDevelopmentLocalCopy).toBeDefined()
+
+      // Restore DOTENV_FLOW_NODE_ENV
+      process.env.DOTENV_FLOW_NODE_ENV = originalEnv
+    })
+
+    it('skips env files that are tracked by git', async () => {
+      // Mock .env.local exists but IS tracked by git
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        if (pathStr.endsWith('.env.local') && !pathStr.includes('worktree')) {
+          return true // exists in main workspace
+        }
+        return false
+      })
+      vi.mocked(isFileTrackedByGit).mockImplementation(async (filePath: string) => {
+        return filePath === '.env.local' // .env.local is tracked
+      })
+
+      await manager.createIloom(baseInput)
+
+      // Verify copyIfExists was NOT called for .env.local
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const envLocalCopy = copyIfExistsCalls.find(call =>
+        String(call[0]).endsWith('.env.local')
+      )
+      expect(envLocalCopy).toBeUndefined()
+    })
+
+    it('handles missing env files gracefully', async () => {
+      // Mock all env files as non-existent
+      vi.mocked(fs.pathExists).mockResolvedValue(false)
+      vi.mocked(isFileTrackedByGit).mockResolvedValue(false)
+
+      // Should not throw
+      await expect(manager.createIloom(baseInput)).resolves.toBeDefined()
+    })
+
+    it('skips env files that already exist in worktree', async () => {
+      // Mock .env.local exists in both main and worktree
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        if (pathStr.endsWith('.env.local')) {
+          return true // exists in both locations
+        }
+        return false
+      })
+      vi.mocked(isFileTrackedByGit).mockResolvedValue(false)
+
+      await manager.createIloom(baseInput)
+
+      // Verify copyIfExists was NOT called for .env.local (already exists)
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const envLocalCopy = copyIfExistsCalls.find(call =>
+        String(call[0]).endsWith('.env.local')
+      )
+      expect(envLocalCopy).toBeUndefined()
     })
   })
 })

@@ -195,10 +195,11 @@ export const IloomSettingsSchema = z.object({
 		.boolean()
 		.default(false)
 		.describe(
-			'Source .env file when launching terminal processes (Claude, dev server, terminal). ' +
-				'NOTE TO AI AGENTS: Before making changes to settings files, YOU MUST OFFER to check  .env compatibility. ' +
+			'Source all dotenv-flow files (.env, .env.local, .env.development, .env.development.local) when launching terminal processes (Claude, dev server, terminal). ' +
+				'Files are sourced in precedence order so later files override earlier ones. ' +
+				'NOTE TO AI AGENTS: Before making changes to settings files, YOU MUST OFFER to check .env file compatibility. ' +
 				'WARNING: Unquoted values in .env files may break sourcing in bash/zsh shells. ' +
-				'Before enabling, verify your .env file does not contain unquoted special characters ' +
+				'Before enabling, verify ALL your .env.* files do not contain unquoted special characters ' +
 				'(e.g., database URLs with ?, &, or other shell metacharacters). ' +
 				'Shell compatibility issues may cause processes to fail or behave unexpectedly.',
 		),
@@ -327,10 +328,11 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.boolean()
 		.optional()
 		.describe(
-			'Source .env file when launching terminal processes (Claude, dev server, terminal). ' +
-				'NOTE TO AI AGENTS: Before making changes to settings files, YOU MUST OFFER to check  .env compatibility. ' +
+			'Source all dotenv-flow files (.env, .env.local, .env.development, .env.development.local) when launching terminal processes (Claude, dev server, terminal). ' +
+				'Files are sourced in precedence order so later files override earlier ones. ' +
+				'NOTE TO AI AGENTS: Before making changes to settings files, YOU MUST OFFER to check .env compatibility. ' +
 				'WARNING: Unquoted values in .env files may break sourcing in bash/zsh shells. ' +
-				'Before enabling, verify your .env file does not contain unquoted special characters ' +
+				'Before enabling, verify ALL your .env.* files do not contain unquoted special characters ' +
 				'(e.g., database URLs with ?, &, or other shell metacharacters). ' +
 				'Shell compatibility issues may cause processes to fail or behave unexpectedly.',
 		),

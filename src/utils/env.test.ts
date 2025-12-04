@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   parseEnvFile,
   formatEnvLine,
@@ -6,6 +6,10 @@ import {
   normalizeLineEndings,
   extractPort,
   isValidEnvKey,
+  getDotenvFlowFiles,
+  getLocalEquivalent,
+  findEnvFileForDatabaseUrl,
+  buildEnvSourceCommands,
 } from './env.js'
 
 describe('env utilities', () => {
@@ -251,6 +255,191 @@ describe('env utilities', () => {
 
     it('should reject empty strings', () => {
       expect(isValidEnvKey('')).toBe(false)
+    })
+  })
+
+  describe('getDotenvFlowFiles', () => {
+    it('should return files in correct precedence order (lowest to highest)', () => {
+      const files = getDotenvFlowFiles()
+      expect(files).toEqual([
+        '.env',
+        '.env.local',
+        '.env.development',
+        '.env.development.local'
+      ])
+    })
+
+    it('should always use development as NODE_ENV per constraint', () => {
+      const files = getDotenvFlowFiles()
+      expect(files[2]).toBe('.env.development')
+      expect(files[3]).toBe('.env.development.local')
+    })
+  })
+
+  describe('getLocalEquivalent', () => {
+    it('should map .env to .env.local', () => {
+      expect(getLocalEquivalent('.env')).toBe('.env.local')
+    })
+
+    it('should map .env.development to .env.development.local', () => {
+      expect(getLocalEquivalent('.env.development')).toBe('.env.development.local')
+    })
+
+    it('should return .env.local unchanged', () => {
+      expect(getLocalEquivalent('.env.local')).toBe('.env.local')
+    })
+
+    it('should return .env.development.local unchanged', () => {
+      expect(getLocalEquivalent('.env.development.local')).toBe('.env.development.local')
+    })
+  })
+
+  describe('findEnvFileForDatabaseUrl', () => {
+    it('should return file containing variable when not git-tracked', async () => {
+      const mockIsFileTracked = vi.fn().mockResolvedValue(false)
+      const mockFileExists = vi.fn().mockResolvedValue(true)
+      const mockGetEnvVariable = vi.fn()
+        .mockResolvedValueOnce(null) // .env.development.local
+        .mockResolvedValueOnce(null) // .env.development
+        .mockResolvedValueOnce('postgres://localhost/db') // .env.local - found here
+
+      const result = await findEnvFileForDatabaseUrl(
+        '/workspace',
+        'DATABASE_URL',
+        mockIsFileTracked,
+        mockFileExists,
+        mockGetEnvVariable
+      )
+
+      expect(result).toBe('.env.local')
+      expect(mockIsFileTracked).toHaveBeenCalledWith('.env.local', '/workspace')
+    })
+
+    it('should return .local equivalent when file containing variable is git-tracked', async () => {
+      const mockIsFileTracked = vi.fn().mockResolvedValue(true) // File is tracked
+      const mockFileExists = vi.fn().mockResolvedValue(true)
+      const mockGetEnvVariable = vi.fn()
+        .mockResolvedValueOnce(null) // .env.development.local
+        .mockResolvedValueOnce(null) // .env.development
+        .mockResolvedValueOnce(null) // .env.local
+        .mockResolvedValueOnce('postgres://localhost/db') // .env - found here but tracked
+
+      const result = await findEnvFileForDatabaseUrl(
+        '/workspace',
+        'DATABASE_URL',
+        mockIsFileTracked,
+        mockFileExists,
+        mockGetEnvVariable
+      )
+
+      expect(result).toBe('.env.local') // Should redirect to .local equivalent
+      expect(mockIsFileTracked).toHaveBeenCalledWith('.env', '/workspace')
+    })
+
+    it('should search in reverse precedence order (highest first)', async () => {
+      const mockIsFileTracked = vi.fn().mockResolvedValue(false)
+      const mockFileExists = vi.fn().mockResolvedValue(true)
+      const mockGetEnvVariable = vi.fn()
+        .mockResolvedValueOnce('postgres://localhost/db') // .env.development.local - found first
+
+      const result = await findEnvFileForDatabaseUrl(
+        '/workspace',
+        'DATABASE_URL',
+        mockIsFileTracked,
+        mockFileExists,
+        mockGetEnvVariable
+      )
+
+      expect(result).toBe('.env.development.local')
+      expect(mockGetEnvVariable).toHaveBeenCalledTimes(1) // Should stop after finding first match
+    })
+
+    it('should return .env.local when variable not found anywhere', async () => {
+      const mockIsFileTracked = vi.fn().mockResolvedValue(false)
+      const mockFileExists = vi.fn().mockResolvedValue(true)
+      const mockGetEnvVariable = vi.fn().mockResolvedValue(null) // Not found in any file
+
+      const result = await findEnvFileForDatabaseUrl(
+        '/workspace',
+        'DATABASE_URL',
+        mockIsFileTracked,
+        mockFileExists,
+        mockGetEnvVariable
+      )
+
+      expect(result).toBe('.env.local') // Safe default
+    })
+
+    it('should skip non-existent files', async () => {
+      const mockIsFileTracked = vi.fn().mockResolvedValue(false)
+      const mockFileExists = vi.fn()
+        .mockResolvedValueOnce(false) // .env.development.local doesn't exist
+        .mockResolvedValueOnce(false) // .env.development doesn't exist
+        .mockResolvedValueOnce(true)  // .env.local exists
+        .mockResolvedValueOnce(true)  // .env exists
+      const mockGetEnvVariable = vi.fn()
+        .mockResolvedValueOnce('postgres://localhost/db') // .env.local - found here
+
+      const result = await findEnvFileForDatabaseUrl(
+        '/workspace',
+        'DATABASE_URL',
+        mockIsFileTracked,
+        mockFileExists,
+        mockGetEnvVariable
+      )
+
+      expect(result).toBe('.env.local')
+      expect(mockGetEnvVariable).toHaveBeenCalledTimes(1) // Only called for existing files
+    })
+  })
+
+  describe('buildEnvSourceCommands', () => {
+    it('should return empty array when no env files exist', async () => {
+      const mockFileExists = vi.fn().mockResolvedValue(false)
+
+      const result = await buildEnvSourceCommands('/workspace', mockFileExists)
+
+      expect(result).toEqual([])
+    })
+
+    it('should return source commands for all existing files in order', async () => {
+      const mockFileExists = vi.fn()
+        .mockResolvedValueOnce(true)  // .env exists
+        .mockResolvedValueOnce(false) // .env.local doesn't exist
+        .mockResolvedValueOnce(true)  // .env.development exists
+        .mockResolvedValueOnce(true)  // .env.development.local exists
+
+      const result = await buildEnvSourceCommands('/workspace', mockFileExists)
+
+      expect(result).toEqual([
+        'source .env',
+        'source .env.development',
+        'source .env.development.local'
+      ])
+    })
+
+    it('should use development as NODE_ENV per constraint', async () => {
+      const mockFileExists = vi.fn().mockResolvedValue(true)
+
+      const result = await buildEnvSourceCommands('/workspace', mockFileExists)
+
+      expect(result).toContain('source .env.development')
+      expect(result).toContain('source .env.development.local')
+    })
+
+    it('should only include files that exist in workspace', async () => {
+      const mockFileExists = vi.fn()
+        .mockResolvedValueOnce(true)  // .env exists
+        .mockResolvedValueOnce(true)  // .env.local exists
+        .mockResolvedValueOnce(false) // .env.development doesn't exist
+        .mockResolvedValueOnce(false) // .env.development.local doesn't exist
+
+      const result = await buildEnvSourceCommands('/workspace', mockFileExists)
+
+      expect(result).toEqual([
+        'source .env',
+        'source .env.local'
+      ])
     })
   })
 })

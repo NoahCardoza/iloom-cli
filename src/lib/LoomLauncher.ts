@@ -9,6 +9,7 @@ import { logger } from '../utils/logger.js'
 import { ClaudeContextManager } from './ClaudeContextManager.js'
 import type { SettingsManager } from './SettingsManager.js'
 import type { Capability } from '../types/loom.js'
+import { getDotenvFlowFiles } from '../utils/env.js'
 
 export interface LaunchLoomOptions {
 	enableClaude: boolean
@@ -156,7 +157,7 @@ export class LoomLauncher {
 			workspacePath: options.worktreePath,
 			command: devServerCommand,
 			backgroundColor: colorData.rgb,
-			includeEnvSetup: (options.sourceEnvOnStart ?? false) && existsSync(join(options.worktreePath, '.env')),
+			includeEnvSetup: (options.sourceEnvOnStart ?? false) && this.hasAnyEnvFiles(options.worktreePath),
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
 		})
@@ -172,7 +173,7 @@ export class LoomLauncher {
 		await openTerminalWindow({
 			workspacePath: options.worktreePath,
 			backgroundColor: colorData.rgb,
-			includeEnvSetup: (options.sourceEnvOnStart ?? false) && existsSync(join(options.worktreePath, '.env')),
+			includeEnvSetup: (options.sourceEnvOnStart ?? false) && this.hasAnyEnvFiles(options.worktreePath),
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
 		})
@@ -186,7 +187,7 @@ export class LoomLauncher {
 		options: LaunchLoomOptions
 	): Promise<TerminalWindowOptions> {
 		const colorData = generateColorFromBranchName(options.branchName)
-		const hasEnvFile = existsSync(join(options.worktreePath, '.env'))
+		const hasEnvFile = this.hasAnyEnvFiles(options.worktreePath)
 		const claudeTitle = `Claude - ${this.formatIdentifier(options.workflowType, options.identifier)}`
 
 		const executable = options.executablePath ?? 'iloom'
@@ -222,7 +223,7 @@ export class LoomLauncher {
 			options.port,
 			options.capabilities
 		)
-		const hasEnvFile = existsSync(join(options.worktreePath, '.env'))
+		const hasEnvFile = this.hasAnyEnvFiles(options.worktreePath)
 		const devServerTitle = `Dev Server - ${this.formatIdentifier(options.workflowType, options.identifier)}`
 
 		return {
@@ -243,7 +244,7 @@ export class LoomLauncher {
 		options: LaunchLoomOptions
 	): TerminalWindowOptions {
 		const colorData = generateColorFromBranchName(options.branchName)
-		const hasEnvFile = existsSync(join(options.worktreePath, '.env'))
+		const hasEnvFile = this.hasAnyEnvFiles(options.worktreePath)
 		const terminalTitle = `Terminal - ${this.formatIdentifier(options.workflowType, options.identifier)}`
 
 		return {
@@ -269,6 +270,15 @@ export class LoomLauncher {
 
 		const terminalTypes = terminals.map((t) => t.type).join(' + ')
 		logger.info(`Multiple terminals opened: ${terminalTypes}`)
+	}
+
+	/**
+	 * Check if any dotenv-flow files exist in the workspace
+	 * Checks all files: .env, .env.local, .env.{NODE_ENV}, .env.{NODE_ENV}.local
+	 */
+	private hasAnyEnvFiles(workspacePath: string): boolean {
+		const envFiles = getDotenvFlowFiles()
+		return envFiles.some(file => existsSync(join(workspacePath, file)))
 	}
 
 	/**

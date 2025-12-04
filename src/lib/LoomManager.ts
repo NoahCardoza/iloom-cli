@@ -9,11 +9,11 @@ import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { VSCodeIntegration } from './VSCodeIntegration.js'
 import { SettingsManager } from './SettingsManager.js'
-import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber } from '../utils/git.js'
+import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit } from '../utils/git.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName } from '../utils/color.js'
 import { DatabaseManager } from './DatabaseManager.js'
-import { loadEnvIntoProcess } from '../utils/env.js'
+import { loadEnvIntoProcess, findEnvFileForDatabaseUrl } from '../utils/env.js'
 import type { Loom, CreateLoomInput } from '../types/loom.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { Issue, PullRequest } from '../types/index.js'
@@ -132,15 +132,23 @@ export class LoomManager {
       try {
         const connectionString = await this.database.createBranchIfConfigured(
           branchName,
-          path.join(worktreePath, '.env'),
+          worktreePath, // workspace path - checks all dotenv-flow files
           undefined, // cwd
           input.parentLoom?.databaseBranch // fromBranch - use parent's database branch for child looms
         )
 
         if (connectionString) {
+          const varName = this.database.getConfiguredVariableName()
+          const targetFile = await findEnvFileForDatabaseUrl(
+            worktreePath,
+            varName,
+            isFileTrackedByGit,
+            async (p) => fs.pathExists(p),
+            async (p, v) => this.environment.getEnvVariable(p, v)
+          )
           await this.environment.setEnvVar(
-            path.join(worktreePath, '.env'),
-            this.database.getConfiguredVariableName(),
+            path.join(worktreePath, targetFile),
+            varName,
             connectionString
           )
           logger.success('Database branch configured')
@@ -524,22 +532,51 @@ export class LoomManager {
 
   /**
    * Copy user application environment files (.env) from main repo to worktree
+   * Copies all dotenv-flow patterns: .env, .env.local, .env.{NODE_ENV}, .env.{NODE_ENV}.local
+   * Only copies files that exist and are NOT tracked by git (tracked files exist via worktree)
    * Always called regardless of project capabilities
    */
   private async copyEnvironmentFiles(worktreePath: string): Promise<void> {
-    const envFilePath = path.join(worktreePath, '.env')
+    const mainWorkspacePath = this.gitWorktree.workingDirectory
+    const nodeEnv = process.env.DOTENV_FLOW_NODE_ENV ?? 'development'
 
-    try {
-      const mainEnvPath = path.join(process.cwd(), '.env')
-      if (await fs.pathExists(envFilePath)) {
-        logger.warn('.env file already exists in worktree, skipping copy')
-      } else {
-        //TODO: Update this to handle .env.local, .env.development and .env.development.local as well.
-        await this.environment.copyIfExists(mainEnvPath, envFilePath)
+    // Define all dotenv-flow patterns to copy
+    const envFilePatterns = [
+      '.env',
+      '.env.local',
+      `.env.${nodeEnv}`,
+      `.env.${nodeEnv}.local`
+    ]
+
+    for (const pattern of envFilePatterns) {
+      try {
+        const mainEnvPath = path.join(mainWorkspacePath, pattern)
+        const worktreeEnvPath = path.join(worktreePath, pattern)
+
+        // Skip if file doesn't exist in main workspace
+        if (!(await fs.pathExists(mainEnvPath))) {
+          continue
+        }
+
+        // Skip if file is tracked by git (it will exist in worktree via git)
+        if (await isFileTrackedByGit(pattern, mainWorkspacePath)) {
+          logger.debug(`Skipping ${pattern} (tracked by git, already in worktree)`)
+          continue
+        }
+
+        // Skip if file already exists in worktree
+        if (await fs.pathExists(worktreeEnvPath)) {
+          logger.warn(`${pattern} already exists in worktree, skipping copy`)
+          continue
+        }
+
+        // Copy the untracked env file
+        await this.environment.copyIfExists(mainEnvPath, worktreeEnvPath)
+        logger.debug(`Copied ${pattern} to worktree`)
+      } catch (error) {
+        // Handle gracefully if individual file fails to copy
+        logger.warn(`Warning: Failed to copy ${pattern}: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
-    } catch (error) {
-      // Handle gracefully if main .env fails to copy
-      logger.warn(`Warning: Failed to copy main .env file: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -600,7 +637,7 @@ export class LoomManager {
     input: CreateLoomInput,
     basePort: number
   ): Promise<number> {
-    const envFilePath = path.join(worktreePath, '.env')
+    const envFilePath = path.join(worktreePath, '.env.local')
 
     // Calculate port based on input type
     const options: { basePort: number; issueNumber?: number; prNumber?: number; branchName?: string } = { basePort }

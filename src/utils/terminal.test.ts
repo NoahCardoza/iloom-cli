@@ -112,6 +112,12 @@ describe('openTerminalWindow', () => {
 
 	it('should include environment setup when requested', async () => {
 		vi.mocked(execa).mockResolvedValue({} as unknown)
+		// Mock existsSync to return true for .env files
+		vi.mocked(existsSync).mockImplementation((path) => {
+			const pathStr = String(path)
+			return pathStr.endsWith('.env') || pathStr.endsWith('.env.local') ||
+			       pathStr.endsWith('.env.development') || pathStr.endsWith('.env.development.local')
+		})
 
 		await openTerminalWindow({
 			workspacePath: '/Users/test/workspace',
@@ -119,7 +125,11 @@ describe('openTerminalWindow', () => {
 		})
 
 		const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
+		// Should contain source commands for all env files
 		expect(applescript).toContain('source .env')
+		expect(applescript).toContain('source .env.local')
+		expect(applescript).toContain('source .env.development')
+		expect(applescript).toContain('source .env.development.local')
 	})
 
 	it('should export PORT variable when provided', async () => {
@@ -176,6 +186,12 @@ describe('openTerminalWindow', () => {
 
 	it('should handle multi-command sequences with &&', async () => {
 		vi.mocked(execa).mockResolvedValue({} as unknown)
+		// Mock existsSync to return true for .env files
+		vi.mocked(existsSync).mockImplementation((path) => {
+			const pathStr = String(path)
+			return pathStr.endsWith('.env') || pathStr.endsWith('.env.local') ||
+			       pathStr.endsWith('.env.development') || pathStr.endsWith('.env.development.local')
+		})
 
 		await openTerminalWindow({
 			workspacePath: '/Users/test/workspace',
@@ -502,8 +518,8 @@ describe('openDualTerminalWindow', () => {
 		)
 
 		const applescript = vi.mocked(execa).mock.calls[0][1]?.[1] as string
-		// Should include source .env for both tabs
+		// Should include source commands for all dotenv-flow files in both tabs (4 files × 2 tabs = 8 occurrences)
 		const envCount = (applescript.match(/source \.env/g) || []).length
-		expect(envCount).toBe(2)
+		expect(envCount).toBe(8)
 	})
 })

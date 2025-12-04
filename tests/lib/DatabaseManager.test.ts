@@ -14,6 +14,17 @@ vi.mock('../../src/utils/logger.js', () => ({
   })),
 }))
 
+// Mock fs-extra for pathExists
+vi.mock('fs-extra', () => ({
+  default: {
+    pathExists: vi.fn((path: string) => {
+      // Only return true for .env (first file in dotenv-flow order)
+      // This simulates that only .env exists in most tests
+      return Promise.resolve(path.endsWith('.env') && !path.includes('.local') && !path.includes('.development'))
+    }),
+  },
+}))
+
 describe('DatabaseManager', () => {
   let databaseManager: DatabaseManager
   let mockProvider: DatabaseProvider
@@ -46,6 +57,7 @@ describe('DatabaseManager', () => {
       writeEnvFile: vi.fn().mockResolvedValue(undefined),
       updateEnvValue: vi.fn().mockResolvedValue(undefined),
       removeEnvValue: vi.fn().mockResolvedValue(undefined),
+      getEnvVariable: vi.fn().mockResolvedValue('postgresql://localhost/test'), // Mock DATABASE_URL as present by default
     } as unknown as EnvironmentManager
 
     // Create DatabaseManager instance
@@ -59,15 +71,12 @@ describe('DatabaseManager', () => {
       // Mock provider as configured
       vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
 
-      // Mock .env file with DATABASE_URL
-      vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
-        new Map([['DATABASE_URL', 'postgresql://localhost/test']])
-      )
+      // Mock getEnvVariable to return DATABASE_URL value
+      vi.mocked(mockEnvironment.getEnvVariable).mockResolvedValue('postgresql://localhost/test')
 
-      const result = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
+      const result = await databaseManager.shouldUseDatabaseBranching('/path/to/workspace')
 
       expect(result).toBe(true)
-      expect(mockEnvironment.readEnvFile).toHaveBeenCalledWith('/path/to/.env')
     })
 
     it('should return true when provider is configured and custom database variable is present', async () => {
@@ -77,12 +86,10 @@ describe('DatabaseManager', () => {
       // Create DatabaseManager with custom variable name
       const customDbManager = new DatabaseManager(mockProvider, mockEnvironment, 'POSTGRES_URL')
 
-      // Mock .env file with custom variable
-      vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
-        new Map([['POSTGRES_URL', 'postgresql://localhost/test']])
-      )
+      // Mock getEnvVariable to return POSTGRES_URL value
+      vi.mocked(mockEnvironment.getEnvVariable).mockResolvedValue('postgresql://localhost/test')
 
-      const result = await customDbManager.shouldUseDatabaseBranching('/path/to/.env')
+      const result = await customDbManager.shouldUseDatabaseBranching('/path/to/workspace')
 
       expect(result).toBe(true)
     })
@@ -91,41 +98,36 @@ describe('DatabaseManager', () => {
       // Mock provider as not configured
       vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
-      // Mock .env file with DATABASE_URL (shouldn't be checked)
-      vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
-        new Map([['DATABASE_URL', 'postgresql://localhost/test']])
-      )
+      // Mock getEnvVariable (shouldn't be checked)
+      vi.mocked(mockEnvironment.getEnvVariable).mockResolvedValue('postgresql://localhost/test')
 
-      const result = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
+      const result = await databaseManager.shouldUseDatabaseBranching('/path/to/workspace')
 
       expect(result).toBe(false)
-      // Should not check .env file if provider not configured
-      expect(mockEnvironment.readEnvFile).not.toHaveBeenCalled()
+      // Should not check env files if provider not configured
+      expect(mockEnvironment.getEnvVariable).not.toHaveBeenCalled()
     })
 
-    it('should return false when configured database URL variable is missing from .env', async () => {
+    it('should return false when configured database URL variable is missing from all env files', async () => {
       // Mock provider as configured
       vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
 
-      // Mock .env file without DATABASE_URL
-      vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
-        new Map([['OTHER_VAR', 'some-value']])
-      )
+      // Mock getEnvVariable to return null (variable not found)
+      vi.mocked(mockEnvironment.getEnvVariable).mockResolvedValue(null)
 
-      const result = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
+      const result = await databaseManager.shouldUseDatabaseBranching('/path/to/workspace')
 
       expect(result).toBe(false)
-      expect(mockEnvironment.readEnvFile).toHaveBeenCalledWith('/path/to/.env')
     })
 
-    it('should return false when .env file cannot be read', async () => {
+    it('should return false when env files cannot be read', async () => {
       // Mock provider as configured
       vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
 
-      // Mock .env file read failure
-      vi.mocked(mockEnvironment.readEnvFile).mockRejectedValue(new Error('File not found'))
+      // Mock getEnvVariable read failure
+      vi.mocked(mockEnvironment.getEnvVariable).mockRejectedValue(new Error('File not found'))
 
-      const result = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
+      const result = await databaseManager.shouldUseDatabaseBranching('/path/to/workspace')
 
       expect(result).toBe(false)
     })
@@ -155,16 +157,14 @@ describe('DatabaseManager', () => {
     beforeEach(() => {
       // Set up valid configuration by default
       vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
-      vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
-        new Map([['DATABASE_URL', 'postgresql://localhost/test']])
-      )
+      vi.mocked(mockEnvironment.getEnvVariable).mockResolvedValue('postgresql://localhost/test')
     })
 
     it('should return null when database branching not configured', async () => {
       // Mock provider as not configured
       vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
-      const result = await databaseManager.createBranchIfConfigured('feature-branch', '/path/to/.env')
+      const result = await databaseManager.createBranchIfConfigured('feature-branch', '/path/to/workspace')
 
       expect(result).toBe(null)
       expect(mockProvider.createBranch).not.toHaveBeenCalled()
@@ -173,7 +173,7 @@ describe('DatabaseManager', () => {
     it('should return null when CLI not available', async () => {
       vi.mocked(mockProvider.isCliAvailable).mockResolvedValue(false)
 
-      const result = await databaseManager.createBranchIfConfigured('feature-branch', '/path/to/.env')
+      const result = await databaseManager.createBranchIfConfigured('feature-branch', '/path/to/workspace')
 
       expect(result).toBe(null)
       expect(mockProvider.createBranch).not.toHaveBeenCalled()
@@ -182,7 +182,7 @@ describe('DatabaseManager', () => {
     it('should return null when not authenticated', async () => {
       vi.mocked(mockProvider.isAuthenticated).mockResolvedValue(false)
 
-      const result = await databaseManager.createBranchIfConfigured('feature-branch', '/path/to/.env')
+      const result = await databaseManager.createBranchIfConfigured('feature-branch', '/path/to/workspace')
 
       expect(result).toBe(null)
       expect(mockProvider.createBranch).not.toHaveBeenCalled()
@@ -192,7 +192,7 @@ describe('DatabaseManager', () => {
       const connectionString = 'postgresql://test-connection-string'
       vi.mocked(mockProvider.createBranch).mockResolvedValue(connectionString)
 
-      const result = await databaseManager.createBranchIfConfigured('feature-branch', '/path/to/.env')
+      const result = await databaseManager.createBranchIfConfigured('feature-branch', '/path/to/workspace')
 
       expect(result).toBe(connectionString)
       expect(mockProvider.isCliAvailable).toHaveBeenCalled()
@@ -206,7 +206,7 @@ describe('DatabaseManager', () => {
       vi.mocked(mockProvider.createBranch).mockRejectedValue(error)
 
       await expect(
-        databaseManager.createBranchIfConfigured('feature-branch', '/path/to/.env')
+        databaseManager.createBranchIfConfigured('feature-branch', '/path/to/workspace')
       ).rejects.toThrow('Failed to create branch')
     })
 
@@ -214,7 +214,7 @@ describe('DatabaseManager', () => {
       vi.mocked(mockProvider.createBranch).mockRejectedValue('String error')
 
       await expect(
-        databaseManager.createBranchIfConfigured('feature-branch', '/path/to/.env')
+        databaseManager.createBranchIfConfigured('feature-branch', '/path/to/workspace')
       ).rejects.toBe('String error')
     })
   })
@@ -223,9 +223,7 @@ describe('DatabaseManager', () => {
     beforeEach(() => {
       // Set up valid configuration by default
       vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
-      vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
-        new Map([['DATABASE_URL', 'postgresql://localhost/test']])
-      )
+      vi.mocked(mockEnvironment.getEnvVariable).mockResolvedValue('postgresql://localhost/test')
     })
 
     it('should return early when database branching not configured', async () => {
@@ -403,17 +401,15 @@ describe('DatabaseManager', () => {
     it('should verify configuration behavior through public methods', async () => {
       // Test when provider is configured
       vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
-      vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
-        new Map([['DATABASE_URL', 'postgresql://localhost/test']])
-      )
+      vi.mocked(mockEnvironment.getEnvVariable).mockResolvedValue('postgresql://localhost/test')
 
-      const result1 = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
+      const result1 = await databaseManager.shouldUseDatabaseBranching('/path/to/workspace')
       expect(result1).toBe(true)
 
       // Test when provider is not configured
       vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
-      const result2 = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
+      const result2 = await databaseManager.shouldUseDatabaseBranching('/path/to/workspace')
       expect(result2).toBe(false)
     })
 
@@ -422,27 +418,21 @@ describe('DatabaseManager', () => {
       vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
 
       // Test with DATABASE_URL
-      vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
-        new Map([['DATABASE_URL', 'postgresql://localhost/test']])
-      )
-      expect(await databaseManager.shouldUseDatabaseBranching('/path/to/.env')).toBe(true)
+      vi.mocked(mockEnvironment.getEnvVariable).mockResolvedValue('postgresql://localhost/test')
+      expect(await databaseManager.shouldUseDatabaseBranching('/path/to/workspace')).toBe(true)
 
       // Test with custom variable name
       const customDbManager = new DatabaseManager(mockProvider, mockEnvironment, 'POSTGRES_URL')
-      vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
-        new Map([['POSTGRES_URL', 'postgresql://localhost/test']])
-      )
-      expect(await customDbManager.shouldUseDatabaseBranching('/path/to/.env')).toBe(true)
+      vi.mocked(mockEnvironment.getEnvVariable).mockResolvedValue('postgresql://localhost/test')
+      expect(await customDbManager.shouldUseDatabaseBranching('/path/to/workspace')).toBe(true)
 
       // Test with neither
-      vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
-        new Map([['OTHER_VAR', 'some-value']])
-      )
-      expect(await databaseManager.shouldUseDatabaseBranching('/path/to/.env')).toBe(false)
+      vi.mocked(mockEnvironment.getEnvVariable).mockResolvedValue(null)
+      expect(await databaseManager.shouldUseDatabaseBranching('/path/to/workspace')).toBe(false)
 
       // Test with read error
-      vi.mocked(mockEnvironment.readEnvFile).mockRejectedValue(new Error('File not found'))
-      expect(await databaseManager.shouldUseDatabaseBranching('/path/to/.env')).toBe(false)
+      vi.mocked(mockEnvironment.getEnvVariable).mockRejectedValue(new Error('File not found'))
+      expect(await databaseManager.shouldUseDatabaseBranching('/path/to/workspace')).toBe(false)
     })
   })
 
@@ -451,7 +441,7 @@ describe('DatabaseManager', () => {
       // Mock provider as not configured (e.g., empty projectId)
       vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
-      const result = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
+      const result = await databaseManager.shouldUseDatabaseBranching('/path/to/workspace')
 
       expect(result).toBe(false)
     })
@@ -460,30 +450,27 @@ describe('DatabaseManager', () => {
       // Mock provider as not configured (e.g., missing parentBranch)
       vi.mocked(mockProvider.isConfigured).mockReturnValue(false)
 
-      const result = await databaseManager.shouldUseDatabaseBranching('/path/to/.env')
+      const result = await databaseManager.shouldUseDatabaseBranching('/path/to/workspace')
 
       expect(result).toBe(false)
     })
 
-    it('should work with different .env file paths', async () => {
+    it('should work with different workspace paths', async () => {
       vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
-      vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
-        new Map([['DATABASE_URL', 'postgresql://localhost/test']])
-      )
+      vi.mocked(mockEnvironment.getEnvVariable).mockResolvedValue('postgresql://localhost/test')
 
-      await databaseManager.createBranchIfConfigured('feature-branch', '/different/path/.env')
+      await databaseManager.createBranchIfConfigured('feature-branch', '/different/path/workspace')
 
-      expect(mockEnvironment.readEnvFile).toHaveBeenCalledWith('/different/path/.env')
+      // Verify the method was called (getEnvVariable will be called with various env file paths)
+      expect(mockEnvironment.getEnvVariable).toHaveBeenCalled()
     })
 
     it('should handle branch names with special characters', async () => {
       vi.mocked(mockProvider.isConfigured).mockReturnValue(true)
-      vi.mocked(mockEnvironment.readEnvFile).mockResolvedValue(
-        new Map([['DATABASE_URL', 'postgresql://localhost/test']])
-      )
+      vi.mocked(mockEnvironment.getEnvVariable).mockResolvedValue('postgresql://localhost/test')
 
       const branchName = 'feature/issue-123/fix'
-      await databaseManager.createBranchIfConfigured(branchName, '/path/to/.env')
+      await databaseManager.createBranchIfConfigured(branchName, '/path/to/workspace')
 
       expect(mockProvider.createBranch).toHaveBeenCalledWith(branchName, undefined, undefined)
       expect(mockProvider.sanitizeBranchName).toHaveBeenCalledWith(branchName)

@@ -117,7 +117,9 @@ Each loom is a fully isolated container for your work:
 *   **Git Worktree:** A separate filesystem at ~/project-looms/issue-25/. No stashing, no branch switching overhead.
     
 *   **Database Branch:** (Neon support) Schema changes in this loom are isolated—they won't break your main environment or your other active looms.
-    
+
+*   **Environment Variables:** Each loom has its own environment files (`.env`, `.env.local`, `.env.development`, `.env.development.local`). Uses `development` by default, override with `DOTENV_FLOW_NODE_ENV`.
+
 *   **Unique Runtime:**
     
     *   **Web Apps:** Runs on a deterministic port (e.g., base port 3000 + issue #25 = 3025).
