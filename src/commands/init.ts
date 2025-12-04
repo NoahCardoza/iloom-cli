@@ -374,7 +374,7 @@ export class InitCommand {
       }
 
       // Load README content for comprehensive documentation
-      logger.info('Loading iloom documentation...')
+      logger.debug('README content loading...')
       const readmeContent = await this.loadReadmeContent()
       logger.debug('README content loaded', {
         readmeContentLength: readmeContent.length,
