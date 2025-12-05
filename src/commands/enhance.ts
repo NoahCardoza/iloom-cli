@@ -9,6 +9,7 @@ import { generateIssueManagementMcpConfig } from '../utils/mcp.js'
 import { AgentManager as DefaultAgentManager } from '../lib/AgentManager.js'
 import { SettingsManager as DefaultSettingsManager } from '../lib/SettingsManager.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
+import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
 
 export interface EnhanceCommandInput {
 	issueNumber: string | number
@@ -52,7 +53,12 @@ export class EnhanceCommand {
 		const { issueNumber, options } = input
 		const { author } = options
 
-		// Step 0: Load settings and get configured repo for GitHub operations
+		// Step 0: Check for first-run setup
+		if (process.env.FORCE_FIRST_TIME_SETUP === "true" || await needsFirstRunSetup()) {
+			await launchFirstRunSetup()
+		}
+
+		// Step 0.5: Load settings and get configured repo for GitHub operations
 		const settings = await this.settingsManager.loadSettings()
 
 		let repo: string | undefined

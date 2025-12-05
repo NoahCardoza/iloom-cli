@@ -26,6 +26,12 @@ vi.mock('../utils/remote.js', () => ({
 	validateConfiguredRemote: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Mock first-run-setup utilities
+vi.mock('../utils/first-run-setup.js', () => ({
+	needsFirstRunSetup: vi.fn().mockResolvedValue(false),
+	launchFirstRunSetup: vi.fn().mockResolvedValue(undefined),
+}))
+
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
 	logger: {
@@ -66,6 +72,96 @@ describe('EnhanceCommand', () => {
 
 	afterEach(() => {
 		vi.clearAllMocks()
+	})
+
+	describe('first-run setup', () => {
+		it('should trigger first-run setup when needsFirstRunSetup returns true', async () => {
+			const { needsFirstRunSetup, launchFirstRunSetup } = await import(
+				'../utils/first-run-setup.js'
+			)
+			vi.mocked(needsFirstRunSetup).mockResolvedValue(true)
+
+			const mockIssue: Issue = {
+				number: 42,
+				title: 'Test Issue',
+				body: 'Test body',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://github.com/owner/repo/issues/42',
+			}
+
+			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
+			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
+			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+
+			await command.execute({ issueNumber: 42, options: {} })
+
+			expect(needsFirstRunSetup).toHaveBeenCalled()
+			expect(launchFirstRunSetup).toHaveBeenCalled()
+		})
+
+		it('should continue normally when needsFirstRunSetup returns false', async () => {
+			const { needsFirstRunSetup, launchFirstRunSetup } = await import(
+				'../utils/first-run-setup.js'
+			)
+			vi.mocked(needsFirstRunSetup).mockResolvedValue(false)
+
+			const mockIssue: Issue = {
+				number: 42,
+				title: 'Test Issue',
+				body: 'Test body',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://github.com/owner/repo/issues/42',
+			}
+
+			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
+			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
+			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+
+			await command.execute({ issueNumber: 42, options: {} })
+
+			expect(needsFirstRunSetup).toHaveBeenCalled()
+			expect(launchFirstRunSetup).not.toHaveBeenCalled()
+		})
+
+		it('should trigger first-run setup when FORCE_FIRST_TIME_SETUP env var is true', async () => {
+			const { launchFirstRunSetup } = await import(
+				'../utils/first-run-setup.js'
+			)
+			const originalEnv = process.env.FORCE_FIRST_TIME_SETUP
+			process.env.FORCE_FIRST_TIME_SETUP = 'true'
+
+			try {
+				const mockIssue: Issue = {
+					number: 42,
+					title: 'Test Issue',
+					body: 'Test body',
+					state: 'open',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/owner/repo/issues/42',
+				}
+
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
+				vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
+				vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
+				vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+
+				await command.execute({ issueNumber: 42, options: {} })
+
+				expect(launchFirstRunSetup).toHaveBeenCalled()
+			} finally {
+				process.env.FORCE_FIRST_TIME_SETUP = originalEnv
+			}
+		})
 	})
 
 	describe('input validation', () => {

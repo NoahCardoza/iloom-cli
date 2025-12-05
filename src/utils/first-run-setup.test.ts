@@ -2,10 +2,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { needsFirstRunSetup, launchFirstRunSetup } from './first-run-setup.js'
 import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
+import { FirstRunManager } from './FirstRunManager.js'
+import { getRepoRoot } from './git.js'
 
 // Mock fs modules
 vi.mock('fs')
 vi.mock('fs/promises')
+
+// Mock FirstRunManager
+vi.mock('./FirstRunManager.js')
+
+// Mock git utilities
+vi.mock('./git.js', () => ({
+	getRepoRoot: vi.fn(),
+}))
 
 // Mock logger
 vi.mock('./logger.js', () => ({
@@ -31,11 +41,85 @@ vi.mock('./prompt.js', () => ({
 }))
 
 describe('first-run-setup', () => {
+	const mockIsProjectConfigured = vi.fn()
+	const mockMarkProjectAsConfigured = vi.fn()
+	const mockFixupLegacyProject = vi.fn()
+	const mockRepoRoot = '/test/repo/root'
+
 	beforeEach(() => {
 		vi.clearAllMocks()
+		// Default mock: git repo root found
+		vi.mocked(getRepoRoot).mockResolvedValue(mockRepoRoot)
+		// Default mock: project is not configured globally
+		mockIsProjectConfigured.mockResolvedValue(false)
+		mockMarkProjectAsConfigured.mockResolvedValue(undefined)
+		// fixupLegacyProject now returns { isConfigured, wasFixedUp }
+		mockFixupLegacyProject.mockResolvedValue({ isConfigured: false, wasFixedUp: false })
+		vi.mocked(FirstRunManager).mockImplementation(() => ({
+			isProjectConfigured: mockIsProjectConfigured,
+			markProjectAsConfigured: mockMarkProjectAsConfigured,
+			fixupLegacyProject: mockFixupLegacyProject,
+			isFirstRun: vi.fn(),
+			markAsRun: vi.fn(),
+		}) as unknown as FirstRunManager)
 	})
 
 	describe('needsFirstRunSetup', () => {
+		it('should use git repo root for project path resolution', async () => {
+			// fixupLegacyProject returns isConfigured: true (project already has marker)
+			mockFixupLegacyProject.mockResolvedValue({ isConfigured: true, wasFixedUp: false })
+
+			await needsFirstRunSetup()
+
+			// Verify getRepoRoot was called
+			expect(getRepoRoot).toHaveBeenCalled()
+			// Verify fixupLegacyProject was called with the repo root path
+			expect(mockFixupLegacyProject).toHaveBeenCalledWith(mockRepoRoot)
+		})
+
+		it('should fall back to process.cwd() when not in a git repo', async () => {
+			vi.mocked(getRepoRoot).mockResolvedValue(null)
+			mockFixupLegacyProject.mockResolvedValue({ isConfigured: true, wasFixedUp: false })
+			const originalCwd = process.cwd()
+
+			await needsFirstRunSetup()
+
+			// Verify methods were called with cwd (since getRepoRoot returned null)
+			expect(mockFixupLegacyProject).toHaveBeenCalledWith(originalCwd)
+		})
+
+		it('should use isConfigured from fixupLegacyProject to avoid duplicate calls', async () => {
+			// fixupLegacyProject returns isConfigured: true (already has marker)
+			mockFixupLegacyProject.mockResolvedValue({ isConfigured: true, wasFixedUp: false })
+
+			await needsFirstRunSetup()
+
+			expect(mockFixupLegacyProject).toHaveBeenCalled()
+			// isProjectConfigured should NOT be called directly since we use the result from fixupLegacyProject
+			expect(mockIsProjectConfigured).not.toHaveBeenCalled()
+		})
+
+		it('should return false after fixup creates marker for legacy project', async () => {
+			// fixup finds legacy project, creates marker, and returns isConfigured: true
+			mockFixupLegacyProject.mockResolvedValue({ isConfigured: true, wasFixedUp: true })
+
+			const result = await needsFirstRunSetup()
+
+			expect(result).toBe(false)
+			expect(mockFixupLegacyProject).toHaveBeenCalled()
+		})
+
+		it('should return false when project is tracked as configured globally', async () => {
+			// fixupLegacyProject returns isConfigured: true (already has marker)
+			mockFixupLegacyProject.mockResolvedValue({ isConfigured: true, wasFixedUp: false })
+
+			const result = await needsFirstRunSetup()
+
+			expect(result).toBe(false)
+			// Should not check local files when globally configured
+			expect(existsSync).not.toHaveBeenCalled()
+		})
+
 		it('should return true when .iloom directory does not exist', async () => {
 			vi.mocked(existsSync).mockReturnValue(false)
 
@@ -145,6 +229,31 @@ describe('first-run-setup', () => {
 			expect(logger.info).toHaveBeenCalledWith(
 				'Configuration complete! Continuing with your original command...'
 			)
+		})
+
+		it('should mark project as configured after wizard completes', async () => {
+			await launchFirstRunSetup()
+
+			expect(mockMarkProjectAsConfigured).toHaveBeenCalled()
+		})
+
+		it('should use git repo root when marking project as configured', async () => {
+			await launchFirstRunSetup()
+
+			// Verify getRepoRoot was called
+			expect(getRepoRoot).toHaveBeenCalled()
+			// Verify markProjectAsConfigured was called with repo root
+			expect(mockMarkProjectAsConfigured).toHaveBeenCalledWith(mockRepoRoot)
+		})
+
+		it('should fall back to process.cwd() when not in a git repo', async () => {
+			vi.mocked(getRepoRoot).mockResolvedValue(null)
+			const originalCwd = process.cwd()
+
+			await launchFirstRunSetup()
+
+			// Verify markProjectAsConfigured was called with cwd
+			expect(mockMarkProjectAsConfigured).toHaveBeenCalledWith(originalCwd)
 		})
 	})
 })

@@ -25,6 +25,12 @@ vi.mock('../utils/remote.js', () => ({
 	validateConfiguredRemote: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Mock first-run-setup utilities
+vi.mock('../utils/first-run-setup.js', () => ({
+	needsFirstRunSetup: vi.fn().mockResolvedValue(false),
+	launchFirstRunSetup: vi.fn().mockResolvedValue(undefined),
+}))
+
 // Mock the logger to prevent console output during tests
 vi.mock('../utils/logger.js', () => ({
 	logger: {
@@ -60,6 +66,70 @@ describe('AddIssueCommand', () => {
 
 	describe('execute', () => {
 		const validDescription = 'This is a valid description that has more than thirty characters and multiple spaces'
+
+		describe('first-run setup', () => {
+			it('should trigger first-run setup when needsFirstRunSetup returns true', async () => {
+				const { needsFirstRunSetup, launchFirstRunSetup } = await import(
+					'../utils/first-run-setup.js'
+				)
+				vi.mocked(needsFirstRunSetup).mockResolvedValue(true)
+				vi.mocked(mockEnhancementService.validateDescription).mockReturnValue(true)
+				vi.mocked(mockEnhancementService.enhanceDescription).mockResolvedValue('Enhanced description')
+				vi.mocked(mockEnhancementService.createEnhancedIssue).mockResolvedValue({
+					number: 123,
+					url: 'https://github.com/owner/repo/issues/123',
+				})
+				vi.mocked(mockEnhancementService.waitForReviewAndOpen).mockResolvedValue(undefined)
+
+				await command.execute({ description: validDescription, options: {} })
+
+				expect(needsFirstRunSetup).toHaveBeenCalled()
+				expect(launchFirstRunSetup).toHaveBeenCalled()
+			})
+
+			it('should continue normally when needsFirstRunSetup returns false', async () => {
+				const { needsFirstRunSetup, launchFirstRunSetup } = await import(
+					'../utils/first-run-setup.js'
+				)
+				vi.mocked(needsFirstRunSetup).mockResolvedValue(false)
+				vi.mocked(mockEnhancementService.validateDescription).mockReturnValue(true)
+				vi.mocked(mockEnhancementService.enhanceDescription).mockResolvedValue('Enhanced description')
+				vi.mocked(mockEnhancementService.createEnhancedIssue).mockResolvedValue({
+					number: 123,
+					url: 'https://github.com/owner/repo/issues/123',
+				})
+				vi.mocked(mockEnhancementService.waitForReviewAndOpen).mockResolvedValue(undefined)
+
+				await command.execute({ description: validDescription, options: {} })
+
+				expect(needsFirstRunSetup).toHaveBeenCalled()
+				expect(launchFirstRunSetup).not.toHaveBeenCalled()
+			})
+
+			it('should trigger first-run setup when FORCE_FIRST_TIME_SETUP env var is true', async () => {
+				const { launchFirstRunSetup } = await import(
+					'../utils/first-run-setup.js'
+				)
+				const originalEnv = process.env.FORCE_FIRST_TIME_SETUP
+				process.env.FORCE_FIRST_TIME_SETUP = 'true'
+
+				try {
+					vi.mocked(mockEnhancementService.validateDescription).mockReturnValue(true)
+					vi.mocked(mockEnhancementService.enhanceDescription).mockResolvedValue('Enhanced description')
+					vi.mocked(mockEnhancementService.createEnhancedIssue).mockResolvedValue({
+						number: 123,
+						url: 'https://github.com/owner/repo/issues/123',
+					})
+					vi.mocked(mockEnhancementService.waitForReviewAndOpen).mockResolvedValue(undefined)
+
+					await command.execute({ description: validDescription, options: {} })
+
+					expect(launchFirstRunSetup).toHaveBeenCalled()
+				} finally {
+					process.env.FORCE_FIRST_TIME_SETUP = originalEnv
+				}
+			})
+		})
 
 		describe('input validation', () => {
 			it('should throw error when description is empty or missing', async () => {

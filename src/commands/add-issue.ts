@@ -2,6 +2,7 @@ import type { AddIssueOptions } from '../types/index.js'
 import { IssueEnhancementService } from '../lib/IssueEnhancementService.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
+import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
 import { logger } from '../utils/logger.js'
 
 /**
@@ -36,7 +37,12 @@ export class AddIssueCommand {
 	public async execute(input: AddIssueCommandInput): Promise<string | number> {
 		const { description } = input
 
-		// Step 0: Load settings and get configured repo for GitHub operations
+		// Step 0: Check for first-run setup
+		if (process.env.FORCE_FIRST_TIME_SETUP === "true" || await needsFirstRunSetup()) {
+			await launchFirstRunSetup()
+		}
+
+		// Step 0.5: Load settings and get configured repo for GitHub operations
 		const settings = await this.settingsManager.loadSettings()
 
 		let repo: string | undefined

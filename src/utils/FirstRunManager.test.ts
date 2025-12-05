@@ -61,6 +61,227 @@ describe('FirstRunManager', () => {
 		})
 	})
 
+	describe('isProjectConfigured', () => {
+		it('returns false when project marker file does not exist', async () => {
+			const manager = new FirstRunManager()
+
+			vi.mocked(fs.pathExists).mockResolvedValue(false)
+
+			const result = await manager.isProjectConfigured('/Users/adam/Projects/my-app')
+
+			expect(result).toBe(false)
+			expect(fs.pathExists).toHaveBeenCalledWith(
+				'/home/user/.config/iloom-ai/projects/Users__adam__Projects__my-app'
+			)
+		})
+
+		it('returns true when project marker file exists', async () => {
+			const manager = new FirstRunManager()
+
+			vi.mocked(fs.pathExists).mockResolvedValue(true)
+
+			const result = await manager.isProjectConfigured('/Users/adam/Projects/my-app')
+
+			expect(result).toBe(true)
+		})
+
+		it('returns false on file read errors (allows wizard to run)', async () => {
+			const manager = new FirstRunManager()
+
+			vi.mocked(fs.pathExists).mockRejectedValue(new Error('Permission denied'))
+
+			const result = await manager.isProjectConfigured('/some/path')
+
+			expect(result).toBe(false)
+		})
+
+		it('uses process.cwd() when no path provided', async () => {
+			const manager = new FirstRunManager()
+			const originalCwd = process.cwd
+
+			// Mock process.cwd
+			process.cwd = () => '/mocked/cwd/path'
+			vi.mocked(fs.pathExists).mockResolvedValue(true)
+
+			const result = await manager.isProjectConfigured()
+
+			expect(result).toBe(true)
+			expect(fs.pathExists).toHaveBeenCalledWith(
+				'/home/user/.config/iloom-ai/projects/mocked__cwd__path'
+			)
+
+			// Restore
+			process.cwd = originalCwd
+		})
+	})
+
+	describe('markProjectAsConfigured', () => {
+		it('creates marker file in projects directory', async () => {
+			const manager = new FirstRunManager()
+
+			vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+			vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+			await manager.markProjectAsConfigured('/Users/adam/Projects/my-app')
+
+			expect(fs.ensureDir).toHaveBeenCalledWith('/home/user/.config/iloom-ai/projects')
+			expect(fs.writeFile).toHaveBeenCalledWith(
+				'/home/user/.config/iloom-ai/projects/Users__adam__Projects__my-app',
+				expect.any(String),
+				'utf8'
+			)
+		})
+
+		it('writes JSON marker file with project metadata', async () => {
+			const manager = new FirstRunManager()
+
+			vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+			vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+			await manager.markProjectAsConfigured('/Users/adam/Projects/my-app')
+
+			const calls = vi.mocked(fs.writeFile).mock.calls
+			expect(calls.length).toBeGreaterThan(0)
+			const [, jsonContent] = calls[0]
+			const parsed = JSON.parse(String(jsonContent))
+
+			expect(parsed).toHaveProperty('configuredAt')
+			expect(parsed.projectPath).toBe('/Users/adam/Projects/my-app')
+			expect(parsed.projectName).toBe('my-app')
+		})
+
+		it('handles write errors gracefully without throwing', async () => {
+			const manager = new FirstRunManager()
+
+			vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+			vi.mocked(fs.writeFile).mockRejectedValue(new Error('Disk full'))
+
+			await expect(manager.markProjectAsConfigured('/some/path')).resolves.toBeUndefined()
+		})
+
+		it('uses process.cwd() when no path provided', async () => {
+			const manager = new FirstRunManager()
+			const originalCwd = process.cwd
+
+			process.cwd = () => '/mocked/cwd/path'
+			vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+			vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+			await manager.markProjectAsConfigured()
+
+			expect(fs.writeFile).toHaveBeenCalledWith(
+				'/home/user/.config/iloom-ai/projects/mocked__cwd__path',
+				expect.any(String),
+				'utf8'
+			)
+
+			process.cwd = originalCwd
+		})
+	})
+
+	describe('fixupLegacyProject', () => {
+		it('returns isConfigured=true when project already has global marker', async () => {
+			const manager = new FirstRunManager()
+
+			// Project already has marker
+			vi.mocked(fs.pathExists).mockResolvedValue(true)
+
+			const result = await manager.fixupLegacyProject('/Users/adam/Projects/my-app')
+
+			expect(result).toEqual({ isConfigured: true, wasFixedUp: false })
+			// Should only check for marker, not create one
+			expect(fs.writeFile).not.toHaveBeenCalled()
+		})
+
+		it('returns isConfigured=false when project has no local settings', async () => {
+			const manager = new FirstRunManager()
+
+			// No marker exists, no local settings exist
+			vi.mocked(fs.pathExists).mockResolvedValue(false)
+
+			const result = await manager.fixupLegacyProject('/Users/adam/Projects/my-app')
+
+			expect(result).toEqual({ isConfigured: false, wasFixedUp: false })
+			expect(fs.writeFile).not.toHaveBeenCalled()
+		})
+
+		it('creates marker for legacy project with local settings.json', async () => {
+			const manager = new FirstRunManager()
+
+			// Marker doesn't exist, but local settings.json exists with content
+			vi.mocked(fs.pathExists).mockImplementation(async (pathArg) => {
+				const p = String(pathArg)
+				if (p.includes('projects/')) return false // No global marker
+				if (p.includes('settings.json')) return true // Local settings exists
+				return false
+			})
+			vi.mocked(fs.readFile).mockResolvedValue('{"mainBranch": "main"}')
+			vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+			vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+			const result = await manager.fixupLegacyProject('/Users/adam/Projects/my-app')
+
+			expect(result).toEqual({ isConfigured: true, wasFixedUp: true })
+			expect(fs.writeFile).toHaveBeenCalled()
+		})
+
+		it('creates marker for legacy project with local settings.local.json', async () => {
+			const manager = new FirstRunManager()
+
+			// Marker doesn't exist, but local settings.local.json exists with content
+			vi.mocked(fs.pathExists).mockImplementation(async (pathArg) => {
+				const p = String(pathArg)
+				if (p.includes('projects/')) return false // No global marker
+				if (p.includes('settings.local.json')) return true // Local settings exists
+				if (p.includes('settings.json')) return false // No regular settings
+				return false
+			})
+			vi.mocked(fs.readFile).mockResolvedValue('{"basePort": 4000}')
+			vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+			vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+			const result = await manager.fixupLegacyProject('/Users/adam/Projects/my-app')
+
+			expect(result).toEqual({ isConfigured: true, wasFixedUp: true })
+			expect(fs.writeFile).toHaveBeenCalled()
+		})
+
+		it('ignores empty local settings files', async () => {
+			const manager = new FirstRunManager()
+
+			// Marker doesn't exist, local settings exists but is empty
+			vi.mocked(fs.pathExists).mockImplementation(async (pathArg) => {
+				const p = String(pathArg)
+				if (p.includes('projects/')) return false // No global marker
+				if (p.includes('settings.json')) return true // Local settings exists
+				return false
+			})
+			vi.mocked(fs.readFile).mockResolvedValue('{}') // Empty object
+
+			const result = await manager.fixupLegacyProject('/Users/adam/Projects/my-app')
+
+			expect(result).toEqual({ isConfigured: false, wasFixedUp: false })
+			expect(fs.writeFile).not.toHaveBeenCalled()
+		})
+
+		it('uses process.cwd() when no path provided', async () => {
+			const manager = new FirstRunManager()
+			const originalCwd = process.cwd
+
+			process.cwd = () => '/mocked/cwd/path'
+			vi.mocked(fs.pathExists).mockResolvedValue(true) // Has marker
+
+			const result = await manager.fixupLegacyProject()
+
+			expect(result).toEqual({ isConfigured: true, wasFixedUp: false })
+			expect(fs.pathExists).toHaveBeenCalledWith(
+				'/home/user/.config/iloom-ai/projects/mocked__cwd__path'
+			)
+
+			process.cwd = originalCwd
+		})
+	})
+
 	describe('markAsRun', () => {
 		it('creates marker file in config directory', async () => {
 			const manager = new FirstRunManager('spin')
