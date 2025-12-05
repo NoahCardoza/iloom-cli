@@ -410,10 +410,11 @@ REMOTES_INFO
      - "sublime" - Sublime Text
      - "intellij" - JetBrains IntelliJ IDEA
      - "windsurf" - Windsurf editor
+     - "antigravity" - Antigravity IDE
    - Default: currentIdeType or "vscode"
    - Validation: Must be one of the listed options
    - Store answer as: `ide.type`
-   - Note: Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf). Other IDEs will launch without color theming.
+   - Note: Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf, antigravity). Other IDEs will launch without color theming.
 
 **Step 4: Merge Mode** (only ask if multiple remotes detected OR user requests advanced config)
 
@@ -436,7 +437,7 @@ REMOTES_INFO
 - Set multiSelect: false for all questions
 - Process answers sequentially as they depend on each other
 
-### Phase 2.5: Color Synchronization Settings - ONLY IF USER HAS CHOSEN the vscode or cursor IDE
+### Phase 2.5: Color Synchronization Settings - ONLY IF USER HAS CHOSEN the vscode, cursor, windsurf, or antigravity IDE
 
 After Phase 2, handle color settings based on gitignore status.
 

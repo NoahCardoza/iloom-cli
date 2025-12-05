@@ -238,7 +238,7 @@ iloom supports the tools you already use. Unless you use JIRA.
 ### IDE Support
 iloom creates isolated workspace settings for your editor. Color synchronization (visual context) only works best VS Code-based editors.
 
-*   **Supported:** VS Code, Cursor, Windsurf, WebStorm, IntelliJ, Sublime Text.
+*   **Supported:** VS Code, Cursor, Windsurf, Antigravity, WebStorm, IntelliJ, Sublime Text.
     
 *   **Config:** Set your preference via `il init` or `il start --set ide.type=cursor`.
     

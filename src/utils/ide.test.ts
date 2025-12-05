@@ -72,6 +72,15 @@ describe('IDE Utilities', () => {
 				name: 'Windsurf',
 			})
 		})
+
+		it('should return correct command for antigravity preset', () => {
+			const config = getIdeConfig({ type: 'antigravity' })
+			expect(config).toEqual({
+				command: 'agy',
+				args: [],
+				name: 'Antigravity',
+			})
+		})
 	})
 
 	describe('isIdeAvailable', () => {

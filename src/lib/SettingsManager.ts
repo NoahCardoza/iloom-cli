@@ -298,19 +298,19 @@ export const IloomSettingsSchema = z.object({
 	ide: z
 		.object({
 			type: z
-				.enum(['vscode', 'cursor', 'webstorm', 'sublime', 'intellij', 'windsurf'])
+				.enum(['vscode', 'cursor', 'webstorm', 'sublime', 'intellij', 'windsurf', 'antigravity'])
 				.default('vscode')
 				.describe(
 					'IDE to launch when starting a loom. Options: vscode (Visual Studio Code), cursor (Cursor AI editor), ' +
 						'webstorm (JetBrains WebStorm), sublime (Sublime Text), intellij (JetBrains IntelliJ IDEA), ' +
-						'windsurf (Windsurf editor).'
+						'windsurf (Windsurf editor), antigravity (Antigravity IDE).'
 				),
 		})
 		.optional()
 		.describe(
 			'IDE configuration for workspace launches. Controls which editor opens when you start a loom. ' +
-				'Supports VSCode, Cursor, WebStorm, Sublime Text, IntelliJ, and Windsurf. ' +
-				'Note: Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf).'
+				'Supports VSCode, Cursor, WebStorm, Sublime Text, IntelliJ, Windsurf, and Antigravity. ' +
+				'Note: Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf, antigravity).'
 		),
 	colors: z
 		.object({
@@ -448,19 +448,19 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 	ide: z
 		.object({
 			type: z
-				.enum(['vscode', 'cursor', 'webstorm', 'sublime', 'intellij', 'windsurf'])
+				.enum(['vscode', 'cursor', 'webstorm', 'sublime', 'intellij', 'windsurf', 'antigravity'])
 				.optional()
 				.describe(
 					'IDE to launch when starting a loom. Options: vscode (Visual Studio Code), cursor (Cursor AI editor), ' +
 						'webstorm (JetBrains WebStorm), sublime (Sublime Text), intellij (JetBrains IntelliJ IDEA), ' +
-						'windsurf (Windsurf editor).'
+						'windsurf (Windsurf editor), antigravity (Antigravity IDE).'
 				),
 		})
 		.optional()
 		.describe(
 			'IDE configuration for workspace launches. Controls which editor opens when you start a loom. ' +
-				'Supports VSCode, Cursor, WebStorm, Sublime Text, IntelliJ, and Windsurf. ' +
-				'Note: Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf).'
+				'Supports VSCode, Cursor, WebStorm, Sublime Text, IntelliJ, Windsurf, and Antigravity. ' +
+				'Note: Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf, antigravity).'
 		),
 	colors: z
 		.object({

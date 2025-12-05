@@ -10,6 +10,7 @@ const IDE_PRESETS = {
 	sublime: { command: 'subl', name: 'Sublime Text', args: [] },
 	intellij: { command: 'idea', name: 'IntelliJ IDEA', args: ['--nosplash'] },
 	windsurf: { command: 'surf', name: 'Windsurf', args: [] },
+	antigravity: { command: 'agy', name: 'Antigravity', args: [] },
 } as const
 
 type IdePreset = keyof typeof IDE_PRESETS
@@ -54,6 +55,8 @@ function getInstallHint(type: string): string {
 		intellij: 'Install via JetBrains Toolbox > Settings > Shell Scripts > Enable',
 		windsurf:
 			'Install command-line tools during Windsurf installation or create symlink manually',
+		antigravity:
+			'Install command-line tools during Antigravity installation or create symlink manually',
 	}
 	return hints[type] ?? `Ensure the IDE command is available in your PATH`
 }
