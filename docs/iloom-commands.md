@@ -30,7 +30,7 @@ Complete documentation for all iloom CLI commands, options, and flags.
 
 Create an isolated loom workspace with complete AI-assisted context establishment.
 
-**Aliases:** `up`, `create`
+**Aliases:** `new`, `create`, `up`
 
 **Usage:**
 ```bash
@@ -237,6 +237,8 @@ il rebase --dry-run
 ### il cleanup
 
 Remove one or more loom workspaces without merging.
+
+**Aliases:** `remove`, `clean`
 
 **Usage:**
 ```bash

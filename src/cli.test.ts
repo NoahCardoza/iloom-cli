@@ -5,11 +5,14 @@
  * Unlike unit tests which mock dependencies, these integration tests verify the CLI
  * works correctly when executed as a real subprocess.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { spawn } from 'child_process'
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import { validateGhCliForCommand } from './cli.js'
+import { GitHubService } from './lib/GitHubService.js'
+import { SettingsManager } from './lib/SettingsManager.js'
 
 // Helper function to run CLI command and capture output
 function runCLI(args: string[], cwd?: string): Promise<{ stdout: string; stderr: string; code: number | null }> {
@@ -109,7 +112,7 @@ describe('CLI', () => {
         const { stdout, code } = await runCLI(['--help'])
         expect(code).toBe(0)
         // Commander.js shows first alias in format: command|alias
-        expect(stdout).toMatch(/start\|create/)
+        expect(stdout).toMatch(/start\|new/)
         expect(stdout).toMatch(/finish\|dn/)
       })
 
@@ -281,5 +284,201 @@ describe('Settings validation on CLI startup', () => {
     expect(code).toBe(1)
     expect(stderr).toContain('Configuration error')
     expect(stderr).toContain('settings.json')
+  })
+})
+
+// Unit tests for gh CLI validation (not integration tests)
+describe('GitHub CLI validation', () => {
+  describe('validateGhCliForCommand', () => {
+    let mockCommand: { args: string[] }
+    let mockExit: ReturnType<typeof vi.spyOn<typeof process, 'exit'>>
+    let mockIsCliAvailable: ReturnType<typeof vi.spyOn<typeof GitHubService, 'isCliAvailable'>>
+    let mockLoadSettings: ReturnType<typeof vi.spyOn<SettingsManager, 'loadSettings'>>
+
+    beforeEach(() => {
+      // Mock process.exit
+      mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+
+      // Create mock command with args
+      mockCommand = {
+        args: [] as string[],
+      }
+
+      // Mock GitHubService.isCliAvailable
+      mockIsCliAvailable = vi.spyOn(GitHubService, 'isCliAvailable')
+
+      // Mock SettingsManager
+      mockLoadSettings = vi.spyOn(SettingsManager.prototype, 'loadSettings')
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    describe('commands that always require gh CLI', () => {
+      it('should exit with error when gh CLI is missing for feedback command', async () => {
+        mockCommand.args = ['feedback']
+        mockIsCliAvailable.mockReturnValue(false)
+
+        await validateGhCliForCommand(mockCommand)
+
+        expect(mockExit).toHaveBeenCalledWith(1)
+      })
+
+      it('should exit with error when gh CLI is missing for contribute command', async () => {
+        mockCommand.args = ['contribute']
+        mockIsCliAvailable.mockReturnValue(false)
+
+        await validateGhCliForCommand(mockCommand)
+
+        expect(mockExit).toHaveBeenCalledWith(1)
+      })
+
+      it('should not exit when gh CLI is available for feedback command', async () => {
+        mockCommand.args = ['feedback']
+        mockIsCliAvailable.mockReturnValue(true)
+
+        await validateGhCliForCommand(mockCommand)
+
+        expect(mockExit).not.toHaveBeenCalled()
+      })
+    })
+
+    describe('commands that conditionally require gh CLI', () => {
+      it('should exit when gh CLI missing and provider is github', async () => {
+        mockCommand.args = ['start']
+        mockIsCliAvailable.mockReturnValue(false)
+        mockLoadSettings.mockResolvedValue({
+          issueManagement: { provider: 'github' },
+        })
+
+        await validateGhCliForCommand(mockCommand)
+
+        expect(mockExit).toHaveBeenCalledWith(1)
+      })
+
+      it('should exit when gh CLI missing and merge mode is github-pr', async () => {
+        mockCommand.args = ['finish']
+        mockIsCliAvailable.mockReturnValue(false)
+        mockLoadSettings.mockResolvedValue({
+          issueManagement: { provider: 'linear' },
+          mergeBehavior: { mode: 'github-pr' },
+        })
+
+        await validateGhCliForCommand(mockCommand)
+
+        expect(mockExit).toHaveBeenCalledWith(1)
+      })
+
+      it('should not exit when gh CLI missing but provider is linear and merge mode is local', async () => {
+        mockCommand.args = ['start']
+        mockIsCliAvailable.mockReturnValue(false)
+        mockLoadSettings.mockResolvedValue({
+          issueManagement: { provider: 'linear' },
+          mergeBehavior: { mode: 'local' },
+        })
+
+        await validateGhCliForCommand(mockCommand)
+
+        expect(mockExit).not.toHaveBeenCalled()
+      })
+
+      it('should not exit when gh CLI is available regardless of provider', async () => {
+        mockCommand.args = ['enhance']
+        mockIsCliAvailable.mockReturnValue(true)
+        mockLoadSettings.mockResolvedValue({
+          issueManagement: { provider: 'github' },
+        })
+
+        await validateGhCliForCommand(mockCommand)
+
+        expect(mockExit).not.toHaveBeenCalled()
+      })
+
+      it('should handle missing settings gracefully and assume gh CLI needed', async () => {
+        mockCommand.args = ['start']
+        mockIsCliAvailable.mockReturnValue(false)
+        mockLoadSettings.mockRejectedValue(new Error('Settings file not found'))
+
+        await validateGhCliForCommand(mockCommand)
+
+        expect(mockExit).toHaveBeenCalledWith(1)
+      })
+    })
+
+    describe('commands that only warn', () => {
+      it('should not exit for init command even when gh CLI is missing', async () => {
+        mockCommand.args = ['init']
+        mockIsCliAvailable.mockReturnValue(false)
+        mockLoadSettings.mockResolvedValue({
+          issueManagement: { provider: 'github' },
+        })
+
+        await validateGhCliForCommand(mockCommand)
+
+        expect(mockExit).not.toHaveBeenCalled()
+      })
+
+      it('should not exit for list command even when gh CLI is missing', async () => {
+        mockCommand.args = ['list']
+        mockIsCliAvailable.mockReturnValue(false)
+        mockLoadSettings.mockResolvedValue({
+          issueManagement: { provider: 'github' },
+        })
+
+        await validateGhCliForCommand(mockCommand)
+
+        expect(mockExit).not.toHaveBeenCalled()
+      })
+
+      it('should not exit for open command even when gh CLI is missing', async () => {
+        mockCommand.args = ['open']
+        mockIsCliAvailable.mockReturnValue(false)
+        mockLoadSettings.mockResolvedValue({
+          issueManagement: { provider: 'github' },
+        })
+
+        await validateGhCliForCommand(mockCommand)
+
+        expect(mockExit).not.toHaveBeenCalled()
+      })
+    })
+
+    describe('commands that bypass gh CLI check', () => {
+      it('should not check gh CLI for help command', async () => {
+        mockCommand.args = ['help']
+        mockIsCliAvailable.mockReturnValue(false)
+
+        await validateGhCliForCommand(mockCommand)
+
+        expect(mockExit).not.toHaveBeenCalled()
+        expect(mockIsCliAvailable).not.toHaveBeenCalled()
+      })
+
+      it('should not check gh CLI for test commands', async () => {
+        mockCommand.args = ['test-github']
+        mockIsCliAvailable.mockReturnValue(false)
+
+        await validateGhCliForCommand(mockCommand)
+
+        expect(mockExit).not.toHaveBeenCalled()
+        expect(mockIsCliAvailable).not.toHaveBeenCalled()
+      })
+    })
+
+    describe('default provider handling', () => {
+      it('should use github as default provider when not specified', async () => {
+        mockCommand.args = ['start']
+        mockIsCliAvailable.mockReturnValue(false)
+        mockLoadSettings.mockResolvedValue({
+          // No issueManagement.provider specified
+        })
+
+        await validateGhCliForCommand(mockCommand)
+
+        // Should exit because default provider is 'github' and gh CLI is missing
+        expect(mockExit).toHaveBeenCalledWith(1)
+      })
+    })
   })
 })

@@ -126,8 +126,8 @@ export class StartCommand {
 			let repo: string | undefined
 
 			// Only get repo if we have multiple remotes (prehook already validated config)
-			const multipleRemotes = await hasMultipleRemotes()
-			if (multipleRemotes) {
+			if (this.issueTracker.providerName === 'github' && (await hasMultipleRemotes())) {
+				// Only relevant for GitHub - Linear doesn't use repo info
 				repo = await getConfiguredRepoFromSettings(initialSettings)
 				logger.info(`Using GitHub repository: ${repo}`)
 			}

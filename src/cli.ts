@@ -6,13 +6,16 @@ import { SettingsManager } from './lib/SettingsManager.js'
 import { IssueTrackerFactory } from './lib/IssueTrackerFactory.js'
 import { IssueEnhancementService } from './lib/IssueEnhancementService.js'
 import { AgentManager } from './lib/AgentManager.js'
+import { GitHubService } from './lib/GitHubService.js'
 import { StartCommand } from './commands/start.js'
 import { AddIssueCommand } from './commands/add-issue.js'
 import { EnhanceCommand } from './commands/enhance.js'
 import { FinishCommand } from './commands/finish.js'
 import type { StartOptions, CleanupOptions, FinishOptions } from './types/index.js'
 import { getPackageInfo } from './utils/package-info.js'
+import { hasMultipleRemotes } from './utils/remote.js'
 import { fileURLToPath } from 'url'
+import { realpathSync } from 'fs'
 
 // Get package.json for version
 const __filename = fileURLToPath(import.meta.url)
@@ -74,6 +77,9 @@ program
 
     // Validate settings for all commands
     await validateSettingsForCommand(thisCommand)
+
+    // Validate GitHub CLI availability for commands that need it
+    await validateGhCliForCommand(thisCommand)
   })
 
 // Helper function to validate settings at startup
@@ -97,7 +103,6 @@ async function validateSettingsForCommand(command: Command): Promise<void> {
     const settings = await settingsManager.loadSettings()
 
     // Check for multi-remote configuration requirement
-    const { hasMultipleRemotes } = await import('./utils/remote.js')
     const multipleRemotes = await hasMultipleRemotes()
 
     if (multipleRemotes && !settings.issueManagement?.github?.remote) {
@@ -110,6 +115,89 @@ async function validateSettingsForCommand(command: Command): Promise<void> {
     logger.error(`Configuration error: ${error instanceof Error ? error.message : 'Unknown error'}`)
     logger.info('Please fix your .iloom/settings.json file and try again.')
     process.exit(1)
+  }
+}
+
+// Helper function to validate GitHub CLI availability
+// Exported for testing
+export async function validateGhCliForCommand(command: Command): Promise<void> {
+  const commandName = command.args[0] ?? ''
+
+  // Commands that ALWAYS require gh CLI regardless of configuration
+  const alwaysRequireGh = ['feedback', 'contribute']
+
+  // Commands that require gh CLI when GitHub provider or github-pr merge mode
+  const conditionallyRequireGh = ['start', 'finish', 'enhance', 'add-issue', 'ignite', 'spin']
+
+  // Commands that only warn if gh CLI is missing (secondary/utility commands)
+  const warnOnly = ['init', 'list', 'rebase', 'cleanup', 'run', 'update', 'open']
+
+  // Test commands and help bypass this check entirely
+  if (commandName.startsWith('test-') || commandName === 'help') {
+    return
+  }
+
+  // Check if gh CLI is available
+  const ghAvailable = GitHubService.isCliAvailable()
+
+  // Determine if gh CLI is needed based on configuration
+  let needsGhCli = alwaysRequireGh.includes(commandName)
+
+  // For conditional commands, check provider and merge mode
+  if (!needsGhCli && conditionallyRequireGh.includes(commandName)) {
+    try {
+      const settingsManager = new SettingsManager()
+      const settings = await settingsManager.loadSettings()
+
+      const provider = IssueTrackerFactory.getProviderName(settings)
+      const mergeBehaviorMode = settings.mergeBehavior?.mode
+
+      needsGhCli = provider === 'github' || mergeBehaviorMode === 'github-pr'
+    } catch {
+      // If we can't load settings, assume we might need gh CLI
+      needsGhCli = true
+    }
+  }
+
+  // Handle missing gh CLI
+  if (!ghAvailable) {
+    if (needsGhCli) {
+      // ERROR: gh CLI is required for this command
+      const errorMessage = alwaysRequireGh.includes(commandName)
+        ? `The "${commandName}" command requires GitHub CLI (gh) to be installed.`
+        : `GitHub CLI (gh) is required when using GitHub as the issue tracker or "github-pr" merge mode.`
+
+      logger.error(errorMessage)
+      logger.info('')
+      logger.info('To install GitHub CLI:')
+      logger.info('  • macOS: brew install gh')
+      logger.info('  • Windows: winget install GitHub.cli')
+      logger.info('  • Linux: https://github.com/cli/cli#installation')
+      logger.info('')
+      logger.info('After installation, authenticate with: gh auth login')
+
+      process.exit(1)
+    } else if (warnOnly.includes(commandName)) {
+      // WARN: gh CLI might be needed for certain configurations
+      try {
+        const settingsManager = new SettingsManager()
+        const settings = await settingsManager.loadSettings()
+
+        const provider = IssueTrackerFactory.getProviderName(settings)
+        const mergeBehaviorMode = settings.mergeBehavior?.mode
+
+        if (provider === 'github' || mergeBehaviorMode === 'github-pr') {
+          logger.warn('GitHub CLI (gh) is not installed.')
+          logger.warn(
+            'Some features may not work correctly with your current configuration (GitHub provider or github-pr merge mode).'
+          )
+          logger.info('To install: brew install gh (macOS) or see https://github.com/cli/cli#installation')
+          logger.info('')
+        }
+      } catch {
+        // Silently skip warning if we can't load settings
+      }
+    }
   }
 }
 
@@ -177,6 +265,7 @@ shellCompletion.init()
 
 program
   .command('start')
+  .alias('new')
   .alias('create')
   .alias('up')
   .description('Create isolated workspace for an issue/PR')
@@ -404,6 +493,8 @@ program
 
 program
   .command('cleanup')
+  .alias('remove')
+  .alias('clean')
   .description('Remove workspaces')
   .argument('[identifier]', 'Branch name or issue number to cleanup (auto-detected)')
   .option('-l, --list', 'List all worktrees')
@@ -975,12 +1066,26 @@ program
     process.exit(0)
   })
 
-// Parse CLI arguments
-try {
-  await program.parseAsync()
-} catch (error) {
-  if (error instanceof Error) {
-    logger.error(`Error: ${error.message}`)
-    process.exit(1)
+// Parse CLI arguments (only when run directly, not when imported for testing)
+// Resolve symlinks to handle npm link and global installs
+const isRunDirectly = process.argv[1] && ((): boolean => {
+  try {
+    const scriptPath = realpathSync(process.argv[1])
+    const modulePath = fileURLToPath(import.meta.url)
+    return scriptPath === modulePath
+  } catch {
+    // If we can't resolve the path, assume we should run
+    return true
+  }
+})()
+
+if (isRunDirectly) {
+  try {
+    await program.parseAsync()
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error(`Error: ${error.message}`)
+      process.exit(1)
+    }
   }
 }

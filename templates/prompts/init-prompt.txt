@@ -340,6 +340,11 @@ Since this repository has multiple git remotes, GitHub Issues is suggested as th
    - Validation: Must be one of: github, linear
    - Store answer as: `issueManagement.provider`
 
+**Note on Provider + Merge Mode Combinations:**
+- GitHub Issues + local merge or github-pr: Requires authorized GitHub CLI (`gh`)
+- Linear Issues + local merge: Requires Linear API token only
+- Linear Issues + github-pr merge: Requires BOTH Linear API token AND authorized GitHub CLI (`gh`)
+
 **Step 2: Provider-Specific Configuration**
 
 Based on the answer to Step 1, ask the appropriate follow-up questions:
@@ -421,6 +426,7 @@ REMOTES_INFO
    - Validation: Must be one of: local, github-pr
    - Store answer as: `mergeBehavior.mode`
    - Context: Fork workflows (with upstream remote) should typically use "github-pr" mode
+   - **IMPORTANT**: The "github-pr" mode requires GitHub CLI (`gh`) to be installed and authenticated, regardless of your issue tracker provider. If you use Linear for issue tracking but want to create GitHub PRs, ensure `gh` is installed.
 
 **Implementation Details:**
 - Ask Step 1 first to determine provider

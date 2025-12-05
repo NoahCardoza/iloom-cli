@@ -190,8 +190,12 @@ export class FinishCommand {
 
 			let repo: string | undefined
 
-			const multipleRemotes = await hasMultipleRemotes()
-			if (multipleRemotes) {
+			// We need repo info if:
+			// 1. Merge mode is github-pr (for creating PRs on GitHub, even with Linear issues)
+			// 2. Provider is GitHub (for GitHub issue operations)
+			const needsRepo =
+				settings.mergeBehavior?.mode === 'github-pr' || this.issueTracker.providerName === 'github'
+			if (needsRepo && (await hasMultipleRemotes())) {
 				repo = await getConfiguredRepoFromSettings(settings)
 				logger.info(`Using GitHub repository: ${repo}`)
 			}
@@ -613,6 +617,15 @@ export class FinishCommand {
 		const mergeBehavior = settings.mergeBehavior ?? { mode: 'local' }
 
 		if (mergeBehavior.mode === 'github-pr') {
+			// Validate that issue tracker supports pull requests
+			if (!this.issueTracker.supportsPullRequests) {
+				throw new Error(
+					`The 'github-pr' merge mode requires a GitHub-compatible issue tracker. ` +
+					`Your current provider (${this.issueTracker.providerName}) does not support pull requests. ` +
+					`Either change mergeBehavior.mode to 'local' in your settings, or use GitHub as your issue tracker.`
+				)
+			}
+
 			// Execute github-pr workflow instead of local merge
 			await this.executeGitHubPRWorkflow(parsed, options, worktree, settings)
 			return

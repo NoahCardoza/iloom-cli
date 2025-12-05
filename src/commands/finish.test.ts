@@ -18,6 +18,7 @@ import { GitHubError, GitHubErrorCode } from '../types/github.js'
 import { findMainWorktreePathWithSettings, pushBranchToRemote } from '../utils/git.js'
 import { logger } from '../utils/logger.js'
 import { installDependencies } from '../utils/package-manager.js'
+import { SettingsManager } from '../lib/SettingsManager.js'
 
 // Mock dependencies
 vi.mock('../lib/GitHubService.js')
@@ -3174,6 +3175,102 @@ describe('FinishCommand', () => {
 			it('should skip build when --skip-build flag is provided', async () => {
 				// This test will be enabled after BuildRunner integration
 				expect(true).toBe(true)
+			})
+		})
+
+		describe('Provider-aware guards for Linear', () => {
+			const mockIssue: Issue = {
+				number: 123,
+				title: 'Test Issue',
+				body: 'Test description',
+				state: 'open',
+				url: 'https://linear.app/team/ENG-123',
+			}
+
+			const mockWorktree: GitWorktree = {
+				path: '/test/worktree',
+				branch: 'feat/issue-123',
+				commit: 'abc123',
+				isPR: false,
+				issueNumber: 123,
+			}
+
+			beforeEach(() => {
+				// Mock Linear service (doesn't support PRs)
+				mockGitHubService.supportsPullRequests = false
+				mockGitHubService.providerName = 'linear'
+
+				// Mock successful issue fetch
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+
+				// Mock successful worktree finding
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+				// Mock IdentifierParser to detect as issue
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					originalInput: '123',
+				})
+			})
+
+			it('should throw error when Linear provider is used with github-pr merge mode', async () => {
+				// Mock settings with github-pr mode
+				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+					mainBranch: 'main',
+					worktreeDir: '/test/worktrees',
+					mergeBehavior: {
+						mode: 'github-pr',
+					},
+				})
+
+				await expect(
+					command.execute({
+						identifier: '123',
+						options: {},
+					})
+				).rejects.toThrow(/github-pr.*merge mode requires.*GitHub-compatible issue tracker/)
+
+				// Should not enter PR workflow
+				expect(mockMergeManager.rebaseOnMain).not.toHaveBeenCalled()
+				expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
+			})
+
+			it('should succeed with Linear provider and local merge mode', async () => {
+				// Mock settings with local mode (default)
+				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+					mainBranch: 'main',
+					worktreeDir: '/test/worktrees',
+					mergeBehavior: {
+						mode: 'local',
+					},
+				})
+
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				// Should complete local merge workflow successfully
+				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalled()
+				expect(mockMergeManager.performFastForwardMerge).toHaveBeenCalled()
+			})
+
+			it('should succeed with Linear provider when mergeBehavior is undefined (defaults to local)', async () => {
+				// Mock settings without mergeBehavior (defaults to local)
+				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+					mainBranch: 'main',
+					worktreeDir: '/test/worktrees',
+				})
+
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				// Should complete local merge workflow successfully
+				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalled()
+				expect(mockMergeManager.performFastForwardMerge).toHaveBeenCalled()
 			})
 		})
 	})

@@ -41,8 +41,8 @@ export class AddIssueCommand {
 
 		let repo: string | undefined
 
-		const multipleRemotes = await hasMultipleRemotes()
-		if (multipleRemotes) {
+		if (this.enhancementService.issueTracker.providerName === 'github' && await hasMultipleRemotes()) {
+			// Only relevant for GitHub - Linear doesn't use repo info
 			repo = await getConfiguredRepoFromSettings(settings)
 			logger.info(`Using GitHub repository: ${repo}`)
 		}

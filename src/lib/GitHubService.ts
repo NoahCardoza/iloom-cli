@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process'
 import type { Issue, PullRequest, IssueTrackerInputDetection } from '../types/index.js'
 import type {
 	GitHubIssue,
@@ -33,6 +34,19 @@ export class GitHubService implements IssueTracker {
 	}) {
 		// Set up prompter (use provided or default to promptConfirmation)
 		this.prompter = options?.prompter ?? promptConfirmation
+	}
+
+	/**
+	 * Check if GitHub CLI (gh) is available on the system
+	 * @returns true if gh CLI is installed and accessible, false otherwise
+	 */
+	public static isCliAvailable(): boolean {
+		try {
+			execSync('gh --version', { stdio: 'ignore' })
+			return true
+		} catch {
+			return false
+		}
 	}
 
 	// Input detection - IssueTracker interface implementation

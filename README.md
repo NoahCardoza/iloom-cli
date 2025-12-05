@@ -134,9 +134,9 @@ Command Reference
 
 | **Command** | **Alias** |  **Description** |
 | ------ | ----- | -----|
-| `il start` | `up` | Create loom, run analysis agents, and launch IDE. |
+| `il start` | `new` | Create loom, run analysis agents, and launch IDE. |
 | `il finish` | `dn` | Validate tests/lint, commit, handle conflicts, and merge/PR. |
-| `il cleanup` |  | Safely remove a loom and its database branch without merging. |
+| `il cleanup` | `remove` | Safely remove a loom and its database branch without merging. |
 | `il list` |  | Show active looms and paths. |
 | `il spin` |  | Launch Claude inside the current loom with context auto-detected. |
 | `il open` | `run` | Open loom in browser (web) or run your CLI tool. |

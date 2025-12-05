@@ -7,15 +7,22 @@ import { waitForKeypress } from '../utils/prompt.js'
 import { logger } from '../utils/logger.js'
 
 /**
- * Service for enhancing and creating GitHub issues with AI assistance.
+ * Service for enhancing and creating issues with AI assistance.
  * Extracts reusable issue enhancement logic from StartCommand.
  */
 export class IssueEnhancementService {
 	constructor(
-		private gitHubService: IssueTracker,
+		private issueTrackerService: IssueTracker,
 		private agentManager: AgentManager,
 		private settingsManager: SettingsManager
 	) {}
+
+	/**
+	 * Expose issue tracker for provider checks
+	 */
+	public get issueTracker(): IssueTracker {
+		return this.issueTrackerService
+	}
 
 	/**
 	 * Validates that a description meets minimum requirements.
@@ -95,7 +102,7 @@ Your response should be the raw markdown that will become the GitHub issue body.
 	): Promise<{ number: string | number; url: string }> {
 		logger.info('Creating GitHub issue from description...')
 
-		const result = await this.gitHubService.createIssue(
+		const result = await this.issueTrackerService.createIssue(
 			originalDescription,  // Use original description as title
 			enhancedDescription,  // Use enhanced description as body
 			repository,
@@ -122,7 +129,7 @@ Your response should be the raw markdown that will become the GitHub issue body.
 		}
 
 		// Get issue URL
-		const issueUrl = await this.gitHubService.getIssueUrl(issueNumber, repository)
+		const issueUrl = await this.issueTrackerService.getIssueUrl(issueNumber, repository)
 
 		// Display message and wait for first keypress
 		const message = `Created issue #${issueNumber}.

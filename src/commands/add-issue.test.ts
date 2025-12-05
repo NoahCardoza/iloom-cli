@@ -41,11 +41,16 @@ describe('AddIssueCommand', () => {
 	let mockEnhancementService: IssueEnhancementService
 
 	beforeEach(() => {
+		const mockIssueTracker = { providerName: 'github' } as GitHubService
 		mockEnhancementService = new IssueEnhancementService(
-			{} as GitHubService,
+			mockIssueTracker,
 			{} as AgentManager,
 			{} as SettingsManager
 		)
+		// Override the issueTracker getter to ensure it returns our mock
+		Object.defineProperty(mockEnhancementService, 'issueTracker', {
+			get: () => mockIssueTracker,
+		})
 		command = new AddIssueCommand(mockEnhancementService)
 	})
 
