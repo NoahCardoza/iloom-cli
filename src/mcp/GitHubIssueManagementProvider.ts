@@ -48,6 +48,18 @@ function normalizeAuthor(author: GitHubAuthor | null | undefined): FlexibleAutho
 }
 
 /**
+ * Extract numeric comment ID from GitHub comment URL
+ * URL format: https://github.com/owner/repo/issues/123#issuecomment-3615239386
+ */
+export function extractNumericIdFromUrl(url: string): string {
+	const match = url.match(/#issuecomment-(\d+)$/)
+	if (!match?.[1]) {
+		throw new Error(`Cannot extract comment ID from URL: ${url}`)
+	}
+	return match[1]
+}
+
+/**
  * GitHub-specific implementation of IssueManagementProvider
  */
 export class GitHubIssueManagementProvider implements IssueManagementProvider {
@@ -88,6 +100,7 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 				body: string
 				createdAt: string
 				updatedAt?: string
+				url: string
 			}>
 		}
 
@@ -127,9 +140,11 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 		}
 
 		// Handle comments with normalized authors
+		// Use extractNumericIdFromUrl to get REST API-compatible numeric IDs from comment URLs
+		// (GitHub CLI returns GraphQL node IDs in the id field, but REST API expects numeric IDs)
 		if (raw.comments !== undefined) {
 			result.comments = raw.comments.map(comment => ({
-				id: String(comment.id),
+				id: extractNumericIdFromUrl(comment.url),
 				body: comment.body,
 				createdAt: comment.createdAt,
 				author: normalizeAuthor(comment.author),
