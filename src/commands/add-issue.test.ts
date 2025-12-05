@@ -276,5 +276,104 @@ describe('AddIssueCommand', () => {
 				expect(calls).toEqual(['validate', 'enhance', 'create', 'review'])
 			})
 		})
+
+		describe('--body flag behavior', () => {
+			const preFormattedBody = '## Requirements\n- Item 1\n- Item 2\n\n## Acceptance Criteria\n- Test passes'
+
+			beforeEach(() => {
+				vi.mocked(mockEnhancementService.validateDescription).mockReturnValue(true)
+				vi.mocked(mockEnhancementService.createEnhancedIssue).mockResolvedValue({
+					number: 123,
+					url: 'https://github.com/owner/repo/issues/123',
+				})
+				vi.mocked(mockEnhancementService.waitForReviewAndOpen).mockResolvedValue(undefined)
+			})
+
+			it('should skip enhancement when body is provided', async () => {
+				vi.mocked(mockEnhancementService.enhanceDescription).mockResolvedValue('Enhanced description')
+
+				await command.execute({
+					description: validDescription,
+					options: { body: preFormattedBody }
+				})
+
+				expect(mockEnhancementService.enhanceDescription).not.toHaveBeenCalled()
+			})
+
+			it('should use provided body as issue body directly', async () => {
+				await command.execute({
+					description: validDescription,
+					options: { body: preFormattedBody }
+				})
+
+				expect(mockEnhancementService.createEnhancedIssue).toHaveBeenCalledWith(
+					validDescription,
+					preFormattedBody,
+					undefined
+				)
+			})
+
+			it('should still validate description when body is provided', async () => {
+				await command.execute({
+					description: validDescription,
+					options: { body: preFormattedBody }
+				})
+
+				expect(mockEnhancementService.validateDescription).toHaveBeenCalledWith(validDescription)
+			})
+
+			it('should call createEnhancedIssue with description as title and body as body', async () => {
+				await command.execute({
+					description: validDescription,
+					options: { body: preFormattedBody }
+				})
+
+				expect(mockEnhancementService.createEnhancedIssue).toHaveBeenCalledWith(
+					validDescription,
+					preFormattedBody,
+					undefined
+				)
+			})
+
+			it('should still call waitForReviewAndOpen when body is provided', async () => {
+				await command.execute({
+					description: validDescription,
+					options: { body: preFormattedBody }
+				})
+
+				expect(mockEnhancementService.waitForReviewAndOpen).toHaveBeenCalledWith(123)
+			})
+
+			it('should execute workflow without enhance step when body is provided', async () => {
+				const calls: string[] = []
+
+				vi.mocked(mockEnhancementService.validateDescription).mockImplementation(() => {
+					calls.push('validate')
+					return true
+				})
+
+				vi.mocked(mockEnhancementService.enhanceDescription).mockImplementation(async () => {
+					calls.push('enhance')
+					return 'Enhanced description'
+				})
+
+				vi.mocked(mockEnhancementService.createEnhancedIssue).mockImplementation(async () => {
+					calls.push('create')
+					return { number: 123, url: 'https://github.com/owner/repo/issues/123' }
+				})
+
+				vi.mocked(mockEnhancementService.waitForReviewAndOpen).mockImplementation(async () => {
+					calls.push('review')
+				})
+
+				await command.execute({
+					description: validDescription,
+					options: { body: preFormattedBody }
+				})
+
+				// Note: 'enhance' should NOT be in the calls
+				expect(calls).toEqual(['validate', 'create', 'review'])
+			})
+		})
 	})
 })

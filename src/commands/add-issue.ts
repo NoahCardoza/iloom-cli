@@ -28,7 +28,7 @@ export class AddIssueCommand {
 	/**
 	 * Execute the add-issue command workflow:
 	 * 1. Validate description format
-	 * 2. Enhance description with Claude Code
+	 * 2. Skip enhancement if body provided, otherwise enhance description with Claude Code
 	 * 3. Create GitHub issue
 	 * 4. Wait for keypress and open browser for review
 	 * 5. Return issue number
@@ -52,13 +52,13 @@ export class AddIssueCommand {
 			throw new Error('Description is required and must be more than 30 characters with at least 3 words')
 		}
 
-		// Step 2: Enhance description using Claude Code
-		const enhancedDescription = await this.enhancementService.enhanceDescription(description)
+		// Step 2: Skip enhancement if body provided, otherwise enhance description
+		const issueBody = input.options.body ?? await this.enhancementService.enhanceDescription(description)
 
-		// Step 3: Create GitHub issue with original as title, enhanced as body
+		// Step 3: Create GitHub issue with original as title, body as body
 		const result = await this.enhancementService.createEnhancedIssue(
 			description,
-			enhancedDescription,
+			issueBody,
 			repo
 		)
 

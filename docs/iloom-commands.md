@@ -433,16 +433,19 @@ Create and AI-enhance a new issue without starting a loom.
 
 **Usage:**
 ```bash
-il add-issue "<description>"
+il add-issue [options] "<description>"
 ```
 
 **Arguments:**
 - `<description>` - Brief or detailed issue description
 
+**Options:**
+- `--body <text>` - Pre-formatted body text (skips AI enhancement)
+
 **Workflow:**
 
 1. Creates issue in configured tracker (GitHub or Linear)
-2. Runs enhancement agent to expand description
+2. Runs enhancement agent to expand description (unless `--body` provided)
 3. Posts enhancement as issue comment
 4. Opens issue in browser
 
@@ -454,12 +457,21 @@ il add-issue "Add dark mode toggle to settings"
 
 # Create issue with more detail
 il add-issue "Users report authentication fails after password reset. Need to investigate token refresh flow."
+
+# Create issue with pre-formatted body (skips AI enhancement)
+il add-issue "Add dark mode toggle" --body "## Requirements
+- Toggle in settings page
+- Persist preference in localStorage
+
+## Acceptance Criteria
+- User can switch between light and dark mode"
 ```
 
 **Notes:**
 - Does NOT create a loom workspace
 - Useful for backlog grooming and planning
 - Enhancement makes issues more actionable for future work
+- Use `--body` when you already have detailed requirements written
 - Use `il start <issue-number>` later to begin work
 
 ---

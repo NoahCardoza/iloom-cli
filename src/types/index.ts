@@ -154,10 +154,9 @@ export interface StartOptions {
   body?: string
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface AddIssueOptions {
-  // Reserved for future flags like --no-enhance, --no-browser
-  // Currently empty - command accepts no options
+  // Optional body text for issue (skips AI enhancement)
+  body?: string
 }
 
 export interface FeedbackOptions {

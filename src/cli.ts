@@ -321,7 +321,8 @@ program
   .alias('a')
   .description('Create and enhance GitHub issue without starting workspace')
   .argument('<description>', 'Natural language description of the issue (>50 chars, >2 spaces)')
-  .action(async (description: string) => {
+  .option('--body <text>', 'Body text for issue (skips AI enhancement)')
+  .action(async (description: string, options: { body?: string }) => {
     try {
       const settingsManager = new SettingsManager()
       const settings = await settingsManager.loadSettings()
@@ -330,7 +331,7 @@ program
       const command = new AddIssueCommand(enhancementService, settingsManager)
       const issueNumber = await command.execute({
         description,
-        options: {}
+        options: options.body ? { body: options.body } : {}
       })
       logger.success(`Issue #${issueNumber} created successfully`)
       process.exit(0)
