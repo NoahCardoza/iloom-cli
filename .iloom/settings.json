@@ -14,5 +14,9 @@
     "iloom-issue-planner": { "model": "opus" },
     "iloom-issue-analyze-and-plan": { "model": "opus" },
     "iloom-issue-implementer": { "model": "opus" }
+  },
+  "colors": {
+    "terminal": true,
+    "vscode": true
   }
 }
