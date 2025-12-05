@@ -7,6 +7,7 @@ import { IssueTrackerFactory } from './lib/IssueTrackerFactory.js'
 import { IssueEnhancementService } from './lib/IssueEnhancementService.js'
 import { AgentManager } from './lib/AgentManager.js'
 import { GitHubService } from './lib/GitHubService.js'
+import { MetadataManager, type LoomMetadata } from './lib/MetadataManager.js'
 import { StartCommand } from './commands/start.js'
 import { AddIssueCommand } from './commands/add-issue.js'
 import { EnhanceCommand } from './commands/enhance.js'
@@ -528,11 +529,19 @@ program
   .action(async (options: { json?: boolean }) => {
     try {
       const manager = new GitWorktreeManager()
+      const metadataManager = new MetadataManager()
       const worktrees = await manager.listWorktrees({ porcelain: true })
+
+      // Read metadata for all worktrees (spec section 3.2)
+      const metadata = new Map<string, LoomMetadata | null>()
+      for (const worktree of worktrees) {
+        const loomMetadata = await metadataManager.readMetadata(worktree.path)
+        metadata.set(worktree.path, loomMetadata)
+      }
 
       if (options.json) {
         const mainWorktreePath = await findMainWorktreePathWithSettings()
-        console.log(JSON.stringify(formatLoomsForJson(worktrees, mainWorktreePath), null, 2))
+        console.log(JSON.stringify(formatLoomsForJson(worktrees, mainWorktreePath, metadata), null, 2))
         return
       }
 
@@ -544,7 +553,11 @@ program
       logger.info('Active workspaces:')
       for (const worktree of worktrees) {
         const formatted = manager.formatWorktree(worktree)
+        const loomMetadata = metadata.get(worktree.path)
         logger.info(`  ${formatted.title}`)
+        if (loomMetadata?.description) {
+          logger.info(`    Description: ${loomMetadata.description}`)
+        }
         logger.info(`    Path: ${formatted.path}`)
         logger.info(`    Commit: ${formatted.commit}`)
       }

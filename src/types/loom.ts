@@ -9,6 +9,7 @@ export interface Loom {
   identifier: string | number
   port: number
   databaseBranch?: string
+  description?: string
   createdAt: Date
   lastAccessed: Date
   issueData?: {

@@ -670,6 +670,9 @@ describe('formatLoomsForJson', () => {
         issue_numbers: [],
         pr_numbers: [],
         isMainWorktree: true,
+        description: null,
+        created_at: null,
+        issueTracker: null,
       })
 
       // Issue worktree
@@ -681,6 +684,9 @@ describe('formatLoomsForJson', () => {
         issue_numbers: ['269'],
         pr_numbers: [],
         isMainWorktree: false,
+        description: null,
+        created_at: null,
+        issueTracker: null,
       })
 
       // PR worktree
@@ -692,6 +698,9 @@ describe('formatLoomsForJson', () => {
         issue_numbers: [],
         pr_numbers: ['255'],
         isMainWorktree: false,
+        description: null,
+        created_at: null,
+        issueTracker: null,
       })
 
       // Linear-style issue
@@ -703,6 +712,9 @@ describe('formatLoomsForJson', () => {
         issue_numbers: ['ILOOM-42'],
         pr_numbers: [],
         isMainWorktree: false,
+        description: null,
+        created_at: null,
+        issueTracker: null,
       })
     })
 

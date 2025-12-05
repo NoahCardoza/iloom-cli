@@ -9,6 +9,7 @@ import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { VSCodeIntegration } from './VSCodeIntegration.js'
 import { SettingsManager } from './SettingsManager.js'
+import { MetadataManager, type WriteMetadataInput } from './MetadataManager.js'
 import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit } from '../utils/git.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName } from '../utils/color.js'
@@ -24,6 +25,8 @@ import { logger } from '../utils/logger.js'
  * Bridges the gap between input validation and workspace operations
  */
 export class LoomManager {
+  private metadataManager: MetadataManager
+
   constructor(
     private gitWorktree: GitWorktreeManager,
     private issueTracker: IssueTracker,
@@ -34,7 +37,9 @@ export class LoomManager {
     private cliIsolation: CLIIsolationManager,
     private settings: SettingsManager,
     private database?: DatabaseManager
-  ) {}
+  ) {
+    this.metadataManager = new MetadataManager()
+  }
 
   /**
    * Get database branch name for a loom by reading its .env file
@@ -246,7 +251,26 @@ export class LoomManager {
       })
     }
 
-    // 9. Create and return loom metadata
+    // 12. Write loom metadata (spec section 3.1)
+    // Derive description from issue/PR title or branch name
+    const description = issueData?.title ?? branchName
+
+    // Build issue/pr numbers arrays based on type
+    const issue_numbers: string[] = input.type === 'issue' ? [String(input.identifier)] : []
+    const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []
+
+    const metadataInput: WriteMetadataInput = {
+      description,
+      branchName,
+      worktreePath,
+      issueType: input.type,
+      issue_numbers,
+      pr_numbers,
+      issueTracker: this.issueTracker.providerName,
+    }
+    await this.metadataManager.writeMetadata(worktreePath, metadataInput)
+
+    // 13. Create and return loom metadata
     const loom: Loom = {
       id: this.generateLoomId(input),
       path: worktreePath,
@@ -254,6 +278,7 @@ export class LoomManager {
       type: input.type,
       identifier: input.identifier,
       port,
+      description,
       createdAt: new Date(),
       lastAccessed: new Date(),
       ...(databaseBranch !== undefined && { databaseBranch }),
@@ -751,6 +776,7 @@ export class LoomManager {
   /**
    * Map worktrees to loom objects
    * This is a simplified conversion - in production we'd store loom metadata
+   * Now reads metadata from MetadataManager (spec section 3.2)
    */
   private async mapWorktreesToLooms(worktrees: GitWorktree[]): Promise<Loom[]> {
     return await Promise.all(worktrees.map(async (wt) => {
@@ -766,6 +792,9 @@ export class LoomManager {
         identifier = parseInt(wt.branch.replace('pr-', ''), 10)
       }
 
+      // Read metadata from persistent storage
+      const loomMetadata = await this.metadataManager.readMetadata(wt.path)
+
       return {
         id: `${type}-${identifier}`,
         path: wt.path,
@@ -773,6 +802,7 @@ export class LoomManager {
         type,
         identifier,
         port: await this.calculatePort({ type, identifier, originalInput: '' }),
+        ...(loomMetadata?.description && { description: loomMetadata.description }),
         createdAt: new Date(),
         lastAccessed: new Date(),
       }
@@ -893,7 +923,28 @@ export class LoomManager {
       })
     }
 
-    // 8. Return loom metadata
+    // 8. Write loom metadata if missing (spec section 3.1)
+    // For reused looms, only write if metadata file doesn't exist
+    const existingMetadata = await this.metadataManager.readMetadata(worktreePath)
+    const description = existingMetadata?.description ?? issueData?.title ?? branchName
+    if (!existingMetadata) {
+      // Build issue/pr numbers arrays based on type
+      const issue_numbers: string[] = input.type === 'issue' ? [String(input.identifier)] : []
+      const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []
+
+      const metadataInput: WriteMetadataInput = {
+        description,
+        branchName,
+        worktreePath,
+        issueType: input.type,
+        issue_numbers,
+        pr_numbers,
+        issueTracker: this.issueTracker.providerName,
+      }
+      await this.metadataManager.writeMetadata(worktreePath, metadataInput)
+    }
+
+    // 9. Return loom metadata
     const loom: Loom = {
       id: this.generateLoomId(input),
       path: worktreePath,
@@ -901,6 +952,7 @@ export class LoomManager {
       type: input.type,
       identifier: input.identifier,
       port,
+      description,
       createdAt: new Date(), // We don't have actual creation date, use now
       lastAccessed: new Date(),
       ...(databaseBranch !== undefined && { databaseBranch }),

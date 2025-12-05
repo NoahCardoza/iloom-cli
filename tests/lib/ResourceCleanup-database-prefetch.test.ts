@@ -17,6 +17,16 @@ vi.mock('../../src/utils/logger.js', () => ({
 	},
 }))
 
+// Mock MetadataManager to prevent real file creation during tests
+vi.mock('../../src/lib/MetadataManager.js', () => ({
+	MetadataManager: vi.fn(() => ({
+		writeMetadata: vi.fn().mockResolvedValue(undefined),
+		readMetadata: vi.fn().mockResolvedValue(null),
+		deleteMetadata: vi.fn().mockResolvedValue(undefined),
+		slugifyPath: vi.fn((path: string) => path.replace(/\//g, '___') + '.json'),
+	})),
+}))
+
 // Mock git utilities
 vi.mock('../../src/utils/git.js', () => ({
 	executeGitCommand: vi.fn(),

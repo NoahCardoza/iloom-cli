@@ -12,6 +12,16 @@ import type { ParsedInput } from '../../src/commands/start.js'
 vi.mock('../../src/lib/GitWorktreeManager.js')
 vi.mock('../../src/lib/process/ProcessManager.js')
 vi.mock('../../src/lib/SettingsManager.js')
+
+// Mock MetadataManager to prevent real file creation during tests
+vi.mock('../../src/lib/MetadataManager.js', () => ({
+  MetadataManager: vi.fn(() => ({
+    writeMetadata: vi.fn().mockResolvedValue(undefined),
+    readMetadata: vi.fn().mockResolvedValue(null),
+    deleteMetadata: vi.fn().mockResolvedValue(undefined),
+    slugifyPath: vi.fn((path: string) => path.replace(/\//g, '___') + '.json'),
+  })),
+}))
 vi.mock('../../src/utils/git.js', () => ({
   executeGitCommand: vi.fn().mockResolvedValue(undefined),
   hasUncommittedChanges: vi.fn().mockResolvedValue(false),

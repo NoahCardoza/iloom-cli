@@ -1,5 +1,6 @@
 import { extractIssueNumber } from './git.js'
 import type { GitWorktree } from '../types/worktree.js'
+import type { LoomMetadata } from '../lib/MetadataManager.js'
 
 /**
  * JSON output schema for il list --json
@@ -12,6 +13,9 @@ export interface LoomJsonOutput {
   issue_numbers: string[]
   pr_numbers: string[]
   isMainWorktree: boolean
+  description?: string | null
+  created_at?: string | null
+  issueTracker?: string | null
 }
 
 /**
@@ -74,26 +78,39 @@ function extractIssueNumbers(branch: string): string[] {
 
 /**
  * Format single worktree to JSON schema
- * - When type is 'pr': populate pr_numbers, leave issue_numbers empty
- * - When type is 'issue': populate issue_numbers, leave pr_numbers empty
- * - When type is 'branch': leave both issue_numbers and pr_numbers empty
+ * - When metadata is available, use metadata values for type, issue_numbers, pr_numbers
+ * - When metadata is not available, derive values from worktree path/branch
  *
  * @param worktree - The worktree to format
  * @param mainWorktreePath - Optional path to the main worktree for isMainWorktree detection
+ * @param metadata - Optional metadata from MetadataManager (preferred source when available)
  */
-export function formatLoomForJson(worktree: GitWorktree, mainWorktreePath?: string): LoomJsonOutput {
-  const loomType = determineLoomType(worktree)
+export function formatLoomForJson(
+  worktree: GitWorktree,
+  mainWorktreePath?: string,
+  metadata?: LoomMetadata | null
+): LoomJsonOutput {
+  // Use metadata values when available, otherwise derive from worktree
+  const loomType = metadata?.issueType ?? determineLoomType(worktree)
 
-  // Populate issue_numbers or pr_numbers based on type
-  let issueNumbers: string[] = []
-  let prNumbers: string[] = []
+  // Use metadata arrays when available, otherwise extract from path/branch
+  let issueNumbers: string[]
+  let prNumbers: string[]
 
-  if (loomType === 'pr') {
-    prNumbers = extractPRNumbers(worktree.path)
-  } else if (loomType === 'issue') {
-    issueNumbers = extractIssueNumbers(worktree.branch)
+  if (metadata) {
+    // Use metadata values directly
+    issueNumbers = metadata.issue_numbers
+    prNumbers = metadata.pr_numbers
+  } else {
+    // Derive from worktree path/branch
+    issueNumbers = []
+    prNumbers = []
+    if (loomType === 'pr') {
+      prNumbers = extractPRNumbers(worktree.path)
+    } else if (loomType === 'issue') {
+      issueNumbers = extractIssueNumbers(worktree.branch)
+    }
   }
-  // For 'branch' type, both remain empty
 
   // Determine if this is the main worktree by comparing paths
   const isMainWorktree = mainWorktreePath ? worktree.path === mainWorktreePath : false
@@ -101,11 +118,14 @@ export function formatLoomForJson(worktree: GitWorktree, mainWorktreePath?: stri
   return {
     name: worktree.branch || worktree.path,
     worktreePath: worktree.bare ? null : worktree.path,
-    branch: worktree.branch || null,
+    branch: (metadata?.branchName ?? worktree.branch) || null,
     type: loomType,
     issue_numbers: issueNumbers,
     pr_numbers: prNumbers,
     isMainWorktree,
+    description: metadata?.description ?? null,
+    created_at: metadata?.created_at ?? null,
+    issueTracker: metadata?.issueTracker ?? null,
   }
 }
 
@@ -114,7 +134,12 @@ export function formatLoomForJson(worktree: GitWorktree, mainWorktreePath?: stri
  *
  * @param worktrees - Array of worktrees to format
  * @param mainWorktreePath - Optional path to the main worktree for isMainWorktree detection
+ * @param metadata - Optional map of worktree paths to metadata
  */
-export function formatLoomsForJson(worktrees: GitWorktree[], mainWorktreePath?: string): LoomJsonOutput[] {
-  return worktrees.map(wt => formatLoomForJson(wt, mainWorktreePath))
+export function formatLoomsForJson(
+  worktrees: GitWorktree[],
+  mainWorktreePath?: string,
+  metadata?: Map<string, LoomMetadata | null>
+): LoomJsonOutput[] {
+  return worktrees.map(wt => formatLoomForJson(wt, mainWorktreePath, metadata?.get(wt.path)))
 }

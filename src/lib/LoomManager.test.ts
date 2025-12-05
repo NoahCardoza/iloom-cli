@@ -31,6 +31,16 @@ vi.mock('fs-extra', () => ({
   },
 }))
 
+// Mock MetadataManager to prevent real file creation during tests
+vi.mock('./MetadataManager.js', () => ({
+  MetadataManager: vi.fn(() => ({
+    writeMetadata: vi.fn().mockResolvedValue(undefined),
+    readMetadata: vi.fn().mockResolvedValue(null),
+    deleteMetadata: vi.fn().mockResolvedValue(undefined),
+    slugifyPath: vi.fn((path: string) => path.replace(/\//g, '___') + '.json'),
+  })),
+}))
+
 // Mock branchExists utility
 vi.mock('../utils/git.js', () => ({
   branchExists: vi.fn().mockResolvedValue(false),

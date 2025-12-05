@@ -4,6 +4,7 @@ import { DatabaseManager } from './DatabaseManager.js'
 import { ProcessManager } from './process/ProcessManager.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
+import { MetadataManager } from './MetadataManager.js'
 import { logger } from '../utils/logger.js'
 import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber } from '../utils/git.js'
 
@@ -23,6 +24,7 @@ import type { ParsedInput } from '../commands/start.js'
  */
 export class ResourceCleanup {
 	private settingsManager: SettingsManager
+	private metadataManager: MetadataManager
 
 	constructor(
 		private gitWorktree: GitWorktreeManager,
@@ -32,6 +34,7 @@ export class ResourceCleanup {
 		settingsManager?: SettingsManager
 	) {
 		this.settingsManager = settingsManager ?? new SettingsManager()
+		this.metadataManager = new MetadataManager()
 	}
 
 	/**
@@ -199,6 +202,11 @@ export class ResourceCleanup {
 					success: true,
 					message: `Worktree removed: ${worktree.path}`,
 				})
+
+				// Step 4.5: Delete metadata file after worktree removal (spec section 3.3)
+				// This is idempotent - silently succeeds if file doesn't exist
+				await this.metadataManager.deleteMetadata(worktree.path)
+				logger.debug(`Metadata file cleanup attempted for: ${worktree.path}`)
 			} catch (error) {
 				const err = error instanceof Error ? error : new Error('Unknown error')
 				errors.push(err)
