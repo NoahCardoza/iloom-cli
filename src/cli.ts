@@ -16,6 +16,8 @@ import { getPackageInfo } from './utils/package-info.js'
 import { hasMultipleRemotes } from './utils/remote.js'
 import { fileURLToPath } from 'url'
 import { realpathSync } from 'fs'
+import { formatLoomsForJson } from './utils/loom-formatter.js'
+import { findMainWorktreePathWithSettings } from './utils/git.js'
 
 // Get package.json for version
 const __filename = fileURLToPath(import.meta.url)
@@ -529,7 +531,8 @@ program
       const worktrees = await manager.listWorktrees({ porcelain: true })
 
       if (options.json) {
-        console.log(JSON.stringify(worktrees, null, 2))
+        const mainWorktreePath = await findMainWorktreePathWithSettings()
+        console.log(JSON.stringify(formatLoomsForJson(worktrees, mainWorktreePath), null, 2))
         return
       }
 

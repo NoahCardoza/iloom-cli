@@ -1,7 +1,7 @@
 import path from 'path'
 import { execa, type ExecaError } from 'execa'
 import { type GitWorktree } from '../types/worktree.js'
-import type { SettingsManager } from '../lib/SettingsManager.js'
+import { SettingsManager, type SettingsManager as SettingsManagerType } from '../lib/SettingsManager.js'
 import { logger } from './logger.js'
 
 /**
@@ -413,13 +413,10 @@ export async function findMainWorktreePath(
  */
 export async function findMainWorktreePathWithSettings(
   path?: string,
-  settingsManager?: SettingsManager
+  settingsManager?: SettingsManagerType
 ): Promise<string> {
   // Lazy load SettingsManager to avoid circular dependencies
-  if (!settingsManager) {
-    const { SettingsManager: SM } = await import('../lib/SettingsManager.js')
-    settingsManager = new SM()
-  }
+  settingsManager ??= new SettingsManager()
 
   const settings = await settingsManager.loadSettings(path)
   const findOptions = settings.mainBranch ? { mainBranch: settings.mainBranch } : undefined
@@ -479,7 +476,7 @@ export async function getDefaultBranch(path: string = process.cwd()): Promise<st
 export async function findAllBranchesForIssue(
   issueNumber: string | number,
   path: string = process.cwd(),
-  settingsManager?: SettingsManager
+  settingsManager?: SettingsManagerType
 ): Promise<string[]> {
   // Lazy load SettingsManager to avoid circular dependencies
   if (!settingsManager) {
