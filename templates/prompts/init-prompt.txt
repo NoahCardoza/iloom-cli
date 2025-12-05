@@ -446,6 +446,7 @@ Analyis of system: Is VSCode Settings ignore? VSCODE_SETTINGS_GITIGNORED
 **IMPORTANT DISTINCTION:**
 - Schema defaults are: terminal=true, vscode=false (for safety)
 - Your job in init is to RECOMMEND optimal settings based on the project
+- IMPORTANT: This is a per-project setting - recommend to save it in shared project settings (not globally). EVEN IF OTHER SETTINGS ARE SAVED ELSEHWERE
 
 **Terminal Color Recommendation:**
 - Always recommend `true` - terminal colors only affect macOS Terminal.app, no file changes
@@ -780,8 +781,11 @@ Would you like to commit these changes?
 - **NEVER stage or commit unrelated files** - even if they appear in `git status`
 - **If the commit fails, you must then subsequently request to use --no-verify flag** to bypass pre-commit hooks that might fail due to unrelated codebase state
 - **Do NOT commit settings.local.json** - it should be gitignored, not committed
+- **YOU MAY NEED TO EDIT/UPDATE MORE THAN ONE FILE if the user is changing something like API Keys (local only), permissionsMode (local only), IDE (recommened global) as well as shared settings.
 
 **Step 3: If user says yes, commit the changes**
+
+VERIFY YOU'RE NOT BUNDLING ALL CHANGES IN ONE FILE DESPITE GUIDANCE TO SPLIT ACCORDING TO RULES/RECOMMENDATIONS ABOVE
 
 Stage ONLY the iloom-related files that should be committed:
 ```bash
