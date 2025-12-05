@@ -102,15 +102,20 @@ export async function waitForKeypress(
 
 		// Listen for single data event
 		process.stdin.once('data', (chunk: Buffer) => {
-			// Restore normal mode
+			const key = chunk.toString('utf8')
+
+			// Restore normal mode first (cleanup before any exit)
 			process.stdin.setRawMode(false)
 			process.stdin.pause()
 
+			// Handle Ctrl+C (ETX character \x03)
+			if (key === '\x03') {
+				process.stdout.write('\n')
+				process.exit(130) // Standard exit code for SIGINT (128 + 2)
+			}
+
 			// Add newline after keypress for clean output
 			process.stdout.write('\n')
-
-			// Convert buffer to string and return the key
-			const key = chunk.toString('utf8')
 			resolve(key)
 		})
 	})

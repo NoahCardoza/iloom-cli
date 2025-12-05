@@ -261,5 +261,35 @@ describe('prompt utils', () => {
 			expect(mockStdin.setRawMode).toHaveBeenCalledWith(true)
 			expect(mockStdin.setRawMode).toHaveBeenCalledWith(false)
 		})
+
+		it('should exit process with code 130 when Ctrl+C is pressed', async () => {
+			const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+				throw new Error('process.exit called')
+			})
+
+			simulateKeypress('\x03')
+
+			await expect(waitForKeypress()).rejects.toThrow('process.exit called')
+			expect(mockExit).toHaveBeenCalledWith(130)
+
+			// Verify cleanup happened before exit
+			expect(mockStdin.setRawMode).toHaveBeenCalledWith(false)
+		})
+
+		it('should write newline before exiting on Ctrl+C', async () => {
+			vi.spyOn(process, 'exit').mockImplementation(() => {
+				throw new Error('process.exit called')
+			})
+
+			simulateKeypress('\x03')
+
+			try {
+				await waitForKeypress()
+			} catch {
+				// Expected - process.exit throws in test
+			}
+
+			expect(process.stdout.write).toHaveBeenCalledWith('\n')
+		})
 	})
 })
