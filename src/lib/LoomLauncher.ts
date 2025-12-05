@@ -27,6 +27,7 @@ export interface LaunchLoomOptions {
 	setArguments?: string[] // Raw --set arguments to forward
 	executablePath?: string // Executable path to use for spin command
 	sourceEnvOnStart?: boolean // defaults to false if undefined
+	colorTerminal?: boolean // defaults to true if undefined
 }
 
 /**
@@ -146,17 +147,21 @@ export class LoomLauncher {
 	 * Launch dev server terminal
 	 */
 	private async launchDevServerTerminal(options: LaunchLoomOptions): Promise<void> {
-		const colorData = generateColorFromBranchName(options.branchName)
 		const devServerCommand = await getDevServerLaunchCommand(
 			options.worktreePath,
 			options.port,
 			options.capabilities
 		)
 
+		// Only generate color if terminal coloring is enabled (default: true)
+		const backgroundColor = (options.colorTerminal ?? true)
+			? generateColorFromBranchName(options.branchName).rgb
+			: undefined
+
 		await openTerminalWindow({
 			workspacePath: options.worktreePath,
 			command: devServerCommand,
-			backgroundColor: colorData.rgb,
+			...(backgroundColor && { backgroundColor }),
 			includeEnvSetup: (options.sourceEnvOnStart ?? false) && this.hasAnyEnvFiles(options.worktreePath),
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
@@ -168,11 +173,14 @@ export class LoomLauncher {
 	 * Launch standalone terminal (no command, just workspace with env vars)
 	 */
 	private async launchStandaloneTerminal(options: LaunchLoomOptions): Promise<void> {
-		const colorData = generateColorFromBranchName(options.branchName)
+		// Only generate color if terminal coloring is enabled (default: true)
+		const backgroundColor = (options.colorTerminal ?? true)
+			? generateColorFromBranchName(options.branchName).rgb
+			: undefined
 
 		await openTerminalWindow({
 			workspacePath: options.worktreePath,
-			backgroundColor: colorData.rgb,
+			...(backgroundColor && { backgroundColor }),
 			includeEnvSetup: (options.sourceEnvOnStart ?? false) && this.hasAnyEnvFiles(options.worktreePath),
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
@@ -186,7 +194,6 @@ export class LoomLauncher {
 	private async buildClaudeTerminalOptions(
 		options: LaunchLoomOptions
 	): Promise<TerminalWindowOptions> {
-		const colorData = generateColorFromBranchName(options.branchName)
 		const hasEnvFile = this.hasAnyEnvFiles(options.worktreePath)
 		const claudeTitle = `Claude - ${this.formatIdentifier(options.workflowType, options.identifier)}`
 
@@ -201,10 +208,15 @@ export class LoomLauncher {
 			}
 		}
 
+		// Only generate color if terminal coloring is enabled (default: true)
+		const backgroundColor = (options.colorTerminal ?? true)
+			? generateColorFromBranchName(options.branchName).rgb
+			: undefined
+
 		return {
 			workspacePath: options.worktreePath,
 			command: claudeCommand,
-			backgroundColor: colorData.rgb,
+			...(backgroundColor && { backgroundColor }),
 			title: claudeTitle,
 			includeEnvSetup: (options.sourceEnvOnStart ?? false) && hasEnvFile,
 			...(options.port !== undefined && { port: options.port, includePortExport: true }),
@@ -217,7 +229,6 @@ export class LoomLauncher {
 	private async buildDevServerTerminalOptions(
 		options: LaunchLoomOptions
 	): Promise<TerminalWindowOptions> {
-		const colorData = generateColorFromBranchName(options.branchName)
 		const devServerCommand = await getDevServerLaunchCommand(
 			options.worktreePath,
 			options.port,
@@ -226,10 +237,15 @@ export class LoomLauncher {
 		const hasEnvFile = this.hasAnyEnvFiles(options.worktreePath)
 		const devServerTitle = `Dev Server - ${this.formatIdentifier(options.workflowType, options.identifier)}`
 
+		// Only generate color if terminal coloring is enabled (default: true)
+		const backgroundColor = (options.colorTerminal ?? true)
+			? generateColorFromBranchName(options.branchName).rgb
+			: undefined
+
 		return {
 			workspacePath: options.worktreePath,
 			command: devServerCommand,
-			backgroundColor: colorData.rgb,
+			...(backgroundColor && { backgroundColor }),
 			title: devServerTitle,
 			includeEnvSetup: (options.sourceEnvOnStart ?? false) && hasEnvFile,
 			includePortExport: options.capabilities.includes('web'),
@@ -243,13 +259,17 @@ export class LoomLauncher {
 	private buildStandaloneTerminalOptions(
 		options: LaunchLoomOptions
 	): TerminalWindowOptions {
-		const colorData = generateColorFromBranchName(options.branchName)
 		const hasEnvFile = this.hasAnyEnvFiles(options.worktreePath)
 		const terminalTitle = `Terminal - ${this.formatIdentifier(options.workflowType, options.identifier)}`
 
+		// Only generate color if terminal coloring is enabled (default: true)
+		const backgroundColor = (options.colorTerminal ?? true)
+			? generateColorFromBranchName(options.branchName).rgb
+			: undefined
+
 		return {
 			workspacePath: options.worktreePath,
-			backgroundColor: colorData.rgb,
+			...(backgroundColor && { backgroundColor }),
 			title: terminalTitle,
 			includeEnvSetup: (options.sourceEnvOnStart ?? false) && hasEnvFile,
 			includePortExport: options.capabilities.includes('web'),

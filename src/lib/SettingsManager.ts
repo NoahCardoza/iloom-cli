@@ -312,6 +312,23 @@ export const IloomSettingsSchema = z.object({
 				'Supports VSCode, Cursor, WebStorm, Sublime Text, IntelliJ, and Windsurf. ' +
 				'Note: Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf).'
 		),
+	colors: z
+		.object({
+			terminal: z
+				.boolean()
+				.default(true)
+				.describe('Apply terminal background colors based on branch name (macOS only)'),
+			vscode: z
+				.boolean()
+				.default(false)
+				.describe(
+					'Apply VSCode/Cursor title bar colors based on branch name. ' +
+						'Note: This modifies .vscode/settings.json which may be in source control. ' +
+						'Default is false for safety; enable via init or explicitly if .vscode is gitignored.'
+				),
+		})
+		.optional()
+		.describe('Color synchronization settings for workspace identification'),
 })
 
 /**
@@ -445,6 +462,22 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'Supports VSCode, Cursor, WebStorm, Sublime Text, IntelliJ, and Windsurf. ' +
 				'Note: Color synchronization (title bar colors) only works with VSCode-compatible editors (vscode, cursor, windsurf).'
 		),
+	colors: z
+		.object({
+			terminal: z
+				.boolean()
+				.optional()
+				.describe('Apply terminal background colors based on branch name (macOS only)'),
+			vscode: z
+				.boolean()
+				.optional()
+				.describe(
+					'Apply VSCode/Cursor title bar colors based on branch name. ' +
+						'Note: This modifies .vscode/settings.json which may be in source control.'
+				),
+		})
+		.optional()
+		.describe('Color synchronization settings for workspace identification'),
 })
 
 /**

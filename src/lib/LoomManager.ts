@@ -180,17 +180,15 @@ export class LoomManager {
       }
     }
 
-    // 11. Apply color synchronization (terminal and VSCode)
-    if (!input.options?.skipColorSync) {
-      try {
-        await this.applyColorSynchronization(worktreePath, branchName)
-      } catch (error) {
-        // Log warning but don't fail - colors are cosmetic
-        logger.warn(
-          `Failed to apply color synchronization: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          error
-        )
-      }
+    // 11. Apply color synchronization (terminal and VSCode) based on settings
+    try {
+      await this.applyColorSynchronization(worktreePath, branchName, settingsData, input.options)
+    } catch (error) {
+      // Log warning but don't fail - colors are cosmetic
+      logger.warn(
+        `Failed to apply color synchronization: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error
+      )
     }
 
     // NEW: Move issue to In Progress (for new worktrees)
@@ -244,6 +242,7 @@ export class LoomManager {
         ...(setArguments && { setArguments }),
         ...(executablePath && { executablePath }),
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
+        colorTerminal: input.options?.colorTerminal ?? settingsData.colors?.terminal ?? true,
       })
     }
 
@@ -712,21 +711,41 @@ export class LoomManager {
   /**
    * Apply color synchronization to both VSCode and terminal
    * Colors are cosmetic - errors are logged but don't block workflow
+   * Respects colors settings for independent control
+   *
+   * DEFAULTS:
+   * - terminal: true (always safe, only affects macOS Terminal.app)
+   * - vscode: false (safe default, prevents unexpected file modifications)
    */
   private async applyColorSynchronization(
     worktreePath: string,
-    branchName: string
+    branchName: string,
+    settings: import('./SettingsManager.js').IloomSettings,
+    options?: CreateLoomInput['options']
   ): Promise<void> {
+    // Determine color settings: options override settings, settings override defaults
+    // Note: vscode defaults to FALSE for safety
+    const colorVscode = options?.colorVscode ?? settings.colors?.vscode ?? false
+    const colorTerminal = options?.colorTerminal ?? settings.colors?.terminal ?? true
+
+    if (!colorVscode && !colorTerminal) {
+      logger.debug('Color synchronization disabled for both VSCode and terminal')
+      return
+    }
+
     const colorData = generateColorFromBranchName(branchName)
 
-    // Apply VSCode title bar color
-    const vscode = new VSCodeIntegration()
-    await vscode.setTitleBarColor(worktreePath, colorData.hex)
+    // Apply VSCode title bar color if enabled (default: disabled for safety)
+    if (colorVscode) {
+      const vscode = new VSCodeIntegration()
+      await vscode.setTitleBarColor(worktreePath, colorData.hex)
+      logger.info(`Applied VSCode title bar color: ${colorData.hex} for branch: ${branchName}`)
+    } else {
+      logger.debug('VSCode color sync disabled (default: false for safety)')
+    }
 
-    logger.info(`Applied VSCode title bar color: ${colorData.hex} for branch: ${branchName}`)
-
-    // Note: Terminal color is applied during window creation in ClaudeContextManager
-    // This ensures the color is set when the new terminal window is opened
+    // Note: Terminal color is applied during window creation in LoomLauncher
+    // The colorTerminal setting is passed through to launch options
   }
 
   /**
@@ -870,6 +889,7 @@ export class LoomManager {
         ...(setArguments && { setArguments }),
         ...(executablePath && { executablePath }),
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
+        colorTerminal: input.options?.colorTerminal ?? settingsData.colors?.terminal ?? true,
       })
     }
 

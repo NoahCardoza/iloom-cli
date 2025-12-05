@@ -10,6 +10,7 @@ import { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import { fileURLToPath } from 'url'
 import { GitRemote, parseGitRemotes } from '../utils/remote.js'
 import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
+import { isFileGitignored } from '../utils/git.js'
 
 /**
  * Initialize iloom configuration and setup shell autocomplete
@@ -351,6 +352,14 @@ export class InitCommand {
         logger.debug("Error occured while getting remote info: ", message)
       }
 
+      // Detect if .vscode/settings.json is gitignored
+      let vscodeSettingsGitignored = false
+      try {
+        vscodeSettingsGitignored = await isFileGitignored('.vscode/settings.json')
+        logger.debug('VSCode settings gitignore status', { vscodeSettingsGitignored })
+      } catch (error) {
+        logger.debug('Could not detect gitignore status for .vscode/settings.json', { error })
+      }
 
       let remotesInfo = ''
       let multipleRemotes = false
@@ -396,6 +405,7 @@ export class InitCommand {
         SINGLE_REMOTE_URL: singleRemoteUrl,
         NO_REMOTES: noRemotes.toString(),
         README_CONTENT: readmeContent,
+        VSCODE_SETTINGS_GITIGNORED: vscodeSettingsGitignored.toString(),
       }
 
       logger.debug('Building template variables', {

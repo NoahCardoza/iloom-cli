@@ -10,6 +10,7 @@ import {
   isEmptyRepository,
   ensureRepositoryHasCommits,
   isFileTrackedByGit,
+  isFileGitignored,
 } from './git.js'
 import { execa } from 'execa'
 
@@ -1022,6 +1023,48 @@ describe('Git Utility Regression Tests', () => {
       const result = await isFileTrackedByGit('.env.local', '/test/repo')
 
       expect(result).toBe(false)
+    })
+  })
+
+  describe('isFileGitignored', () => {
+    it('should return true when file is gitignored', async () => {
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      const result = await isFileGitignored('.vscode/settings.json')
+
+      expect(result).toBe(true)
+      expect(execa).toHaveBeenCalledWith('git', ['check-ignore', '-q', '.vscode/settings.json'], expect.objectContaining({ cwd: process.cwd() }))
+    })
+
+    it('should return false when file is NOT gitignored', async () => {
+      vi.mocked(execa).mockRejectedValueOnce(new Error('exit code 1'))
+
+      const result = await isFileGitignored('.vscode/settings.json')
+
+      expect(result).toBe(false)
+      expect(execa).toHaveBeenCalledWith('git', ['check-ignore', '-q', '.vscode/settings.json'], expect.objectContaining({ cwd: process.cwd() }))
+    })
+
+    it('should return false on git command errors', async () => {
+      vi.mocked(execa).mockRejectedValueOnce(new Error('fatal: not a git repository'))
+
+      const result = await isFileGitignored('.vscode/settings.json')
+
+      expect(result).toBe(false)
+    })
+
+    it('should use provided cwd parameter', async () => {
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      await isFileGitignored('.vscode/settings.json', '/custom/path')
+
+      expect(execa).toHaveBeenCalledWith('git', ['check-ignore', '-q', '.vscode/settings.json'], expect.objectContaining({ cwd: '/custom/path' }))
     })
   })
 })

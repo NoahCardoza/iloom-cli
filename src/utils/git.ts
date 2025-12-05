@@ -689,3 +689,23 @@ export async function isFileTrackedByGit(
     throw error
   }
 }
+
+/**
+ * Check if a file is gitignored
+ * Uses `git check-ignore` which handles nested gitignore files and global patterns
+ *
+ * @param filePath - Path to file to check (relative to repo root)
+ * @param cwd - Working directory (defaults to process.cwd())
+ * @returns true if file IS ignored, false if NOT ignored or on error
+ */
+export async function isFileGitignored(
+  filePath: string,
+  cwd: string = process.cwd()
+): Promise<boolean> {
+  try {
+    await executeGitCommand(['check-ignore', '-q', filePath], { cwd })
+    return true // Exit 0 = file IS ignored
+  } catch {
+    return false // Exit 1 = NOT ignored (or error)
+  }
+}

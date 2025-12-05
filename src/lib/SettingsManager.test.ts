@@ -2492,5 +2492,123 @@ const error: { code?: string; message: string } = {
 				expect(result.protectedBranches).toEqual(['project-1', 'project-2'])
 			})
 		})
+
+		describe('colors settings', () => {
+			it('should default colors.terminal to true when colors object is provided', async () => {
+				const projectRoot = '/test/project'
+				const projectSettings = {
+					colors: {}, // Empty colors object should trigger defaults
+				}
+				const error: { code?: string; message: string } = {
+					code: 'ENOENT',
+					message: 'ENOENT: no such file or directory',
+				}
+
+				vi.mocked(readFile)
+					.mockRejectedValueOnce(error) // global settings (missing)
+					.mockResolvedValueOnce(JSON.stringify(projectSettings)) // settings.json
+					.mockRejectedValueOnce(error) // settings.local.json (missing)
+
+				const result = await settingsManager.loadSettings(projectRoot)
+				expect(result.colors?.terminal).toBe(true)
+			})
+
+			it('should default colors.vscode to false when colors object is provided', async () => {
+				const projectRoot = '/test/project'
+				const projectSettings = {
+					colors: {}, // Empty colors object should trigger defaults
+				}
+				const error: { code?: string; message: string } = {
+					code: 'ENOENT',
+					message: 'ENOENT: no such file or directory',
+				}
+
+				vi.mocked(readFile)
+					.mockRejectedValueOnce(error) // global settings (missing)
+					.mockResolvedValueOnce(JSON.stringify(projectSettings)) // settings.json
+					.mockRejectedValueOnce(error) // settings.local.json (missing)
+
+				const result = await settingsManager.loadSettings(projectRoot)
+				expect(result.colors?.vscode).toBe(false)
+			})
+
+			it('should accept missing colors object entirely', async () => {
+				const projectRoot = '/test/project'
+				const error: { code?: string; message: string } = {
+					code: 'ENOENT',
+					message: 'ENOENT: no such file or directory',
+				}
+
+				vi.mocked(readFile)
+					.mockRejectedValueOnce(error) // global settings (missing)
+					.mockResolvedValueOnce(JSON.stringify({})) // settings.json (empty)
+					.mockRejectedValueOnce(error) // settings.local.json (missing)
+
+				const result = await settingsManager.loadSettings(projectRoot)
+				expect(result.colors).toBeUndefined()
+			})
+
+			it('should accept colors.terminal = false', async () => {
+				const projectRoot = '/test/project'
+				const projectSettings = {
+					colors: { terminal: false },
+				}
+				const error: { code?: string; message: string } = {
+					code: 'ENOENT',
+					message: 'ENOENT: no such file or directory',
+				}
+
+				vi.mocked(readFile)
+					.mockRejectedValueOnce(error) // global settings (missing)
+					.mockResolvedValueOnce(JSON.stringify(projectSettings)) // settings.json
+					.mockRejectedValueOnce(error) // settings.local.json (missing)
+
+				const result = await settingsManager.loadSettings(projectRoot)
+				expect(result.colors?.terminal).toBe(false)
+			})
+
+			it('should accept colors.vscode = true (explicit enable)', async () => {
+				const projectRoot = '/test/project'
+				const projectSettings = {
+					colors: { vscode: true },
+				}
+				const error: { code?: string; message: string } = {
+					code: 'ENOENT',
+					message: 'ENOENT: no such file or directory',
+				}
+
+				vi.mocked(readFile)
+					.mockRejectedValueOnce(error) // global settings (missing)
+					.mockResolvedValueOnce(JSON.stringify(projectSettings)) // settings.json
+					.mockRejectedValueOnce(error) // settings.local.json (missing)
+
+				const result = await settingsManager.loadSettings(projectRoot)
+				expect(result.colors?.vscode).toBe(true)
+			})
+
+			it('should merge colors from local and project settings', async () => {
+				const projectRoot = '/test/project'
+				const projectSettings = {
+					colors: { terminal: true, vscode: false },
+				}
+				const localSettings = {
+					colors: { vscode: true }, // Override vscode setting
+				}
+
+				const error: { code?: string; message: string } = {
+					code: 'ENOENT',
+					message: 'ENOENT: no such file or directory',
+				}
+
+				vi.mocked(readFile)
+					.mockRejectedValueOnce(error) // global settings (missing)
+					.mockResolvedValueOnce(JSON.stringify(projectSettings)) // settings.json
+					.mockResolvedValueOnce(JSON.stringify(localSettings)) // settings.local.json
+
+				const result = await settingsManager.loadSettings(projectRoot)
+				expect(result.colors?.terminal).toBe(true) // From project
+				expect(result.colors?.vscode).toBe(true) // Overridden by local
+			})
+		})
 	})
 })

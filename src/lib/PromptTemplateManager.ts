@@ -28,6 +28,7 @@ export interface TemplateVariables {
 	README_CONTENT?: string
 	SETTINGS_SCHEMA_CONTENT?: string
 	FIRST_TIME_USER?: boolean
+	VSCODE_SETTINGS_GITIGNORED?: string
 }
 
 export class PromptTemplateManager {
@@ -181,6 +182,10 @@ export class PromptTemplateManager {
 
 		if (variables.SETTINGS_SCHEMA_CONTENT !== undefined) {
 			result = result.replace(/SETTINGS_SCHEMA_CONTENT/g, variables.SETTINGS_SCHEMA_CONTENT)
+		}
+
+		if (variables.VSCODE_SETTINGS_GITIGNORED !== undefined) {
+			result = result.replace(/VSCODE_SETTINGS_GITIGNORED/g, variables.VSCODE_SETTINGS_GITIGNORED)
 		}
 
 		return result

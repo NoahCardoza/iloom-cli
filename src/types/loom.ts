@@ -36,7 +36,9 @@ export interface CreateLoomInput {
   }
   options?: {
     skipDatabase?: boolean
-    skipColorSync?: boolean
+    // Color sync options (derived from settings, can be overridden)
+    colorTerminal?: boolean
+    colorVscode?: boolean
     // Individual component flags
     enableClaude?: boolean
     enableCode?: boolean

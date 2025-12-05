@@ -303,7 +303,7 @@ Use AskUserQuestion to ask ALL local development settings questions **IN A SINGL
      - "bypassPermissions" - Claude executes without confirmation (use with caution)
    - Default: currentPermissionMode or "acceptEdits"
    - Validation: Must be one of: default, plan, acceptEdits, bypassPermissions
-   - Store answer as: `workflows.issue.permissionMode`
+   - Store answer as: `workflows.issue.permissionMode` - NOTE: this is a personal preference - recommend it be stored in the gitignored local settings file.
 
 4. **Base Port**
    - Question format: "What base port should web development servers use?{{#IF currentBasePort}} (Currently: [currentBasePort]){{/IF currentBasePort}}"
@@ -435,6 +435,39 @@ REMOTES_INFO
 - Ask Step 4 (Merge Mode) only if multiple remotes detected OR user requests advanced config
 - Set multiSelect: false for all questions
 - Process answers sequentially as they depend on each other
+
+### Phase 2.5: Color Synchronization Settings - ONLY IF USER HAS CHOSEN the vscode or cursor IDE
+
+After Phase 2, handle color settings based on gitignore status.
+
+Analyis of system: Is VSCode Settings ignore? VSCODE_SETTINGS_GITIGNORED
+
+**IMPORTANT DISTINCTION:**
+- Schema defaults are: terminal=true, vscode=false (for safety)
+- Your job in init is to RECOMMEND optimal settings based on the project
+
+**Terminal Color Recommendation:**
+- Always recommend `true` - terminal colors only affect macOS Terminal.app, no file changes
+
+**VSCode Color Recommendation:**
+
+**If "VSCODE_SETTINGS_GITIGNORED" == "true":**
+- Recommend `colors.vscode: true` (safe since file is gitignored)
+- Explain: "VSCode title bar coloring is safe to enable since .vscode/settings.json is gitignored"
+
+**If "VSCODE_SETTINGS_GITIGNORED" == "false":**
+- Warn user: "VSCode/Cursor title bar coloring modifies .vscode/settings.json which is tracked in git."
+- Ask user: "Would you like to:
+  1. Add .vscode/settings.json to .gitignore (recommended - enables color sync without git pollution)
+  2. Keep VSCode color sync disabled (default - keeps .vscode/settings.json in source control unchanged)
+  3. Enable anyway (Please don't do this - colors will appear in git diffs)"
+
+Based on the users answer:
+- Option 1: Add to .gitignore, set `colors.vscode: true`
+- Option 2: Set `colors.vscode: false` (matches safe default)
+- Option 3: Set `colors.vscode: true` (with warning noted)
+
+**Note:** Terminal colors default to `true` (always recommend unless user explicitly disables).
 
 ### Phase 3: Configuration Summary
 
@@ -609,15 +642,32 @@ When both settings.json and settings.local.json exist, you MUST prevent duplicat
    }
    ```
 
-7. **Combine all applicable sections** into a single JSON object. Only include sections where the value differs from the default.
+7. **Add colors settings based on Phase 2.5 recommendations (if vscode or cursor IDE):**
+   ```json
+   {
+     "colors": {
+       "terminal": true,  // Always recommend true unless user explicitly disabled
+       "vscode": <based on gitignore status and user choice>
+     }
+   }
+   ```
+   - Default behavior: Only include if vscode differs from default (false) or terminal is disabled
+   - If "VSCODE_SETTINGS_GITIGNORED" == "true" (note: variable has been subsituted) and user accepted recommendation: `"vscode": true`
+   - If user chose to add .vscode/settings.json to .gitignore: `"vscode": true`
+   - If user chose to keep disabled or enable anyway: set accordingly
+   - Terminal should be true unless user explicitly disabled it
 
-8. **If existing settings exist, MERGE** the new values with existing ones. Don't overwrite settings the user didn't modify.
+8. **Combine all applicable sections** into a single JSON object. Only include sections where the value differs from the default.
+
+9. **If existing settings exist, MERGE** the new values with existing ones. Don't overwrite settings the user didn't modify.
 
 ### Phase 6: Write File
 
 **CRITICAL: REMOVE DUPLICATES BEFORE WRITING**
 
 Before writing the file, perform a final duplication check:
+
+**You might need to create/update multiple files - if some settigns should be not commitedd (ie. API Keys, permissionMode etc), then recommend create a local settings file for those settings and a shared one for others.
 
 **If writing to settings.local.json:**
 1. Load the current settings.json (if it exists)
@@ -648,7 +698,7 @@ Reason: mainBranch has same value in both files, so it's removed from local
    - For global: Ensure `~/.config/iloom-ai/` directory exists (create if needed)
    - For project/local: Ensure `.iloom/` directory exists (create if needed)
 2. Perform duplication check as described above
-3. Write the deduplicated settings to the chosen file:
+3. For each settings file you need to update, write the deduplicated settings to the chosen file:
    - `~/.config/iloom-ai/settings.json` if user chose Global
    - `.iloom/settings.json` if user chose Project
    - `.iloom/settings.local.json` if user chose Local
@@ -875,6 +925,7 @@ If users ask about specific configurations, help them add these sections to thei
 - **Phase 1 = Local dev settings** (main branch, worktree prefix, permission mode, base port)
 - **Phase 2 = Tooling integrations** (issue tracker provider, provider-specific config, IDE, merge mode)
 - **Keep configuration minimal** - only include non-default values
+- **Honor recommendations/requirements of where to save certain settings - this may mean you have to create/update multiple settings files. (e.g when adding API keys for permissions mode settings)
 - **Merge carefully** when updating existing settings - preserve any settings the user didn't modify
 - **Handle errors gracefully** - if schema validation fails, explain what went wrong and ask the user to try again
 - **CRITICAL: PREVENT DUPLICATION** - When writing settings.local.json, ONLY include settings that differ from settings.json. If a setting has the same value in both files, it MUST be removed from the local file. Local should only contain overrides, never duplicates.
