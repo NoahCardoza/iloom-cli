@@ -1,1 +1,0 @@
-/Users/adam/bin/hatchbox-bash
