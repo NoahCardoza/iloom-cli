@@ -4,7 +4,7 @@ import { openTerminalWindow, openMultipleTerminalWindows } from '../utils/termin
 import type { TerminalWindowOptions } from '../utils/terminal.js'
 import { openIdeWindow } from '../utils/ide.js'
 import { getDevServerLaunchCommand } from '../utils/dev-server.js'
-import { generateColorFromBranchName } from '../utils/color.js'
+import { generateColorFromBranchName, hexToRgb } from '../utils/color.js'
 import { logger } from '../utils/logger.js'
 import { ClaudeContextManager } from './ClaudeContextManager.js'
 import type { SettingsManager } from './SettingsManager.js'
@@ -28,6 +28,7 @@ export interface LaunchLoomOptions {
 	executablePath?: string // Executable path to use for spin command
 	sourceEnvOnStart?: boolean // defaults to false if undefined
 	colorTerminal?: boolean // defaults to true if undefined
+	colorHex?: string // Pre-calculated hex color from metadata, avoids recalculation
 }
 
 /**
@@ -155,7 +156,9 @@ export class LoomLauncher {
 
 		// Only generate color if terminal coloring is enabled (default: true)
 		const backgroundColor = (options.colorTerminal ?? true)
-			? generateColorFromBranchName(options.branchName).rgb
+			? options.colorHex
+				? hexToRgb(options.colorHex)
+				: generateColorFromBranchName(options.branchName).rgb
 			: undefined
 
 		await openTerminalWindow({
@@ -175,7 +178,9 @@ export class LoomLauncher {
 	private async launchStandaloneTerminal(options: LaunchLoomOptions): Promise<void> {
 		// Only generate color if terminal coloring is enabled (default: true)
 		const backgroundColor = (options.colorTerminal ?? true)
-			? generateColorFromBranchName(options.branchName).rgb
+			? options.colorHex
+				? hexToRgb(options.colorHex)
+				: generateColorFromBranchName(options.branchName).rgb
 			: undefined
 
 		await openTerminalWindow({
@@ -210,7 +215,9 @@ export class LoomLauncher {
 
 		// Only generate color if terminal coloring is enabled (default: true)
 		const backgroundColor = (options.colorTerminal ?? true)
-			? generateColorFromBranchName(options.branchName).rgb
+			? options.colorHex
+				? hexToRgb(options.colorHex)
+				: generateColorFromBranchName(options.branchName).rgb
 			: undefined
 
 		return {
@@ -239,7 +246,9 @@ export class LoomLauncher {
 
 		// Only generate color if terminal coloring is enabled (default: true)
 		const backgroundColor = (options.colorTerminal ?? true)
-			? generateColorFromBranchName(options.branchName).rgb
+			? options.colorHex
+				? hexToRgb(options.colorHex)
+				: generateColorFromBranchName(options.branchName).rgb
 			: undefined
 
 		return {
@@ -264,7 +273,9 @@ export class LoomLauncher {
 
 		// Only generate color if terminal coloring is enabled (default: true)
 		const backgroundColor = (options.colorTerminal ?? true)
-			? generateColorFromBranchName(options.branchName).rgb
+			? options.colorHex
+				? hexToRgb(options.colorHex)
+				: generateColorFromBranchName(options.branchName).rgb
 			: undefined
 
 		return {

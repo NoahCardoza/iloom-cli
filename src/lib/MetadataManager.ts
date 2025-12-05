@@ -18,6 +18,7 @@ export interface MetadataFile {
   issue_numbers?: string[]
   pr_numbers?: string[]
   issueTracker?: string
+  colorHex?: string // Stored hex color (e.g., "#dcebff") - robust against palette changes
 }
 
 /**
@@ -33,6 +34,7 @@ export interface WriteMetadataInput {
   issue_numbers: string[]
   pr_numbers: string[]
   issueTracker: string
+  colorHex: string // Hex color (e.g., "#dcebff") - robust against palette changes
 }
 
 /**
@@ -47,6 +49,7 @@ export interface LoomMetadata {
   issue_numbers: string[]
   pr_numbers: string[]
   issueTracker: string | null
+  colorHex: string | null // Hex color (e.g., "#dcebff") - robust against palette changes
 }
 
 /**
@@ -124,6 +127,7 @@ export class MetadataManager {
         issue_numbers: input.issue_numbers,
         pr_numbers: input.pr_numbers,
         issueTracker: input.issueTracker,
+        colorHex: input.colorHex,
       }
 
       // 3. Write to slugified filename
@@ -171,6 +175,7 @@ export class MetadataManager {
         issue_numbers: data.issue_numbers ?? [],
         pr_numbers: data.pr_numbers ?? [],
         issueTracker: data.issueTracker ?? null,
+        colorHex: data.colorHex ?? null,
       }
     } catch (error) {
       // Return null on any error (graceful degradation per spec)

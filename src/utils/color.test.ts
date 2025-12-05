@@ -8,62 +8,37 @@ import {
 	lightenColor,
 	saturateColor,
 	calculateForegroundColor,
+	colorDistance,
+	selectDistinctColor,
 	type RgbColor,
 } from './color.js'
 
 describe('Color utilities', () => {
 	describe('getColorPalette', () => {
-		it('should return exactly 40 colors', () => {
+		it('should return exactly 16 colors', () => {
 			const palette = getColorPalette()
-			expect(palette).toHaveLength(40)
+			expect(palette).toHaveLength(16)
 		})
 
-		it('should return colors matching terminal palette from bash script', () => {
+		it('should return the expected 16-color palette', () => {
 			const palette = getColorPalette()
-			// From bash/new-branch-workflow.sh lines 111-122
 			const expectedColors: RgbColor[] = [
-				// First 10 colors preserved for backward compatibility
-				{ r: 220, g: 235, b: 248 }, // 0: Soft blue
-				{ r: 248, g: 220, b: 235 }, // 1: Soft pink
-				{ r: 220, g: 248, b: 235 }, // 2: Soft green
-				{ r: 248, g: 240, b: 220 }, // 3: Soft cream
-				{ r: 240, g: 220, b: 248 }, // 4: Soft lavender
-				{ r: 220, g: 240, b: 248 }, // 5: Soft cyan
+				{ r: 220, g: 235, b: 255 }, // 0: Soft blue
+				{ r: 255, g: 220, b: 235 }, // 1: Soft pink
+				{ r: 220, g: 255, b: 235 }, // 2: Soft green
+				{ r: 255, g: 245, b: 220 }, // 3: Soft cream
+				{ r: 245, g: 220, b: 255 }, // 4: Soft lavender
+				{ r: 220, g: 245, b: 255 }, // 5: Soft cyan
 				{ r: 235, g: 235, b: 235 }, // 6: Soft grey
-				{ r: 228, g: 238, b: 248 }, // 7: Soft ice blue
-				{ r: 248, g: 228, b: 238 }, // 8: Soft rose
-				{ r: 228, g: 248, b: 238 }, // 9: Soft mint
-				// 30 new colors (indices 10-39)
-				{ r: 235, g: 245, b: 250 }, // 10: Pale sky blue
-				{ r: 250, g: 235, b: 245 }, // 11: Pale orchid
-				{ r: 235, g: 250, b: 245 }, // 12: Pale seafoam
-				{ r: 250, g: 245, b: 235 }, // 13: Pale peach
-				{ r: 245, g: 235, b: 250 }, // 14: Pale periwinkle
-				{ r: 235, g: 245, b: 235 }, // 15: Pale sage
-				{ r: 245, g: 250, b: 235 }, // 16: Pale lemon
-				{ r: 245, g: 235, b: 235 }, // 17: Pale blush
-				{ r: 235, g: 235, b: 250 }, // 18: Pale lavender blue
-				{ r: 250, g: 235, b: 235 }, // 19: Pale coral
-				{ r: 235, g: 250, b: 250 }, // 20: Pale aqua
-				{ r: 240, g: 248, b: 255 }, // 21: Alice blue
-				{ r: 255, g: 240, b: 248 }, // 22: Lavender blush
-				{ r: 240, g: 255, b: 248 }, // 23: Honeydew tint
-				{ r: 255, g: 248, b: 240 }, // 24: Antique white
-				{ r: 248, g: 240, b: 255 }, // 25: Magnolia
-				{ r: 240, g: 248, b: 240 }, // 26: Mint cream tint
-				{ r: 248, g: 255, b: 240 }, // 27: Ivory tint
-				{ r: 248, g: 240, b: 240 }, // 28: Misty rose tint
-				{ r: 240, g: 240, b: 255 }, // 29: Ghost white tint
-				{ r: 255, g: 245, b: 238 }, // 30: Seashell
-				{ r: 245, g: 255, b: 250 }, // 31: Azure mist
-				{ r: 250, g: 245, b: 255 }, // 32: Lilac mist
-				{ r: 255, g: 250, b: 245 }, // 33: Snow peach
-				{ r: 238, g: 245, b: 255 }, // 34: Powder blue
-				{ r: 255, g: 238, b: 245 }, // 35: Pink lace
-				{ r: 245, g: 255, b: 238 }, // 36: Pale lime
-				{ r: 238, g: 255, b: 245 }, // 37: Pale turquoise
-				{ r: 245, g: 238, b: 255 }, // 38: Pale violet
-				{ r: 255, g: 245, b: 255 }, // 39: Pale magenta
+				{ r: 255, g: 230, b: 230 }, // 7: Soft coral
+				{ r: 230, g: 255, b: 230 }, // 8: Soft mint
+				{ r: 255, g: 245, b: 230 }, // 9: Soft peach
+				{ r: 220, g: 255, b: 255 }, // 10: Soft aqua
+				{ r: 255, g: 220, b: 255 }, // 11: Soft magenta
+				{ r: 255, g: 255, b: 220 }, // 12: Soft yellow
+				{ r: 235, g: 220, b: 255 }, // 13: Soft violet
+				{ r: 220, g: 255, b: 245 }, // 14: Soft sea green
+				{ r: 255, g: 235, b: 220 }, // 15: Soft salmon
 			]
 			expect(palette).toEqual(expectedColors)
 		})
@@ -165,12 +140,24 @@ describe('Color utilities', () => {
 			expect(color1).toEqual(color2)
 		})
 
-		it('should return different colors for different branch names', () => {
-			const color1 = generateColorFromBranchName('feature/branch-1')
-			const color2 = generateColorFromBranchName('feature/branch-2')
-			// While theoretically they could be the same due to hash collisions,
-			// in practice they should be different
-			expect(color1.index).not.toBe(color2.index)
+		it('should generate different colors for many different branch names', () => {
+			// With only 16 colors, some hash collisions are expected
+			// But we should get good distribution across different branch names
+			const branches = [
+				'feature/branch-1',
+				'feature/branch-2',
+				'bugfix/auth',
+				'hotfix/urgent',
+				'release/v1.0',
+				'main',
+				'develop',
+				'feature/add-user-profile',
+			]
+			const indices = branches.map(b => generateColorFromBranchName(b).index)
+			const uniqueIndices = new Set(indices)
+			// With 8 branches and 16 colors, we should get at least 4 unique colors
+			// (statistically unlikely to get fewer due to birthday problem)
+			expect(uniqueIndices.size).toBeGreaterThanOrEqual(4)
 		})
 
 		it('should handle branch names with special characters (/, -, _)', () => {
@@ -185,7 +172,7 @@ describe('Color utilities', () => {
 			expect(() => generateColorFromBranchName('功能/my-branch')).not.toThrow()
 		})
 
-		it('should always return color index in range [0, 39]', () => {
+		it('should always return color index in range [0, 15]', () => {
 			const testBranches = [
 				'main',
 				'develop',
@@ -199,7 +186,7 @@ describe('Color utilities', () => {
 			testBranches.forEach((branch) => {
 				const color = generateColorFromBranchName(branch)
 				expect(color.index).toBeGreaterThanOrEqual(0)
-				expect(color.index).toBeLessThanOrEqual(39)
+				expect(color.index).toBeLessThanOrEqual(15)
 			})
 		})
 
@@ -230,7 +217,7 @@ describe('Color utilities', () => {
 			// We can verify our implementation produces same index
 			const color = generateColorFromBranchName('feature/test-branch')
 			expect(color.index).toBeGreaterThanOrEqual(0)
-			expect(color.index).toBeLessThanOrEqual(39)
+			expect(color.index).toBeLessThanOrEqual(15)
 			// Color should be from palette
 			const palette = getColorPalette()
 			expect(color.rgb).toEqual(palette[color.index])
@@ -265,7 +252,7 @@ describe('Color utilities', () => {
 
 					// Index in range
 					expect(color.index).toBeGreaterThanOrEqual(0)
-					expect(color.index).toBeLessThanOrEqual(39)
+					expect(color.index).toBeLessThanOrEqual(15)
 
 					// RGB values valid
 					expect(color.rgb.r).toBeGreaterThanOrEqual(0)
@@ -304,54 +291,124 @@ describe('Color utilities', () => {
 		})
 	})
 
-	describe('40-color palette expansion', () => {
-		it('should maintain first 10 colors for backward compatibility', () => {
-			// Verify first 10 colors unchanged to preserve existing branch colors
+	describe('16-color distinct palette', () => {
+		it('should have most colors be visually distinct (minimum palette distance > 10)', () => {
+			// Test that no two colors are too similar
+			// With RGB constrained to 220-255 range and 16 colors,
+			// we can't achieve min distance >= MIN_COLOR_DISTANCE (20) for all pairs,
+			// but the collision avoidance algorithm ensures active looms get distinct colors
 			const palette = getColorPalette()
-			const originalColors: RgbColor[] = [
-				{ r: 220, g: 235, b: 248 }, // Soft blue
-				{ r: 248, g: 220, b: 235 }, // Soft pink
-				{ r: 220, g: 248, b: 235 }, // Soft green
-				{ r: 248, g: 240, b: 220 }, // Soft cream
-				{ r: 240, g: 220, b: 248 }, // Soft lavender
-				{ r: 220, g: 240, b: 248 }, // Soft cyan
-				{ r: 235, g: 235, b: 235 }, // Soft grey
-				{ r: 228, g: 238, b: 248 }, // Soft ice blue
-				{ r: 248, g: 228, b: 238 }, // Soft rose
-				{ r: 228, g: 248, b: 238 }, // Soft mint
-			]
-			originalColors.forEach((expected, index) => {
-				expect(palette[index]).toEqual(expected)
-			})
-		})
-
-		it('should have all 40 colors be visually distinct', () => {
-			// Test that no two colors are too similar (Euclidean distance threshold)
-			const palette = getColorPalette()
+			let minDistance = Infinity
 			for (let i = 0; i < palette.length; i++) {
 				for (let j = i + 1; j < palette.length; j++) {
-					const distance = Math.sqrt(
-						Math.pow(palette[i].r - palette[j].r, 2) +
-							Math.pow(palette[i].g - palette[j].g, 2) +
-							Math.pow(palette[i].b - palette[j].b, 2)
-					)
-					// Minimum distance threshold to ensure visual distinction
-					// For subtle colors (RGB >= 220), we allow smaller distances since the color space is constrained
-					// A distance of 3+ ensures colors are not identical or too similar
-					expect(distance).toBeGreaterThanOrEqual(3)
+					const distance = colorDistance(palette[i], palette[j])
+					if (distance < minDistance) {
+						minDistance = distance
+					}
 				}
 			}
+			// Ensure minimum distance is significantly better than the original 3.61
+			expect(minDistance).toBeGreaterThanOrEqual(10)
 		})
 
-		it('should maintain subtlety constraint for all 40 colors', () => {
-			// This already exists but confirms it works for expanded palette
+		it('should maintain subtlety constraint for all 16 colors', () => {
 			const palette = getColorPalette()
-			expect(palette).toHaveLength(40)
+			expect(palette).toHaveLength(16)
 			palette.forEach((color) => {
 				expect(color.r).toBeGreaterThanOrEqual(220)
 				expect(color.g).toBeGreaterThanOrEqual(220)
 				expect(color.b).toBeGreaterThanOrEqual(220)
 			})
+		})
+	})
+
+	describe('colorDistance', () => {
+		it('should return 0 for identical colors', () => {
+			const color: RgbColor = { r: 220, g: 235, b: 255 }
+			expect(colorDistance(color, color)).toBe(0)
+		})
+
+		it('should calculate correct euclidean distance', () => {
+			const color1: RgbColor = { r: 0, g: 0, b: 0 }
+			const color2: RgbColor = { r: 3, g: 4, b: 0 }
+			// sqrt(3^2 + 4^2 + 0^2) = sqrt(25) = 5
+			expect(colorDistance(color1, color2)).toBe(5)
+		})
+
+		it('should be symmetric', () => {
+			const color1: RgbColor = { r: 220, g: 235, b: 255 }
+			const color2: RgbColor = { r: 255, g: 220, b: 235 }
+			expect(colorDistance(color1, color2)).toBe(colorDistance(color2, color1))
+		})
+	})
+
+	describe('selectDistinctColor', () => {
+		it('should return hash-based color when no colors in use', () => {
+			const result = selectDistinctColor('feature/test', [])
+			const hashBased = generateColorFromBranchName('feature/test')
+			expect(result.index).toBe(hashBased.index)
+			expect(result.hex).toBe(hashBased.hex)
+		})
+
+		it('should return hash-based color when used hex colors are distinct enough', () => {
+			const hashBased = generateColorFromBranchName('feature/test')
+			// Use a very different color (black) that won't conflict
+			const usedHexColors = ['#000000']
+			const result = selectDistinctColor('feature/test', usedHexColors)
+			// Should return hash-based since black is very different from any palette color
+			expect(result.index).toBe(hashBased.index)
+		})
+
+		it('should avoid color when same hex is in use', () => {
+			const hashBased = generateColorFromBranchName('feature/collision-test')
+			const usedHexColors = [hashBased.hex]
+			const result = selectDistinctColor('feature/collision-test', usedHexColors)
+			expect(result.hex).not.toBe(hashBased.hex)
+		})
+
+		it('should avoid colors that are too similar to used hex colors', () => {
+			// Use palette color 0 (Soft blue: #dcebff)
+			const usedHexColors = ['#dcebff']
+			const result = selectDistinctColor('feature/test', usedHexColors)
+			// Either the hash-based color was distinct enough, or we found another distinct color
+			// The key is we got a valid result
+			expect(result.hex).toMatch(/^#[0-9a-f]{6}$/)
+		})
+
+		it('should handle invalid hex colors gracefully', () => {
+			// Invalid hex colors should be skipped
+			const usedHexColors = ['invalid', 'not-a-color', '#gg0000']
+			const result = selectDistinctColor('feature/test', usedHexColors)
+			const hashBased = generateColorFromBranchName('feature/test')
+			// Since all hex colors are invalid, should return hash-based
+			expect(result.index).toBe(hashBased.index)
+		})
+
+		it('should fall back to hash-based when all colors too similar', () => {
+			// Use all palette colors as hex strings
+			const palette = getColorPalette()
+			const allHexColors = palette.map(c => rgbToHex(c.r, c.g, c.b))
+			const result = selectDistinctColor('feature/test', allHexColors)
+			// Should still return a valid color (fallback behavior)
+			expect(result.index).toBeGreaterThanOrEqual(0)
+			expect(result.index).toBeLessThanOrEqual(15)
+		})
+
+		it('should return valid ColorData', () => {
+			const result = selectDistinctColor('feature/test', ['#dcebff', '#f8dceb'])
+			expect(result).toHaveProperty('rgb')
+			expect(result).toHaveProperty('hex')
+			expect(result).toHaveProperty('index')
+			expect(result.hex).toMatch(/^#[0-9a-f]{6}$/)
+		})
+
+		it('should be robust against palette changes by comparing hex colors directly', () => {
+			// This test verifies the key benefit: comparing hex colors directly
+			// means the function works even if the palette is modified
+			const customHexColors = ['#aabbcc', '#ddeeff', '#112233']
+			const result = selectDistinctColor('feature/test', customHexColors)
+			// Should return a valid color regardless of what hex colors are passed
+			expect(result.hex).toMatch(/^#[0-9a-f]{6}$/)
 		})
 	})
 

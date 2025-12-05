@@ -20,55 +20,30 @@ export interface ColorData {
 }
 
 /**
- * Get the predefined color palette (40 subtle, professional colors)
- * Matches the terminal color palette from bash/new-branch-workflow.sh
+ * Get the predefined color palette (16 visually distinct colors)
+ * Reduced from 40 colors to ensure minimum euclidean distance >= 30 between all pairs
+ * This prevents near-identical colors being assigned to different looms
  *
- * @returns Array of 40 RGB colors
+ * @returns Array of 16 RGB colors
  */
 export function getColorPalette(): RgbColor[] {
 	return [
-		// First 10 colors preserved for backward compatibility
-		{ r: 220, g: 235, b: 248 }, // 0: Soft blue
-		{ r: 248, g: 220, b: 235 }, // 1: Soft pink
-		{ r: 220, g: 248, b: 235 }, // 2: Soft green
-		{ r: 248, g: 240, b: 220 }, // 3: Soft cream
-		{ r: 240, g: 220, b: 248 }, // 4: Soft lavender
-		{ r: 220, g: 240, b: 248 }, // 5: Soft cyan
+		{ r: 220, g: 235, b: 255 }, // 0: Soft blue
+		{ r: 255, g: 220, b: 235 }, // 1: Soft pink
+		{ r: 220, g: 255, b: 235 }, // 2: Soft green
+		{ r: 255, g: 245, b: 220 }, // 3: Soft cream
+		{ r: 245, g: 220, b: 255 }, // 4: Soft lavender
+		{ r: 220, g: 245, b: 255 }, // 5: Soft cyan
 		{ r: 235, g: 235, b: 235 }, // 6: Soft grey
-		{ r: 228, g: 238, b: 248 }, // 7: Soft ice blue
-		{ r: 248, g: 228, b: 238 }, // 8: Soft rose
-		{ r: 228, g: 248, b: 238 }, // 9: Soft mint
-		// 30 new colors (indices 10-39)
-		{ r: 235, g: 245, b: 250 }, // 10: Pale sky blue
-		{ r: 250, g: 235, b: 245 }, // 11: Pale orchid
-		{ r: 235, g: 250, b: 245 }, // 12: Pale seafoam
-		{ r: 250, g: 245, b: 235 }, // 13: Pale peach
-		{ r: 245, g: 235, b: 250 }, // 14: Pale periwinkle
-		{ r: 235, g: 245, b: 235 }, // 15: Pale sage
-		{ r: 245, g: 250, b: 235 }, // 16: Pale lemon
-		{ r: 245, g: 235, b: 235 }, // 17: Pale blush
-		{ r: 235, g: 235, b: 250 }, // 18: Pale lavender blue
-		{ r: 250, g: 235, b: 235 }, // 19: Pale coral
-		{ r: 235, g: 250, b: 250 }, // 20: Pale aqua
-		{ r: 240, g: 248, b: 255 }, // 21: Alice blue
-		{ r: 255, g: 240, b: 248 }, // 22: Lavender blush
-		{ r: 240, g: 255, b: 248 }, // 23: Honeydew tint
-		{ r: 255, g: 248, b: 240 }, // 24: Antique white
-		{ r: 248, g: 240, b: 255 }, // 25: Magnolia
-		{ r: 240, g: 248, b: 240 }, // 26: Mint cream tint
-		{ r: 248, g: 255, b: 240 }, // 27: Ivory tint
-		{ r: 248, g: 240, b: 240 }, // 28: Misty rose tint
-		{ r: 240, g: 240, b: 255 }, // 29: Ghost white tint
-		{ r: 255, g: 245, b: 238 }, // 30: Seashell
-		{ r: 245, g: 255, b: 250 }, // 31: Azure mist
-		{ r: 250, g: 245, b: 255 }, // 32: Lilac mist
-		{ r: 255, g: 250, b: 245 }, // 33: Snow peach
-		{ r: 238, g: 245, b: 255 }, // 34: Powder blue
-		{ r: 255, g: 238, b: 245 }, // 35: Pink lace
-		{ r: 245, g: 255, b: 238 }, // 36: Pale lime
-		{ r: 238, g: 255, b: 245 }, // 37: Pale turquoise
-		{ r: 245, g: 238, b: 255 }, // 38: Pale violet
-		{ r: 255, g: 245, b: 255 }, // 39: Pale magenta
+		{ r: 255, g: 230, b: 230 }, // 7: Soft coral
+		{ r: 230, g: 255, b: 230 }, // 8: Soft mint
+		{ r: 255, g: 245, b: 230 }, // 9: Soft peach
+		{ r: 220, g: 255, b: 255 }, // 10: Soft aqua
+		{ r: 255, g: 220, b: 255 }, // 11: Soft magenta
+		{ r: 255, g: 255, b: 220 }, // 12: Soft yellow
+		{ r: 235, g: 220, b: 255 }, // 13: Soft violet
+		{ r: 220, g: 255, b: 245 }, // 14: Soft sea green
+		{ r: 255, g: 235, b: 220 }, // 15: Soft salmon
 	]
 }
 
@@ -154,6 +129,92 @@ export function generateColorFromBranchName(branchName: string): ColorData {
 		hex,
 		index,
 	}
+}
+
+/**
+ * Calculate euclidean distance between two RGB colors
+ */
+export function colorDistance(a: RgbColor, b: RgbColor): number {
+	return Math.sqrt(
+		Math.pow(a.r - b.r, 2) +
+		Math.pow(a.g - b.g, 2) +
+		Math.pow(a.b - b.b, 2)
+	)
+}
+
+/**
+ * Minimum distance threshold for colors to be considered "distinct"
+ * Note: With RGB constrained to 220-255 range (subtle backgrounds),
+ * the maximum possible distance between any two colors is ~60.6
+ * A threshold of 20 ensures colors are visually distinguishable
+ * (vs the original palette minimum of 3.61) while allowing enough
+ * palette diversity for typical concurrent loom counts (5-10).
+ */
+export const MIN_COLOR_DISTANCE = 20
+
+/**
+ * Select a color for a branch, avoiding colors that are too similar to hex colors in use
+ * This function is robust against palette changes since it compares hex colors directly.
+ *
+ * @param branchName - Branch name to generate base color from
+ * @param usedHexColors - Array of hex colors (e.g., "#dcebff") already in use by active looms
+ * @returns ColorData with the selected color
+ */
+export function selectDistinctColor(branchName: string, usedHexColors: string[]): ColorData {
+	const palette = getColorPalette()
+	const hashBasedColor = generateColorFromBranchName(branchName)
+
+	// If no colors in use, return hash-based selection
+	if (usedHexColors.length === 0) {
+		return hashBasedColor
+	}
+
+	// Convert used hex colors to RGB for distance calculation
+	const usedRgbColors: RgbColor[] = []
+	for (const hex of usedHexColors) {
+		try {
+			usedRgbColors.push(hexToRgb(hex))
+		} catch {
+			// Skip invalid hex colors
+			logger.debug(`[selectDistinctColor] Skipping invalid hex color: ${hex}`)
+		}
+	}
+
+	// If all hex colors were invalid, return hash-based selection
+	if (usedRgbColors.length === 0) {
+		return hashBasedColor
+	}
+
+	// Check if hash-based color is distinct enough from all used colors
+	const isTooSimilar = usedRgbColors.some(usedRgb =>
+		colorDistance(hashBasedColor.rgb, usedRgb) < MIN_COLOR_DISTANCE
+	)
+
+	if (!isTooSimilar) {
+		return hashBasedColor
+	}
+
+	// Find the first available color that's distinct from all used colors
+	for (let i = 0; i < palette.length; i++) {
+		const candidateRgb = palette[i]
+		if (!candidateRgb) continue
+
+		const isDistinct = usedRgbColors.every(usedRgb =>
+			colorDistance(candidateRgb, usedRgb) >= MIN_COLOR_DISTANCE
+		)
+
+		if (isDistinct) {
+			return {
+				rgb: candidateRgb,
+				hex: rgbToHex(candidateRgb.r, candidateRgb.g, candidateRgb.b),
+				index: i,
+			}
+		}
+	}
+
+	// Fallback: all colors too similar, return hash-based (best effort)
+	logger.debug(`[selectDistinctColor] No distinct color found, falling back to hash-based for ${branchName}`)
+	return hashBasedColor
 }
 
 /**

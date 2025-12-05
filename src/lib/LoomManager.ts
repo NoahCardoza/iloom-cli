@@ -12,7 +12,7 @@ import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager, type WriteMetadataInput } from './MetadataManager.js'
 import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit } from '../utils/git.js'
 import { installDependencies } from '../utils/package-manager.js'
-import { generateColorFromBranchName } from '../utils/color.js'
+import { generateColorFromBranchName, selectDistinctColor, type ColorData } from '../utils/color.js'
 import { DatabaseManager } from './DatabaseManager.js'
 import { loadEnvIntoProcess, findEnvFileForDatabaseUrl } from '../utils/env.js'
 import type { Loom, CreateLoomInput } from '../types/loom.js'
@@ -185,9 +185,26 @@ export class LoomManager {
       }
     }
 
-    // 11. Apply color synchronization (terminal and VSCode) based on settings
+    // 11. Select color with collision avoidance
+    // Get hex colors in use from active looms (robust against palette changes)
+    const activeLooms = await this.listLooms()
+    const usedHexColors: string[] = []
+    await Promise.all(
+      activeLooms.map(async (loom) => {
+        const metadata = await this.metadataManager.readMetadata(loom.path)
+        if (metadata?.colorHex) {
+          usedHexColors.push(metadata.colorHex)
+        }
+      })
+    )
+
+    // Select distinct color using hex-based comparison
+    const colorData = selectDistinctColor(branchName, usedHexColors)
+    logger.debug(`Selected color ${colorData.hex} for branch ${branchName} (${usedHexColors.length} colors in use)`)
+
+    // Apply color synchronization (terminal and VSCode) based on settings
     try {
-      await this.applyColorSynchronization(worktreePath, branchName, settingsData, input.options)
+      await this.applyColorSynchronization(worktreePath, branchName, colorData, settingsData, input.options)
     } catch (error) {
       // Log warning but don't fail - colors are cosmetic
       logger.warn(
@@ -213,7 +230,7 @@ export class LoomManager {
       }
     }
 
-    // 8. Launch workspace components based on individual flags
+    // 11.5. Launch workspace components based on individual flags
     const enableClaude = input.options?.enableClaude !== false
     const enableCode = input.options?.enableCode !== false
     const enableDevServer = input.options?.enableDevServer !== false
@@ -248,6 +265,7 @@ export class LoomManager {
         ...(executablePath && { executablePath }),
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
         colorTerminal: input.options?.colorTerminal ?? settingsData.colors?.terminal ?? true,
+        colorHex: colorData.hex,
       })
     }
 
@@ -267,6 +285,7 @@ export class LoomManager {
       issue_numbers,
       pr_numbers,
       issueTracker: this.issueTracker.providerName,
+      colorHex: colorData.hex,
     }
     await this.metadataManager.writeMetadata(worktreePath, metadataInput)
 
@@ -313,6 +332,9 @@ export class LoomManager {
    */
   async listLooms(): Promise<Loom[]> {
     const worktrees = await this.gitWorktree.listWorktrees()
+    if (!worktrees) {
+      return []
+    }
     return await this.mapWorktreesToLooms(worktrees)
   }
 
@@ -741,10 +763,13 @@ export class LoomManager {
    * DEFAULTS:
    * - terminal: true (always safe, only affects macOS Terminal.app)
    * - vscode: false (safe default, prevents unexpected file modifications)
+   *
+   * @param colorData - Pre-computed color data (from collision avoidance)
    */
   private async applyColorSynchronization(
     worktreePath: string,
     branchName: string,
+    colorData: ColorData,
     settings: import('./SettingsManager.js').IloomSettings,
     options?: CreateLoomInput['options']
   ): Promise<void> {
@@ -757,8 +782,6 @@ export class LoomManager {
       logger.debug('Color synchronization disabled for both VSCode and terminal')
       return
     }
-
-    const colorData = generateColorFromBranchName(branchName)
 
     // Apply VSCode title bar color if enabled (default: disabled for safety)
     if (colorVscode) {
@@ -869,6 +892,22 @@ export class LoomManager {
     logger.info('Database branch assumed to be already configured for existing worktree')
     const databaseBranch: string | undefined = undefined
 
+    // 5.5. Read existing metadata to get colorHex (for reusing stored color)
+    const existingMetadata = await this.metadataManager.readMetadata(worktreePath)
+
+    // Determine colorHex for launch
+    let colorHex: string
+    if (existingMetadata?.colorHex) {
+      // Use stored hex color (already migrated from colorIndex if needed in readMetadata)
+      colorHex = existingMetadata.colorHex
+      logger.debug(`Reusing stored color ${colorHex} for branch ${branchName}`)
+    } else {
+      // No metadata - fall back to hash-based
+      const colorData = generateColorFromBranchName(branchName)
+      colorHex = colorData.hex
+      logger.debug(`No stored color, using hash-based color ${colorHex} for branch ${branchName}`)
+    }
+
     // 6. Move issue to In Progress (for reused worktrees too)
     if (input.type === 'issue') {
       try {
@@ -920,12 +959,12 @@ export class LoomManager {
         ...(executablePath && { executablePath }),
         sourceEnvOnStart: settingsData.sourceEnvOnStart ?? false,
         colorTerminal: input.options?.colorTerminal ?? settingsData.colors?.terminal ?? true,
+        colorHex,
       })
     }
 
     // 8. Write loom metadata if missing (spec section 3.1)
     // For reused looms, only write if metadata file doesn't exist
-    const existingMetadata = await this.metadataManager.readMetadata(worktreePath)
     const description = existingMetadata?.description ?? issueData?.title ?? branchName
     if (!existingMetadata) {
       // Build issue/pr numbers arrays based on type
@@ -940,6 +979,7 @@ export class LoomManager {
         issue_numbers,
         pr_numbers,
         issueTracker: this.issueTracker.providerName,
+        colorHex,
       }
       await this.metadataManager.writeMetadata(worktreePath, metadataInput)
     }

@@ -82,6 +82,7 @@ describe('MetadataManager', () => {
       issue_numbers: ['42'],
       pr_numbers: [],
       issueTracker: 'github',
+      colorHex: '#dcebff',
     }
 
     beforeEach(() => {
@@ -121,6 +122,7 @@ describe('MetadataManager', () => {
         issue_numbers: ['42'],
         pr_numbers: [],
         issueTracker: 'github',
+        colorHex: '#dcebff',
       })
 
       vi.useRealTimers()
@@ -164,6 +166,7 @@ describe('MetadataManager', () => {
         issue_numbers: ['42'],
         pr_numbers: [],
         issueTracker: 'github',
+        colorHex: '#f5dceb',
       })
       vi.mocked(fs.pathExists).mockResolvedValue(true)
       vi.mocked(fs.readFile).mockResolvedValue(mockContent)
@@ -179,6 +182,7 @@ describe('MetadataManager', () => {
         issue_numbers: ['42'],
         pr_numbers: [],
         issueTracker: 'github',
+        colorHex: '#f5dceb',
       })
     })
 
@@ -202,6 +206,7 @@ describe('MetadataManager', () => {
         issue_numbers: [],
         pr_numbers: [],
         issueTracker: null,
+        colorHex: null,
       })
     })
 
