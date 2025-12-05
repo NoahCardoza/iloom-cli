@@ -12,7 +12,7 @@ import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager, type WriteMetadataInput } from './MetadataManager.js'
 import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit } from '../utils/git.js'
 import { installDependencies } from '../utils/package-manager.js'
-import { generateColorFromBranchName, selectDistinctColor, type ColorData } from '../utils/color.js'
+import { generateColorFromBranchName, selectDistinctColor, hexToRgb, type ColorData } from '../utils/color.js'
 import { DatabaseManager } from './DatabaseManager.js'
 import { loadEnvIntoProcess, findEnvFileForDatabaseUrl } from '../utils/env.js'
 import type { Loom, CreateLoomInput } from '../types/loom.js'
@@ -906,6 +906,19 @@ export class LoomManager {
       const colorData = generateColorFromBranchName(branchName)
       colorHex = colorData.hex
       logger.debug(`No stored color, using hash-based color ${colorHex} for branch ${branchName}`)
+    }
+
+    // Apply color synchronization (VSCode colors for reused looms)
+    // Mirrors createIloom() behavior at lines 205-214
+    try {
+      const colorData: ColorData = { hex: colorHex, rgb: hexToRgb(colorHex), index: 0 }
+      await this.applyColorSynchronization(worktreePath, branchName, colorData, settingsData, input.options)
+    } catch (error) {
+      // Log warning but don't fail - colors are cosmetic
+      logger.warn(
+        `Failed to apply color synchronization: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error
+      )
     }
 
     // 6. Move issue to In Progress (for reused worktrees too)
