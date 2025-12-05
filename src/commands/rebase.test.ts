@@ -11,11 +11,11 @@ vi.mock('../lib/GitWorktreeManager.js')
 vi.mock('../lib/SettingsManager.js')
 vi.mock('../utils/git.js', () => ({
 	isValidGitRepo: vi.fn(),
-	getRepoRoot: vi.fn(),
+	getWorktreeRoot: vi.fn(),
 }))
 
 // Import mocked functions
-import { isValidGitRepo, getRepoRoot } from '../utils/git.js'
+import { isValidGitRepo, getWorktreeRoot } from '../utils/git.js'
 
 describe('RebaseCommand', () => {
 	let command: RebaseCommand
@@ -85,7 +85,7 @@ describe('RebaseCommand', () => {
 		it('throws error when repo root cannot be determined', async () => {
 			process.cwd = vi.fn().mockReturnValue('/test/worktree')
 			vi.mocked(isValidGitRepo).mockResolvedValue(true)
-			vi.mocked(getRepoRoot).mockResolvedValue(null)
+			vi.mocked(getWorktreeRoot).mockResolvedValue(null)
 
 			await expect(command.execute()).rejects.toThrow(WorktreeValidationError)
 			await expect(command.execute()).rejects.toThrow('Could not determine repository root.')
@@ -94,7 +94,7 @@ describe('RebaseCommand', () => {
 		it('throws error when directory is not a registered worktree', async () => {
 			process.cwd = vi.fn().mockReturnValue('/test/regular-repo')
 			vi.mocked(isValidGitRepo).mockResolvedValue(true)
-			vi.mocked(getRepoRoot).mockResolvedValue('/test/regular-repo')
+			vi.mocked(getWorktreeRoot).mockResolvedValue('/test/regular-repo')
 			vi.mocked(mockGitWorktreeManager.listWorktrees).mockResolvedValue([
 				createMockWorktree({ path: '/other/worktree' }),
 			])
@@ -111,7 +111,7 @@ describe('RebaseCommand', () => {
 			})
 			process.cwd = vi.fn().mockReturnValue('/test/main-repo')
 			vi.mocked(isValidGitRepo).mockResolvedValue(true)
-			vi.mocked(getRepoRoot).mockResolvedValue('/test/main-repo')
+			vi.mocked(getWorktreeRoot).mockResolvedValue('/test/main-repo')
 			vi.mocked(mockGitWorktreeManager.listWorktrees).mockResolvedValue([mainWorktree])
 			vi.mocked(mockGitWorktreeManager.isMainWorktree).mockResolvedValue(true)
 
@@ -123,7 +123,7 @@ describe('RebaseCommand', () => {
 			const worktree = createMockWorktree({ path: '/test/worktree' })
 			process.cwd = vi.fn().mockReturnValue('/test/worktree/src/components')
 			vi.mocked(isValidGitRepo).mockResolvedValue(true)
-			vi.mocked(getRepoRoot).mockResolvedValue('/test/worktree')
+			vi.mocked(getWorktreeRoot).mockResolvedValue('/test/worktree')
 			vi.mocked(mockGitWorktreeManager.listWorktrees).mockResolvedValue([worktree])
 			vi.mocked(mockGitWorktreeManager.isMainWorktree).mockResolvedValue(false)
 
@@ -152,7 +152,7 @@ describe('RebaseCommand', () => {
 		it('provides helpful suggestion for regular git repo', async () => {
 			process.cwd = vi.fn().mockReturnValue('/test/regular-repo')
 			vi.mocked(isValidGitRepo).mockResolvedValue(true)
-			vi.mocked(getRepoRoot).mockResolvedValue('/test/regular-repo')
+			vi.mocked(getWorktreeRoot).mockResolvedValue('/test/regular-repo')
 			vi.mocked(mockGitWorktreeManager.listWorktrees).mockResolvedValue([])
 
 			try {
@@ -171,7 +171,7 @@ describe('RebaseCommand', () => {
 			})
 			process.cwd = vi.fn().mockReturnValue('/test/main-repo')
 			vi.mocked(isValidGitRepo).mockResolvedValue(true)
-			vi.mocked(getRepoRoot).mockResolvedValue('/test/main-repo')
+			vi.mocked(getWorktreeRoot).mockResolvedValue('/test/main-repo')
 			vi.mocked(mockGitWorktreeManager.listWorktrees).mockResolvedValue([mainWorktree])
 			vi.mocked(mockGitWorktreeManager.isMainWorktree).mockResolvedValue(true)
 
@@ -191,7 +191,7 @@ describe('RebaseCommand', () => {
 			const worktree = createMockWorktree({ path: '/test/worktree' })
 			process.cwd = vi.fn().mockReturnValue('/test/worktree')
 			vi.mocked(isValidGitRepo).mockResolvedValue(true)
-			vi.mocked(getRepoRoot).mockResolvedValue('/test/worktree')
+			vi.mocked(getWorktreeRoot).mockResolvedValue('/test/worktree')
 			vi.mocked(mockGitWorktreeManager.listWorktrees).mockResolvedValue([worktree])
 			vi.mocked(mockGitWorktreeManager.isMainWorktree).mockResolvedValue(false)
 		})
@@ -272,7 +272,7 @@ describe('RebaseCommand', () => {
 			})
 			process.cwd = vi.fn().mockReturnValue('/test/feat-issue-123')
 			vi.mocked(isValidGitRepo).mockResolvedValue(true)
-			vi.mocked(getRepoRoot).mockResolvedValue('/test/feat-issue-123')
+			vi.mocked(getWorktreeRoot).mockResolvedValue('/test/feat-issue-123')
 			vi.mocked(mockGitWorktreeManager.listWorktrees).mockResolvedValue([
 				mainWorktree,
 				featureWorktree,
@@ -301,7 +301,7 @@ describe('RebaseCommand', () => {
 			const worktree = createMockWorktree({ path: '/test/worktree' })
 			process.cwd = vi.fn().mockReturnValue('/test/worktree/src/lib/utils/deep/nested')
 			vi.mocked(isValidGitRepo).mockResolvedValue(true)
-			vi.mocked(getRepoRoot).mockResolvedValue('/test/worktree')
+			vi.mocked(getWorktreeRoot).mockResolvedValue('/test/worktree')
 			vi.mocked(mockGitWorktreeManager.listWorktrees).mockResolvedValue([worktree])
 			vi.mocked(mockGitWorktreeManager.isMainWorktree).mockResolvedValue(false)
 

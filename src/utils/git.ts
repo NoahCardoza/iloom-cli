@@ -333,13 +333,40 @@ export async function branchExists(
 }
 
 /**
- * Get repository root directory
+ * Get the root directory of the current worktree
+ * Returns the worktree root when in a linked worktree, or main repo root when in main worktree
  */
-export async function getRepoRoot(path: string = process.cwd()): Promise<string | null> {
+export async function getWorktreeRoot(path: string = process.cwd()): Promise<string | null> {
   try {
     const result = await executeGitCommand(['rev-parse', '--show-toplevel'], { cwd: path })
     return result.trim()
   } catch {
+    return null
+  }
+}
+
+/**
+ * Get the main repository root directory
+ * Returns the main repo root even when called from a linked worktree
+ */
+export async function getRepoRoot(path: string = process.cwd()): Promise<string | null> {
+  try {
+    // Get the common git directory (shared by all worktrees)
+    const gitCommonDir = await executeGitCommand(
+      ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+      { cwd: path }
+    )
+    const trimmedPath = gitCommonDir.trim()
+
+    // Handle linked worktree: /path/to/repo/.git/worktrees/worktree-name -> /path/to/repo
+    // Handle main worktree: /path/to/repo/.git -> /path/to/repo
+    const repoRoot = trimmedPath
+      .replace(/\/\.git\/worktrees\/[^/]+$/, '')  // Remove /.git/worktrees/name suffix
+      .replace(/\/\.git$/, '')                     // Remove /.git suffix
+
+    return repoRoot
+  } catch(error) {
+    logger.warn(`Failed to determine repo root from git-common-dir: ${path}`, error instanceof Error ? error.message : String(error))
     return null
   }
 }

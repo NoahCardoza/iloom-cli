@@ -2,7 +2,7 @@ import { logger } from '../utils/logger.js'
 import { MergeManager } from '../lib/MergeManager.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
-import { isValidGitRepo, getRepoRoot } from '../utils/git.js'
+import { isValidGitRepo, getWorktreeRoot } from '../utils/git.js'
 import type { MergeOptions } from '../types/index.js'
 
 export interface RebaseOptions {
@@ -65,9 +65,9 @@ export class RebaseCommand {
 			)
 		}
 
-		// Step 2: Get the repository root (handles subdirectories)
-		const repoRoot = await getRepoRoot(currentDir)
-		if (!repoRoot) {
+		// Step 2: Get the worktree root (handles subdirectories)
+		const worktreeRoot = await getWorktreeRoot(currentDir)
+		if (!worktreeRoot) {
 			throw new WorktreeValidationError(
 				'Could not determine repository root.',
 				"Run 'il rebase' from within an iloom worktree created by 'il start'."
@@ -76,7 +76,7 @@ export class RebaseCommand {
 
 		// Step 3: Check if this path is a registered git worktree
 		const worktrees = await this.gitWorktreeManager.listWorktrees()
-		const currentWorktree = worktrees.find(wt => wt.path === repoRoot)
+		const currentWorktree = worktrees.find(wt => wt.path === worktreeRoot)
 
 		if (!currentWorktree) {
 			throw new WorktreeValidationError(
@@ -94,7 +94,7 @@ export class RebaseCommand {
 			)
 		}
 
-		return repoRoot
+		return worktreeRoot
 	}
 
 	async execute(options: RebaseOptions = {}): Promise<void> {
