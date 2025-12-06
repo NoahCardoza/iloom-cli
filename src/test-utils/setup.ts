@@ -1,12 +1,8 @@
-import { beforeEach, vi } from 'vitest'
+import { beforeEach } from 'vitest'
 
 // Global test setup
+// Note: Mock cleanup (clearMocks, resetMocks, restoreMocks) is handled by vitest.config.ts
 beforeEach(() => {
-  // Reset all mocks before each test
-  vi.clearAllMocks()
-  vi.resetAllMocks()
-  vi.restoreAllMocks()
-
   // Reset environment variables to clean state
   delete process.env.GITHUB_TOKEN
   delete process.env.CLAUDE_API_KEY
