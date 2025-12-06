@@ -247,6 +247,219 @@ describe('MetadataManager', () => {
     })
   })
 
+  describe('listAllMetadata', () => {
+    it('should return empty array when looms directory does not exist', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(false)
+
+      const result = await manager.listAllMetadata()
+
+      expect(result).toEqual([])
+      expect(fs.readdir).not.toHaveBeenCalled()
+    })
+
+    it('should return empty array when looms directory is empty', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockResolvedValue([])
+
+      const result = await manager.listAllMetadata()
+
+      expect(result).toEqual([])
+    })
+
+    it('should return metadata from all valid JSON files', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockResolvedValue([
+        '___Users___alice___project1.json',
+        '___Users___bob___project2.json',
+      ] as unknown as string[])
+
+      vi.mocked(fs.readFile).mockImplementation(async (filePath) => {
+        const path = String(filePath)
+        if (path.includes('project1')) {
+          return JSON.stringify({
+            description: 'Project 1 loom',
+            created_at: '2024-01-15T10:00:00.000Z',
+            version: 1,
+            branchName: 'issue-1__feat',
+            worktreePath: '/Users/alice/project1',
+            issueType: 'issue',
+            issue_numbers: ['1'],
+            pr_numbers: [],
+            issueTracker: 'github',
+            colorHex: '#ff0000',
+          })
+        }
+        return JSON.stringify({
+          description: 'Project 2 loom',
+          created_at: '2024-01-16T10:00:00.000Z',
+          version: 1,
+          branchName: 'issue-2__fix',
+          worktreePath: '/Users/bob/project2',
+          issueType: 'issue',
+          issue_numbers: ['2'],
+          pr_numbers: [],
+          issueTracker: 'github',
+          colorHex: '#00ff00',
+        })
+      })
+
+      const result = await manager.listAllMetadata()
+
+      expect(result).toHaveLength(2)
+      expect(result[0]).toEqual({
+        description: 'Project 1 loom',
+        created_at: '2024-01-15T10:00:00.000Z',
+        branchName: 'issue-1__feat',
+        worktreePath: '/Users/alice/project1',
+        issueType: 'issue',
+        issue_numbers: ['1'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#ff0000',
+      })
+      expect(result[1]).toEqual({
+        description: 'Project 2 loom',
+        created_at: '2024-01-16T10:00:00.000Z',
+        branchName: 'issue-2__fix',
+        worktreePath: '/Users/bob/project2',
+        issueType: 'issue',
+        issue_numbers: ['2'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#00ff00',
+      })
+    })
+
+    it('should skip non-JSON files', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockResolvedValue([
+        '___Users___alice___project1.json',
+        'readme.txt',
+        '.DS_Store',
+      ] as unknown as string[])
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+        description: 'Project 1 loom',
+        version: 1,
+        colorHex: '#ff0000',
+      }))
+
+      const result = await manager.listAllMetadata()
+
+      expect(result).toHaveLength(1)
+      expect(fs.readFile).toHaveBeenCalledTimes(1)
+    })
+
+    it('should skip files with invalid JSON', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockResolvedValue([
+        'valid.json',
+        'invalid.json',
+      ] as unknown as string[])
+
+      vi.mocked(fs.readFile).mockImplementation(async (filePath) => {
+        const path = String(filePath)
+        if (path.includes('invalid')) {
+          return 'not valid json {'
+        }
+        return JSON.stringify({
+          description: 'Valid loom',
+          version: 1,
+          colorHex: '#ff0000',
+        })
+      })
+
+      const result = await manager.listAllMetadata()
+
+      expect(result).toHaveLength(1)
+      expect(result[0].description).toBe('Valid loom')
+    })
+
+    it('should skip files without description field', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockResolvedValue([
+        'with-desc.json',
+        'no-desc.json',
+      ] as unknown as string[])
+
+      vi.mocked(fs.readFile).mockImplementation(async (filePath) => {
+        const path = String(filePath)
+        if (path.includes('no-desc')) {
+          return JSON.stringify({ version: 1, colorHex: '#ff0000' })
+        }
+        return JSON.stringify({
+          description: 'Has description',
+          version: 1,
+          colorHex: '#00ff00',
+        })
+      })
+
+      const result = await manager.listAllMetadata()
+
+      expect(result).toHaveLength(1)
+      expect(result[0].description).toBe('Has description')
+    })
+
+    it('should return null values for missing optional fields', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockResolvedValue(['minimal.json'] as unknown as string[])
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+        description: 'Minimal loom',
+        version: 1,
+      }))
+
+      const result = await manager.listAllMetadata()
+
+      expect(result).toHaveLength(1)
+      expect(result[0]).toEqual({
+        description: 'Minimal loom',
+        created_at: null,
+        branchName: null,
+        worktreePath: null,
+        issueType: null,
+        issue_numbers: [],
+        pr_numbers: [],
+        issueTracker: null,
+        colorHex: null,
+      })
+    })
+
+    it('should handle readdir error gracefully', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockRejectedValue(new Error('Permission denied'))
+
+      const result = await manager.listAllMetadata()
+
+      expect(result).toEqual([])
+    })
+
+    it('should continue reading other files when one file read fails', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockResolvedValue([
+        'good1.json',
+        'bad.json',
+        'good2.json',
+      ] as unknown as string[])
+
+      vi.mocked(fs.readFile).mockImplementation(async (filePath) => {
+        const path = String(filePath)
+        if (path.includes('bad')) {
+          throw new Error('Permission denied')
+        }
+        if (path.includes('good1')) {
+          return JSON.stringify({ description: 'Good 1', version: 1, colorHex: '#111111' })
+        }
+        return JSON.stringify({ description: 'Good 2', version: 1, colorHex: '#222222' })
+      })
+
+      const result = await manager.listAllMetadata()
+
+      expect(result).toHaveLength(2)
+      expect(result.map(r => r.description)).toEqual(['Good 1', 'Good 2'])
+    })
+  })
+
   describe('deleteMetadata', () => {
     const worktreePath = '/Users/jane/dev/repo'
 

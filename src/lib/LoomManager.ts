@@ -186,21 +186,16 @@ export class LoomManager {
     }
 
     // 11. Select color with collision avoidance
-    // Get hex colors in use from active looms (robust against palette changes)
-    const activeLooms = await this.listLooms()
-    const usedHexColors: string[] = []
-    await Promise.all(
-      activeLooms.map(async (loom) => {
-        const metadata = await this.metadataManager.readMetadata(loom.path)
-        if (metadata?.colorHex) {
-          usedHexColors.push(metadata.colorHex)
-        }
-      })
-    )
+    // Get hex colors in use from ALL stored looms across all projects (global collision detection)
+    // This prevents color reuse across different repositories for the same user
+    const allMetadata = await this.metadataManager.listAllMetadata()
+    const usedHexColors: string[] = allMetadata
+      .filter((metadata) => metadata.colorHex !== null)
+      .map((metadata) => metadata.colorHex as string)
 
     // Select distinct color using hex-based comparison
     const colorData = selectDistinctColor(branchName, usedHexColors)
-    logger.debug(`Selected color ${colorData.hex} for branch ${branchName} (${usedHexColors.length} colors in use)`)
+    logger.debug(`Selected color ${colorData.hex} for branch ${branchName} (${usedHexColors.length} colors in use globally)`)
 
     // Apply color synchronization (terminal and VSCode) based on settings
     try {

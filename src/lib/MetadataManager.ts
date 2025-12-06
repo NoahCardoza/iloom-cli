@@ -187,6 +187,70 @@ export class MetadataManager {
   }
 
   /**
+   * List all stored loom metadata files
+   *
+   * Returns an array of LoomMetadata objects for all valid metadata files
+   * in the looms directory. Invalid or unreadable files are skipped.
+   *
+   * @returns Array of LoomMetadata objects from all stored files
+   */
+  async listAllMetadata(): Promise<LoomMetadata[]> {
+    const results: LoomMetadata[] = []
+
+    try {
+      // Check if looms directory exists
+      if (!(await fs.pathExists(this.loomsDir))) {
+        return results
+      }
+
+      // Read all files in looms directory
+      const files = await fs.readdir(this.loomsDir)
+
+      // Filter to only .json files and read each
+      for (const file of files) {
+        if (!file.endsWith('.json')) {
+          continue
+        }
+
+        try {
+          const filePath = path.join(this.loomsDir, file)
+          const content = await fs.readFile(filePath, 'utf8')
+          const data: MetadataFile = JSON.parse(content)
+
+          // Skip files without required description field
+          if (!data.description) {
+            continue
+          }
+
+          results.push({
+            description: data.description,
+            created_at: data.created_at ?? null,
+            branchName: data.branchName ?? null,
+            worktreePath: data.worktreePath ?? null,
+            issueType: data.issueType ?? null,
+            issue_numbers: data.issue_numbers ?? [],
+            pr_numbers: data.pr_numbers ?? [],
+            issueTracker: data.issueTracker ?? null,
+            colorHex: data.colorHex ?? null,
+          })
+        } catch (error) {
+          // Skip individual files that fail to parse (graceful degradation)
+          logger.debug(
+            `Skipping metadata file ${file}: ${error instanceof Error ? error.message : String(error)}`
+          )
+        }
+      }
+    } catch (error) {
+      // Log error but return empty array (graceful degradation)
+      logger.debug(
+        `Could not list metadata files: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+
+    return results
+  }
+
+  /**
    * Delete metadata for a worktree (spec section 3.3)
    *
    * Idempotent: silently succeeds if file doesn't exist
