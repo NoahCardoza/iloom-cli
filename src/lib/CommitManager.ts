@@ -1,6 +1,8 @@
 import { executeGitCommand } from '../utils/git.js'
 import { logger } from '../utils/logger.js'
 import { launchClaude, detectClaudeCli } from '../utils/claude.js'
+import { promptCommitAction } from '../utils/prompt.js'
+import { UserAbortedCommitError } from '../types/index.js'
 import type { GitStatus, CommitOptions } from '../types/index.js'
 
 /**
@@ -76,29 +78,49 @@ export class CommitManager {
       logger.warn('⚠️  Skipping pre-commit hooks (--no-verify configured in settings)')
     }
 
-    // Step 5: Commit with user review via git editor (unless noReview specified)
+    // Step 5: Commit with user review via prompt (unless noReview specified)
     try {
       if (options.noReview || options.message) {
-        // Direct commit without editor review
+        // Direct commit without review (custom message or noReview flag)
         const commitArgs = ['commit', '-m', message]
         if (options.skipVerify) {
           commitArgs.push('--no-verify')
         }
         await executeGitCommand(commitArgs, { cwd: worktreePath })
       } else {
-        // Use git editor for user review - pre-populate message and open editor
-        logger.info('Opening git editor for commit message review...')
-        const commitArgs = ['commit', '-e', '-m', message]
-        if (options.skipVerify) {
-          commitArgs.push('--no-verify')
+        // Prompt user for action instead of going straight to editor
+        const action = await promptCommitAction(message)
+
+        if (action === 'abort') {
+          throw new UserAbortedCommitError()
         }
-        await executeGitCommand(commitArgs, {
-          cwd: worktreePath,
-          stdio: 'inherit',
-          timeout: 300000 // 5 minutes for interactive editing
-        })
+
+        if (action === 'accept') {
+          // Direct commit with -m flag (no editor)
+          const commitArgs = ['commit', '-m', message]
+          if (options.skipVerify) {
+            commitArgs.push('--no-verify')
+          }
+          await executeGitCommand(commitArgs, { cwd: worktreePath })
+        } else {
+          // action === 'edit': Use git editor for user review
+          logger.info('Opening git editor for commit message review...')
+          const commitArgs = ['commit', '-e', '-m', message]
+          if (options.skipVerify) {
+            commitArgs.push('--no-verify')
+          }
+          await executeGitCommand(commitArgs, {
+            cwd: worktreePath,
+            stdio: 'inherit',
+            timeout: 300000 // 5 minutes for interactive editing
+          })
+        }
       }
     } catch (error) {
+      // Re-throw UserAbortedCommitError as-is
+      if (error instanceof UserAbortedCommitError) {
+        throw error
+      }
       // Handle "nothing to commit" scenario gracefully
       if (error instanceof Error && error.message.includes('nothing to commit')) {
         logger.info('No changes to commit')

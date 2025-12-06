@@ -2,11 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { CommitManager } from './CommitManager.js'
 import * as git from '../utils/git.js'
 import * as claude from '../utils/claude.js'
+import * as prompt from '../utils/prompt.js'
 import { logger } from '../utils/logger.js'
+import { UserAbortedCommitError } from '../types/index.js'
 
 // Mock dependencies
 vi.mock('../utils/git.js')
 vi.mock('../utils/claude.js')
+vi.mock('../utils/prompt.js')
 vi.mock('../utils/logger.js', () => ({
   logger: {
     info: vi.fn(),
@@ -35,6 +38,9 @@ describe('CommitManager', () => {
   beforeEach(() => {
     manager = new CommitManager()
     vi.clearAllMocks()
+    // Default to 'edit' action to maintain backward compatibility with existing tests
+    // that expect the editor flow (git commit -e -m)
+    vi.mocked(prompt.promptCommitAction).mockResolvedValue('edit')
   })
 
   afterEach(() => {
@@ -950,6 +956,105 @@ describe('CommitManager', () => {
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-e', '-m', 'Add authentication feature', '--no-verify'],
+        { cwd: mockWorktreePath, stdio: 'inherit', timeout: 300000 }
+      )
+    })
+  })
+
+  describe('Commit Message Prompt Flow', () => {
+    beforeEach(() => {
+      vi.mocked(claude.detectClaudeCli).mockResolvedValue(false)
+    })
+
+    it('should call promptCommitAction with generated message when noReview=false', async () => {
+      vi.mocked(prompt.promptCommitAction).mockResolvedValue('accept')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+      expect(prompt.promptCommitAction).toHaveBeenCalledWith('WIP: Auto-commit uncommitted changes')
+    })
+
+    it('should use direct commit (no editor) when user selects "accept"', async () => {
+      vi.mocked(prompt.promptCommitAction).mockResolvedValue('accept')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+      expect(git.executeGitCommand).toHaveBeenCalledWith(
+        ['commit', '-m', 'WIP: Auto-commit uncommitted changes'],
+        { cwd: mockWorktreePath }
+      )
+    })
+
+    it('should open git editor when user selects "edit"', async () => {
+      vi.mocked(prompt.promptCommitAction).mockResolvedValue('edit')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+      expect(git.executeGitCommand).toHaveBeenCalledWith(
+        ['commit', '-e', '-m', 'WIP: Auto-commit uncommitted changes'],
+        { cwd: mockWorktreePath, stdio: 'inherit', timeout: 300000 }
+      )
+    })
+
+    it('should throw UserAbortedCommitError when user selects "abort"', async () => {
+      vi.mocked(prompt.promptCommitAction).mockResolvedValue('abort')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await expect(manager.commitChanges(mockWorktreePath, { dryRun: false })).rejects.toThrow(
+        UserAbortedCommitError
+      )
+    })
+
+    it('should not call promptCommitAction when noReview=true', async () => {
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, { noReview: true, dryRun: false })
+
+      expect(prompt.promptCommitAction).not.toHaveBeenCalled()
+    })
+
+    it('should not call promptCommitAction when custom message provided', async () => {
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, { message: 'Custom message', dryRun: false })
+
+      expect(prompt.promptCommitAction).not.toHaveBeenCalled()
+    })
+
+    it('should pass Claude-generated message to prompt', async () => {
+      vi.mocked(claude.detectClaudeCli).mockResolvedValue(true)
+      vi.mocked(claude.launchClaude).mockResolvedValue('Add user authentication')
+      vi.mocked(prompt.promptCommitAction).mockResolvedValue('accept')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+      expect(prompt.promptCommitAction).toHaveBeenCalledWith('Add user authentication')
+    })
+
+    it('should include --no-verify flag when skipVerify=true and user accepts', async () => {
+      vi.mocked(prompt.promptCommitAction).mockResolvedValue('accept')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, { skipVerify: true, dryRun: false })
+
+      expect(git.executeGitCommand).toHaveBeenCalledWith(
+        ['commit', '-m', 'WIP: Auto-commit uncommitted changes', '--no-verify'],
+        { cwd: mockWorktreePath }
+      )
+    })
+
+    it('should include --no-verify flag when skipVerify=true and user edits', async () => {
+      vi.mocked(prompt.promptCommitAction).mockResolvedValue('edit')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, { skipVerify: true, dryRun: false })
+
+      expect(git.executeGitCommand).toHaveBeenCalledWith(
+        ['commit', '-e', '-m', 'WIP: Auto-commit uncommitted changes', '--no-verify'],
         { cwd: mockWorktreePath, stdio: 'inherit', timeout: 300000 }
       )
     })

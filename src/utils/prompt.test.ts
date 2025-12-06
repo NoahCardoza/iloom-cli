@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as readline from 'node:readline'
-import { promptConfirmation, promptInput, waitForKeypress } from './prompt.js'
+import { promptConfirmation, promptInput, waitForKeypress, promptCommitAction } from './prompt.js'
 
 vi.mock('node:readline')
 
@@ -290,6 +290,163 @@ describe('prompt utils', () => {
 			}
 
 			expect(process.stdout.write).toHaveBeenCalledWith('\n')
+		})
+	})
+
+	describe('promptCommitAction', () => {
+		let originalStdinIsTTY: boolean | undefined
+		let originalCI: string | undefined
+
+		beforeEach(() => {
+			originalStdinIsTTY = process.stdin.isTTY
+			originalCI = process.env.CI
+			// Default to interactive environment
+			Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true })
+			delete process.env.CI
+			vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+		})
+
+		afterEach(() => {
+			Object.defineProperty(process.stdin, 'isTTY', { value: originalStdinIsTTY, configurable: true })
+			if (originalCI !== undefined) {
+				process.env.CI = originalCI
+			} else {
+				delete process.env.CI
+			}
+		})
+
+		it('should return "accept" for "a" input', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback('a')
+			})
+
+			const result = await promptCommitAction('Test commit message')
+
+			expect(result).toBe('accept')
+			expect(mockRl.close).toHaveBeenCalled()
+		})
+
+		it('should return "accept" for "A" input (uppercase)', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback('A')
+			})
+
+			const result = await promptCommitAction('Test commit message')
+
+			expect(result).toBe('accept')
+		})
+
+		it('should return "accept" for empty input (default)', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback('')
+			})
+
+			const result = await promptCommitAction('Test commit message')
+
+			expect(result).toBe('accept')
+		})
+
+		it('should return "edit" for "e" input', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback('e')
+			})
+
+			const result = await promptCommitAction('Test commit message')
+
+			expect(result).toBe('edit')
+		})
+
+		it('should return "edit" for "E" input (uppercase)', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback('E')
+			})
+
+			const result = await promptCommitAction('Test commit message')
+
+			expect(result).toBe('edit')
+		})
+
+		it('should return "abort" for "b" input', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback('b')
+			})
+
+			const result = await promptCommitAction('Test commit message')
+
+			expect(result).toBe('abort')
+		})
+
+		it('should return "abort" for "B" input (uppercase)', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback('B')
+			})
+
+			const result = await promptCommitAction('Test commit message')
+
+			expect(result).toBe('abort')
+		})
+
+		it('should return "accept" for invalid input (falls back to default)', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback('invalid')
+			})
+
+			const result = await promptCommitAction('Test commit message')
+
+			expect(result).toBe('accept')
+		})
+
+		it('should display commit message with clear demarcation', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback('a')
+			})
+
+			await promptCommitAction('My test commit message')
+
+			expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('='))
+			expect(process.stdout.write).toHaveBeenCalledWith('COMMIT MESSAGE:\n')
+			expect(process.stdout.write).toHaveBeenCalledWith('My test commit message\n')
+		})
+
+		it('should show correct options hint [A/e/b]', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback('a')
+			})
+
+			await promptCommitAction('Test message')
+
+			expect(mockRl.question).toHaveBeenCalledWith(
+				expect.stringContaining('[A/e/b]'),
+				expect.any(Function)
+			)
+		})
+
+		it('should return "accept" immediately in non-interactive environment (no TTY)', async () => {
+			Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true })
+
+			const result = await promptCommitAction('Test message')
+
+			expect(result).toBe('accept')
+			expect(mockRl.question).not.toHaveBeenCalled()
+		})
+
+		it('should return "accept" immediately in CI environment', async () => {
+			process.env.CI = 'true'
+
+			const result = await promptCommitAction('Test message')
+
+			expect(result).toBe('accept')
+			expect(mockRl.question).not.toHaveBeenCalled()
+		})
+
+		it('should properly close readline interface after response', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback('e')
+			})
+
+			await promptCommitAction('Test message')
+
+			expect(mockRl.close).toHaveBeenCalled()
 		})
 	})
 })

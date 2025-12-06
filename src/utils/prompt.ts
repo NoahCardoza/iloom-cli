@@ -128,3 +128,58 @@ export async function waitForKeypress(
 export function isInteractiveEnvironment(): boolean {
 	return process.stdin.isTTY === true && process.env.CI !== 'true'
 }
+
+// Commit action type for type safety
+export type CommitAction = 'accept' | 'edit' | 'abort'
+
+/**
+ * Display commit message and prompt for action
+ * @param message The commit message to display
+ * @returns Promise<CommitAction> - 'accept', 'edit', or 'abort'
+ */
+export async function promptCommitAction(message: string): Promise<CommitAction> {
+	// Check for non-interactive environment first
+	if (!isInteractiveEnvironment()) {
+		return 'accept'
+	}
+
+	// Display the commit message with clear demarcation
+	process.stdout.write('\n' + '='.repeat(60) + '\n')
+	process.stdout.write('COMMIT MESSAGE:\n')
+	process.stdout.write('='.repeat(60) + '\n')
+	process.stdout.write(message + '\n')
+	process.stdout.write('='.repeat(60) + '\n\n')
+
+	// Create readline interface (following existing pattern from promptConfirmation)
+	const rl = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+	})
+
+	return new Promise((resolve) => {
+		rl.question('[A]ccept as-is, [E]dit in editor, A[b]ort? [A/e/b]: ', (answer) => {
+			rl.close()
+
+			const normalized = answer.trim().toLowerCase()
+
+			if (normalized === '' || normalized === 'a') {
+				resolve('accept')
+				return
+			}
+
+			if (normalized === 'e') {
+				resolve('edit')
+				return
+			}
+
+			if (normalized === 'b') {
+				resolve('abort')
+				return
+			}
+
+			// Invalid input - default to accept
+			logger.warn('Invalid input, defaulting to accept', { input: answer })
+			resolve('accept')
+		})
+	})
+}

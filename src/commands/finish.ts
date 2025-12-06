@@ -22,6 +22,7 @@ import { installDependencies } from '../utils/package-manager.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import { promptConfirmation } from '../utils/prompt.js'
+import { UserAbortedCommitError } from '../types/index.js'
 import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions, PullRequest } from '../types/index.js'
 import type { ResourceCleanupOptions, CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
@@ -604,9 +605,16 @@ export class FinishCommand {
 					commitOptions.issueNumber = parsed.number
 				}
 
-				await this.commitManager.commitChanges(worktree.path, commitOptions)
-
-				logger.success('Changes committed successfully')
+				try {
+					await this.commitManager.commitChanges(worktree.path, commitOptions)
+					logger.success('Changes committed successfully')
+				} catch (error) {
+					if (error instanceof UserAbortedCommitError) {
+						logger.info('Commit aborted by user')
+						return  // Exit workflow gracefully
+					}
+					throw error  // Re-throw other errors
+				}
 			}
 		} else {
 			logger.debug('No uncommitted changes found')
@@ -716,12 +724,20 @@ export class FinishCommand {
 					const settings = await this.settingsManager.loadSettings(worktree.path)
 					const skipVerify = settings.workflows?.pr?.noVerify ?? false
 
-					await this.commitManager.commitChanges(worktree.path, {
-						dryRun: false,
-						skipVerify,
-						// Do NOT pass issueNumber for PRs - no "Fixes #" trailer needed
-					})
-					logger.success('Changes committed')
+					try {
+						await this.commitManager.commitChanges(worktree.path, {
+							dryRun: false,
+							skipVerify,
+							// Do NOT pass issueNumber for PRs - no "Fixes #" trailer needed
+						})
+						logger.success('Changes committed')
+					} catch (error) {
+						if (error instanceof UserAbortedCommitError) {
+							logger.info('Commit aborted by user')
+							return  // Exit workflow gracefully
+						}
+						throw error  // Re-throw other errors
+					}
 				}
 			} else {
 				logger.debug('No uncommitted changes found')

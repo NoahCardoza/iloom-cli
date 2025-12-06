@@ -269,6 +269,17 @@ export interface CommitOptions {
 	skipVerify?: boolean  // Skip pre-commit hooks (--no-verify flag)
 }
 
+/**
+ * Error thrown when user aborts a commit operation
+ * Used by CommitManager when user selects 'abort' at the commit prompt
+ */
+export class UserAbortedCommitError extends Error {
+	constructor(message = 'User aborted the commit') {
+		super(message)
+		this.name = 'UserAbortedCommitError'
+	}
+}
+
 // Merge management types
 export interface MergeOptions {
 	dryRun?: boolean      // Preview actions without executing
