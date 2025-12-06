@@ -101,7 +101,7 @@ Instead of a single generic prompt, iloom uses a pipeline of agents:
 *   **Implementer:** Executes the plan using the context established in the previous steps.
     
 
-### 2\ Interactive Control
+### 2. Interactive Control
 
 You are in the loop at every stage. You can review the AI's analysis, edit the plan in GitHub/Linear, and adjust course before implementation begins.
 
