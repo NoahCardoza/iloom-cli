@@ -2,6 +2,8 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
+    watch: false,
+    silent: true,
     globals: true,
     environment: 'node',
     pool: 'forks',
