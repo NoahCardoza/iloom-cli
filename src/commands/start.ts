@@ -16,6 +16,7 @@ import { loadEnvIntoProcess } from '../utils/env.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
+import { capitalizeFirstLetter } from '../utils/text.js'
 import type { StartOptions } from '../types/index.js'
 import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
@@ -190,10 +191,12 @@ export class StartCommand {
 			// Step 2.5: Handle description input - create GitHub issue
 			if (parsed.type === 'description') {
 				logger.info('Creating GitHub issue from description...')
-				const body = input.options.body ?? ""  // Use provided body or empty string
+				// Apply first-letter capitalization to title and body
+				const title = capitalizeFirstLetter(parsed.originalInput)
+				const body = input.options.body ? capitalizeFirstLetter(input.options.body) : ""
 				const result = await this.issueTracker.createIssue(
-					parsed.originalInput,  // Use description as title
-					body                   // Use provided body or empty
+					title,  // Use capitalized description as title
+					body    // Use capitalized body or empty
 				)
 				logger.success(`Created issue #${result.number}: ${result.url}`)
 				// Update parsed to be an issue type with the new number
@@ -286,18 +289,23 @@ export class StartCommand {
 	 * Parse input to determine type and extract relevant data
 	 */
 	private async parseInput(identifier: string, repo?: string): Promise<ParsedInput> {
+		// Check if user wants to skip capitalization by prefixing with space
+		// We preserve this for description types so capitalizeFirstLetter() can handle it
+		const hasLeadingSpace = identifier.startsWith(' ')
+
 		// Handle empty input
 		const trimmedIdentifier = identifier.trim()
 		if (!trimmedIdentifier) {
 			throw new Error('Missing required argument: identifier')
 		}
 
-		// Check for description: >25 chars AND >2 spaces
+		// Check for description: >25 chars AND >2 spaces (in trimmed version)
 		const spaceCount = (trimmedIdentifier.match(/ /g) ?? []).length
 		if (trimmedIdentifier.length > 25 && spaceCount > 2) {
+			// Preserve leading space if present so capitalizeFirstLetter() can detect the override
 			return {
 				type: 'description',
-				originalInput: trimmedIdentifier,
+				originalInput: hasLeadingSpace ? ' ' + trimmedIdentifier : trimmedIdentifier,
 			}
 		}
 

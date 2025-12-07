@@ -282,7 +282,7 @@ describe('StartCommand', () => {
 			})
 
 			it('should detect description when >25 chars with >2 spaces', async () => {
-				const description = 'Users cannot filter the dashboard by date range making reports difficult'
+				const description = 'users cannot filter the dashboard by date range making reports difficult'
 
 				// Mock GitHubService.createIssue to return issue data
 				vi.mocked(mockGitHubService.createIssue).mockResolvedValue({
@@ -301,8 +301,9 @@ describe('StartCommand', () => {
 				).resolves.not.toThrow()
 
 				// Should create issue directly via GitHubService (no enhancement)
+				// Title is auto-capitalized
 				expect(mockGitHubService.createIssue).toHaveBeenCalledWith(
-					description, // title
+					'Users cannot filter the dashboard by date range making reports difficult', // title (first letter capitalized)
 					''           // empty body
 				)
 			})
@@ -378,9 +379,65 @@ describe('StartCommand', () => {
 				).resolves.not.toThrow()
 
 				// Should create issue directly via GitHubService (no enhancement)
+				// Title is auto-capitalized
 				expect(mockGitHubService.createIssue).toHaveBeenCalledWith(
-					description, // title
-					''           // empty body
+					'Word1 word2 word3 xxxxxxxx', // title (first letter capitalized)
+					''                            // empty body
+				)
+			})
+
+			it('should skip capitalization when description starts with space (override)', async () => {
+				// User prefixes with space to skip auto-capitalization
+				const description = ' this is a test issue that should not be capitalized'
+
+				// Mock GitHubService.createIssue to return issue data
+				vi.mocked(mockGitHubService.createIssue).mockResolvedValue({
+					number: 789,
+					url: 'https://github.com/owner/repo/issues/789',
+				})
+
+				// Mock GitHubService methods for issue validation
+				mockGitHubService.getIssueTitle = vi.fn().mockResolvedValue('Issue title')
+
+				await expect(
+					command.execute({
+						identifier: description,
+						options: {},
+					})
+				).resolves.not.toThrow()
+
+				// Leading space triggers override: strip space, don't capitalize
+				expect(mockGitHubService.createIssue).toHaveBeenCalledWith(
+					'this is a test issue that should not be capitalized', // NOT capitalized
+					''
+				)
+			})
+
+			it('should skip capitalization for body when it starts with space (override)', async () => {
+				// User prefixes both title and body with space to skip auto-capitalization
+				const description = ' title that should not be capitalized here'
+				const body = ' body that should also not be capitalized'
+
+				// Mock GitHubService.createIssue to return issue data
+				vi.mocked(mockGitHubService.createIssue).mockResolvedValue({
+					number: 790,
+					url: 'https://github.com/owner/repo/issues/790',
+				})
+
+				// Mock GitHubService methods for issue validation
+				mockGitHubService.getIssueTitle = vi.fn().mockResolvedValue('Issue title')
+
+				await expect(
+					command.execute({
+						identifier: description,
+						options: { body },
+					})
+				).resolves.not.toThrow()
+
+				// Both should have leading space stripped without capitalization
+				expect(mockGitHubService.createIssue).toHaveBeenCalledWith(
+					'title that should not be capitalized here', // NOT capitalized
+					'body that should also not be capitalized'   // NOT capitalized
 				)
 			})
 

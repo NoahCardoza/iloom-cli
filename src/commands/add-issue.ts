@@ -4,6 +4,7 @@ import { SettingsManager } from '../lib/SettingsManager.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
 import { logger } from '../utils/logger.js'
+import { capitalizeFirstLetter } from '../utils/text.js'
 
 /**
  * Input structure for AddIssueCommand
@@ -35,7 +36,9 @@ export class AddIssueCommand {
 	 * 5. Return issue number
 	 */
 	public async execute(input: AddIssueCommandInput): Promise<string | number> {
-		const { description } = input
+		// Apply first-letter capitalization to title (description) and body
+		const description = capitalizeFirstLetter(input.description)
+		const body = input.options.body ? capitalizeFirstLetter(input.options.body) : undefined
 
 		// Step 0: Check for first-run setup
 		if (process.env.FORCE_FIRST_TIME_SETUP === "true" || await needsFirstRunSetup()) {
@@ -59,7 +62,7 @@ export class AddIssueCommand {
 		}
 
 		// Step 2: Skip enhancement if body provided, otherwise enhance description
-		const issueBody = input.options.body ?? await this.enhancementService.enhanceDescription(description)
+		const issueBody = body ?? await this.enhancementService.enhanceDescription(description)
 
 		// Step 3: Create GitHub issue with original as title, body as body
 		const result = await this.enhancementService.createEnhancedIssue(

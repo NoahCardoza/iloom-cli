@@ -4,6 +4,7 @@ import { GitHubService } from '../lib/GitHubService.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { gatherDiagnosticInfo, formatDiagnosticsAsMarkdown } from '../utils/diagnostics.js'
+import { capitalizeFirstLetter } from '../utils/text.js'
 
 // Hardcoded target repository for feedback
 const FEEDBACK_REPOSITORY = 'iloom-ai/iloom-cli'
@@ -41,7 +42,9 @@ export class FeedbackCommand {
 	 * 5. Return issue number
 	 */
 	public async execute(input: FeedbackCommandInput): Promise<string | number> {
-		const { description } = input
+		// Apply first-letter capitalization to title (description) and body
+		const description = capitalizeFirstLetter(input.description)
+		const body = input.options.body ? capitalizeFirstLetter(input.options.body) : undefined
 
 		// Step 1: Validate description format
 		if (!description || !this.enhancementService.validateDescription(description)) {
@@ -53,7 +56,7 @@ export class FeedbackCommand {
 		const diagnosticsMarkdown = formatDiagnosticsAsMarkdown(diagnostics)
 
 		// Step 3: Create enhanced issue body with marker and diagnostics
-		const userBody = input.options.body ?? description
+		const userBody = body ?? description
 		const enhancedBody = `${diagnosticsMarkdown}
 
 ${userBody}`
