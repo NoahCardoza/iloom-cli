@@ -1667,6 +1667,74 @@ describe('FinishCommand', () => {
 					expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalled()
 				})
 
+				it('should skip safety checks for merged PRs (work is safely in main)', async () => {
+					// For merged PRs:
+					// - checkMergeSafety: false (work is in main, no data loss risk)
+					// - checkRemoteBranch: false (GitHub may auto-delete branch after merge)
+					const mockPR: PullRequest = {
+						number: 456,
+						title: 'Test PR',
+						body: 'Test description',
+						state: 'merged',
+						branch: 'feat/test-feature',
+						baseBranch: 'main',
+						url: 'https://github.com/test/repo/pull/456',
+						isDraft: false,
+					}
+
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: 'pr/456',
+						options: {},
+					})
+
+					// Verify safety checks are skipped for merged PRs
+					expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
+						expect.any(Object),
+						expect.objectContaining({
+							checkRemoteBranch: false,
+							checkMergeSafety: false,
+							deleteBranch: true,
+						})
+					)
+				})
+
+				it('should enable safety checks for closed (not merged) PRs (may have unpushed commits)', async () => {
+					// For closed PRs (rejected/abandoned):
+					// - checkMergeSafety: true (PR may have local commits that were never pushed)
+					// - checkRemoteBranch: false (we rely on checkMergeSafety for commit safety)
+					const mockPR: PullRequest = {
+						number: 456,
+						title: 'Test PR',
+						body: 'Test description',
+						state: 'closed',
+						branch: 'feat/test-feature',
+						baseBranch: 'main',
+						url: 'https://github.com/test/repo/pull/456',
+						isDraft: false,
+					}
+
+					vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockPR)
+					vi.mocked(mockGitWorktreeManager.findWorktreeForPR).mockResolvedValue(mockWorktree)
+
+					await command.execute({
+						identifier: 'pr/456',
+						options: {},
+					})
+
+					// Verify safety checks are enabled for closed PRs
+					expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
+						expect.any(Object),
+						expect.objectContaining({
+							checkRemoteBranch: false,
+							checkMergeSafety: true, // Enabled for closed PRs
+							deleteBranch: true,
+						})
+					)
+				})
+
 				it('should throw error if PR not found on GitHub', async () => {
 					// Mock NOT_FOUND error
 					const notFoundError = new GitHubError(
@@ -2250,7 +2318,8 @@ describe('FinishCommand', () => {
 					})
 				).rejects.toThrow('Request timeout')
 
-				expect(logger.error).toHaveBeenCalled()
+				// Error logging is done in cli.ts (the catch site), not in finish.ts (the throw site)
+				// This ensures errors are logged exactly once
 			})
 
 			it('should handle GitHub API rate limit errors', async () => {
@@ -2272,7 +2341,8 @@ describe('FinishCommand', () => {
 					})
 				).rejects.toThrow('API rate limit exceeded')
 
-				expect(logger.error).toHaveBeenCalled()
+				// Error logging is done in cli.ts (the catch site), not in finish.ts (the throw site)
+				// This ensures errors are logged exactly once
 			})
 
 			it('should handle GitHub authentication errors', async () => {
@@ -2313,9 +2383,8 @@ describe('FinishCommand', () => {
 					})
 				).rejects.toThrow('GitHub API error: failed to fetch')
 
-				expect(logger.error).toHaveBeenCalledWith(
-					expect.stringContaining('GitHub API error')
-				)
+				// Error logging is done in cli.ts (the catch site), not in finish.ts (the throw site)
+				// This ensures errors are logged exactly once
 			})
 
 			it('should handle Git command failures gracefully', async () => {
@@ -2411,7 +2480,8 @@ describe('FinishCommand', () => {
 					})
 				).rejects.toThrow()
 
-				expect(logger.error).toHaveBeenCalledWith('An unknown error occurred')
+				// Error logging is done in cli.ts (the catch site), not in finish.ts (the throw site)
+				// This ensures errors are logged exactly once
 			})
 
 			it('should handle thrown null/undefined gracefully', async () => {
@@ -2424,7 +2494,8 @@ describe('FinishCommand', () => {
 					})
 				).rejects.toThrow()
 
-				expect(logger.error).toHaveBeenCalledWith('An unknown error occurred')
+				// Error logging is done in cli.ts (the catch site), not in finish.ts (the throw site)
+				// This ensures errors are logged exactly once
 			})
 		})
 

@@ -185,64 +185,55 @@ export class FinishCommand {
 	 * Main entry point for finish command
 	 */
 	public async execute(input: FinishCommandInput): Promise<void> {
-		try {
-			// Step 1: Load settings and get configured repo for GitHub operations
-			const settings = await this.settingsManager.loadSettings()
+		// Step 1: Load settings and get configured repo for GitHub operations
+		const settings = await this.settingsManager.loadSettings()
 
-			let repo: string | undefined
+		let repo: string | undefined
 
-			// We need repo info if:
-			// 1. Merge mode is github-pr (for creating PRs on GitHub, even with Linear issues)
-			// 2. Provider is GitHub (for GitHub issue operations)
-			const needsRepo =
-				settings.mergeBehavior?.mode === 'github-pr' || this.issueTracker.providerName === 'github'
-			if (needsRepo && (await hasMultipleRemotes())) {
-				repo = await getConfiguredRepoFromSettings(settings)
-				logger.info(`Using GitHub repository: ${repo}`)
+		// We need repo info if:
+		// 1. Merge mode is github-pr (for creating PRs on GitHub, even with Linear issues)
+		// 2. Provider is GitHub (for GitHub issue operations)
+		const needsRepo =
+			settings.mergeBehavior?.mode === 'github-pr' || this.issueTracker.providerName === 'github'
+		if (needsRepo && (await hasMultipleRemotes())) {
+			repo = await getConfiguredRepoFromSettings(settings)
+			logger.info(`Using GitHub repository: ${repo}`)
+		}
+
+		// Step 2: Parse input (or auto-detect from current directory)
+		const parsed = await this.parseInput(input.identifier, input.options)
+
+		// Step 2.5: Check for child looms AFTER parsing input
+		// This ensures we only block when finishing the CURRENT loom (parent), not a child
+		await this.checkForChildLooms(parsed)
+
+		// Step 2: Validate based on type and get worktrees
+		const worktrees = await this.validateInput(parsed, input.options, repo)
+
+		// Step 3: Log success
+		logger.info(`Validated input: ${this.formatParsedInput(parsed)}`)
+
+		// Get worktree for workflow execution
+		const worktree = worktrees[0]
+		if (!worktree) {
+			throw new Error('No worktree found')
+		}
+
+		// Step 4: Branch based on input type
+		if (parsed.type === 'pr') {
+			// Fetch PR to get current state
+			if (!parsed.number) {
+				throw new Error('Invalid PR number')
 			}
-
-			// Step 2: Parse input (or auto-detect from current directory)
-			const parsed = await this.parseInput(input.identifier, input.options)
-
-			// Step 2.5: Check for child looms AFTER parsing input
-			// This ensures we only block when finishing the CURRENT loom (parent), not a child
-			await this.checkForChildLooms(parsed)
-
-			// Step 2: Validate based on type and get worktrees
-			const worktrees = await this.validateInput(parsed, input.options, repo)
-
-			// Step 3: Log success
-			logger.info(`Validated input: ${this.formatParsedInput(parsed)}`)
-
-			// Get worktree for workflow execution
-			const worktree = worktrees[0]
-			if (!worktree) {
-				throw new Error('No worktree found')
+			// Check if provider supports PRs before calling PR methods
+			if (!this.issueTracker.supportsPullRequests || !this.issueTracker.fetchPR) {
+				throw new Error('Issue tracker does not support pull requests')
 			}
-
-			// Step 4: Branch based on input type
-			if (parsed.type === 'pr') {
-				// Fetch PR to get current state
-				if (!parsed.number) {
-					throw new Error('Invalid PR number')
-				}
-				// Check if provider supports PRs before calling PR methods
-				if (!this.issueTracker.supportsPullRequests || !this.issueTracker.fetchPR) {
-					throw new Error('Issue tracker does not support pull requests')
-				}
-				const pr = await this.issueTracker.fetchPR(parsed.number, repo)
-				await this.executePRWorkflow(parsed, input.options, worktree, pr)
-			} else {
-				// Execute traditional issue/branch workflow
-				await this.executeIssueWorkflow(parsed, input.options, worktree)
-			}
-		} catch (error) {
-			if (error instanceof Error) {
-				logger.error(`${error.message}`)
-			} else {
-				logger.error('An unknown error occurred')
-			}
-			throw error
+			const pr = await this.issueTracker.fetchPR(parsed.number, repo)
+			await this.executePRWorkflow(parsed, input.options, worktree, pr)
+		} else {
+			// Execute traditional issue/branch workflow
+			await this.executeIssueWorkflow(parsed, input.options, worktree)
 		}
 	}
 
@@ -703,7 +694,10 @@ export class FinishCommand {
 			}
 
 			// Call cleanup directly with deleteBranch: true
-			await this.performPRCleanup(parsed, options, worktree)
+			// Pass PR state to enable appropriate safety checks:
+			// - merged: skip checks (work is in main)
+			// - closed: enable checks (may have unpushed commits)
+			await this.performPRCleanup(parsed, options, worktree, pr.state as 'closed' | 'merged')
 
 			logger.success(`PR #${parsed.number} cleanup completed`)
 		} else {
@@ -921,11 +915,22 @@ export class FinishCommand {
 	/**
 	 * Perform cleanup for closed/merged PRs
 	 * Similar to performPostMergeCleanup but with different messaging
+	 *
+	 * Safety check behavior differs based on PR state:
+	 * - MERGED: Skip safety checks - work is safely in main branch
+	 * - CLOSED (not merged): Enable safety checks - PR was rejected/abandoned,
+	 *   local commits may not exist anywhere else
+	 *
+	 * @param parsed - Parsed input identifying the PR
+	 * @param options - Finish options
+	 * @param worktree - The worktree to clean up
+	 * @param prState - The PR state ('closed' or 'merged')
 	 */
 	private async performPRCleanup(
 		parsed: ParsedFinishInput,
 		options: FinishOptions,
-		worktree: GitWorktree
+		worktree: GitWorktree,
+		prState: 'closed' | 'merged'
 	): Promise<void> {
 		// Convert to ParsedInput format
 		const cleanupInput: ParsedInput = {
@@ -935,11 +940,28 @@ export class FinishCommand {
 			...(parsed.branchName !== undefined && { branchName: parsed.branchName }),
 		}
 
+		// Safety checks depend on PR state:
+		// - MERGED PR: Work is safely in main - skip all safety checks
+		// - CLOSED PR: Work may NOT be on GitHub (PR was rejected/abandoned) - check for unpushed commits
+		const isMerged = prState === 'merged'
+
 		const cleanupOptions: ResourceCleanupOptions = {
 			dryRun: options.dryRun ?? false,
 			deleteBranch: true, // Delete branch for closed/merged PRs
 			keepDatabase: false,
 			force: options.force ?? false,
+			// For merged PRs: skip merge check (work is in main)
+			// For closed PRs: enable merge check (may have unpushed local commits)
+			checkMergeSafety: !isMerged,
+			// Skip remote branch check for MERGED PRs because:
+			// 1. The PR is merged - the work is safely in main
+			// 2. GitHub may have auto-deleted the branch after merge
+			// 3. The user may have manually deleted the remote branch post-merge
+			//
+			// For CLOSED PRs, we rely on checkMergeSafety to verify no unpushed commits
+			// rather than checkRemoteBranch, since the remote branch may still exist
+			// but local may have additional commits
+			checkRemoteBranch: false,
 		}
 
 		try {

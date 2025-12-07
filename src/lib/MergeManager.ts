@@ -243,9 +243,9 @@ export class MergeManager {
 
 		const commits = commitsOutput.trim()
 
-		// If no commits, branch is already merged
+		// If no commits, branch has no changes ahead of main
 		if (!commits) {
-			logger.success(`Branch is already merged into ${mainBranch}. No merge needed.`)
+			logger.success(`Branch has no commits ahead of ${mainBranch}. No merge needed.`)
 			return
 		}
 

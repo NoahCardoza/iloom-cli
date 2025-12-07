@@ -736,3 +736,226 @@ export async function isFileGitignored(
     return false // Exit 1 = NOT ignored (or error)
   }
 }
+
+/**
+ * Check if a branch is merged into the main branch
+ *
+ * Uses `git merge-base --is-ancestor` which is more reliable than `git branch -d`'s check.
+ * The `-d` flag checks against current HEAD, which can give false positives when:
+ * - Running from a worktree where main isn't checked out
+ * - Squash or rebase merges were used
+ *
+ * This function explicitly checks if the branch tip is an ancestor of the main branch,
+ * providing consistent results regardless of which worktree the command runs from.
+ *
+ * @param branchName - The branch to check
+ * @param mainBranch - The main branch to check against (defaults to 'main')
+ * @param cwd - Working directory (defaults to process.cwd())
+ * @returns true if branch is merged into main, false otherwise
+ */
+export async function isBranchMergedIntoMain(
+  branchName: string,
+  mainBranch: string = 'main',
+  cwd: string = process.cwd()
+): Promise<boolean> {
+  try {
+    // git merge-base --is-ancestor exits 0 if branchName is ancestor of mainBranch, 1 if not
+    await executeGitCommand(['merge-base', '--is-ancestor', branchName, mainBranch], { cwd })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Check if a branch exists on the remote (origin) and is up-to-date with local
+ * Useful for GitHub-PR workflows to ensure branch has been pushed and is current
+ *
+ * @param branchName - Name of the branch to check
+ * @param cwd - Working directory to run git command in
+ * @returns Promise<boolean> - true if remote branch exists and matches local HEAD, false otherwise
+ */
+export async function isRemoteBranchUpToDate(
+  branchName: string,
+  cwd: string
+): Promise<boolean> {
+  try {
+    // First, check if remote branch exists and get its commit hash
+    const remoteResult = await executeGitCommand(['ls-remote', '--heads', 'origin', branchName], { cwd })
+
+    if (remoteResult.trim().length === 0) {
+      // Remote branch doesn't exist
+      return false
+    }
+
+    // Extract the commit hash from ls-remote output (format: "hash\trefs/heads/branchname")
+    const remoteCommit = remoteResult.trim().split('\t')[0]
+
+    // Get the local branch's HEAD commit
+    const localCommit = await executeGitCommand(['rev-parse', branchName], { cwd })
+
+    // Both must exist and match
+    return localCommit.trim() === remoteCommit
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Result of checking remote branch status for safety validation
+ */
+export interface RemoteBranchStatus {
+  /** Whether the remote branch exists */
+  exists: boolean
+  /** Whether the remote is ahead of local (has commits not present locally) */
+  remoteAhead: boolean
+  /** Whether local is ahead of remote (has unpushed commits) */
+  localAhead: boolean
+  /** Whether a network error occurred during the check */
+  networkError: boolean
+  /** Error message if network error occurred */
+  errorMessage?: string
+}
+
+/**
+ * Check the status of a remote branch for safety validation during cleanup
+ * This function provides detailed status needed for the 5-point safety check:
+ *
+ * The key insight: we care about DATA LOSS, not about remote state
+ * - Remote ahead of local is SAFE (commits exist on remote, no data loss)
+ * - Local ahead of remote is DANGEROUS (unpushed commits would be lost)
+ *
+ * 5-point safety logic:
+ * 1. Network error -> BLOCK (can't verify safety)
+ * 2. Remote ahead of local -> OK (no data loss - commits exist on remote)
+ * 3. Local ahead of remote (unpushed commits) -> BLOCK (data loss risk)
+ * 4. No remote, merged to main -> OK (work is in main)
+ * 5. No remote, NOT merged to main -> BLOCK (unmerged work would be lost)
+ *
+ * @param branchName - Name of the branch to check
+ * @param cwd - Working directory to run git command in
+ * @returns Promise<RemoteBranchStatus> - Detailed status of the remote branch
+ */
+export async function checkRemoteBranchStatus(
+  branchName: string,
+  cwd: string
+): Promise<RemoteBranchStatus> {
+  try {
+    // First, fetch to ensure we have the latest remote refs
+    // This is important to accurately detect if remote is ahead
+    try {
+      await executeGitCommand(['fetch', 'origin', branchName], { cwd, timeout: 30000 })
+    } catch (fetchError) {
+      // Fetch failing for a specific branch is OK - branch might not exist on remote
+      // We'll detect this in the ls-remote call
+      const fetchErrorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError)
+
+      // Check if this is a network error vs branch not found
+      if (fetchErrorMessage.includes('Could not resolve host') ||
+          fetchErrorMessage.includes('unable to access') ||
+          fetchErrorMessage.includes('network') ||
+          fetchErrorMessage.includes('Connection refused') ||
+          fetchErrorMessage.includes('Connection timed out')) {
+        return {
+          exists: false,
+          remoteAhead: false,
+          localAhead: false,
+          networkError: true,
+          errorMessage: fetchErrorMessage
+        }
+      }
+      // Otherwise continue - branch might just not exist on remote
+    }
+
+    // Check if remote branch exists using ls-remote
+    const remoteResult = await executeGitCommand(['ls-remote', '--heads', 'origin', branchName], { cwd })
+
+    if (remoteResult.trim().length === 0) {
+      // Remote branch doesn't exist
+      return {
+        exists: false,
+        remoteAhead: false,
+        localAhead: false,
+        networkError: false
+      }
+    }
+
+    // Remote branch exists - check if it's ahead of local
+    // Extract the remote commit hash
+    const remoteCommit = remoteResult.trim().split('\t')[0]
+
+    // Guard against undefined (shouldn't happen but TypeScript wants it)
+    if (!remoteCommit) {
+      return {
+        exists: false,
+        remoteAhead: false,
+        localAhead: false,
+        networkError: false
+      }
+    }
+
+    // Get the local branch's HEAD commit
+    const localCommit = await executeGitCommand(['rev-parse', branchName], { cwd })
+    const localCommitTrimmed = localCommit.trim()
+
+    if (remoteCommit === localCommitTrimmed) {
+      // Remote and local are at the same commit - safe (no unpushed commits)
+      return {
+        exists: true,
+        remoteAhead: false,
+        localAhead: false,
+        networkError: false
+      }
+    }
+
+    // Commits differ - check if remote is ahead of local
+    // Use merge-base to find common ancestor, then compare
+    try {
+      // Check if localCommit is an ancestor of remoteCommit (meaning remote is ahead)
+      await executeGitCommand(['merge-base', '--is-ancestor', localCommitTrimmed, remoteCommit], { cwd })
+      // If we get here, local IS an ancestor of remote, meaning remote is ahead
+      // This is SAFE - no data loss because commits exist on remote
+      return {
+        exists: true,
+        remoteAhead: true,
+        localAhead: false,
+        networkError: false
+      }
+    } catch {
+      // Local is NOT an ancestor of remote
+      // This means local is ahead or branches have diverged
+      // Either way, local has unpushed commits - this is DANGEROUS (data loss risk)
+      return {
+        exists: true,
+        remoteAhead: false,
+        localAhead: true,
+        networkError: false
+      }
+    }
+  } catch (error) {
+    // Check if this is a network error
+    const errorMessage = error instanceof Error ? error.message : String(error)
+
+    if (errorMessage.includes('Could not resolve host') ||
+        errorMessage.includes('unable to access') ||
+        errorMessage.includes('network') ||
+        errorMessage.includes('Connection refused') ||
+        errorMessage.includes('Connection timed out')) {
+      return {
+        exists: false,
+        remoteAhead: false,
+        localAhead: false,
+        networkError: true,
+        errorMessage
+      }
+    }
+
+    // For other errors, assume remote doesn't exist
+    return {
+      exists: false,
+      remoteAhead: false,
+      localAhead: false,
+      networkError: false
+    }
+  }
+}

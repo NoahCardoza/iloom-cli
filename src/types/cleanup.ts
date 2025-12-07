@@ -12,6 +12,10 @@ export interface ResourceCleanupOptions {
 	keepDatabase?: boolean
 	/** Prompt for confirmation before operations */
 	interactive?: boolean
+	/** Check if branch is merged before allowing cleanup (defaults to true when deleteBranch is true) */
+	checkMergeSafety?: boolean
+	/** Check if branch exists on remote before allowing cleanup (useful for GitHub-PR mode) */
+	checkRemoteBranch?: boolean
 }
 
 /**

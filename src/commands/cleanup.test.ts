@@ -322,25 +322,30 @@ describe('CleanupCommand', () => {
       await expect(errorPromise).rejects.toThrow('Cannot use --list with --all (list is informational only)')
     })
 
-    it('should log errors before throwing', async () => {
+    it('should not log errors before throwing (errors logged by CLI layer)', async () => {
+      // Errors are not logged in the command layer to avoid duplicate messages
+      // The CLI layer (cli.ts) handles all error logging
       await expect(command.execute({
         options: { list: true, all: true }
       })).rejects.toThrow()
 
-      expect(logger.error).toHaveBeenCalled()
+      // Error should NOT be logged here - it propagates to CLI layer
+      expect(logger.error).not.toHaveBeenCalled()
     })
 
-    it('should handle unknown errors gracefully', async () => {
+    it('should propagate unknown errors to CLI layer', async () => {
       // Force an unknown error by throwing from logger
       vi.mocked(logger.info).mockImplementationOnce(() => {
         throw 'string error'  // Non-Error throw
       })
 
+      // Error should propagate up to CLI layer
       await expect(command.execute({
         options: { list: true }
       })).rejects.toBeDefined()
 
-      expect(logger.error).toHaveBeenCalledWith('An unknown error occurred')
+      // Error logging is handled by CLI layer, not command layer
+      expect(logger.error).not.toHaveBeenCalled()
     })
   })
 
@@ -471,40 +476,39 @@ describe('CleanupCommand', () => {
         const mockWorktree = { path: '/path/to/worktree', branch: 'feat/issue-45', commit: 'abc123', bare: false, detached: false, locked: false }
         mockGitWorktreeManager.findWorktreeForBranch = vi.fn().mockResolvedValue(mockWorktree)
 
-        // Mock user confirms both prompts
-        vi.mocked(promptConfirmation)
-          .mockResolvedValueOnce(true) // Confirm worktree removal
-          .mockResolvedValueOnce(true) // Confirm branch deletion
+        // Mock user confirms cleanup (single confirmation - safety check happens in cleanupWorktree)
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true) // Confirm worktree removal
 
-        // Mock successful cleanup
+        // Mock successful cleanup with branch deletion included
         const mockResult: CleanupResult = {
           identifier: 'feat/issue-45',
           branchName: 'feat/issue-45',
           success: true,
           operations: [
             { type: 'dev-server', success: true, message: 'Dev server terminated' },
-            { type: 'worktree', success: true, message: 'Worktree removed' }
+            { type: 'worktree', success: true, message: 'Worktree removed' },
+            { type: 'branch', success: true, message: 'Branch deleted' }
           ],
           errors: []
         }
         mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
-        mockResourceCleanup.deleteBranch = vi.fn().mockResolvedValue(true)
 
         await command.execute({ identifier: 'feat/issue-45', options: {} })
 
-        // Verify execution flow
+        // Verify execution flow - safety checks run via cleanupWorktree with deleteBranch: true
         expect(promptConfirmation).toHaveBeenNthCalledWith(1, 'Remove this worktree?', true)
         expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
           expect.objectContaining({ type: 'branch', branchName: 'feat/issue-45' }),
           {
             dryRun: false,
             force: false,
-            deleteBranch: false,
-            keepDatabase: false
+            deleteBranch: true,  // Now includes branch deletion with safety checks
+            keepDatabase: false,
+            checkMergeSafety: true  // Run 5-point safety check before any deletion
           }
         )
-        expect(promptConfirmation).toHaveBeenNthCalledWith(2, 'Also delete the git branch?', true)
-        expect(mockResourceCleanup.deleteBranch).toHaveBeenCalled()
+        // No second prompt - branch deletion is handled atomically with safety checks
+        expect(promptConfirmation).toHaveBeenCalledTimes(1)
         expect(logger.success).toHaveBeenCalledWith('Cleanup completed successfully')
       })
 
@@ -528,34 +532,36 @@ describe('CleanupCommand', () => {
         expect(logger.info).toHaveBeenCalledWith('Cleanup cancelled')
       })
 
-      it('should cleanup worktree but skip branch when user declines second confirmation', async () => {
+      it('should cleanup worktree and branch atomically with safety checks (no second confirmation)', async () => {
         // Mock IdentifierParser dependencies
         const mockWorktree = { path: '/path/to/worktree', branch: 'feat/issue-45', commit: 'abc123', bare: false, detached: false, locked: false }
         mockGitWorktreeManager.findWorktreeForBranch = vi.fn().mockResolvedValue(mockWorktree)
 
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
+        // User confirms cleanup (single confirmation)
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true) // Confirm worktree removal
 
-        // User confirms worktree but not branch
-        vi.mocked(promptConfirmation)
-          .mockResolvedValueOnce(true)  // Confirm worktree
-          .mockResolvedValueOnce(false) // Decline branch
-
+        // Mock successful cleanup with branch deletion included (atomic operation)
         const mockResult: CleanupResult = {
           identifier: 'feat/issue-45',
           branchName: 'feat/issue-45',
           success: true,
-          operations: [{ type: 'worktree', success: true, message: 'Worktree removed' }],
+          operations: [
+            { type: 'worktree', success: true, message: 'Worktree removed' },
+            { type: 'branch', success: true, message: 'Branch deleted' }
+          ],
           errors: []
         }
         mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
-        mockResourceCleanup.deleteBranch = vi.fn()
 
         await command.execute({ identifier: 'feat/issue-45', options: {} })
 
-        // Worktree removed, branch not deleted
-        expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalled()
-        expect(mockResourceCleanup.deleteBranch).not.toHaveBeenCalled()
+        // Worktree and branch handled atomically - no separate deleteBranch call
+        expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
+          expect.objectContaining({ branchName: 'feat/issue-45' }),
+          expect.objectContaining({ deleteBranch: true, checkMergeSafety: true })
+        )
+        // Only one confirmation prompt
+        expect(promptConfirmation).toHaveBeenCalledTimes(1)
       })
 
       it('should display worktree details before confirmation prompt', async () => {
@@ -709,43 +715,45 @@ describe('CleanupCommand', () => {
     describe('Force Flag Behavior', () => {
       it('should skip all confirmations when --force flag provided', async () => {
         setupBranchWorktreeMock('feat/branch')
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
 
         const mockResult: CleanupResult = {
           identifier: 'feat/branch',
           success: true,
-          operations: [{ type: 'worktree', success: true, message: 'Worktree removed' }],
+          operations: [
+            { type: 'worktree', success: true, message: 'Worktree removed' },
+            { type: 'branch', success: true, message: 'Branch deleted' }
+          ],
           errors: []
         }
         mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
-        mockResourceCleanup.deleteBranch = vi.fn().mockResolvedValue(true)
 
         await command.execute({ identifier: 'feat/branch', options: { force: true } })
 
         // No prompts called
         expect(promptConfirmation).not.toHaveBeenCalled()
-        // Cleanup called with force and deleteBranch
+        // Cleanup called with force and deleteBranch (force bypasses safety checks)
         expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
           expect.objectContaining({ type: 'branch', branchName: 'feat/branch' }),
           {
             dryRun: false,
             force: true,
             deleteBranch: true,
-            keepDatabase: false
+            keepDatabase: false,
+            checkMergeSafety: true  // checkMergeSafety is still passed, but force bypasses it in ResourceCleanup
           }
         )
       })
 
       it('should force delete branch when --force provided', async () => {
         setupBranchWorktreeMock('feat/branch')
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
 
         const mockResult: CleanupResult = {
           identifier: 'feat/branch',
           success: true,
-          operations: [],
+          operations: [
+            { type: 'worktree', success: true, message: 'Worktree removed' },
+            { type: 'branch', success: true, message: 'Branch deleted' }
+          ],
           errors: []
         }
         mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
@@ -754,7 +762,7 @@ describe('CleanupCommand', () => {
 
         expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
           expect.objectContaining({ type: 'branch', branchName: 'feat/branch' }),
-          expect.objectContaining({ deleteBranch: true, force: true })
+          expect.objectContaining({ deleteBranch: true, force: true, checkMergeSafety: true })
         )
       })
     })
@@ -762,8 +770,6 @@ describe('CleanupCommand', () => {
     describe('Dry Run Mode', () => {
       it('should preview operations without executing when --dry-run provided', async () => {
         setupBranchWorktreeMock('feat/branch')
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
 
         vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
 
@@ -771,7 +777,8 @@ describe('CleanupCommand', () => {
           identifier: 'feat/branch',
           success: true,
           operations: [
-            { type: 'worktree', success: true, message: '[DRY RUN] Would remove worktree' }
+            { type: 'worktree', success: true, message: '[DRY RUN] Would remove worktree' },
+            { type: 'branch', success: true, message: '[DRY RUN] Would delete branch' }
           ],
           errors: []
         }
@@ -784,16 +791,15 @@ describe('CleanupCommand', () => {
           {
             dryRun: true,
             force: false,
-            deleteBranch: false,
-            keepDatabase: false
+            deleteBranch: true,  // Still includes branch deletion in dry run
+            keepDatabase: false,
+            checkMergeSafety: true
           }
         )
       })
 
       it('should still require confirmation in dry-run unless --force', async () => {
         setupBranchWorktreeMock('feat/branch')
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
 
         vi.mocked(promptConfirmation).mockResolvedValueOnce(false)
 
@@ -808,10 +814,8 @@ describe('CleanupCommand', () => {
     describe('Result Reporting', () => {
       it('should report detailed results for successful cleanup', async () => {
         setupBranchWorktreeMock('feat/branch')
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
 
-        vi.mocked(promptConfirmation).mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
 
         const mockResult: CleanupResult = {
           identifier: 'feat/branch',
@@ -819,6 +823,7 @@ describe('CleanupCommand', () => {
           operations: [
             { type: 'dev-server', success: true, message: 'Dev server terminated' },
             { type: 'worktree', success: true, message: 'Worktree removed: /path' },
+            { type: 'branch', success: true, message: 'Branch deleted' },
             { type: 'database', success: true, message: 'Database cleaned up' }
           ],
           errors: []
@@ -835,10 +840,8 @@ describe('CleanupCommand', () => {
 
       it('should report partial success when some operations fail', async () => {
         setupBranchWorktreeMock('feat/branch')
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
 
-        vi.mocked(promptConfirmation).mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
 
         const mockError = new Error('Database cleanup failed')
         const mockResult: CleanupResult = {
@@ -846,6 +849,7 @@ describe('CleanupCommand', () => {
           success: false,
           operations: [
             { type: 'worktree', success: true, message: 'Worktree removed' },
+            { type: 'branch', success: true, message: 'Branch deleted' },
             { type: 'database', success: false, message: 'Database cleanup failed', error: 'Database cleanup failed' }
           ],
           errors: [mockError]
@@ -861,10 +865,8 @@ describe('CleanupCommand', () => {
 
       it('should display all operation types in result', async () => {
         setupBranchWorktreeMock('feat/issue-45')
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
 
-        vi.mocked(promptConfirmation).mockResolvedValueOnce(true).mockResolvedValueOnce(true)
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
 
         const mockResult: CleanupResult = {
           identifier: 'feat/issue-45',
@@ -872,12 +874,12 @@ describe('CleanupCommand', () => {
           operations: [
             { type: 'dev-server', success: true, message: 'Dev server terminated' },
             { type: 'worktree', success: true, message: 'Worktree removed' },
+            { type: 'branch', success: true, message: 'Branch deleted' },
             { type: 'database', success: true, message: 'Database cleaned' }
           ],
           errors: []
         }
         mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
-        mockResourceCleanup.deleteBranch = vi.fn().mockResolvedValue(true)
 
         await command.execute({ identifier: 'feat/issue-45', options: {} })
 
@@ -888,10 +890,8 @@ describe('CleanupCommand', () => {
     })
 
     describe('Error Handling', () => {
-      it('should handle ResourceCleanup errors gracefully', async () => {
+      it('should propagate ResourceCleanup errors to CLI layer', async () => {
         setupBranchWorktreeMock('feat/branch')
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
 
         vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
 
@@ -901,13 +901,13 @@ describe('CleanupCommand', () => {
         await expect(command.execute({ identifier: 'feat/branch', options: {} }))
           .rejects.toThrow('Cleanup failed')
 
-        expect(logger.error).toHaveBeenCalled()
+        // Error logging is handled by CLI layer, not command layer
+        // This avoids duplicate error messages
+        expect(logger.error).not.toHaveBeenCalled()
       })
 
       it('should handle prompt errors gracefully', async () => {
         setupBranchWorktreeMock('feat/branch')
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
 
         const error = new Error('stdin closed')
         vi.mocked(promptConfirmation).mockRejectedValue(error)
@@ -918,8 +918,6 @@ describe('CleanupCommand', () => {
 
       it('should not swallow unexpected errors', async () => {
         setupBranchWorktreeMock('feat/branch')
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
 
         const unexpectedError = new Error('Unexpected error')
         vi.mocked(promptConfirmation).mockRejectedValue(unexpectedError)
@@ -932,15 +930,16 @@ describe('CleanupCommand', () => {
     describe('Integration with ResourceCleanup', () => {
       it('should pass correct options to ResourceCleanup.cleanupWorktree()', async () => {
         setupBranchWorktreeMock('feat/branch')
-        const mockSafety: SafetyCheck = { isSafe: true, warnings: [], blockers: [] }
-        mockResourceCleanup.validateCleanupSafety = vi.fn().mockResolvedValue(mockSafety)
 
-        vi.mocked(promptConfirmation).mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
 
         const mockResult: CleanupResult = {
           identifier: 'feat/branch',
           success: true,
-          operations: [],
+          operations: [
+            { type: 'worktree', success: true, message: 'Worktree removed' },
+            { type: 'branch', success: true, message: 'Branch deleted' }
+          ],
           errors: []
         }
         mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
@@ -952,8 +951,9 @@ describe('CleanupCommand', () => {
           {
             dryRun: false,
             force: false,
-            deleteBranch: false,
-            keepDatabase: false
+            deleteBranch: true,  // Now always true to enable safety checks before any deletion
+            keepDatabase: false,
+            checkMergeSafety: true  // Run 5-point safety check
           }
         )
       })
@@ -1080,6 +1080,126 @@ describe('CleanupCommand', () => {
         })
 
         expect(logger.info).toHaveBeenCalledWith('Found 1 worktree(s) related to issue/PR #MARK-1:')
+      })
+    })
+
+    describe('Issue Cleanup with Safety Checks (Issue #275)', () => {
+      it('should call cleanupWorktree with deleteBranch: true and checkMergeSafety: true', async () => {
+        // Mock finding a worktree
+        mockGitWorktreeManager.listWorktrees = vi.fn().mockResolvedValue([
+          { path: '/repo/issue-25', branch: 'issue-25', commit: 'abc', bare: false, detached: false, locked: false }
+        ])
+
+        // User confirms cleanup
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
+
+        // Mock successful cleanup (with branch deletion included)
+        const mockResult: CleanupResult = {
+          identifier: 'issue-25',
+          branchName: 'issue-25',
+          success: true,
+          operations: [
+            { type: 'worktree', success: true, message: 'Worktree removed' },
+            { type: 'branch', success: true, message: 'Branch deleted' }
+          ],
+          errors: []
+        }
+        mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
+
+        await command.execute({ options: { issue: 25 } })
+
+        // Verify cleanupWorktree was called with correct options
+        expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'issue', number: 25 }),
+          {
+            dryRun: false,
+            force: false,
+            deleteBranch: true,  // Now includes branch deletion with safety checks
+            keepDatabase: false,
+            checkMergeSafety: true  // Run 5-point safety check BEFORE any deletion
+          }
+        )
+      })
+
+      it('should NOT call separate deleteBranch after cleanupWorktree', async () => {
+        // Mock finding a worktree
+        mockGitWorktreeManager.listWorktrees = vi.fn().mockResolvedValue([
+          { path: '/repo/issue-25', branch: 'issue-25', commit: 'abc', bare: false, detached: false, locked: false }
+        ])
+
+        // User confirms cleanup
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
+
+        // Mock successful cleanup
+        const mockResult: CleanupResult = {
+          identifier: 'issue-25',
+          branchName: 'issue-25',
+          success: true,
+          operations: [
+            { type: 'worktree', success: true, message: 'Worktree removed' },
+            { type: 'branch', success: true, message: 'Branch deleted' }
+          ],
+          errors: []
+        }
+        mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
+        mockResourceCleanup.deleteBranch = vi.fn()
+
+        await command.execute({ options: { issue: 25 } })
+
+        // Verify deleteBranch was NOT called separately (branch deletion is now atomic)
+        expect(mockResourceCleanup.deleteBranch).not.toHaveBeenCalled()
+      })
+
+      it('should report safety check failure but continue to report stats (issue cleanup handles multiple worktrees)', async () => {
+        // Mock finding a worktree
+        mockGitWorktreeManager.listWorktrees = vi.fn().mockResolvedValue([
+          { path: '/repo/issue-25', branch: 'issue-25', commit: 'abc', bare: false, detached: false, locked: false }
+        ])
+
+        // User confirms cleanup
+        vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
+
+        // Mock cleanupWorktree throwing due to safety check failure
+        mockResourceCleanup.cleanupWorktree = vi.fn().mockRejectedValue(
+          new Error('Cannot cleanup:\n\nBranch has unpushed commits that would be lost.')
+        )
+
+        // Issue cleanup processes worktrees in a loop and catches errors to continue
+        // It doesn't throw - it reports failures in the summary
+        await command.execute({ options: { issue: 25 } })
+
+        // Verify cleanupWorktree was called but failed
+        expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalled()
+        // Verify error was logged
+        expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to cleanup'))
+      })
+
+      it('should bypass safety checks when --force is used', async () => {
+        // Mock finding a worktree
+        mockGitWorktreeManager.listWorktrees = vi.fn().mockResolvedValue([
+          { path: '/repo/issue-25', branch: 'issue-25', commit: 'abc', bare: false, detached: false, locked: false }
+        ])
+
+        // Mock successful cleanup
+        const mockResult: CleanupResult = {
+          identifier: 'issue-25',
+          branchName: 'issue-25',
+          success: true,
+          operations: [
+            { type: 'worktree', success: true, message: 'Worktree removed' },
+            { type: 'branch', success: true, message: 'Branch deleted' }
+          ],
+          errors: []
+        }
+        mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
+
+        await command.execute({ options: { issue: 25, force: true } })
+
+        // Verify cleanupWorktree was called with force: true (which bypasses safety checks in ResourceCleanup)
+        expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'issue', number: 25 }),
+          expect.objectContaining({ force: true, deleteBranch: true, checkMergeSafety: true })
+        )
       })
     })
   })

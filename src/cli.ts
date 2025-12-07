@@ -518,7 +518,8 @@ program
       }
       await command.execute(input)
     } catch (error) {
-      logger.error(`Failed to cleanup worktrees: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      // Error message is already well-formatted (e.g., "Cannot cleanup:\n\n...")
+      logger.error(error instanceof Error ? error.message : 'Unknown error')
       process.exit(1)
     }
   })

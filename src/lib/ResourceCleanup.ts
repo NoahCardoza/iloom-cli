@@ -6,7 +6,7 @@ import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager } from './MetadataManager.js'
 import { logger } from '../utils/logger.js'
-import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber } from '../utils/git.js'
+import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber, isBranchMergedIntoMain, checkRemoteBranchStatus, type RemoteBranchStatus } from '../utils/git.js'
 
 import type {
 	ResourceCleanupOptions,
@@ -127,8 +127,12 @@ export class ResourceCleanup {
 		}
 
 		// Step 2.5: Validate safety before proceeding with cleanup (unless force flag is set)
+		// Check merge safety if: deleteBranch is true AND checkMergeSafety is not explicitly false
+		// This prevents the scenario where worktree is deleted but branch deletion fails
 		if (!options.force) {
-			const safety = await this.validateWorktreeSafety(worktree, parsed.originalInput)
+			const shouldCheckMergeSafety = options.checkMergeSafety ?? (options.deleteBranch === true)
+			const shouldCheckRemoteBranch = options.checkRemoteBranch ?? false
+			const safety = await this.validateWorktreeSafety(worktree, parsed.originalInput, shouldCheckMergeSafety, shouldCheckRemoteBranch)
 
 			if (!safety.isSafe) {
 				// Format blocker messages for error output
@@ -466,18 +470,28 @@ export class ResourceCleanup {
 			throw new Error(`Cannot delete protected branch: ${branchName}`)
 		}
 
+		// Use provided cwd, or find main worktree path as fallback
+		// This ensures we're not running git commands from a deleted directory
+		const workingDir = cwd ?? await findMainWorktreePathWithSettings(undefined, this.settingsManager)
+
+		// Check if branch exists before attempting deletion (idempotent behavior)
+		try {
+			await executeGitCommand(['rev-parse', '--verify', `refs/heads/${branchName}`], {
+				cwd: workingDir
+			})
+		} catch {
+			// Branch doesn't exist - already deleted, return success
+			logger.debug(`Branch ${branchName} does not exist, skipping deletion`)
+			return true
+		}
+
 		if (options.dryRun) {
 			logger.info(`[DRY RUN] Would delete branch: ${branchName}`)
 			return true
 		}
 
-		// Use GitWorktreeManager's removeWorktree with removeBranch option
-		// Or execute git branch -D directly via executeGitCommand
+		// Execute git branch deletion
 		try {
-			// Use provided cwd, or find main worktree path as fallback
-			// This ensures we're not running git commands from a deleted directory
-			let workingDir = cwd ?? await findMainWorktreePathWithSettings(undefined, this.settingsManager)			
-
 			// Use safe delete (-d) unless force is specified
 			const deleteFlag = options.force ? '-D' : '-d'
 			await executeGitCommand(['branch', deleteFlag, branchName], {
@@ -487,13 +501,17 @@ export class ResourceCleanup {
 			logger.info(`Branch deleted: ${branchName}`)
 			return true
 		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error)
+
+			// Handle "branch not found" - may occur in race conditions
+			if (errorMessage.includes('not found') || errorMessage.includes('does not exist')) {
+				logger.debug(`Branch ${branchName} already deleted`)
+				return true
+			}
+
 			if (options.force) {
 				throw error
 			}
-
-			// For safe delete failures, check if it's actually an unmerged branch error
-			// and provide helpful message only in that case, otherwise show the real error
-			const errorMessage = error instanceof Error ? error.message : String(error)
 
 			// Git error for unmerged branch typically contains "not fully merged"
 			if (errorMessage.includes('not fully merged')) {
@@ -502,7 +520,7 @@ export class ResourceCleanup {
 				)
 			}
 
-			// For other errors (like branch doesn't exist), show the actual git error
+			// For other errors, show the actual git error
 			throw error
 		}
 	}
@@ -597,10 +615,17 @@ export class ResourceCleanup {
 	/**
 	 * Validate worktree safety given a worktree object
 	 * Private method used internally when worktree is already known
+	 *
+	 * @param worktree - The worktree to validate
+	 * @param identifier - The original identifier used (for error messages)
+	 * @param checkBranchMerge - Whether to check if branch is merged into main (for branch deletion)
+	 * @param checkRemoteBranch - Whether to check if branch exists on remote (for GitHub-PR mode)
 	 */
 	private async validateWorktreeSafety(
 		worktree: GitWorktree,
-		identifier: string
+		identifier: string,
+		checkBranchMerge: boolean = false,
+		checkRemoteBranch: boolean = false
 	): Promise<SafetyCheck> {
 		const warnings: string[] = []
 		const blockers: string[] = []
@@ -623,6 +648,71 @@ export class ResourceCleanup {
 				`  • Force cleanup: il cleanup ${identifier} --force (WARNING: will discard changes)`
 
 			blockers.push(blockerMessage)
+		}
+
+		// 5-point safety check for branch deletion
+		// The key insight: we care about DATA LOSS, not about remote state
+		// - Remote ahead of local is SAFE (commits exist on remote, no data loss)
+		// - Local ahead of remote is DANGEROUS (unpushed commits would be lost)
+		//
+		// 1. Network error -> BLOCK (can't verify safety)
+		// 2. Remote ahead of local -> OK (no data loss - commits exist on remote)
+		// 3. Local ahead of remote (unpushed commits) -> BLOCK (data loss risk)
+		// 4. No remote, merged to main -> OK (work is in main)
+		// 5. No remote, NOT merged to main -> BLOCK (unmerged work would be lost)
+		if ((checkBranchMerge || checkRemoteBranch) && worktree.branch) {
+			const settings = await this.settingsManager.loadSettings(worktree.path)
+			const mainBranch = settings.mainBranch ?? 'main'
+
+			// Check remote branch status
+			const remoteStatus: RemoteBranchStatus = await checkRemoteBranchStatus(worktree.branch, worktree.path)
+
+			// Scenario 1: Network error checking remote -> Block
+			if (remoteStatus.networkError) {
+				const blockerMessage =
+					`Cannot verify remote branch status due to network error.\n\n` +
+					`Error: ${remoteStatus.errorMessage ?? 'Unknown network error'}\n\n` +
+					`Unable to determine if branch '${worktree.branch}' is safely backed up.\n` +
+					`Use --force to proceed without verification.`
+
+				blockers.push(blockerMessage)
+			}
+			// Scenario 3: Local ahead of remote (unpushed commits) -> Block (data loss risk)
+			else if (remoteStatus.exists && remoteStatus.localAhead) {
+				const blockerMessage =
+					`Branch '${worktree.branch}' has unpushed commits that would be lost.\n` +
+					`The remote branch exists but your local branch is ahead.\n\n` +
+					`Please resolve before cleanup:\n` +
+					`  • Push your commits: git push origin ${worktree.branch}\n` +
+					`  • Force cleanup: il cleanup ${identifier} --force (WARNING: will lose commits)`
+
+				blockers.push(blockerMessage)
+			}
+			// Scenario 2: Remote ahead of local OR same commits -> Safe (work is on remote)
+			else if (remoteStatus.exists && !remoteStatus.localAhead) {
+				// Work is safely on remote (either remote is ahead or same commits)
+				// No blocker needed
+			}
+			// Remote doesn't exist - need to check merge status
+			else if (!remoteStatus.exists) {
+				const isMerged = await isBranchMergedIntoMain(worktree.branch, mainBranch, worktree.path)
+
+				if (isMerged) {
+					// Scenario 4: Remote doesn't exist, but merged to main -> Safe
+					// No blocker needed
+				} else {
+					// Scenario 5: Remote doesn't exist AND not merged to main -> Block
+					const blockerMessage =
+						`Branch '${worktree.branch}' has not been pushed to remote and is not merged into '${mainBranch}'.\n` +
+						`Deleting this branch would result in data loss.\n\n` +
+						`Please resolve before cleanup - you have some options:\n` +
+						`  • Push to remote: git push -u origin ${worktree.branch}\n` +
+						`  • Merge to ${mainBranch}: git checkout ${mainBranch} && git merge ${worktree.branch}\n` +
+						`  • Force cleanup: il cleanup ${identifier} --force (WARNING: will lose commits)`
+
+					blockers.push(blockerMessage)
+				}
+			}
 		}
 
 		return {

@@ -11,6 +11,9 @@ import {
   ensureRepositoryHasCommits,
   isFileTrackedByGit,
   isFileGitignored,
+  isBranchMergedIntoMain,
+  isRemoteBranchUpToDate,
+  checkRemoteBranchStatus,
 } from './git.js'
 import { execa } from 'execa'
 
@@ -1065,6 +1068,379 @@ describe('Git Utility Regression Tests', () => {
       await isFileGitignored('.vscode/settings.json', '/custom/path')
 
       expect(execa).toHaveBeenCalledWith('git', ['check-ignore', '-q', '.vscode/settings.json'], expect.objectContaining({ cwd: '/custom/path' }))
+    })
+  })
+
+  describe('isBranchMergedIntoMain', () => {
+    it('should return true when branch is merged into main', async () => {
+      // git merge-base --is-ancestor exits 0 when branch IS an ancestor of main
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      const result = await isBranchMergedIntoMain('feature-branch', 'main', '/test/repo')
+
+      expect(result).toBe(true)
+      expect(execa).toHaveBeenCalledWith(
+        'git',
+        ['merge-base', '--is-ancestor', 'feature-branch', 'main'],
+        expect.objectContaining({ cwd: '/test/repo' })
+      )
+    })
+
+    it('should return false when branch is NOT merged into main', async () => {
+      // git merge-base --is-ancestor exits 1 when branch is NOT an ancestor of main
+      vi.mocked(execa).mockRejectedValueOnce(new Error('exit code 1'))
+
+      const result = await isBranchMergedIntoMain('feature-branch', 'main', '/test/repo')
+
+      expect(result).toBe(false)
+    })
+
+    it('should return false when branch does not exist', async () => {
+      // git merge-base --is-ancestor throws error for unknown revision
+      vi.mocked(execa).mockRejectedValueOnce(
+        new Error("fatal: Not a valid commit name unknown-branch")
+      )
+
+      const result = await isBranchMergedIntoMain('unknown-branch', 'main', '/test/repo')
+
+      expect(result).toBe(false)
+    })
+
+    it('should use default main branch when not specified', async () => {
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      await isBranchMergedIntoMain('feature-branch')
+
+      expect(execa).toHaveBeenCalledWith(
+        'git',
+        ['merge-base', '--is-ancestor', 'feature-branch', 'main'],
+        expect.objectContaining({ cwd: process.cwd() })
+      )
+    })
+
+    it('should use custom main branch when specified', async () => {
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      await isBranchMergedIntoMain('feature-branch', 'develop', '/test/repo')
+
+      expect(execa).toHaveBeenCalledWith(
+        'git',
+        ['merge-base', '--is-ancestor', 'feature-branch', 'develop'],
+        expect.objectContaining({ cwd: '/test/repo' })
+      )
+    })
+
+    it('should use process.cwd() when cwd is not provided', async () => {
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      await isBranchMergedIntoMain('feature-branch', 'main')
+
+      expect(execa).toHaveBeenCalledWith(
+        'git',
+        ['merge-base', '--is-ancestor', 'feature-branch', 'main'],
+        expect.objectContaining({ cwd: process.cwd() })
+      )
+    })
+  })
+
+  describe('isRemoteBranchUpToDate', () => {
+    beforeEach(() => {
+      vi.resetAllMocks()
+    })
+
+    it('should return true when remote branch exists and matches local', async () => {
+      // Mock successful ls-remote command with output
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'abc123\trefs/heads/feature-branch',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      // Mock local rev-parse with same commit hash
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'abc123',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      const result = await isRemoteBranchUpToDate('feature-branch', '/test/path')
+
+      expect(result).toBe(true)
+      expect(execa).toHaveBeenNthCalledWith(1,
+        'git',
+        ['ls-remote', '--heads', 'origin', 'feature-branch'],
+        expect.objectContaining({ cwd: '/test/path' })
+      )
+      expect(execa).toHaveBeenNthCalledWith(2,
+        'git',
+        ['rev-parse', 'feature-branch'],
+        expect.objectContaining({ cwd: '/test/path' })
+      )
+    })
+
+    it('should return false when remote branch does not exist', async () => {
+      // Mock ls-remote command with empty output
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      const result = await isRemoteBranchUpToDate('nonexistent-branch', '/test/path')
+
+      expect(result).toBe(false)
+      expect(execa).toHaveBeenCalledWith(
+        'git',
+        ['ls-remote', '--heads', 'origin', 'nonexistent-branch'],
+        expect.objectContaining({ cwd: '/test/path' })
+      )
+    })
+
+    it('should return false when git command fails', async () => {
+      // Mock git command failure
+      vi.mocked(execa).mockRejectedValueOnce(new Error('remote not found'))
+
+      const result = await isRemoteBranchUpToDate('any-branch', '/test/path')
+
+      expect(result).toBe(false)
+      expect(execa).toHaveBeenCalledWith(
+        'git',
+        ['ls-remote', '--heads', 'origin', 'any-branch'],
+        expect.objectContaining({ cwd: '/test/path' })
+      )
+    })
+
+    it('should return false when ls-remote returns only whitespace', async () => {
+      // Mock ls-remote with whitespace-only output
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '   \n  \t  ',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      const result = await isRemoteBranchUpToDate('feature-branch', '/test/path')
+
+      expect(result).toBe(false)
+    })
+
+    it('should return false when remote and local commits do not match', async () => {
+      // Mock successful ls-remote command with remote commit
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'abc123\trefs/heads/feature-branch',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      // Mock local rev-parse with different commit hash
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'def456',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      const result = await isRemoteBranchUpToDate('feature-branch', '/test/path')
+
+      expect(result).toBe(false)
+      expect(execa).toHaveBeenCalledTimes(2)
+    })
+
+    it('should return false when local rev-parse fails', async () => {
+      // Mock successful ls-remote command
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'abc123\trefs/heads/feature-branch',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      // Mock local rev-parse failure
+      vi.mocked(execa).mockRejectedValueOnce(new Error('unknown revision'))
+
+      const result = await isRemoteBranchUpToDate('feature-branch', '/test/path')
+
+      expect(result).toBe(false)
+    })
+  })
+
+  describe('checkRemoteBranchStatus', () => {
+    beforeEach(() => {
+      vi.resetAllMocks()
+    })
+
+    it('should return exists=true, remoteAhead=false, localAhead=false when remote and local match', async () => {
+      // Mock fetch (succeeds)
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      // Mock ls-remote (returns same commit as local)
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'abc123\trefs/heads/feature-branch',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      // Mock rev-parse for local commit
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'abc123',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      const result = await checkRemoteBranchStatus('feature-branch', '/test/path')
+
+      expect(result.exists).toBe(true)
+      expect(result.remoteAhead).toBe(false)
+      expect(result.localAhead).toBe(false)
+      expect(result.networkError).toBe(false)
+    })
+
+    it('should return exists=true, remoteAhead=true, localAhead=false when remote is ahead of local (SAFE - no data loss)', async () => {
+      // Mock fetch (succeeds)
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      // Mock ls-remote (returns different commit)
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'remote123\trefs/heads/feature-branch',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      // Mock rev-parse for local commit (different from remote)
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'local456',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      // Mock merge-base --is-ancestor (succeeds = local is ancestor of remote = remote is ahead)
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      const result = await checkRemoteBranchStatus('feature-branch', '/test/path')
+
+      expect(result.exists).toBe(true)
+      expect(result.remoteAhead).toBe(true)
+      expect(result.localAhead).toBe(false)
+      expect(result.networkError).toBe(false)
+    })
+
+    it('should return exists=true, remoteAhead=false, localAhead=true when local is ahead of remote (BLOCK - data loss risk)', async () => {
+      // Mock fetch (succeeds)
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      // Mock ls-remote (returns different commit)
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'remote123\trefs/heads/feature-branch',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      // Mock rev-parse for local commit (different from remote)
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'local456',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      // Mock merge-base --is-ancestor (fails = local is NOT ancestor of remote = local is ahead or diverged)
+      vi.mocked(execa).mockRejectedValueOnce(new Error('exit code 1'))
+
+      const result = await checkRemoteBranchStatus('feature-branch', '/test/path')
+
+      expect(result.exists).toBe(true)
+      expect(result.remoteAhead).toBe(false)
+      expect(result.localAhead).toBe(true)
+      expect(result.networkError).toBe(false)
+    })
+
+    it('should return exists=false, localAhead=false when remote branch does not exist', async () => {
+      // Mock fetch (fails for non-existent branch, but not a network error)
+      vi.mocked(execa).mockRejectedValueOnce(new Error("couldn't find remote ref"))
+
+      // Mock ls-remote (returns empty = branch doesn't exist)
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      } as ReturnType<typeof execa>)
+
+      const result = await checkRemoteBranchStatus('nonexistent-branch', '/test/path')
+
+      expect(result.exists).toBe(false)
+      expect(result.remoteAhead).toBe(false)
+      expect(result.localAhead).toBe(false)
+      expect(result.networkError).toBe(false)
+    })
+
+    it('should return networkError=true when network is unavailable during fetch', async () => {
+      // Mock fetch (fails with network error)
+      vi.mocked(execa).mockRejectedValueOnce(new Error('Could not resolve host: github.com'))
+
+      const result = await checkRemoteBranchStatus('feature-branch', '/test/path')
+
+      expect(result.exists).toBe(false)
+      expect(result.remoteAhead).toBe(false)
+      expect(result.localAhead).toBe(false)
+      expect(result.networkError).toBe(true)
+      expect(result.errorMessage).toContain('Could not resolve host')
+    })
+
+    it('should return networkError=true when connection is refused', async () => {
+      // Mock fetch (fails with connection refused)
+      vi.mocked(execa).mockRejectedValueOnce(new Error('Connection refused'))
+
+      const result = await checkRemoteBranchStatus('feature-branch', '/test/path')
+
+      expect(result.networkError).toBe(true)
+      expect(result.localAhead).toBe(false)
+      expect(result.errorMessage).toContain('Connection refused')
+    })
+
+    it('should return networkError=true when connection times out', async () => {
+      // Mock fetch (fails with timeout)
+      vi.mocked(execa).mockRejectedValueOnce(new Error('Connection timed out'))
+
+      const result = await checkRemoteBranchStatus('feature-branch', '/test/path')
+
+      expect(result.networkError).toBe(true)
+      expect(result.localAhead).toBe(false)
+      expect(result.errorMessage).toContain('Connection timed out')
+    })
+
+    it('should return networkError=true when unable to access remote', async () => {
+      // Mock fetch (fails with access error)
+      vi.mocked(execa).mockRejectedValueOnce(new Error('unable to access the repository'))
+
+      const result = await checkRemoteBranchStatus('feature-branch', '/test/path')
+
+      expect(result.networkError).toBe(true)
+      expect(result.localAhead).toBe(false)
+      expect(result.errorMessage).toContain('unable to access')
     })
   })
 })

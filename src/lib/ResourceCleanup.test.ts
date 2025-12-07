@@ -6,7 +6,7 @@ import { ProcessManager } from './process/ProcessManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { ResourceCleanupOptions } from '../types/cleanup.js'
-import { executeGitCommand, findMainWorktreePathWithSettings, hasUncommittedChanges } from '../utils/git.js'
+import { executeGitCommand, findMainWorktreePathWithSettings, hasUncommittedChanges, isBranchMergedIntoMain, checkRemoteBranchStatus } from '../utils/git.js'
 import { logger } from '../utils/logger.js'
 
 // Mock dependencies
@@ -28,6 +28,8 @@ vi.mock('../utils/git.js', () => ({
 	executeGitCommand: vi.fn(),
 	hasUncommittedChanges: vi.fn(),
 	findMainWorktreePathWithSettings: vi.fn(),
+	isBranchMergedIntoMain: vi.fn(),
+	checkRemoteBranchStatus: vi.fn(),
 	extractIssueNumber: vi.fn((branch: string) => {
 		// Priority 1: New format - issue-{issueId}__
 		const newMatch = branch.match(/issue-([^_]+)__/i)
@@ -98,6 +100,16 @@ describe('ResourceCleanup', () => {
 			// Mock specific worktree finding method for issue type
 			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
 
+			// Mock safety checks - remote exists and local is up-to-date (scenario 3: safe)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: true,
+				remoteAhead: false,
+				localAhead: false,
+				networkError: false
+			})
+
 			// Mock process detection (dev server found)
 			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
 			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce({
@@ -115,7 +127,9 @@ describe('ResourceCleanup', () => {
 
 			// Mock branch deletion
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
-			vi.mocked(executeGitCommand).mockResolvedValueOnce('')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockResolvedValueOnce('') // branch deletion
 
 			// Mock database cleanup (not implemented yet, should skip)
 			// No mock needed as it's optional
@@ -263,6 +277,14 @@ describe('ResourceCleanup', () => {
 
 		it('should support dry-run mode without executing changes', async () => {
 			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: true,
+				remoteAhead: false,
+				localAhead: false,
+				networkError: false
+			})
 			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
 
 			const parsedInput = {
@@ -388,7 +410,9 @@ describe('ResourceCleanup', () => {
 	describe('deleteBranch', () => {
 		it('should delete local branch using git command', async () => {
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
-			vi.mocked(executeGitCommand).mockResolvedValueOnce('')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockResolvedValueOnce('') // branch deletion
 
 			const result = await resourceCleanup.deleteBranch('feat/test-branch', {
 				force: false,
@@ -413,7 +437,9 @@ describe('ResourceCleanup', () => {
 
 		it('should use safe delete (-d) by default', async () => {
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
-			vi.mocked(executeGitCommand).mockResolvedValueOnce('')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockResolvedValueOnce('') // branch deletion
 
 			await resourceCleanup.deleteBranch('feat/test-branch')
 
@@ -437,7 +463,9 @@ describe('ResourceCleanup', () => {
 
 		it('should provide helpful error message for unmerged branches', async () => {
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
-			vi.mocked(executeGitCommand).mockRejectedValueOnce(new Error('branch not fully merged'))
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockRejectedValueOnce(new Error('branch not fully merged')) // branch -d fails
 
 			await expect(resourceCleanup.deleteBranch('feat/unmerged-branch')).rejects.toThrow(
 				/Cannot delete unmerged branch.*Use --force/
@@ -445,11 +473,61 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should support dry-run mode', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			// Mock branch existence check succeeds
+			vi.mocked(executeGitCommand).mockResolvedValueOnce('abc123')
 
 			const result = await resourceCleanup.deleteBranch('feat/test-branch', { dryRun: true })
 
 			expect(result).toBe(true)
-			expect(executeGitCommand).not.toHaveBeenCalled()
+			// Branch existence check is called, but not branch deletion
+			expect(executeGitCommand).toHaveBeenCalledTimes(1)
+			expect(executeGitCommand).toHaveBeenCalledWith(
+				['rev-parse', '--verify', 'refs/heads/feat/test-branch'],
+				{ cwd: '/path/to/main' }
+			)
+		})
+
+		it('should succeed silently when branch does not exist (pre-check)', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			// Mock branch existence check fails (branch not found)
+			vi.mocked(executeGitCommand).mockRejectedValueOnce(
+				new Error('fatal: Needed a single revision')
+			)
+
+			const result = await resourceCleanup.deleteBranch('non-existent-branch')
+
+			expect(result).toBe(true)
+			// git branch -d should NOT be called since branch doesn't exist
+			expect(executeGitCommand).toHaveBeenCalledTimes(1)
+			expect(executeGitCommand).toHaveBeenCalledWith(
+				['rev-parse', '--verify', 'refs/heads/non-existent-branch'],
+				{ cwd: '/path/to/main' }
+			)
+		})
+
+		it('should handle "branch not found" error from git branch -d gracefully', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			// Mock branch existence check passes
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // rev-parse succeeds
+				.mockRejectedValueOnce(new Error("error: branch 'test' not found")) // branch -d fails
+
+			const result = await resourceCleanup.deleteBranch('test')
+
+			expect(result).toBe(true)
+		})
+
+		it('should handle "does not exist" error from git branch -d gracefully', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			// Mock branch existence check passes
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // rev-parse succeeds
+				.mockRejectedValueOnce(new Error('error: branch does not exist')) // branch -d fails
+
+			const result = await resourceCleanup.deleteBranch('test')
+
+			expect(result).toBe(true)
 		})
 	})
 
@@ -766,6 +844,414 @@ describe('ResourceCleanup', () => {
 
 			expect(result.isSafe).toBe(false)
 			expect(result.blockers.length).toBeGreaterThan(0)
+		})
+	})
+
+	describe('cleanupWorktree - 5-point safety check (Issue #275)', () => {
+		const mockWorktree: GitWorktree = {
+			path: '/path/to/worktree',
+			branch: 'feat/issue-25',
+			commit: 'abc123',
+			bare: false,
+			detached: false,
+			locked: false,
+		}
+
+		// Scenario 1: Remote branch exists AND is ahead of local -> OK (no data loss - commits exist on remote)
+		it('should allow cleanup when remote branch is ahead of local (scenario 1 - SAFE)', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: true,
+				remoteAhead: true,
+				localAhead: false,
+				networkError: false
+			})
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockResolvedValueOnce('') // branch deletion
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: true })
+
+			expect(result.success).toBe(true)
+		})
+
+		// New scenario: Local is ahead of remote (unpushed commits) -> BLOCK (data loss risk)
+		it('should block cleanup when local branch has unpushed commits (data loss risk)', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: true,
+				remoteAhead: false,
+				localAhead: true,
+				networkError: false
+			})
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			await expect(
+				resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: true })
+			).rejects.toThrow(/has unpushed commits/)
+		})
+
+		it('should provide helpful error message when local has unpushed commits', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: true,
+				remoteAhead: false,
+				localAhead: true,
+				networkError: false
+			})
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			try {
+				await resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: true })
+				expect.fail('Should have thrown an error')
+			} catch (error) {
+				const message = (error as Error).message
+				expect(message).toContain('git push')
+				expect(message).toContain('--force')
+			}
+		})
+
+		// Scenario 2: Remote doesn't exist AND branch not merged to main -> Block
+		it('should block cleanup when remote doesnt exist and branch not merged (scenario 2)', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: false,
+				remoteAhead: false,
+				localAhead: false,
+				networkError: false
+			})
+			vi.mocked(isBranchMergedIntoMain).mockResolvedValueOnce(false) // NOT merged
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			await expect(
+				resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: true })
+			).rejects.toThrow(/has not been pushed to remote and is not merged/)
+		})
+
+		it('should provide helpful error message for unpushed/unmerged branch (scenario 2)', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: false,
+				remoteAhead: false,
+				localAhead: false,
+				networkError: false
+			})
+			vi.mocked(isBranchMergedIntoMain).mockResolvedValueOnce(false)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			try {
+				await resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: true })
+				expect.fail('Should have thrown an error')
+			} catch (error) {
+				const message = (error as Error).message
+				expect(message).toContain('git push -u origin feat/issue-25')
+				expect(message).toContain('git checkout main && git merge feat/issue-25')
+				expect(message).toContain('--force')
+			}
+		})
+
+		// Scenario 3: Remote exists, local is up-to-date (same commits) -> Fine (work is on remote)
+		it('should allow cleanup when remote exists and local is up-to-date (scenario 3)', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: true,
+				remoteAhead: false,
+				localAhead: false, // Same commits - safe
+				networkError: false
+			})
+			// isBranchMergedIntoMain should NOT be called because work is safe on remote
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockResolvedValueOnce('') // branch deletion
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: true })
+
+			expect(result.success).toBe(true)
+			expect(isBranchMergedIntoMain).not.toHaveBeenCalled() // Key assertion
+		})
+
+		// Scenario 4: Remote doesn't exist, but merged to main -> Fine
+		it('should allow cleanup when remote doesnt exist but branch is merged (scenario 4)', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: false,
+				remoteAhead: false,
+				localAhead: false,
+				networkError: false
+			})
+			vi.mocked(isBranchMergedIntoMain).mockResolvedValueOnce(true) // IS merged
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockResolvedValueOnce('') // branch deletion
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: true })
+
+			expect(result.success).toBe(true)
+		})
+
+		// Scenario 5: Network error checking remote -> Block
+		it('should block cleanup when network error occurs checking remote (scenario 5)', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: false,
+				remoteAhead: false,
+				localAhead: false,
+				networkError: true,
+				errorMessage: 'Could not resolve host: github.com'
+			})
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			await expect(
+				resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: true })
+			).rejects.toThrow(/Cannot verify remote branch status due to network error/)
+		})
+
+		it('should provide helpful error message for network error (scenario 5)', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: false,
+				remoteAhead: false,
+				localAhead: false,
+				networkError: true,
+				errorMessage: 'Connection timed out'
+			})
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			try {
+				await resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: true })
+				expect.fail('Should have thrown an error')
+			} catch (error) {
+				const message = (error as Error).message
+				expect(message).toContain('Connection timed out')
+				expect(message).toContain('--force')
+			}
+		})
+
+		// Skip safety check when deleteBranch is false
+		it('should skip safety check when deleteBranch is false', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			// Note: checkRemoteBranchStatus should NOT be called
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: false })
+
+			expect(result.success).toBe(true)
+			expect(checkRemoteBranchStatus).not.toHaveBeenCalled()
+			expect(isBranchMergedIntoMain).not.toHaveBeenCalled()
+		})
+
+		// Bypass safety check when force flag is set
+		it('should bypass safety check when force flag is set', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			vi.mocked(executeGitCommand).mockResolvedValueOnce('') // Force delete
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				deleteBranch: true,
+				force: true
+			})
+
+			expect(result.success).toBe(true)
+			expect(checkRemoteBranchStatus).not.toHaveBeenCalled()
+			expect(isBranchMergedIntoMain).not.toHaveBeenCalled()
+		})
+
+		// Skip safety check when checkMergeSafety is explicitly false
+		it('should skip safety check when checkMergeSafety is explicitly false', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockResolvedValueOnce('') // branch deletion
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				deleteBranch: true,
+				checkMergeSafety: false
+			})
+
+			expect(result.success).toBe(true)
+			expect(checkRemoteBranchStatus).not.toHaveBeenCalled()
+			expect(isBranchMergedIntoMain).not.toHaveBeenCalled()
+		})
+
+		// Check safety BEFORE deleting worktree
+		it('should check safety BEFORE deleting worktree to prevent partial cleanup', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: false,
+				remoteAhead: false,
+				localAhead: false,
+				networkError: false
+			})
+			vi.mocked(isBranchMergedIntoMain).mockResolvedValueOnce(false)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			try {
+				await resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: true })
+			} catch {
+				// Expected to throw
+			}
+
+			// Assert - worktree removal should NOT have been called
+			expect(mockGitWorktree.removeWorktree).not.toHaveBeenCalled()
+		})
+
+		// Use configured mainBranch from settings
+		it('should use configured mainBranch from settings for merge check', async () => {
+			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({ mainBranch: 'develop' })
+
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: false,
+				remoteAhead: false,
+				localAhead: false,
+				networkError: false
+			})
+			vi.mocked(isBranchMergedIntoMain).mockResolvedValueOnce(false)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			try {
+				await resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: true })
+			} catch {
+				// Expected to throw
+			}
+
+			// Assert - should use 'develop' as the mainBranch
+			expect(isBranchMergedIntoMain).toHaveBeenCalledWith(
+				'feat/issue-25',
+				'develop',
+				'/path/to/worktree'
+			)
 		})
 	})
 })

@@ -161,38 +161,29 @@ export class CleanupCommand {
    * Parses input, validates options, and determines operation mode
    */
   public async execute(input: CleanupCommandInput): Promise<void> {
-    try {
-      // Step 1: Parse input and determine mode
-      const parsed = this.parseInput(input)
+    // Step 1: Parse input and determine mode
+    const parsed = this.parseInput(input)
 
-      // Step 2: Validate option combinations
-      this.validateInput(parsed)
+    // Step 2: Validate option combinations
+    this.validateInput(parsed)
 
-      // Step 2.5: Check for child looms AFTER parsing input
-      // This ensures we only block when cleaning the CURRENT loom (parent), not a child
-      await this.checkForChildLooms(parsed)
+    // Step 2.5: Check for child looms AFTER parsing input
+    // This ensures we only block when cleaning the CURRENT loom (parent), not a child
+    await this.checkForChildLooms(parsed)
 
-      // Step 3: Execute based on mode
-      logger.info(`Cleanup mode: ${parsed.mode}`)
+    // Step 3: Execute based on mode
+    logger.info(`Cleanup mode: ${parsed.mode}`)
 
-      if (parsed.mode === 'single') {
-        await this.executeSingleCleanup(parsed)
-      } else if (parsed.mode === 'list') {
-        logger.info('Would list all worktrees')  // TODO: Implement in Sub-issue #2
-        logger.success('Command parsing and validation successful')
-      } else if (parsed.mode === 'all') {
-        logger.info('Would remove all worktrees')  // TODO: Implement in Sub-issue #5
-        logger.success('Command parsing and validation successful')
-      } else if (parsed.mode === 'issue') {
-        await this.executeIssueCleanup(parsed)
-      }
-    } catch (error) {
-      if (error instanceof Error) {
-        logger.error(`${error.message}`)
-      } else {
-        logger.error('An unknown error occurred')
-      }
-      throw error
+    if (parsed.mode === 'single') {
+      await this.executeSingleCleanup(parsed)
+    } else if (parsed.mode === 'list') {
+      logger.info('Would list all worktrees')  // TODO: Implement in Sub-issue #2
+      logger.success('Command parsing and validation successful')
+    } else if (parsed.mode === 'all') {
+      logger.info('Would remove all worktrees')  // TODO: Implement in Sub-issue #5
+      logger.success('Command parsing and validation successful')
+    } else if (parsed.mode === 'issue') {
+      await this.executeIssueCleanup(parsed)
     }
   }
 
@@ -373,7 +364,8 @@ export class CleanupCommand {
     }
 
     // Step 4: Execute worktree cleanup (includes safety validation)
-    // With --force, delete branch automatically; otherwise handle separately
+    // Issue #275 fix: Run 5-point safety check BEFORE any deletion
+    // This prevents the scenario where worktree is deleted but branch deletion fails
     await this.ensureResourceCleanup()
     if (!this.resourceCleanup) {
       throw new Error('Failed to initialize ResourceCleanup')
@@ -381,48 +373,19 @@ export class CleanupCommand {
     const cleanupResult = await this.resourceCleanup.cleanupWorktree(parsedInput, {
       dryRun: dryRun ?? false,
       force: force ?? false,
-      deleteBranch: force ?? false,  // Delete branch immediately if --force, otherwise prompt later
+      deleteBranch: true,  // Always include branch deletion (safety checks run first)
       keepDatabase: false,
+      checkMergeSafety: true  // Run 5-point safety check BEFORE any deletion
     })
 
     // Step 5: Report cleanup results
     this.reportCleanupResults(cleanupResult)
-
-    // Step 6: Second confirmation - branch deletion (only if not forced and worktree cleanup succeeded)
-    if (cleanupResult.success && !force && cleanupResult.branchName) {
-      const confirmBranch = await promptConfirmation('Also delete the git branch?', true)
-      if (confirmBranch) {
-        await this.deleteBranchForCleanup(cleanupResult.branchName, { force: force ?? false, dryRun: dryRun ?? false })
-      }
-    }
 
     // Final success message
     if (cleanupResult.success) {
       logger.success('Cleanup completed successfully')
     } else {
       logger.warn('Cleanup completed with errors - see details above')
-    }
-  }
-
-  /**
-   * Delete branch as part of cleanup operation
-   */
-  private async deleteBranchForCleanup(
-    branchName: string,
-    options: { force?: boolean; dryRun?: boolean }
-  ): Promise<void> {
-    try {
-      await this.ensureResourceCleanup()
-      if (!this.resourceCleanup) {
-        throw new Error('Failed to initialize ResourceCleanup')
-      }
-      await this.resourceCleanup.deleteBranch(branchName, options)
-      logger.success(`Branch deleted: ${branchName}`)
-    } catch (error) {
-      if (error instanceof Error) {
-        logger.error(`Failed to delete branch: ${error.message}`)
-      }
-      // Don't throw - branch deletion is optional/secondary operation
     }
   }
 
@@ -519,6 +482,7 @@ export class CleanupCommand {
       logger.info(`Processing worktree: ${target.branchName}`)
 
       // Cleanup worktree using ResourceCleanup with ParsedInput
+      // Now includes branch deletion with 5-point safety check BEFORE any deletion
       try {
         // Use the known issue number directly instead of parsing from branch name
         // This ensures CLI symlinks (created with issue number) are properly cleaned up
@@ -533,16 +497,26 @@ export class CleanupCommand {
         if (!this.resourceCleanup) {
           throw new Error('Failed to initialize ResourceCleanup')
         }
+        // Issue #275 fix: Run safety checks BEFORE deleting worktree
+        // This prevents the scenario where worktree is deleted but branch deletion fails
         const result = await this.resourceCleanup.cleanupWorktree(parsedInput, {
           dryRun: dryRun ?? false,
           force: force ?? false,
-          deleteBranch: false, // Handle branch deletion separately
-          keepDatabase: false
+          deleteBranch: true,  // Include branch deletion (with safety checks)
+          keepDatabase: false,
+          checkMergeSafety: true  // Run 5-point safety check BEFORE any deletion
         })
 
         if (result.success) {
           worktreesRemoved++
           logger.success(`  Worktree removed: ${target.branchName}`)
+
+          // Check if branch was deleted
+          const branchOperation = result.operations.find(op => op.type === 'branch')
+          if (branchOperation?.success) {
+            branchesDeleted++
+            logger.success(`  Branch deleted: ${target.branchName}`)
+          }
 
           // Check if database branch was actually deleted (use explicit deleted field)
           const dbOperation = result.operations.find(op => op.type === 'database')
@@ -558,32 +532,8 @@ export class CleanupCommand {
       } catch (error) {
         failed++
         const errMsg = error instanceof Error ? error.message : 'Unknown error'
-        logger.error(`  Failed to remove worktree: ${errMsg}`)
+        logger.error(`  Failed to cleanup: ${errMsg}`)
         continue // Continue with next worktree even if this one failed
-      }
-
-      // Step 6: Delete branch
-      try {
-        await this.ensureResourceCleanup()
-        if (!this.resourceCleanup) {
-          throw new Error('Failed to initialize ResourceCleanup')
-        }
-        await this.resourceCleanup.deleteBranch(target.branchName, {
-          force: force ?? false,
-          dryRun: dryRun ?? false
-        })
-        branchesDeleted++
-        logger.success(`  Branch deleted: ${target.branchName}`)
-      } catch (error) {
-        // Don't count unmerged branch as failure - it's a safety feature
-        const errMsg = error instanceof Error ? error.message : String(error)
-        if (errMsg.includes('not fully merged')) {
-          logger.warn(`  Branch not fully merged, skipping deletion`)
-          logger.warn(`  Use --force to delete anyway`)
-        } else {
-          // Other errors are real failures
-          logger.error(`  Failed to delete branch: ${errMsg}`)
-        }
       }
     }
 
