@@ -11,43 +11,40 @@ export async function promptConfirmation(
 	message: string,
 	defaultValue = false
 ): Promise<boolean> {
-	const rl = readline.createInterface({
-		input: process.stdin,
-		output: process.stdout,
-	})
-
 	const suffix = defaultValue ? '[Y/n]' : '[y/N]'
 	const fullMessage = `${message} ${suffix}: `
 
-	return new Promise((resolve) => {
-		rl.question(fullMessage, (answer) => {
-			rl.close()
-
-			const normalized = answer.trim().toLowerCase()
-
-			if (normalized === '') {
-				resolve(defaultValue)
-				return
-			}
-
-			if (normalized === 'y' || normalized === 'yes') {
-				resolve(true)
-				return
-			}
-
-			if (normalized === 'n' || normalized === 'no') {
-				resolve(false)
-				return
-			}
-
-			// Invalid input, use default
-			logger.warn('Invalid input, using default value', {
-				input: answer,
-				defaultValue,
-			})
-			resolve(defaultValue)
+	// Loop until valid input is received
+	while (true) {
+		const rl = readline.createInterface({
+			input: process.stdin,
+			output: process.stdout,
 		})
-	})
+
+		const answer = await new Promise<string>((resolve) => {
+			rl.question(fullMessage, (ans) => {
+				rl.close()
+				resolve(ans)
+			})
+		})
+
+		const normalized = answer.trim().toLowerCase()
+
+		if (normalized === '') {
+			return defaultValue
+		}
+
+		if (normalized === 'y' || normalized === 'yes') {
+			return true
+		}
+
+		if (normalized === 'n' || normalized === 'no') {
+			return false
+		}
+
+		// Invalid input - show warning and re-prompt
+		logger.warn('Invalid input. Please enter y/yes or n/no.')
+	}
 }
 
 /**
@@ -150,36 +147,35 @@ export async function promptCommitAction(message: string): Promise<CommitAction>
 	process.stdout.write(message + '\n')
 	process.stdout.write('='.repeat(60) + '\n\n')
 
-	// Create readline interface (following existing pattern from promptConfirmation)
-	const rl = readline.createInterface({
-		input: process.stdin,
-		output: process.stdout,
-	})
-
-	return new Promise((resolve) => {
-		rl.question('[A]ccept as-is, [E]dit in editor, A[b]ort? [A/e/b]: ', (answer) => {
-			rl.close()
-
-			const normalized = answer.trim().toLowerCase()
-
-			if (normalized === '' || normalized === 'a') {
-				resolve('accept')
-				return
-			}
-
-			if (normalized === 'e') {
-				resolve('edit')
-				return
-			}
-
-			if (normalized === 'b') {
-				resolve('abort')
-				return
-			}
-
-			// Invalid input - default to accept
-			logger.warn('Invalid input, defaulting to accept', { input: answer })
-			resolve('accept')
+	// Loop until valid input is received
+	while (true) {
+		const rl = readline.createInterface({
+			input: process.stdin,
+			output: process.stdout,
 		})
-	})
+
+		const answer = await new Promise<string>((resolve) => {
+			rl.question('[A]ccept as-is, [E]dit in editor, A[b]ort? [A/e/b]: ', (ans) => {
+				rl.close()
+				resolve(ans)
+			})
+		})
+
+		const normalized = answer.trim().toLowerCase()
+
+		if (normalized === '' || normalized === 'a' || normalized === 'accept') {
+			return 'accept'
+		}
+
+		if (normalized === 'e' || normalized === 'edit') {
+			return 'edit'
+		}
+
+		if (normalized === 'b' || normalized === 'abort') {
+			return 'abort'
+		}
+
+		// Invalid input - show warning and re-prompt
+		logger.warn('Invalid input. Please enter A (accept), E (edit), or B (abort).')
+	}
 }

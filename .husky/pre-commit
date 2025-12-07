@@ -2,7 +2,7 @@
 pnpm run lint
 
 # Run type checking
-pnpm run typecheck
+pnpm run compile
 
 # Run tests to ensure nothing is broken (output suppressed)
 echo "Running tests..."

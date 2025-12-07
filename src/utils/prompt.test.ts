@@ -97,14 +97,21 @@ describe('prompt utils', () => {
 			expect(result).toBe(true)
 		})
 
-		it('should use default value for invalid input', async () => {
+		it('should re-prompt on invalid input and accept valid input', async () => {
+			let callCount = 0
 			mockRl.question.mockImplementation((_, callback) => {
-				callback('invalid')
+				callCount++
+				if (callCount === 1) {
+					callback('invalid')
+				} else {
+					callback('y')
+				}
 			})
 
 			const result = await promptConfirmation('Confirm?', false)
 
-			expect(result).toBe(false)
+			expect(result).toBe(true)
+			expect(callCount).toBe(2)
 		})
 
 		it('should show [Y/n] suffix when default is true', async () => {
@@ -336,6 +343,16 @@ describe('prompt utils', () => {
 			expect(result).toBe('accept')
 		})
 
+		it('should return "accept" for "accept" input (full word)', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback('accept')
+			})
+
+			const result = await promptCommitAction('Test commit message')
+
+			expect(result).toBe('accept')
+		})
+
 		it('should return "accept" for empty input (default)', async () => {
 			mockRl.question.mockImplementation((_, callback) => {
 				callback('')
@@ -366,6 +383,16 @@ describe('prompt utils', () => {
 			expect(result).toBe('edit')
 		})
 
+		it('should return "edit" for "edit" input (full word)', async () => {
+			mockRl.question.mockImplementation((_, callback) => {
+				callback('edit')
+			})
+
+			const result = await promptCommitAction('Test commit message')
+
+			expect(result).toBe('edit')
+		})
+
 		it('should return "abort" for "b" input', async () => {
 			mockRl.question.mockImplementation((_, callback) => {
 				callback('b')
@@ -386,14 +413,31 @@ describe('prompt utils', () => {
 			expect(result).toBe('abort')
 		})
 
-		it('should return "accept" for invalid input (falls back to default)', async () => {
+		it('should return "abort" for "abort" input (full word)', async () => {
 			mockRl.question.mockImplementation((_, callback) => {
-				callback('invalid')
+				callback('abort')
 			})
 
 			const result = await promptCommitAction('Test commit message')
 
-			expect(result).toBe('accept')
+			expect(result).toBe('abort')
+		})
+
+		it('should re-prompt on invalid input and accept valid input', async () => {
+			let callCount = 0
+			mockRl.question.mockImplementation((_, callback) => {
+				callCount++
+				if (callCount === 1) {
+					callback('invalid')
+				} else {
+					callback('e')
+				}
+			})
+
+			const result = await promptCommitAction('Test commit message')
+
+			expect(result).toBe('edit')
+			expect(callCount).toBe(2)
 		})
 
 		it('should display commit message with clear demarcation', async () => {
