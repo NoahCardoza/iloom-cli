@@ -21,9 +21,6 @@ describe('prompt utils', () => {
 		)
 	})
 
-	afterEach(() => {
-		vi.clearAllMocks()
-	})
 
 	describe('promptConfirmation', () => {
 		it('should return true for "y" input', async () => {
@@ -212,6 +209,7 @@ describe('prompt utils', () => {
 
 	describe('waitForKeypress', () => {
 		let mockStdin: {
+			isTTY: boolean
 			setRawMode: ReturnType<typeof vi.fn>
 			once: ReturnType<typeof vi.fn>
 			resume: ReturnType<typeof vi.fn>
@@ -220,6 +218,7 @@ describe('prompt utils', () => {
 
 		beforeEach(() => {
 			mockStdin = {
+				isTTY: true,
 				setRawMode: vi.fn().mockReturnThis(),
 				once: vi.fn(),
 				resume: vi.fn(),
@@ -297,6 +296,33 @@ describe('prompt utils', () => {
 			}
 
 			expect(process.stdout.write).toHaveBeenCalledWith('\n')
+		})
+
+		it('should return empty string in non-interactive environment (no TTY)', async () => {
+			mockStdin.isTTY = false
+
+			const result = await waitForKeypress('Test message')
+
+			expect(result).toBe('')
+			expect(mockStdin.setRawMode).not.toHaveBeenCalled()
+		})
+
+		it('should return empty string when setRawMode is not a function', async () => {
+			// Remove setRawMode to simulate non-TTY environment
+			const stdinWithoutRawMode = {
+				isTTY: true,
+				once: vi.fn(),
+				resume: vi.fn(),
+				pause: vi.fn(),
+			}
+
+			vi.spyOn(process, 'stdin', 'get').mockReturnValue(
+				stdinWithoutRawMode as unknown as typeof process.stdin
+			)
+
+			const result = await waitForKeypress('Test message')
+
+			expect(result).toBe('')
 		})
 	})
 

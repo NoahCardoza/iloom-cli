@@ -119,12 +119,13 @@ Your response should be the raw markdown that will become the GitHub issue body.
 	 * @param repository - Optional repository to fetch issue from (format: "owner/repo")
 	 */
 	public async waitForReviewAndOpen(issueNumber: string | number, confirm = false, repository?: string): Promise<void> {
-		// Check if running in CI environment
+		// Check if running in non-interactive environment (CI or no TTY)
 		const isCI = process.env.CI === 'true'
+		const isNonInteractive = isCI || !process.stdin.isTTY
 
-		if (isCI) {
-			// In CI: Skip all interactive operations
-			logger.info(`Running in CI environment - skipping interactive prompts for issue #${issueNumber}`)
+		if (isNonInteractive) {
+			// In non-interactive environment: Skip all interactive operations
+			logger.info(`Running in non-interactive environment - skipping interactive prompts for issue #${issueNumber}`)
 			return
 		}
 

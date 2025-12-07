@@ -84,11 +84,17 @@ export async function promptInput(
 /**
  * Wait for the user to press any key
  * @param message Optional message to display (default: "Press any key to continue...")
- * @returns Promise<string> - resolves with the key that was pressed
+ * @returns Promise<string> - resolves with the key that was pressed, or empty string in non-interactive environments
  */
 export async function waitForKeypress(
 	message = 'Press any key to continue...'
 ): Promise<string> {
+	// Check if we can use raw mode (only available in TTY)
+	if (!process.stdin.isTTY || typeof process.stdin.setRawMode !== 'function') {
+		// Non-interactive environment - skip keypress wait
+		return ''
+	}
+
 	// Display message first
 	process.stdout.write(message)
 

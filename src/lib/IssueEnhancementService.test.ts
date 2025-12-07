@@ -54,9 +54,6 @@ describe('IssueEnhancementService', () => {
 		)
 	})
 
-	afterEach(() => {
-		vi.clearAllMocks()
-	})
 
 	describe('validateDescription', () => {
 		it('should return true for valid descriptions (>50 chars AND >2 spaces)', () => {
@@ -273,11 +270,15 @@ describe('IssueEnhancementService', () => {
 
 	describe('waitForReviewAndOpen', () => {
 		let originalCIValue: string | undefined
+		let originalIsTTY: boolean | undefined
 
 		beforeEach(() => {
 			// Save and remove CI environment variable to test normal interactive behavior
 			originalCIValue = process.env.CI
 			delete process.env.CI
+			// Save and set isTTY to simulate interactive environment
+			originalIsTTY = process.stdin.isTTY
+			Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true })
 		})
 
 		afterEach(() => {
@@ -287,6 +288,8 @@ describe('IssueEnhancementService', () => {
 			} else {
 				process.env.CI = originalCIValue
 			}
+			// Restore original isTTY value
+			Object.defineProperty(process.stdin, 'isTTY', { value: originalIsTTY, configurable: true })
 		})
 
 		describe('with confirm=false (default, single keypress)', () => {
@@ -446,10 +449,14 @@ describe('IssueEnhancementService', () => {
 
 	describe('waitForReviewAndOpen CI behavior', () => {
 		let originalCIValue: string | undefined
+		let originalIsTTY: boolean | undefined
 
 		beforeEach(() => {
 			// Save original CI environment variable
 			originalCIValue = process.env.CI
+			// Save and set isTTY to simulate interactive environment for non-CI tests
+			originalIsTTY = process.stdin.isTTY
+			Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true })
 		})
 
 		afterEach(() => {
@@ -459,6 +466,8 @@ describe('IssueEnhancementService', () => {
 			} else {
 				process.env.CI = originalCIValue
 			}
+			// Restore original isTTY value
+			Object.defineProperty(process.stdin, 'isTTY', { value: originalIsTTY, configurable: true })
 		})
 
 		it('should skip keypress and browser when CI=true', async () => {
@@ -492,6 +501,18 @@ describe('IssueEnhancementService', () => {
 
 			expect(waitForKeypress).toHaveBeenCalled()
 			expect(openBrowser).toHaveBeenCalled()
+		})
+
+		it('should skip keypress and browser when not a TTY', async () => {
+			delete process.env.CI
+			Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true })
+
+			vi.mocked(mockGitHubService.getIssueUrl).mockResolvedValue('https://github.com/owner/repo/issues/123')
+
+			await service.waitForReviewAndOpen(123)
+
+			expect(waitForKeypress).not.toHaveBeenCalled()
+			expect(openBrowser).not.toHaveBeenCalled()
 		})
 	})
 })
