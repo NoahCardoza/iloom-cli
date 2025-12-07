@@ -1872,6 +1872,174 @@ describe('LoomManager', () => {
     })
   })
 
+  describe('Claude Settings Copying', () => {
+    const baseInput: CreateLoomInput = {
+      type: 'issue',
+      identifier: 286,
+      originalInput: '286',
+    }
+
+    beforeEach(() => {
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 286,
+        title: 'Copy Claude Settings',
+        body: 'Test body',
+        state: 'open',
+        url: 'https://github.com/test/test/issues/286',
+        labels: [],
+        assignees: [],
+      })
+
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => '/main/workspace'),
+        configurable: true,
+      })
+
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/worktree/issue-286')
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/worktree/issue-286')
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3286)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {},
+      })
+    })
+
+    it('copies .claude/settings.local.json when source exists and destination does not', async () => {
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        // Source exists
+        if (pathStr.includes('.claude/settings.local.json') && !pathStr.includes('worktree')) {
+          return true
+        }
+        // Destination does not exist
+        if (pathStr.includes('.claude/settings.local.json') && pathStr.includes('worktree')) {
+          return false
+        }
+        return false
+      })
+
+      vi.mocked(mockEnvironment.copyIfExists).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify copyIfExists was called for .claude/settings.local.json
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const claudeSettingsCopy = copyIfExistsCalls.find(
+        (call) =>
+          String(call[0]).includes('.claude/settings.local.json') ||
+          String(call[0]).includes('.claude\\settings.local.json')
+      )
+      expect(claudeSettingsCopy).toBeDefined()
+    })
+
+    it('skips copying when .claude/settings.local.json already exists in worktree', async () => {
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        // Both source and destination exist
+        if (pathStr.includes('.claude/settings.local.json')) {
+          return true
+        }
+        return false
+      })
+
+      vi.mocked(mockEnvironment.copyIfExists).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify copyIfExists was NOT called for .claude/settings.local.json
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const claudeSettingsCopy = copyIfExistsCalls.find(
+        (call) =>
+          String(call[0]).includes('.claude/settings.local.json') ||
+          String(call[0]).includes('.claude\\settings.local.json')
+      )
+      expect(claudeSettingsCopy).toBeUndefined()
+    })
+
+    it('handles missing source .claude/settings.local.json gracefully', async () => {
+      // Source does not exist
+      vi.mocked(fs.pathExists).mockResolvedValue(false)
+      vi.mocked(mockEnvironment.copyIfExists).mockResolvedValue(undefined)
+
+      // Should not throw
+      await expect(manager.createIloom(baseInput)).resolves.toBeDefined()
+    })
+
+    it('ensures .claude directory is created before copying', async () => {
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        if (pathStr.includes('.claude/settings.local.json') && !pathStr.includes('worktree')) {
+          return true
+        }
+        return false
+      })
+
+      vi.mocked(mockEnvironment.copyIfExists).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify ensureDir was called for .claude directory in worktree
+      const ensureDirCalls = vi.mocked(fs.ensureDir).mock.calls
+      const claudeDirCreation = ensureDirCalls.find((call) =>
+        String(call[0]).includes('.claude')
+      )
+      expect(claudeDirCreation).toBeDefined()
+    })
+
+    it('copies .claude/settings.local.json when reusing existing worktree', async () => {
+      const existingWorktree = {
+        path: '/test/worktree-issue-286',
+        branch: 'issue-286-test',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(existingWorktree)
+
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        if (pathStr.includes('.claude/settings.local.json') && !pathStr.includes('worktree')) {
+          return true
+        }
+        return false
+      })
+
+      vi.mocked(mockEnvironment.copyIfExists).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify copyIfExists was called for .claude/settings.local.json during reuse
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const claudeSettingsCopy = copyIfExistsCalls.find(
+        (call) =>
+          String(call[0]).includes('.claude/settings.local.json') ||
+          String(call[0]).includes('.claude\\settings.local.json')
+      )
+      expect(claudeSettingsCopy).toBeDefined()
+    })
+
+    it('warns but does not fail when copying fails', async () => {
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        if (pathStr.includes('.claude/settings.local.json') && !pathStr.includes('worktree')) {
+          return true
+        }
+        return false
+      })
+
+      // Make ensureDir throw an error
+      vi.mocked(fs.ensureDir).mockRejectedValueOnce(new Error('Permission denied'))
+
+      // Should not throw - continues despite error
+      const result = await manager.createIloom(baseInput)
+
+      expect(result).toBeDefined()
+      expect(result.path).toBe('/test/worktree/issue-286')
+    })
+  })
+
   describe('Global Color Collision Detection', () => {
     const baseInput: CreateLoomInput = {
       type: 'issue',

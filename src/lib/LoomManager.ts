@@ -113,6 +113,9 @@ export class LoomManager {
     // Pass parent branch name if this is a child loom
     await this.copyIloomSettings(worktreePath, input.parentLoom?.branchName)
 
+    // 7.5. Copy Claude settings (.claude/settings.local.json) - ALWAYS done regardless of capabilities
+    await this.copyClaudeSettings(worktreePath)
+
     // 8. Setup PORT environment variable - ONLY for web projects
     // Load base port from settings
     const settingsData = await this.settings.loadSettings()
@@ -670,6 +673,34 @@ export class LoomManager {
   }
 
   /**
+   * Copy Claude settings (settings.local.json) from main repo to worktree
+   * Always called regardless of project capabilities
+   * Follows the same pattern as copyIloomSettings()
+   * @param worktreePath Path to the worktree
+   */
+  private async copyClaudeSettings(worktreePath: string): Promise<void> {
+    const mainClaudeSettingsPath = path.join(process.cwd(), '.claude', 'settings.local.json')
+
+    try {
+      const worktreeClaudeDir = path.join(worktreePath, '.claude')
+
+      // Ensure .claude directory exists in worktree
+      await fs.ensureDir(worktreeClaudeDir)
+
+      const worktreeClaudeSettingsPath = path.join(worktreeClaudeDir, 'settings.local.json')
+
+      // Check if settings.local.json already exists in worktree
+      if (await fs.pathExists(worktreeClaudeSettingsPath)) {
+        logger.debug('.claude/settings.local.json already exists in worktree, skipping copy')
+      } else {
+        await this.environment.copyIfExists(mainClaudeSettingsPath, worktreeClaudeSettingsPath)
+      }
+    } catch (error) {
+      logger.warn(`Warning: Failed to copy .claude/settings.local.json: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /**
    * Setup PORT environment variable for web projects
    * Only called when project has web capabilities
    */
@@ -870,6 +901,7 @@ export class LoomManager {
     // 3. Defensively copy .env and settings.local.json if missing
     await this.copyEnvironmentFiles(worktreePath)
     await this.copyIloomSettings(worktreePath)
+    await this.copyClaudeSettings(worktreePath)
 
     // 4. Setup PORT for web projects (ensure it's set even if .env existed)
     // Load base port from settings
