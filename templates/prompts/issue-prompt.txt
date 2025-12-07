@@ -30,7 +30,7 @@ This is the user's first time running through the `iloom` workflow. You have add
 iloom is a CLI tool for scaling a human's understanding of the AI's work, as the AI's output scales. It does this by managing isolated Git worktrees in a guided workflow, with significant AI integration. It orchestrates multi-phase workflows:
 
 1. **Enhancement** - Expands brief issues into detailed requirements
-2. **Complexity Evaluation** - Categorizes as SIMPLE or COMPLEX based on scope
+2. **Complexity Evaluation** - Categorizes as TRIVIAL, SIMPLE, or COMPLEX based on scope
 3. **Analysis** - Investigates root causes and technical constraints
 4. **Planning** - Creates implementation roadmap with file specifications
 5. **Implementation** - Executes the plan with validation
@@ -121,7 +121,7 @@ You are orchestrating a set of agents through a development process, with human 
 5. Run complexity evaluation for ISSUE_NUMBER using @agent-iloom-issue-complexity-evaluator
 6. Extract issue link that includes comment id from agent output, display complexity assessment to user
 7. WAIT for human confirmation of complexity classification before proceeding to next phase
-8. Route to appropriate workflow based on confirmed complexity (SIMPLE or COMPLEX)
+8. Route to appropriate workflow based on confirmed complexity (TRIVIAL, SIMPLE, or COMPLEX)
 9. If SIMPLE: Run combined analysis and planning for ISSUE_NUMBER using @agent-iloom-issue-analyze-and-plan
 10. If COMPLEX: Run separate analysis for ISSUE_NUMBER using @agent-iloom-issue-analyzer
 11. Extract issue link that includes comment id from agent output, display to user
@@ -152,10 +152,10 @@ Perform ONE comprehensive scan to determine which agents need to run:
    **Complexity Evaluation Decision:**
    - Search ALL comments for existing complexity evaluation. Consider "already evaluated" if ANY comment has:
      * Header containing "Complexity Assessment" or "Complexity Evaluation"
-     * Section with "**Classification**: [SIMPLE / COMPLEX]"
+     * Section with "**Classification**: [TRIVIAL / SIMPLE / COMPLEX]"
      * Metrics section with estimated files, LOC, breaking changes, DB migrations, and risk level
    - Decision: NEEDS_COMPLEXITY_EVAL or SKIP_COMPLEXITY_EVAL
-   - If skipping, log: "Issue #ISSUE_NUMBER already has complexity evaluation by @[author] from [date] showing [SIMPLE/COMPLEX] classification, skipping evaluation"
+   - If skipping, log: "Issue #ISSUE_NUMBER already has complexity evaluation by @[author] from [date] showing [TRIVIAL/SIMPLE/COMPLEX] classification, skipping evaluation"
 
    **Analysis Decision:**
    - Search ALL comments for existing analysis. Consider "already analyzed" if ANY comment has ALL:
@@ -227,13 +227,13 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 2. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
 3. Extract complexity classification from evaluator output:
    - Search the evaluator's output for the "Complexity Assessment" section
-   - Extract: Classification (SIMPLE/COMPLEX), Metrics (files, LOC, breaking changes, DB migrations, risk level), and Reasoning
+   - Extract: Classification (TRIVIAL/SIMPLE/COMPLEX), Metrics (files, LOC, breaking changes, DB migrations, risk level), and Reasoning
    - The evaluator uses deterministic format - parse exactly as specified
 4. Display complexity assessment to user:
    Display the extracted assessment in this format:
    ```
    Complexity Assessment from Evaluator:
-   - Classification: [SIMPLE/COMPLEX]
+   - Classification: [TRIVIAL/SIMPLE/COMPLEX]
    - Estimated files: [N]
    - Estimated LOC: [N]
    - Breaking changes: [Yes/No]
@@ -243,9 +243,10 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
    Reasoning: [reasoning text from evaluator]
    ```
 5. Use AskUserQuestion tool with a single question:
-   - Question: "Complexity evaluated as [SIMPLE/COMPLEX]. See assessment at: [issue comment URL]. Do you agree with this classification?"
+   - Question: "Complexity evaluated as [TRIVIAL/SIMPLE/COMPLEX]. See assessment at: [issue comment URL]. Do you agree with this classification?"
    - Options:
-     - "Yes, proceed with [SIMPLE/COMPLEX] workflow" (default)
+     - "Yes, proceed with [TRIVIAL/SIMPLE/COMPLEX] workflow" (default)
+     - "No, reclassify as TRIVIAL"
      - "No, reclassify as SIMPLE"
      - "No, reclassify as COMPLEX"
      - "Provide feedback before deciding"
@@ -260,11 +261,11 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 If workflow plan determined SKIP_COMPLEXITY_EVAL:
 1. Mark todos #5, #6, and #7 as completed
 2. Extract complexity from existing evaluation comment:
-   - Search ALL issue comments for "**Classification**: [SIMPLE / COMPLEX]"
-   - If found: Extract the classification (SIMPLE or COMPLEX)
+   - Search ALL issue comments for "**Classification**: [TRIVIAL / SIMPLE / COMPLEX]"
+   - If found: Extract the classification (TRIVIAL, SIMPLE, or COMPLEX)
    - If not found: Default to COMPLEX workflow
 3. Display classification to user:
-   If complexity found: "Previous evaluation classified this as [SIMPLE/COMPLEX]. Proceeding with [SIMPLE/COMPLEX] workflow."
+   If complexity found: "Previous evaluation classified this as [TRIVIAL/SIMPLE/COMPLEX]. Proceeding with [TRIVIAL/SIMPLE/COMPLEX] workflow."
    If not found: "No complexity classification found - defaulting to COMPLEX workflow."
 4. Proceed to ROUTING DECISION POINT with extracted complexity (no confirmation needed)
 
@@ -296,6 +297,12 @@ If workflow plan determined SKIP_ANALYSIS:
 After STEP 1.5 completes and complexity is confirmed, determine which workflow path to follow:
 
 **Check the confirmed complexity:**
+
+**IF TRIVIAL complexity confirmed:**
+1. Display to user: "Using TRIVIAL workflow: Skipping analysis and planning, proceeding directly to implementation"
+2. Mark todo #8 as completed
+3. Mark todos #9, #10, #11, #12, #13, #14, and #15 as completed (analysis/planning steps that will not execute)
+4. Skip directly to **STEP 4** (Implementation Phase)
 
 **IF SIMPLE complexity confirmed:**
 1. Display to user: "✓ Using SIMPLE workflow: Combined analysis and planning via @agent-iloom-issue-analyze-and-plan, then implementation"
