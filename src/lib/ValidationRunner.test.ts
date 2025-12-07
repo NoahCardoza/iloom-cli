@@ -186,6 +186,190 @@ describe('ValidationRunner', () => {
 		})
 	})
 
+	describe('Compile vs Typecheck Priority', () => {
+		it('should prefer compile script over typecheck when both exist', async () => {
+			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				name: 'test',
+				scripts: { compile: 'tsc --build', typecheck: 'tsc' },
+			})
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'compile' || script === 'typecheck'
+			)
+			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
+			vi.mocked(packageManager.runScript).mockResolvedValue()
+
+			await runner.runValidations('/test/worktree', {
+				skipLint: true,
+				skipTests: true,
+			})
+
+			// Should run compile, not typecheck
+			expect(packageManager.runScript).toHaveBeenCalledWith(
+				'compile',
+				'/test/worktree',
+				[],
+				{ quiet: true }
+			)
+			expect(packageManager.runScript).not.toHaveBeenCalledWith(
+				'typecheck',
+				expect.any(String),
+				expect.any(Array),
+				expect.any(Object)
+			)
+		})
+
+		it('should use typecheck when only typecheck exists (no compile)', async () => {
+			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				name: 'test',
+				scripts: { typecheck: 'tsc' },
+			})
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'typecheck'
+			)
+			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
+			vi.mocked(packageManager.runScript).mockResolvedValue()
+
+			await runner.runValidations('/test/worktree', {
+				skipLint: true,
+				skipTests: true,
+			})
+
+			expect(packageManager.runScript).toHaveBeenCalledWith(
+				'typecheck',
+				'/test/worktree',
+				[],
+				{ quiet: true }
+			)
+		})
+
+		it('should use compile when only compile exists (no typecheck)', async () => {
+			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				name: 'test',
+				scripts: { compile: 'tsc --build' },
+			})
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'compile'
+			)
+			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
+			vi.mocked(packageManager.runScript).mockResolvedValue()
+
+			await runner.runValidations('/test/worktree', {
+				skipLint: true,
+				skipTests: true,
+			})
+
+			expect(packageManager.runScript).toHaveBeenCalledWith(
+				'compile',
+				'/test/worktree',
+				[],
+				{ quiet: true }
+			)
+		})
+
+		it('should skip when neither compile nor typecheck exists', async () => {
+			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				name: 'test',
+				scripts: { lint: 'eslint .' },
+			})
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'lint'
+			)
+
+			const result = await runner.runValidations('/test/worktree', {
+				skipLint: true,
+				skipTests: true,
+			})
+
+			expect(result.success).toBe(true)
+			expect(result.steps).toHaveLength(1)
+			expect(result.steps[0]?.step).toBe('typecheck')
+			expect(result.steps[0]?.skipped).toBe(true)
+		})
+
+		it('should throw correct error message when compile fails', async () => {
+			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				name: 'test',
+				scripts: { compile: 'tsc --build' },
+			})
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'compile'
+			)
+			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
+			vi.mocked(packageManager.runScript).mockRejectedValue(
+				new Error('Compile failed')
+			)
+
+			await expect(
+				runner.runValidations('/test/worktree', {
+					skipLint: true,
+					skipTests: true,
+				})
+			).rejects.toThrow(/Compile failed/)
+		})
+
+		it('should show correct command in compile error message', async () => {
+			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				name: 'test',
+				scripts: { compile: 'tsc --build' },
+			})
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'compile'
+			)
+			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
+			vi.mocked(packageManager.runScript).mockRejectedValue(
+				new Error('Compile failed')
+			)
+
+			await expect(
+				runner.runValidations('/test/worktree', {
+					skipLint: true,
+					skipTests: true,
+				})
+			).rejects.toThrow(/pnpm compile/)
+		})
+
+		it('should show correct npm command in compile error message', async () => {
+			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				name: 'test',
+				scripts: { compile: 'tsc --build' },
+			})
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'compile'
+			)
+			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('npm')
+			vi.mocked(packageManager.runScript).mockRejectedValue(
+				new Error('Compile failed')
+			)
+
+			await expect(
+				runner.runValidations('/test/worktree', {
+					skipLint: true,
+					skipTests: true,
+				})
+			).rejects.toThrow(/npm run compile/)
+		})
+
+		it('should use correct dry-run command for compile', async () => {
+			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				name: 'test',
+				scripts: { compile: 'tsc --build' },
+			})
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'compile'
+			)
+			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
+
+			const result = await runner.runValidations('/test/worktree', {
+				dryRun: true,
+				skipLint: true,
+				skipTests: true,
+			})
+
+			expect(result.success).toBe(true)
+			expect(packageManager.runScript).not.toHaveBeenCalled()
+		})
+	})
+
 	describe('Typecheck Validation', () => {
 		it('should successfully run typecheck when script exists and passes', async () => {
 			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
@@ -436,7 +620,9 @@ describe('ValidationRunner', () => {
 					test: 'vitest run',
 				},
 			})
-			vi.mocked(packageJson.hasScript).mockReturnValue(true)
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'typecheck' || script === 'lint' || script === 'test'
+			)
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 			vi.mocked(packageManager.runScript).mockImplementation(
 				async (scriptName) => {
@@ -460,7 +646,9 @@ describe('ValidationRunner', () => {
 					test: 'vitest run',
 				},
 			})
-			vi.mocked(packageJson.hasScript).mockReturnValue(true)
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'typecheck' || script === 'lint' || script === 'test'
+			)
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 			vi.mocked(packageManager.runScript)
 				.mockResolvedValueOnce() // typecheck passes
@@ -483,7 +671,9 @@ describe('ValidationRunner', () => {
 					test: 'vitest run',
 				},
 			})
-			vi.mocked(packageJson.hasScript).mockReturnValue(true)
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'typecheck' || script === 'lint' || script === 'test'
+			)
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 			vi.mocked(packageManager.runScript).mockResolvedValue()
 
@@ -586,7 +776,9 @@ describe('ValidationRunner', () => {
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
-			vi.mocked(packageJson.hasScript).mockReturnValue(true)
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'typecheck'
+			)
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 			vi.mocked(packageManager.runScript).mockRejectedValue(
 				new Error('Type errors')
@@ -605,7 +797,9 @@ describe('ValidationRunner', () => {
 				name: 'test',
 				scripts: { lint: 'eslint .' },
 			})
-			vi.mocked(packageJson.hasScript).mockReturnValue(true)
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'lint'
+			)
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 			vi.mocked(packageManager.runScript).mockRejectedValue(
 				new Error('Lint errors')
@@ -624,7 +818,9 @@ describe('ValidationRunner', () => {
 				name: 'test',
 				scripts: { test: 'vitest run' },
 			})
-			vi.mocked(packageJson.hasScript).mockReturnValue(true)
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'test'
+			)
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 			vi.mocked(packageManager.runScript).mockRejectedValue(
 				new Error('Test failures')
@@ -643,7 +839,9 @@ describe('ValidationRunner', () => {
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
-			vi.mocked(packageJson.hasScript).mockReturnValue(true)
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'typecheck'
+			)
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 			vi.mocked(packageManager.runScript).mockRejectedValue(
 				new Error('Type errors')
@@ -662,7 +860,9 @@ describe('ValidationRunner', () => {
 				name: 'test',
 				scripts: { lint: 'eslint .' },
 			})
-			vi.mocked(packageJson.hasScript).mockReturnValue(true)
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'lint'
+			)
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('npm')
 			vi.mocked(packageManager.runScript).mockRejectedValue(
 				new Error('Lint errors')
@@ -681,7 +881,9 @@ describe('ValidationRunner', () => {
 				name: 'test',
 				scripts: { test: 'vitest run' },
 			})
-			vi.mocked(packageJson.hasScript).mockReturnValue(true)
+			vi.mocked(packageJson.hasScript).mockImplementation(
+				(_, script) => script === 'test'
+			)
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('yarn')
 			vi.mocked(packageManager.runScript).mockRejectedValue(
 				new Error('Test failures')
@@ -812,7 +1014,9 @@ describe('ValidationRunner', () => {
 					name: 'test',
 					scripts: { typecheck: 'tsc' },
 				})
-				vi.mocked(packageJson.hasScript).mockReturnValue(true)
+				vi.mocked(packageJson.hasScript).mockImplementation(
+					(_, script) => script === 'typecheck'
+				)
 				vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 
 				// Both calls fail (initial typecheck and verification)
@@ -836,7 +1040,9 @@ describe('ValidationRunner', () => {
 					name: 'test',
 					scripts: { typecheck: 'tsc' },
 				})
-				vi.mocked(packageJson.hasScript).mockReturnValue(true)
+				vi.mocked(packageJson.hasScript).mockImplementation(
+					(_, script) => script === 'typecheck'
+				)
 				vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 				vi.mocked(packageManager.runScript).mockRejectedValue(
 					new Error('Type errors')
@@ -852,6 +1058,76 @@ describe('ValidationRunner', () => {
 				).rejects.toThrow(/Typecheck failed/)
 
 				expect(claude.launchClaude).not.toHaveBeenCalled()
+			})
+		})
+
+		describe('Compile Auto-Fix', () => {
+			it('should attempt Claude fix when compile fails', async () => {
+				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+					name: 'test',
+					scripts: { compile: 'tsc --build' },
+				})
+				vi.mocked(packageJson.hasScript).mockImplementation(
+					(_, script) => script === 'compile'
+				)
+				vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
+
+				// First call fails (initial compile), second succeeds (verification after Claude fix)
+				vi.mocked(packageManager.runScript)
+					.mockRejectedValueOnce(new Error('Compile errors'))
+					.mockResolvedValueOnce()
+
+				vi.mocked(claude.detectClaudeCli).mockResolvedValue(true)
+				vi.mocked(claude.launchClaude).mockResolvedValue()
+
+				const result = await runner.runValidations('/test/worktree', {
+					skipLint: true,
+					skipTests: true,
+				})
+
+				expect(result.success).toBe(true)
+				expect(result.steps[0]?.passed).toBe(true)
+				expect(claude.detectClaudeCli).toHaveBeenCalled()
+				expect(claude.launchClaude).toHaveBeenCalledWith(
+					expect.stringContaining('TypeScript errors'),
+					expect.objectContaining({
+						headless: false,
+						permissionMode: 'acceptEdits',
+						model: 'sonnet',
+						addDir: '/test/worktree',
+					})
+				)
+				// Should use compile command in the prompt
+				expect(claude.launchClaude).toHaveBeenCalledWith(
+					expect.stringContaining('pnpm compile'),
+					expect.any(Object)
+				)
+			})
+
+			it('should throw error when Claude cannot fix compile errors', async () => {
+				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+					name: 'test',
+					scripts: { compile: 'tsc --build' },
+				})
+				vi.mocked(packageJson.hasScript).mockImplementation(
+					(_, script) => script === 'compile'
+				)
+				vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
+
+				// Both calls fail (initial compile and verification)
+				vi.mocked(packageManager.runScript).mockRejectedValue(
+					new Error('Compile errors')
+				)
+
+				vi.mocked(claude.detectClaudeCli).mockResolvedValue(true)
+				vi.mocked(claude.launchClaude).mockResolvedValue()
+
+				await expect(
+					runner.runValidations('/test/worktree', {
+						skipLint: true,
+						skipTests: true,
+					})
+				).rejects.toThrow(/Compile failed/)
 			})
 		})
 
@@ -895,7 +1171,9 @@ describe('ValidationRunner', () => {
 					name: 'test',
 					scripts: { lint: 'eslint .' },
 				})
-				vi.mocked(packageJson.hasScript).mockReturnValue(true)
+				vi.mocked(packageJson.hasScript).mockImplementation(
+					(_, script) => script === 'lint'
+				)
 				vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 
 				vi.mocked(packageManager.runScript).mockRejectedValue(
@@ -920,7 +1198,9 @@ describe('ValidationRunner', () => {
 					name: 'test',
 					scripts: { test: 'vitest run' },
 				})
-				vi.mocked(packageJson.hasScript).mockReturnValue(true)
+				vi.mocked(packageJson.hasScript).mockImplementation(
+					(_, script) => script === 'test'
+				)
 				vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 
 				// First call fails (initial test), second succeeds (verification)
@@ -954,7 +1234,9 @@ describe('ValidationRunner', () => {
 					name: 'test',
 					scripts: { test: 'vitest run' },
 				})
-				vi.mocked(packageJson.hasScript).mockReturnValue(true)
+				vi.mocked(packageJson.hasScript).mockImplementation(
+					(_, script) => script === 'test'
+				)
 				vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 
 				vi.mocked(packageManager.runScript).mockRejectedValue(
@@ -979,7 +1261,9 @@ describe('ValidationRunner', () => {
 					name: 'test',
 					scripts: { typecheck: 'tsc' },
 				})
-				vi.mocked(packageJson.hasScript).mockReturnValue(true)
+				vi.mocked(packageJson.hasScript).mockImplementation(
+					(_, script) => script === 'typecheck'
+				)
 				vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 				vi.mocked(packageManager.runScript)
 					.mockRejectedValueOnce(new Error('Type errors'))
@@ -1003,7 +1287,9 @@ describe('ValidationRunner', () => {
 					name: 'test',
 					scripts: { lint: 'eslint .' },
 				})
-				vi.mocked(packageJson.hasScript).mockReturnValue(true)
+				vi.mocked(packageJson.hasScript).mockImplementation(
+					(_, script) => script === 'lint'
+				)
 				vi.mocked(packageManager.detectPackageManager).mockResolvedValue('npm')
 				vi.mocked(packageManager.runScript)
 					.mockRejectedValueOnce(new Error('Lint errors'))
@@ -1027,7 +1313,9 @@ describe('ValidationRunner', () => {
 					name: 'test',
 					scripts: { test: 'vitest run' },
 				})
-				vi.mocked(packageJson.hasScript).mockReturnValue(true)
+				vi.mocked(packageJson.hasScript).mockImplementation(
+					(_, script) => script === 'test'
+				)
 				vi.mocked(packageManager.detectPackageManager).mockResolvedValue('yarn')
 				vi.mocked(packageManager.runScript)
 					.mockRejectedValueOnce(new Error('Test failures'))
@@ -1051,7 +1339,9 @@ describe('ValidationRunner', () => {
 					name: 'test',
 					scripts: { typecheck: 'tsc' },
 				})
-				vi.mocked(packageJson.hasScript).mockReturnValue(true)
+				vi.mocked(packageJson.hasScript).mockImplementation(
+					(_, script) => script === 'typecheck'
+				)
 				vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 				vi.mocked(packageManager.runScript).mockRejectedValue(
 					new Error('Type errors')

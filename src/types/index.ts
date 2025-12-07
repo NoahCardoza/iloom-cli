@@ -246,7 +246,7 @@ export interface ValidationOptions {
 }
 
 export interface ValidationStepResult {
-	step: 'typecheck' | 'lint' | 'test'
+	step: 'typecheck' | 'compile' | 'lint' | 'test'
 	passed: boolean
 	skipped: boolean
 	output?: string

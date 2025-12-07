@@ -69,6 +69,7 @@ export class ValidationRunner {
 
 	/**
 	 * Run typecheck validation
+	 * Prefers 'compile' script over 'typecheck' if both exist
 	 */
 	private async runTypecheck(
 		worktreePath: string,
@@ -76,13 +77,22 @@ export class ValidationRunner {
 	): Promise<ValidationStepResult> {
 		const stepStartTime = Date.now()
 
+		let scriptToRun: 'compile' | 'typecheck' | null = null
+
 		try {
-			// Check if typecheck script exists
+			// Check for compile and typecheck scripts - prefer compile if both exist
 			const pkgJson = await readPackageJson(worktreePath)
+			const hasCompileScript = hasScript(pkgJson, 'compile')
 			const hasTypecheckScript = hasScript(pkgJson, 'typecheck')
 
-			if (!hasTypecheckScript) {
-				logger.debug('Skipping typecheck - no typecheck script found')
+			if (hasCompileScript) {
+				scriptToRun = 'compile'
+			} else if (hasTypecheckScript) {
+				scriptToRun = 'typecheck'
+			}
+
+			if (!scriptToRun) {
+				logger.debug('Skipping typecheck - no compile or typecheck script found')
 				return {
 					step: 'typecheck',
 					passed: true,
@@ -110,25 +120,25 @@ export class ValidationRunner {
 		if (dryRun) {
 			const command =
 				packageManager === 'npm'
-					? 'npm run typecheck'
-					: `${packageManager} typecheck`
+					? `npm run ${scriptToRun}`
+					: `${packageManager} ${scriptToRun}`
 			logger.info(`[DRY RUN] Would run: ${command}`)
 			return {
-				step: 'typecheck',
+				step: scriptToRun,
 				passed: true,
 				skipped: false,
 				duration: Date.now() - stepStartTime,
 			}
 		}
 
-		logger.info('Running typecheck...')
+		logger.info(`Running ${scriptToRun}...`)
 
 		try {
-			await runScript('typecheck', worktreePath, [], { quiet: true })
-			logger.success('Typecheck passed')
+			await runScript(scriptToRun, worktreePath, [], { quiet: true })
+			logger.success(`${scriptToRun.charAt(0).toUpperCase() + scriptToRun.slice(1)} passed`)
 
 			return {
-				step: 'typecheck',
+				step: scriptToRun,
 				passed: true,
 				skipped: false,
 				duration: Date.now() - stepStartTime,
@@ -136,15 +146,14 @@ export class ValidationRunner {
 		} catch {
 			// Attempt Claude-assisted fix before failing
 			const fixed = await this.attemptClaudeFix(
-				'typecheck',
+				scriptToRun,
 				worktreePath,
 				packageManager
 			)
 
 			if (fixed) {
-				// logger.success('Typecheck passed after Claude auto-fix')
 				return {
-					step: 'typecheck',
+					step: scriptToRun,
 					passed: true,
 					skipped: false,
 					duration: Date.now() - stepStartTime,
@@ -154,11 +163,12 @@ export class ValidationRunner {
 			// Claude couldn't fix - throw original error
 			const runCommand =
 				packageManager === 'npm'
-					? 'npm run typecheck'
-					: `${packageManager} typecheck`
+					? `npm run ${scriptToRun}`
+					: `${packageManager} ${scriptToRun}`
 
+			const stepLabel = scriptToRun.charAt(0).toUpperCase() + scriptToRun.slice(1)
 			throw new Error(
-				`Error: Typecheck failed.\n` +
+				`Error: ${stepLabel} failed.\n` +
 					`Fix type errors before merging.\n\n` +
 					`Run '${runCommand}' to see detailed errors.`
 			)
@@ -357,13 +367,13 @@ export class ValidationRunner {
 	 * Attempt to fix validation errors using Claude
 	 * Pattern based on MergeManager.attemptClaudeConflictResolution
 	 *
-	 * @param validationType - Type of validation that failed ('typecheck' | 'lint' | 'test')
+	 * @param validationType - Type of validation that failed ('compile' | 'typecheck' | 'lint' | 'test')
 	 * @param worktreePath - Path to the worktree
 	 * @param packageManager - Detected package manager
 	 * @returns true if Claude fixed the issue, false otherwise
 	 */
 	private async attemptClaudeFix(
-		validationType: 'typecheck' | 'lint' | 'test',
+		validationType: 'compile' | 'typecheck' | 'lint' | 'test',
 		worktreePath: string,
 		packageManager: string
 	): Promise<boolean> {
@@ -418,7 +428,7 @@ export class ValidationRunner {
 	 * Get validation command string for prompts
 	 */
 	private getValidationCommand(
-		validationType: 'typecheck' | 'lint' | 'test',
+		validationType: 'compile' | 'typecheck' | 'lint' | 'test',
 		packageManager: string
 	): string {
 		if (packageManager === 'npm') {
@@ -432,14 +442,15 @@ export class ValidationRunner {
 	 * Matches bash script prompts exactly
 	 */
 	private getClaudePrompt(
-		validationType: 'typecheck' | 'lint' | 'test',
+		validationType: 'compile' | 'typecheck' | 'lint' | 'test',
 		validationCommand: string
 	): string {
 		switch (validationType) {
+			case 'compile':
 			case 'typecheck':
 				return (
 					`There are TypeScript errors in this codebase. ` +
-					`Please analyze the typecheck output, identify all type errors, and fix them. ` +
+					`Please analyze the ${validationType} output, identify all type errors, and fix them. ` +
 					`Run '${validationCommand}' to see the errors, then make the necessary code changes to resolve all type issues. ` +
 					`When you are done, tell the user to quit using /exit to continue the validation process.`
 				)
