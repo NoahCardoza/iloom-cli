@@ -12,6 +12,7 @@ export interface TemplateVariables {
 	WORKSPACE_PATH?: string
 	PORT?: number
 	ONE_SHOT_MODE?: boolean
+	INTERACTIVE_MODE?: boolean
 	SETTINGS_SCHEMA?: string
 	SETTINGS_GLOBAL_JSON?: string
 	SETTINGS_JSON?: string
@@ -286,6 +287,17 @@ export class PromptTemplateManager {
 		} else {
 			// Remove the entire conditional block
 			result = result.replace(firstTimeUserRegex, '')
+		}
+
+		// Process INTERACTIVE_MODE conditionals
+		const interactiveModeRegex = /\{\{#IF INTERACTIVE_MODE\}\}(.*?)\{\{\/IF INTERACTIVE_MODE\}\}/gs
+
+		if (variables.INTERACTIVE_MODE === true) {
+			// Include the content, remove the conditional markers
+			result = result.replace(interactiveModeRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(interactiveModeRegex, '')
 		}
 
 		return result

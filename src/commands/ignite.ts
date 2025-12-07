@@ -259,9 +259,11 @@ export class IgniteCommand {
 			variables.PORT = context.port
 		}
 
-		// Set ONE_SHOT_MODE flag for template conditional sections
+		// Set ONE_SHOT_MODE or INTERACTIVE_MODE flag for template conditional sections
 		if (oneShot === 'noReview' || oneShot === 'bypassPermissions') {
 			variables.ONE_SHOT_MODE = true
+		} else {
+			variables.INTERACTIVE_MODE = true
 		}
 
 		return variables
