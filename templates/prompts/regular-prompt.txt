@@ -169,6 +169,7 @@ You are orchestrating a set of agents through a development process, with human 
      * Clarify ambiguous requirements
      * Make decisions about scope and approach
    - Instruct the agent: "Do NOT use the issue_management MCP - there is no issue tracking backend. Return the enhanced specification directly to this conversation."
+   - Instruct the agent: "Before making assumptions, document any assumptions clearly in question tables with your own answers."
    - The agent should output its enhanced specification directly to the conversation
 2. Display the enhanced specification to the user:
    ```
@@ -180,6 +181,23 @@ You are orchestrating a set of agents through a development process, with human 
    - Constraints: [technical or business constraints]
    - Acceptance Criteria: [how to verify completion]
    ```
+{{#IF INTERACTIVE_MODE}}
+2.5. Extract and validate assumptions (batched validation):
+   - Read the agent's output
+   - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
+   - If assumptions/questions table found:
+     a. Parse the table to extract all questions and the agent's documented assumptions/answers
+     b. Use AskUserQuestion tool to present ALL questions to the user in a single batched request:
+        - Present each question with the agent's assumed answer shown
+        - Allow user to confirm or provide different answers for each
+     c. Compare user's answers to the agent's documented assumptions:
+        - If ANY mismatches detected:
+          - Compile feedback listing each mismatch: "For [question], you assumed [agent's answer] but user wants [user's answer]"
+          - Re-run @agent-iloom-issue-enhancer with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]."
+          - Return to step 2.5 (validate the revised assumptions again)
+        - If all user answers match agent assumptions: Proceed to next step
+   - If no assumptions found: Proceed to next step
+{{/IF INTERACTIVE_MODE}}
 3. Mark todos #2 and #3 as completed
 4. Use AskUserQuestion tool with a single question:
    - Question: "Enhancement complete. Does this specification accurately capture your requirements?"
@@ -202,7 +220,25 @@ You are orchestrating a set of agents through a development process, with human 
    - Provide the enhanced specification directly to the agent: "This is branch mode - analyze complexity based on the following enhanced specification instead of fetching from GitHub: [ENHANCED_SPECIFICATION]"
    - Instruct the agent to use the AskUserQuestion tool to validate any assumptions about scope or complexity
    - Instruct the agent: "Do NOT use the issue_management MCP - there is no issue tracking backend. Return the complexity assessment directly to this conversation."
+   - Instruct the agent: "Before making assumptions, document any assumptions clearly in question tables with your own answers."
    - The agent should analyze complexity based on the enhanced specification scope
+{{#IF INTERACTIVE_MODE}}
+2.5. Extract and validate assumptions (batched validation):
+   - Read the agent's output
+   - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
+   - If assumptions/questions table found:
+     a. Parse the table to extract all questions and the agent's documented assumptions/answers
+     b. Use AskUserQuestion tool to present ALL questions to the user in a single batched request:
+        - Present each question with the agent's assumed answer shown
+        - Allow user to confirm or provide different answers for each
+     c. Compare user's answers to the agent's documented assumptions:
+        - If ANY mismatches detected:
+          - Compile feedback listing each mismatch: "For [question], you assumed [agent's answer] but user wants [user's answer]"
+          - Re-run @agent-iloom-issue-complexity-evaluator with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]."
+          - Return to step 2.5 (validate the revised assumptions again)
+        - If all user answers match agent assumptions: Proceed to next step
+   - If no assumptions found: Proceed to next step
+{{/IF INTERACTIVE_MODE}}
 2. Extract complexity classification from evaluator output:
    - Search the evaluator's output for the "Complexity Assessment" section
    - Extract: Classification (TRIVIAL/SIMPLE/COMPLEX), Metrics (files, LOC, breaking changes, DB migrations, risk level), and Reasoning
@@ -275,8 +311,26 @@ Execute combined analyze-and-plan agent:
    - Provide the enhanced specification directly to the agent: "This is branch mode - analyze and plan based on the following enhanced specification instead of fetching from GitHub: [ENHANCED_SPECIFICATION]"
    - Instruct the agent to use the AskUserQuestion tool to validate any assumptions or make decisions about the approach
    - Instruct the agent: "Do NOT use the issue_management MCP - there is no issue tracking backend. Return the analysis and plan directly to this conversation."
+   - Instruct the agent: "Before making assumptions, document any assumptions clearly in question tables with your own answers."
    - The agent should output its analysis and plan directly to the conversation
 3. Display the analysis and plan results to the user
+{{#IF INTERACTIVE_MODE}}
+3.5. Extract and validate assumptions (batched validation):
+   - Read the agent's output
+   - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
+   - If assumptions/questions table found:
+     a. Parse the table to extract all questions and the agent's documented assumptions/answers
+     b. Use AskUserQuestion tool to present ALL questions to the user in a single batched request:
+        - Present each question with the agent's assumed answer shown
+        - Allow user to confirm or provide different answers for each
+     c. Compare user's answers to the agent's documented assumptions:
+        - If ANY mismatches detected:
+          - Compile feedback listing each mismatch: "For [question], you assumed [agent's answer] but user wants [user's answer]"
+          - Re-run @agent-iloom-issue-analyze-and-plan with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]."
+          - Return to step 3.5 (validate the revised assumptions again)
+        - If all user answers match agent assumptions: Proceed to next step
+   - If no assumptions found: Proceed to next step
+{{/IF INTERACTIVE_MODE}}
 4. Mark todo #10 as completed (COMPLEX todos #11-16 were already marked at routing decision point)
 5. Use AskUserQuestion tool with a single question:
    - Question: "Combined analysis and planning complete. How would you like to proceed?"
@@ -300,8 +354,26 @@ Execute combined analyze-and-plan agent:
    - Provide the enhanced specification directly to the agent: "This is branch mode - analyze the following enhanced specification instead of fetching from GitHub: [ENHANCED_SPECIFICATION]"
    - Instruct the agent to use the AskUserQuestion tool to validate any assumptions or clarify requirements during analysis
    - Instruct the agent: "Do NOT use the issue_management MCP - there is no issue tracking backend. Return the analysis directly to this conversation."
+   - Instruct the agent: "Before making assumptions, document any assumptions clearly in question tables with your own answers."
    - The agent should output its analysis directly to the conversation
 2. Display the analysis results to the user
+{{#IF INTERACTIVE_MODE}}
+2.5. Extract and validate assumptions (batched validation):
+   - Read the agent's output
+   - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
+   - If assumptions/questions table found:
+     a. Parse the table to extract all questions and the agent's documented assumptions/answers
+     b. Use AskUserQuestion tool to present ALL questions to the user in a single batched request:
+        - Present each question with the agent's assumed answer shown
+        - Allow user to confirm or provide different answers for each
+     c. Compare user's answers to the agent's documented assumptions:
+        - If ANY mismatches detected:
+          - Compile feedback listing each mismatch: "For [question], you assumed [agent's answer] but user wants [user's answer]"
+          - Re-run @agent-iloom-issue-analyzer with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]."
+          - Return to step 2.5 (validate the revised assumptions again)
+        - If all user answers match agent assumptions: Proceed to next step
+   - If no assumptions found: Proceed to next step
+{{/IF INTERACTIVE_MODE}}
 3. Mark todos #11 and #12 as completed
 4. Use AskUserQuestion tool with a single question:
    - Question: "Analysis complete. How would you like to proceed?"
@@ -326,8 +398,26 @@ Execute combined analyze-and-plan agent:
    - Provide the enhanced specification AND analysis results directly to the agent: "This is branch mode - create an implementation plan based on the following enhanced specification and analysis instead of fetching from GitHub: [ENHANCED_SPECIFICATION] [ANALYSIS_RESULTS]"
    - Instruct the agent to use the AskUserQuestion tool to validate any assumptions or make decisions about implementation approach
    - Instruct the agent: "Do NOT use the issue_management MCP - there is no issue tracking backend. Return the implementation plan directly to this conversation."
+   - Instruct the agent: "Before making assumptions, document any assumptions clearly in question tables with your own answers."
    - The agent should output its plan directly to the conversation
 2. Display the implementation plan to the user
+{{#IF INTERACTIVE_MODE}}
+2.5. Extract and validate assumptions (batched validation):
+   - Read the agent's output
+   - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
+   - If assumptions/questions table found:
+     a. Parse the table to extract all questions and the agent's documented assumptions/answers
+     b. Use AskUserQuestion tool to present ALL questions to the user in a single batched request:
+        - Present each question with the agent's assumed answer shown
+        - Allow user to confirm or provide different answers for each
+     c. Compare user's answers to the agent's documented assumptions:
+        - If ANY mismatches detected:
+          - Compile feedback listing each mismatch: "For [question], you assumed [agent's answer] but user wants [user's answer]"
+          - Re-run @agent-iloom-issue-planner with feedback: "User provided different answers than your assumptions. Please revise based on this feedback: [list of mismatches]."
+          - Return to step 2.5 (validate the revised assumptions again)
+        - If all user answers match agent assumptions: Proceed to next step
+   - If no assumptions found: Proceed to next step
+{{/IF INTERACTIVE_MODE}}
 3. Mark todos #14 and #15 as completed
 4. Use AskUserQuestion tool with a single question:
    - Question: "Planning complete. How would you like to proceed?"
