@@ -1,0 +1,366 @@
+import path from 'path'
+import fs from 'fs-extra'
+import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
+import { DevServerManager } from '../lib/DevServerManager.js'
+import { SettingsManager } from '../lib/SettingsManager.js'
+import { IdentifierParser } from '../utils/IdentifierParser.js'
+import { parseEnvFile, extractPort, findEnvFileContainingVariable } from '../utils/env.js'
+import { calculatePortForBranch } from '../utils/port.js'
+import { extractIssueNumber } from '../utils/git.js'
+import { logger } from '../utils/logger.js'
+import { extractSettingsOverrides } from '../utils/cli-overrides.js'
+import type { GitWorktree } from '../types/worktree.js'
+
+export interface DevServerCommandInput {
+	identifier?: string | undefined
+	json?: boolean | undefined
+}
+
+export interface DevServerResult {
+	status: 'started' | 'already_running' | 'no_web_capability'
+	url?: string
+	port?: number
+	pid?: number
+	message: string
+}
+
+interface ParsedDevServerInput {
+	type: 'issue' | 'pr' | 'branch'
+	number?: string | number
+	branchName?: string
+	originalInput: string
+	autoDetected: boolean
+}
+
+/**
+ * DevServerCommand - Start dev server for workspace in foreground mode
+ * Runs in foreground (blocking terminal until user stops it)
+ */
+export class DevServerCommand {
+	constructor(
+		private gitWorktreeManager = new GitWorktreeManager(),
+		private capabilityDetector = new ProjectCapabilityDetector(),
+		private identifierParser = new IdentifierParser(new GitWorktreeManager()),
+		private devServerManager = new DevServerManager(),
+		private settingsManager = new SettingsManager()
+	) {}
+
+	/**
+	 * Output JSON to stdout (used for --json flag)
+	 */
+	private outputJson(data: DevServerResult | Record<string, unknown>): void {
+		process.stdout.write(JSON.stringify(data, null, 2) + '\n')
+	}
+
+	async execute(input: DevServerCommandInput): Promise<DevServerResult> {
+		// 1. Parse or auto-detect identifier
+		const parsed = input.identifier
+			? await this.parseExplicitInput(input.identifier)
+			: await this.autoDetectFromCurrentDirectory()
+
+		logger.debug(`Parsed input: ${JSON.stringify(parsed)}`)
+
+		// 2. Find worktree path based on identifier
+		const worktree = await this.findWorktreeForIdentifier(parsed)
+
+		logger.debug(`Found worktree at: ${worktree.path}`)
+
+		// 3. Detect project capabilities
+		const { capabilities } =
+			await this.capabilityDetector.detectCapabilities(worktree.path)
+
+		logger.debug(`Detected capabilities: ${capabilities.join(', ')}`)
+
+		// 4. If no web capability, return gracefully with info message
+		if (!capabilities.includes('web')) {
+			const message = 'No web capability detected in this workspace. Dev server not started.'
+			if (input.json) {
+				this.outputJson({
+					status: 'no_web_capability',
+					message,
+				})
+			} else {
+				logger.info(message)
+			}
+			return {
+				status: 'no_web_capability',
+				message,
+			}
+		}
+
+		// 5. Get port for workspace
+		const port = await this.getWorkspacePort(worktree.path)
+		const url = `http://localhost:${port}`
+
+		// 6. Check if server already running
+		const isRunning = await this.devServerManager.isServerRunning(port)
+
+		if (isRunning) {
+			const message = `Dev server already running at ${url}`
+			if (input.json) {
+				this.outputJson({
+					status: 'already_running',
+					url,
+					port,
+					message,
+				})
+			} else {
+				logger.info(message)
+			}
+			return {
+				status: 'already_running',
+				url,
+				port,
+				message,
+			}
+		}
+
+		// 7. Start server in foreground
+		const message = `Starting dev server at ${url}`
+		if (!input.json) {
+			logger.info(message)
+		}
+
+		let finalResult: DevServerResult = {
+			status: 'started',
+			url,
+			port,
+			message,
+		}
+
+		// This will block until user stops the server (Ctrl+C)
+		// In JSON mode, redirect npm output to stderr so JSON can go to stdout
+		const processInfo = await this.devServerManager.runServerForeground(
+			worktree.path,
+			port,
+			!!input.json,
+			// Callback called immediately when process starts (for JSON output)
+			(pid) => {
+				if (input.json && pid) {
+					finalResult.pid = pid
+					this.outputJson(finalResult)
+				}
+			}
+		)
+
+		if (processInfo.pid) {
+			finalResult.pid = processInfo.pid
+		}
+
+		return finalResult
+	}
+
+	/**
+	 * Parse explicit identifier input
+	 */
+	private async parseExplicitInput(identifier: string): Promise<ParsedDevServerInput> {
+		const parsed = await this.identifierParser.parseForPatternDetection(identifier)
+
+		// Description type should never reach dev-server command
+		if (parsed.type === 'description') {
+			throw new Error('Description input type is not supported in dev-server command')
+		}
+
+		const result: ParsedDevServerInput = {
+			type: parsed.type,
+			originalInput: parsed.originalInput,
+			autoDetected: false,
+		}
+
+		if (parsed.number !== undefined) {
+			result.number = parsed.number
+		}
+		if (parsed.branchName !== undefined) {
+			result.branchName = parsed.branchName
+		}
+
+		return result
+	}
+
+	/**
+	 * Auto-detect identifier from current directory
+	 */
+	private async autoDetectFromCurrentDirectory(): Promise<ParsedDevServerInput> {
+		const currentDir = path.basename(process.cwd())
+
+		// Check for PR worktree pattern: _pr_N suffix
+		const prPattern = /_pr_(\d+)$/
+		const prMatch = currentDir.match(prPattern)
+
+		if (prMatch?.[1]) {
+			const prNumber = parseInt(prMatch[1], 10)
+			logger.debug(`Auto-detected PR #${prNumber} from directory: ${currentDir}`)
+			return {
+				type: 'pr',
+				number: prNumber,
+				originalInput: currentDir,
+				autoDetected: true,
+			}
+		}
+
+		// Check for issue pattern in directory
+		const issueNumber = extractIssueNumber(currentDir)
+
+		if (issueNumber !== null) {
+			logger.debug(`Auto-detected issue #${issueNumber} from directory: ${currentDir}`)
+			return {
+				type: 'issue',
+				number: issueNumber,
+				originalInput: currentDir,
+				autoDetected: true,
+			}
+		}
+
+		// Fallback: get current branch name
+		const repoInfo = await this.gitWorktreeManager.getRepoInfo()
+		const currentBranch = repoInfo.currentBranch
+
+		if (!currentBranch) {
+			throw new Error(
+				'Could not auto-detect identifier. Please provide an issue number, PR number, or branch name.\n' +
+					'Expected directory pattern: feat/issue-XX-description OR worktree with _pr_N suffix'
+			)
+		}
+
+		// Try to extract issue from branch name
+		const branchIssueNumber = extractIssueNumber(currentBranch)
+		if (branchIssueNumber !== null) {
+			logger.debug(`Auto-detected issue #${branchIssueNumber} from branch: ${currentBranch}`)
+			return {
+				type: 'issue',
+				number: branchIssueNumber,
+				originalInput: currentBranch,
+				autoDetected: true,
+			}
+		}
+
+		// Last resort: use branch name
+		return {
+			type: 'branch',
+			branchName: currentBranch,
+			originalInput: currentBranch,
+			autoDetected: true,
+		}
+	}
+
+	/**
+	 * Find worktree for the given identifier
+	 */
+	private async findWorktreeForIdentifier(parsed: ParsedDevServerInput): Promise<GitWorktree> {
+		let worktree: GitWorktree | null = null
+
+		if (parsed.type === 'issue' && parsed.number !== undefined) {
+			worktree = await this.gitWorktreeManager.findWorktreeForIssue(parsed.number)
+		} else if (parsed.type === 'pr' && parsed.number !== undefined) {
+			const prNumber = typeof parsed.number === 'number' ? parsed.number : Number(parsed.number)
+			if (isNaN(prNumber) || !isFinite(prNumber)) {
+				throw new Error(`Invalid PR number: ${parsed.number}. PR numbers must be numeric.`)
+			}
+			worktree = await this.gitWorktreeManager.findWorktreeForPR(prNumber, '')
+		} else if (parsed.type === 'branch' && parsed.branchName) {
+			worktree = await this.gitWorktreeManager.findWorktreeForBranch(
+				parsed.branchName
+			)
+		}
+
+		if (!worktree) {
+			throw new Error(
+				`No worktree found for ${this.formatParsedInput(parsed)}. ` +
+					`Run 'il start ${parsed.originalInput}' to create one.`
+			)
+		}
+
+		return worktree
+	}
+
+	/**
+	 * Format parsed input for display
+	 */
+	private formatParsedInput(parsed: ParsedDevServerInput): string {
+		const autoLabel = parsed.autoDetected ? ' (auto-detected)' : ''
+
+		if (parsed.type === 'issue') {
+			return `issue #${parsed.number}${autoLabel}`
+		}
+		if (parsed.type === 'pr') {
+			return `PR #${parsed.number}${autoLabel}`
+		}
+		return `branch "${parsed.branchName}"${autoLabel}`
+	}
+
+	/**
+	 * Get port for workspace - reads from dotenv-flow files or calculates based on workspace type
+	 */
+	private async getWorkspacePort(worktreePath: string): Promise<number> {
+		// Load base port from settings with CLI overrides
+		const cliOverrides = extractSettingsOverrides()
+		const settings = await this.settingsManager.loadSettings(undefined, cliOverrides)
+		const basePort = settings.capabilities?.web?.basePort ?? 3000
+
+		// Try to read PORT from any dotenv-flow file (as override)
+		const envFile = await findEnvFileContainingVariable(
+			worktreePath,
+			'PORT',
+			async (p) => fs.pathExists(p),
+			async (p, varName) => {
+				const content = await fs.readFile(p, 'utf8')
+				const envMap = parseEnvFile(content)
+				return envMap.get(varName) ?? null
+			}
+		)
+
+		if (envFile) {
+			const envPath = path.join(worktreePath, envFile)
+			const envContent = await fs.readFile(envPath, 'utf8')
+			const envMap = parseEnvFile(envContent)
+			const port = extractPort(envMap)
+
+			if (port) {
+				logger.debug(`Using PORT from ${envFile}: ${port}`)
+				return port
+			}
+		}
+
+		// PORT not in any dotenv-flow file, calculate based on workspace identifier
+		logger.debug('PORT not found in any dotenv-flow file, calculating from workspace identifier')
+
+		// Get worktree to determine type
+		const worktrees = await this.gitWorktreeManager.listWorktrees()
+		const worktree = worktrees.find(wt => wt.path === worktreePath)
+
+		if (!worktree) {
+			throw new Error(`Could not find worktree for path: ${worktreePath}`)
+		}
+
+		// Extract identifier from worktree path/branch
+		const dirName = path.basename(worktreePath)
+
+		// Check for PR pattern: _pr_N
+		const prPattern = /_pr_(\d+)$/
+		const prMatch = dirName.match(prPattern)
+		if (prMatch?.[1]) {
+			const prNumber = parseInt(prMatch[1], 10)
+			const port = basePort + prNumber
+			logger.debug(`Calculated PORT for PR #${prNumber}: ${port}`)
+			return port
+		}
+
+		// Check for issue pattern: issue-N
+		const issueId = extractIssueNumber(dirName) ?? extractIssueNumber(worktree.branch)
+		if (issueId !== null) {
+			const issueNumber = parseInt(issueId, 10)
+			if (!isNaN(issueNumber)) {
+				const port = basePort + issueNumber
+				logger.debug(`Calculated PORT for issue #${issueId}: ${port}`)
+				return port
+			}
+			// For alphanumeric IDs, fall through to branch-based hash
+		}
+
+		// Branch-based workspace - use deterministic hash
+		const port = calculatePortForBranch(worktree.branch, basePort)
+		logger.debug(`Calculated PORT for branch "${worktree.branch}": ${port}`)
+		return port
+	}
+}

@@ -22,3 +22,6 @@ export { TestTabsCommand } from './test-tabs.js'
 export type { TestTabsCommandInput } from './test-tabs.js'
 
 export { ContributeCommand } from './contribute.js'
+
+export { DevServerCommand } from './dev-server.js'
+export type { DevServerCommandInput, DevServerResult } from './dev-server.js'

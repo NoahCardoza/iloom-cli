@@ -140,6 +140,7 @@ Command Reference
 | `il list` |  | Show active looms and paths. |
 | `il spin` |  | Launch Claude inside the current loom with context auto-detected. |
 | `il open` | `run` | Open loom in browser (web) or run your CLI tool. |
+| `il dev-server` | `dev` | Start dev server in foreground for a workspace. |
 | `il add-issue` | `a` | Create and AI-enhance a new issue without starting work yet. |
 | `il init` | `config` | Interactive configuration wizard. |
 | `il feedback` | `f` | Submit bug reports/feedback directly from the CLI. |

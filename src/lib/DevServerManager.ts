@@ -144,6 +144,66 @@ export class DevServerManager {
 	}
 
 	/**
+	 * Check if a dev server is running on the specified port
+	 *
+	 * @param port - Port to check
+	 * @returns true if server is running, false otherwise
+	 */
+	async isServerRunning(port: number): Promise<boolean> {
+		const existingProcess = await this.processManager.detectDevServer(port)
+		return existingProcess !== null
+	}
+
+	/**
+	 * Run dev server in foreground mode (blocking)
+	 * This method blocks until the server is stopped (e.g., via Ctrl+C)
+	 *
+	 * @param worktreePath - Path to the worktree
+	 * @param port - Port the server should run on
+	 * @param redirectToStderr - If true, redirect stdout/stderr to stderr (useful for JSON output)
+	 * @param onProcessStarted - Callback called immediately after process starts with PID
+	 * @returns Process information including PID
+	 */
+	async runServerForeground(
+		worktreePath: string,
+		port: number,
+		redirectToStderr = false,
+		onProcessStarted?: (pid?: number) => void
+	): Promise<{ pid?: number }> {
+		// Build dev server command
+		const devCommand = await buildDevServerCommand(worktreePath)
+		logger.debug(`Starting dev server in foreground with command: ${devCommand}`)
+
+		// Configure stdio based on redirect option
+		const stdio = redirectToStderr ? [process.stdin, process.stderr, process.stderr] : 'inherit'
+
+		// Start server in foreground (blocking with configured stdio)
+		const serverProcess = execa('sh', ['-c', devCommand], {
+			cwd: worktreePath,
+			env: {
+				...process.env,
+				PORT: port.toString(),
+			},
+			// Configure stdio based on whether we want to redirect output
+			stdio,
+		})
+
+		// Process info is available immediately after spawn
+		// Use conditional property to satisfy exactOptionalPropertyTypes
+		const processInfo: { pid?: number } = serverProcess.pid !== undefined ? { pid: serverProcess.pid } : {}
+
+		// Call the callback immediately with the PID (for JSON output)
+		if (onProcessStarted) {
+			onProcessStarted(processInfo.pid)
+		}
+
+		// Now wait for the process to complete (this blocks)
+		await serverProcess
+
+		return processInfo
+	}
+
+	/**
 	 * Clean up all running server processes
 	 * This should be called when the manager is being disposed
 	 */

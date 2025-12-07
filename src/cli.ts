@@ -496,6 +496,23 @@ program
   })
 
 program
+  .command('dev-server')
+  .alias('dev')
+  .description('Start dev server for workspace (foreground)')
+  .argument('[identifier]', 'Issue number, PR number, or branch name (auto-detected if omitted)')
+  .option('--json', 'Output as JSON')
+  .action(async (identifier?: string, options?: { json?: boolean }) => {
+    try {
+      const { DevServerCommand } = await import('./commands/dev-server.js')
+      const cmd = new DevServerCommand()
+      await cmd.execute({ identifier, json: options?.json })
+    } catch (error) {
+      logger.error(`Failed to start dev server: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
   .command('cleanup')
   .alias('remove')
   .alias('clean')
