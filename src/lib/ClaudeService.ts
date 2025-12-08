@@ -35,18 +35,6 @@ export class ClaudeService {
 	}
 
 	/**
-	 * Get the appropriate model for a workflow type
-	 */
-	private getModelForWorkflow(type: 'issue' | 'pr' | 'regular'): string | undefined {
-		// Issue workflows use claude-sonnet-4-20250514
-		if (type === 'issue') {
-			return 'claude-sonnet-4-20250514'
-		}
-		// For PR and regular workflows, use Claude's default model
-		return undefined
-	}
-
-	/**
 	 * Get the appropriate permission mode for a workflow type
 	 */
 	private getPermissionModeForWorkflow(
@@ -113,8 +101,7 @@ export class ClaudeService {
 			// Get the prompt from template manager
 			const prompt = await this.templateManager.getPrompt(type, variables)
 
-			// Determine model and permission mode
-			const model = this.getModelForWorkflow(type)
+			// Determine permission mode (model uses Claude's default for start command)
 			const permissionMode = this.getPermissionModeForWorkflow(type)
 
 			// Display warning if bypassPermissions mode is used
@@ -129,11 +116,6 @@ export class ClaudeService {
 			const claudeOptions: ClaudeCliOptions = {
 				addDir: workspacePath,
 				headless,
-			}
-
-			// Add optional model if present
-			if (model !== undefined) {
-				claudeOptions.model = model
 			}
 
 			// Add permission mode if not default
@@ -163,7 +145,6 @@ export class ClaudeService {
 
 			logger.debug('Launching Claude for workflow', {
 				type,
-				model,
 				permissionMode,
 				headless,
 				workspacePath,

@@ -2611,4 +2611,38 @@ const error: { code?: string; message: string } = {
 			})
 		})
 	})
+
+	describe('getSpinModel', () => {
+		it('should return opus by default when spin not configured', () => {
+			const settings = { sourceEnvOnStart: false }
+			const result = settingsManager.getSpinModel(settings)
+			expect(result).toBe('opus')
+		})
+
+		it('should return configured model when spin.model is set to sonnet', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'sonnet' as const } }
+			const result = settingsManager.getSpinModel(settings)
+			expect(result).toBe('sonnet')
+		})
+
+		it('should return configured model when spin.model is set to haiku', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const } }
+			const result = settingsManager.getSpinModel(settings)
+			expect(result).toBe('haiku')
+		})
+
+		it('should return configured model when spin.model is set to opus', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'opus' as const } }
+			const result = settingsManager.getSpinModel(settings)
+			expect(result).toBe('opus')
+		})
+
+		it('should return opus when spin object exists but model not set', () => {
+			// This tests the Zod default behavior - when spin object is parsed without model
+			// the default 'opus' should be applied
+			const settings = { sourceEnvOnStart: false, spin: {} as { model: 'opus' } }
+			const result = settingsManager.getSpinModel(settings)
+			expect(result).toBe('opus')
+		})
+	})
 })

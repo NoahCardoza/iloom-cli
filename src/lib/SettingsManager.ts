@@ -17,6 +17,17 @@ export const AgentSettingsSchema = z.object({
 })
 
 /**
+ * Zod schema for spin agent settings with default model
+ * Used for the spin orchestrator configuration
+ */
+export const SpinAgentSettingsSchema = z.object({
+	model: z
+		.enum(['sonnet', 'opus', 'haiku'])
+		.default('opus')
+		.describe('Claude model shorthand for spin orchestrator'),
+})
+
+/**
  * Zod schema for workflow permission configuration
  */
 export const WorkflowPermissionSchema = z.object({
@@ -256,6 +267,9 @@ export const IloomSettingsSchema = z.object({
 				'iloom-issue-implementer (implements code changes), ' +
 				'iloom-issue-reviewer (reviews code changes against requirements)',
 		),
+	spin: SpinAgentSettingsSchema.optional().describe(
+		'Spin orchestrator configuration. Model defaults to opus when not configured.',
+	),
 	capabilities: CapabilitiesSettingsSchema.describe('Project capability configurations'),
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
@@ -406,6 +420,12 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'iloom-issue-implementer (implements code changes), ' +
 				'iloom-issue-reviewer (reviews code changes against requirements)',
 		),
+	spin: z
+		.object({
+			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
+		})
+		.optional()
+		.describe('Spin orchestrator configuration'),
 	capabilities: CapabilitiesSettingsSchemaNoDefaults.describe('Project capability configurations'),
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
@@ -494,6 +514,11 @@ export type DatabaseProvidersSettings = z.infer<typeof DatabaseProvidersSettings
  * TypeScript type for agent settings derived from Zod schema
  */
 export type AgentSettings = z.infer<typeof AgentSettingsSchema>
+
+/**
+ * TypeScript type for spin agent settings derived from Zod schema
+ */
+export type SpinAgentSettings = z.infer<typeof SpinAgentSettingsSchema>
 
 /**
  * TypeScript type for workflow permission configuration derived from Zod schema
@@ -784,5 +809,19 @@ export class SettingsManager {
 		}
 
 		return protectedBranches
+	}
+
+	/**
+	 * Get the spin orchestrator model with default applied
+	 * Returns 'opus' when not configured (via schema default or fallback)
+	 *
+	 * @param settings - Pre-loaded settings object
+	 * @returns Model shorthand ('opus', 'sonnet', or 'haiku')
+	 */
+	getSpinModel(settings?: IloomSettings): 'sonnet' | 'opus' | 'haiku' {
+		// If spin object exists and has model, return it
+		// Otherwise return 'opus' as the default
+		// Note: The fallback handles the case where spin is optional and undefined
+		return settings?.spin?.model ?? 'opus'
 	}
 }

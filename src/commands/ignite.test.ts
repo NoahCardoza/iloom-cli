@@ -51,7 +51,7 @@ describe('IgniteCommand', () => {
 					expect.objectContaining({
 						headless: false,
 						addDir: '/path/to/feat/issue-70__description',
-						model: 'claude-sonnet-4-20250514',
+						model: 'opus',
 						permissionMode: 'acceptEdits',
 					})
 				)
@@ -127,7 +127,7 @@ describe('IgniteCommand', () => {
 					expect.objectContaining({
 						headless: false,
 						addDir: '/path/to/some-worktree',
-						model: 'claude-sonnet-4-20250514',
+						model: 'opus',
 						permissionMode: 'acceptEdits',
 					})
 				)
@@ -262,7 +262,7 @@ describe('IgniteCommand', () => {
 					expect.any(String),
 					expect.objectContaining({
 						headless: false,
-						model: 'claude-sonnet-4-20250514',
+						model: 'opus',
 						permissionMode: 'acceptEdits',
 					})
 				)
@@ -415,7 +415,7 @@ describe('IgniteCommand', () => {
 					expect.objectContaining({
 						headless: false,
 						addDir: '/path/to/feat/issue-50__terminal-test',
-						model: 'claude-sonnet-4-20250514', // issue workflow model
+						model: 'opus', // issue workflow model (default from spin.model)
 						permissionMode: 'acceptEdits', // issue workflow permission mode
 					})
 				)
@@ -537,7 +537,7 @@ describe('IgniteCommand', () => {
 					'Guide the user through the iloom workflow!', // User prompt
 					expect.objectContaining({
 						headless: false,
-						model: 'claude-sonnet-4-20250514',
+						model: 'opus',
 						permissionMode: 'acceptEdits',
 						appendSystemPrompt: 'System instructions for issue workflow',
 					})
@@ -1139,6 +1139,7 @@ describe('IgniteCommand', () => {
 
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue(mockSettings),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
 			}
 
 			const mockAgentManager = {
@@ -1187,6 +1188,7 @@ describe('IgniteCommand', () => {
 
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({}), // Empty settings
+				getSpinModel: vi.fn().mockReturnValue('opus'),
 			}
 
 			const mockAgentManager = {
@@ -1290,6 +1292,7 @@ describe('IgniteCommand', () => {
 
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue(mockSettings),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
 			}
 
 			const mockAgentManager = {

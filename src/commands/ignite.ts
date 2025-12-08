@@ -93,7 +93,7 @@ export class IgniteCommand {
 			}
 
 			// Step 3: Determine model and permission mode based on workflow type
-			const model = this.getModelForWorkflow(context.type)
+			const model = this.settingsManager.getSpinModel(this.settings)
 			let permissionMode = this.getPermissionModeForWorkflow(context.type)
 
 			// Override permission mode if bypassPermissions oneShot mode
@@ -267,19 +267,6 @@ export class IgniteCommand {
 		}
 
 		return variables
-	}
-
-	/**
-	 * Get the appropriate model for a workflow type
-	 * Same logic as ClaudeService.getModelForWorkflow()
-	 */
-	private getModelForWorkflow(type: 'issue' | 'pr' | 'regular'): string | undefined {
-		// Issue workflows use claude-sonnet-4-20250514
-		if (type === 'issue') {
-			return 'claude-sonnet-4-20250514'
-		}
-		// For PR and regular workflows, use Claude's default model
-		return undefined
 	}
 
 	/**

@@ -61,7 +61,7 @@ describe('ClaudeService', () => {
 
 	describe('launchForWorkflow', () => {
 		describe('issue workflow', () => {
-			it('should launch Claude with opusplan model and plan permission mode', async () => {
+			it('should launch Claude with acceptEdits permission mode (no model specified)', async () => {
 				// Create a service with a mocked SettingsManager to avoid loading real settings.json
 				const mockSettingsManager = {
 					loadSettings: vi.fn().mockResolvedValue({} as IloomSettings),
@@ -92,7 +92,6 @@ describe('ClaudeService', () => {
 				})
 
 				expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(prompt, {
-					model: 'claude-sonnet-4-20250514',
 					permissionMode: 'acceptEdits', // Default fallback when no settings configured
 					workspacePath: '/workspace/issue-123',
 					addDir: '/workspace/issue-123',
@@ -167,7 +166,7 @@ describe('ClaudeService', () => {
 					PORT: 3456,
 				})
 
-				// PR workflow should not set model (uses Claude default) and uses default permission mode
+				// PR workflow uses Claude's default model and default permission mode
 				expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(prompt, {
 					addDir: '/workspace/pr-456',
 					workspacePath: '/workspace/pr-456',
@@ -196,7 +195,7 @@ describe('ClaudeService', () => {
 					WORKSPACE_PATH: '/workspace/feature',
 				})
 
-				// Regular workflow should not set model (uses Claude default) and uses default permission mode
+				// Regular workflow uses Claude's default model and default permission mode
 				expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(prompt, {
 					addDir: '/workspace/feature',
 					workspacePath: '/workspace/feature',

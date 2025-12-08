@@ -219,6 +219,9 @@ This example shows how to configure a project-wide default (e.g., GitHub remote)
     "issue": {
       "permissionMode": "acceptEdits" // Control Claude Code permissions
     }
+  },
+  "spin": {
+    "model": "opus" // Claude model for spin orchestrator: opus (default), sonnet, or haiku
   }
 }
 ```
