@@ -649,6 +649,102 @@ describe('EnhanceCommand', () => {
 		})
 	})
 
+	describe('--json flag behavior', () => {
+		beforeEach(() => {
+			const mockIssue: Issue = {
+				number: 42,
+				title: 'Test Issue',
+				body: 'Test body',
+				state: 'open',
+				labels: [],
+				assignees: [],
+				url: 'https://github.com/owner/repo/issues/42',
+			}
+			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
+			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
+		})
+
+		it('should return EnhanceResult object when json option is true and enhancement occurred', async () => {
+			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
+			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+
+			const result = await command.execute({ issueNumber: 42, options: { json: true } })
+
+			expect(result).toEqual(expect.objectContaining({
+				url: commentUrl,
+				id: 123456,
+				title: 'Test Issue',
+				enhanced: true,
+			}))
+			expect(result).toHaveProperty('created_at')
+		})
+
+		it('should return EnhanceResult with enhanced=false when no enhancement needed', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+
+			const result = await command.execute({ issueNumber: 42, options: { json: true } })
+
+			expect(result).toEqual(expect.objectContaining({
+				url: 'https://github.com/owner/repo/issues/42',
+				id: 0,
+				title: 'Test Issue',
+				enhanced: false,
+			}))
+		})
+
+		it('should skip browser interaction when json option is true', async () => {
+			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
+			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+
+			await command.execute({ issueNumber: 42, options: { json: true } })
+
+			expect(waitForKeypress).not.toHaveBeenCalled()
+			expect(openBrowser).not.toHaveBeenCalled()
+		})
+
+		it('should return void when json option is not set', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+
+			const result = await command.execute({ issueNumber: 42, options: {} })
+
+			expect(result).toBeUndefined()
+		})
+
+		it('should skip first-run setup in json mode', async () => {
+			const { needsFirstRunSetup, launchFirstRunSetup } = await import(
+				'../utils/first-run-setup.js'
+			)
+			vi.mocked(needsFirstRunSetup).mockResolvedValue(true)
+			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+
+			await command.execute({ issueNumber: 42, options: { json: true } })
+
+			expect(launchFirstRunSetup).not.toHaveBeenCalled()
+		})
+
+		it('should extract comment ID from URL correctly', async () => {
+			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-999888777'
+			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+
+			const result = await command.execute({ issueNumber: 42, options: { json: true } })
+
+			expect(result).toHaveProperty('id', 999888777)
+		})
+
+		it('should include created_at as ISO timestamp', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+
+			const result = await command.execute({ issueNumber: 42, options: { json: true } })
+
+			expect(result).toBeDefined()
+			if (result) {
+				expect(result.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
+			}
+		})
+	})
+
 	describe('author parameter support', () => {
 		beforeEach(() => {
 			const mockIssue: Issue = {

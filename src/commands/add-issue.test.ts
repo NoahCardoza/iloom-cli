@@ -347,6 +347,87 @@ describe('AddIssueCommand', () => {
 			})
 		})
 
+		describe('--json flag behavior', () => {
+			const validDescription = 'This is a valid description that has more than thirty characters and multiple spaces'
+
+			beforeEach(() => {
+				vi.mocked(mockEnhancementService.validateDescription).mockReturnValue(true)
+				vi.mocked(mockEnhancementService.enhanceDescription).mockResolvedValue('Enhanced description')
+				vi.mocked(mockEnhancementService.createEnhancedIssue).mockResolvedValue({
+					number: 123,
+					url: 'https://github.com/owner/repo/issues/123',
+				})
+				vi.mocked(mockEnhancementService.waitForReviewAndOpen).mockResolvedValue(undefined)
+			})
+
+			it('should return AddIssueResult object when json option is true', async () => {
+				const result = await command.execute({
+					description: validDescription,
+					options: { json: true }
+				})
+
+				expect(result).toEqual(expect.objectContaining({
+					url: 'https://github.com/owner/repo/issues/123',
+					id: 123,
+					title: validDescription,
+				}))
+				expect(result).toHaveProperty('created_at')
+			})
+
+			it('should skip waitForReviewAndOpen when json option is true', async () => {
+				await command.execute({
+					description: validDescription,
+					options: { json: true }
+				})
+
+				expect(mockEnhancementService.waitForReviewAndOpen).not.toHaveBeenCalled()
+			})
+
+			it('should still call waitForReviewAndOpen when json option is false', async () => {
+				await command.execute({
+					description: validDescription,
+					options: { json: false }
+				})
+
+				expect(mockEnhancementService.waitForReviewAndOpen).toHaveBeenCalled()
+			})
+
+			it('should return issue number when json option is not set', async () => {
+				const result = await command.execute({
+					description: validDescription,
+					options: {}
+				})
+
+				expect(result).toBe(123)
+			})
+
+			it('should skip first-run setup in json mode', async () => {
+				const { needsFirstRunSetup, launchFirstRunSetup } = await import(
+					'../utils/first-run-setup.js'
+				)
+				vi.mocked(needsFirstRunSetup).mockResolvedValue(true)
+
+				await command.execute({
+					description: validDescription,
+					options: { json: true }
+				})
+
+				expect(launchFirstRunSetup).not.toHaveBeenCalled()
+			})
+
+			it('should include created_at as ISO timestamp', async () => {
+				const result = await command.execute({
+					description: validDescription,
+					options: { json: true }
+				})
+
+				expect(typeof result).toBe('object')
+				if (typeof result === 'object') {
+					expect(result.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
+				}
+			})
+		})
+
 		describe('--body flag behavior', () => {
 			const preFormattedBody = '## Requirements\n- Item 1\n- Item 2\n\n## Acceptance Criteria\n- Test passes'
 

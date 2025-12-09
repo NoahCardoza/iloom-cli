@@ -12,6 +12,9 @@ vi.mock('./logger.js', () => ({
 		warn: vi.fn(),
 		error: vi.fn(),
 		isDebugEnabled: vi.fn().mockReturnValue(false),
+		stdout: {
+			write: vi.fn().mockReturnValue(true),
+		},
 	},
 }))
 
@@ -259,9 +262,6 @@ describe('claude utils', () => {
 				// Mock logger to return true for debug enabled
 				vi.mocked(logger.isDebugEnabled).mockReturnValue(true)
 
-				// Mock process.stdout.write to capture the streaming output
-				const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-
 				vi.mocked(execa).mockResolvedValueOnce({
 					stdout: '{"type":"message","text":"Hello"}\n{"type":"thinking","text":"Let me think"}',
 					exitCode: 0,
@@ -281,11 +281,10 @@ describe('claude utils', () => {
 					})
 				)
 
-				// Verify JSON output was written to stdout
-				expect(stdoutSpy).toHaveBeenCalledWith('{"type":"message","text":"Hello"}\n{"type":"thinking","text":"Let me think"}')
+				// Verify JSON output was written to logger.stdout
+				expect(logger.stdout.write).toHaveBeenCalledWith('{"type":"message","text":"Hello"}\n{"type":"thinking","text":"Let me think"}')
 				expect(result).toBe('{"type":"message","text":"Hello"}\n{"type":"thinking","text":"Let me think"}')
 
-				stdoutSpy.mockRestore()
 				// Reset logger mock
 				vi.mocked(logger.isDebugEnabled).mockReturnValue(false)
 			})
@@ -295,9 +294,6 @@ describe('claude utils', () => {
 
 				// Mock logger to return false for debug disabled (non-debug mode)
 				vi.mocked(logger.isDebugEnabled).mockReturnValue(false)
-
-				// Mock process.stdout.write to capture the progress dots
-				const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
 				vi.mocked(execa).mockResolvedValueOnce({
 					stdout: '{"type":"result","result":"Hello World"}',
@@ -320,13 +316,11 @@ describe('claude utils', () => {
 				)
 
 				// Verify progress dots were shown instead of full JSON, followed by cleanup newline
-				expect(stdoutSpy).toHaveBeenCalledWith('🤖 .')
-				expect(stdoutSpy).toHaveBeenCalledWith('\n')
+				expect(logger.stdout.write).toHaveBeenCalledWith('🤖 .')
+				expect(logger.stdout.write).toHaveBeenCalledWith('\n')
 
 				// Verify result is parsed from JSON
 				expect(result).toBe('Hello World')
-
-				stdoutSpy.mockRestore()
 			})
 
 			it('should throw error with context when Claude CLI fails', async () => {

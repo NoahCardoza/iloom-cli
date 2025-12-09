@@ -44,7 +44,7 @@ npm test               # Run all tests with Vitest
 npm run test:watch     # Run tests in watch mode
 npm run test:coverage  # Generate coverage report (70% required)
 npm run lint           # Run ESLint
-npm run typecheck      # Run TypeScript compiler check
+npm run compile      # Run TypeScript compiler check
 ```
 
 **Development Workflow**:
@@ -169,34 +169,6 @@ MockNeonProvider       # Mock Neon CLI and API responses
 MockClaudeProvider     # Mock Claude CLI integration
 MockFileSystem         # Mock file operations
 ```
-
-## Core Functionality Being Ported
-
-**From new-branch-workflow.sh**:
-
-- GitHub issue/PR detection and fetching
-- Branch name generation using Claude Code
-- Git worktree creation with sanitized naming
-- Environment setup (port calculation: 3000 + issue number)
-- Database branch creation (Neon integration)
-- Claude context generation and CLI launching
-
-**From merge-and-clean.sh**:
-
-- Uncommitted changes detection and auto-commit
-- Migration conflict handling (Payload CMS specific)
-- Pre-merge validation pipeline (typecheck, lint, test)
-- Claude-assisted error fixing workflows
-- Branch rebasing and fast-forward merge validation
-- Resource cleanup (worktrees, database branches)
-
-**Critical Integration Points**:
-
-- **GitHub CLI**: Issue/PR fetching, branch detection
-- **Claude CLI**: Context generation, branch naming, error fixing
-- **Neon CLI**: Database branch management for isolation
-- **Git**: Worktree operations, branch management, merge workflows
-- **pnpm**: Dependency installation in worktrees
 
 ## Port Assignment Strategy
 

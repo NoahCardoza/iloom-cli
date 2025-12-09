@@ -18,6 +18,7 @@ export interface Logger {
   debug: (message: string, ...args: unknown[]) => void
   setDebug: (enabled: boolean) => void
   isDebugEnabled: () => boolean
+  stdout: NodeJS.WriteStream // Stream for progress output (stdout normally, stderr in JSON mode)
 }
 
 // Lines 19-29: Stream-specific chalk instances
@@ -84,7 +85,9 @@ export const logger: Logger = {
 
   isDebugEnabled: (): boolean => {
     return globalDebugEnabled
-  }
+  },
+
+  stdout: process.stdout
 }
 /* eslint-enable no-console */
 
@@ -117,7 +120,8 @@ export function createLogger(options: LoggerOptions = {}): Logger {
       setDebug: (): void => {},
       isDebugEnabled: (): boolean => {
         return false
-      }
+      },
+      stdout: process.stdout
     }
   }
 
@@ -160,10 +164,74 @@ export function createLogger(options: LoggerOptions = {}): Logger {
     },
     isDebugEnabled: (): boolean => {
       return globalDebugEnabled
-    }
+    },
+    stdout: process.stdout
   }
   /* eslint-enable no-console */
 }
 
-// Lines 147-148: Default export
+// Lines 147-200: Factory function for stderr-only logger (for JSON mode)
+/**
+ * Creates a logger that redirects all output to stderr.
+ * Use this in JSON mode so progress messages don't pollute stdout.
+ * The JSON output can then be cleanly piped.
+ */
+export function createStderrLogger(options: LoggerOptions = {}): Logger {
+  const { prefix = '', timestamp = false, forceColor, debug = globalDebugEnabled } = options
+
+  // Local debug flag for this logger instance
+  let localDebugEnabled = debug
+
+  // Create chalk instances with forced color if needed
+  const customChalk = forceColor !== undefined
+    ? new Chalk({ level: forceColor ? 3 : 0 })
+    : stderrChalk
+
+  const prefixStr = prefix ? `[${prefix}] ` : ''
+  const getTimestamp = (): string => timestamp ? `[${new Date().toISOString()}] ` : ''
+
+  return {
+    info: (message: string, ...args: unknown[]): void => {
+      const formatted = formatMessage(message, ...args)
+      const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
+      const output = formatWithEmoji(fullMessage, '🗂️ ', customChalk.blue)
+      console.error(output)  // Redirect to stderr
+    },
+    success: (message: string, ...args: unknown[]): void => {
+      const formatted = formatMessage(message, ...args)
+      const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
+      const output = formatWithEmoji(fullMessage, '✅', customChalk.green)
+      console.error(output)  // Redirect to stderr
+    },
+    warn: (message: string, ...args: unknown[]): void => {
+      const formatted = formatMessage(message, ...args)
+      const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
+      const output = formatWithEmoji(fullMessage, '⚠️ ', customChalk.yellow)
+      console.error(output)
+    },
+    error: (message: string, ...args: unknown[]): void => {
+      const formatted = formatMessage(message, ...args)
+      const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
+      const output = formatWithEmoji(fullMessage, '❌', customChalk.red)
+      console.error(output)
+    },
+    debug: (message: string, ...args: unknown[]): void => {
+      if (localDebugEnabled) {
+        const formatted = formatMessage(message, ...args)
+        const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
+        const output = formatWithEmoji(fullMessage, '🔍', customChalk.gray)
+        console.error(output)  // Redirect to stderr
+      }
+    },
+    setDebug: (enabled: boolean): void => {
+      localDebugEnabled = enabled
+    },
+    isDebugEnabled: (): boolean => {
+      return globalDebugEnabled
+    },
+    stdout: process.stderr  // Use stderr for progress output in JSON mode
+  }
+}
+
+// Default export
 export default logger

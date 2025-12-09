@@ -1,10 +1,12 @@
 import type { IssueTracker } from '../lib/IssueTracker.js'
 import type { AgentManager } from '../lib/AgentManager.js'
 import type { SettingsManager } from '../lib/SettingsManager.js'
+import type { EnhanceResult } from '../types/index.js'
+import type { Logger } from '../utils/logger.js'
 import { launchClaude } from '../utils/claude.js'
 import { openBrowser } from '../utils/browser.js'
 import { waitForKeypress } from '../utils/prompt.js'
-import { logger } from '../utils/logger.js'
+import { logger as defaultLogger } from '../utils/logger.js'
 import { generateIssueManagementMcpConfig } from '../utils/mcp.js'
 import { AgentManager as DefaultAgentManager } from '../lib/AgentManager.js'
 import { SettingsManager as DefaultSettingsManager } from '../lib/SettingsManager.js'
@@ -19,6 +21,7 @@ export interface EnhanceCommandInput {
 export interface EnhanceOptions {
 	noBrowser?: boolean // Skip browser opening prompt
 	author?: string // GitHub username of issue author for tagging
+	json?: boolean // Output result as JSON
 }
 
 /**
@@ -29,15 +32,18 @@ export class EnhanceCommand {
 	private issueTracker: IssueTracker
 	private agentManager: AgentManager
 	private settingsManager: SettingsManager
+	private logger: Logger
 
 	constructor(
 		issueTracker: IssueTracker,
 		agentManager?: AgentManager,
-		settingsManager?: SettingsManager
+		settingsManager?: SettingsManager,
+		logger?: Logger
 	) {
 		this.issueTracker = issueTracker
 		this.agentManager = agentManager ?? new DefaultAgentManager()
 		this.settingsManager = settingsManager ?? new DefaultSettingsManager()
+		this.logger = logger ?? defaultLogger
 	}
 
 	/**
@@ -47,14 +53,16 @@ export class EnhanceCommand {
 	 * 3. Load agent configurations
 	 * 4. Invoke Claude CLI with enhancer agent
 	 * 5. Parse response to determine outcome
-	 * 6. Handle browser interaction based on outcome
+	 * 6. Handle browser interaction based on outcome (unless --json mode)
+	 * 7. Return result object when --json mode
 	 */
-	public async execute(input: EnhanceCommandInput): Promise<void> {
+	public async execute(input: EnhanceCommandInput): Promise<EnhanceResult | void> {
 		const { issueNumber, options } = input
 		const { author } = options
+		const isJsonMode = options.json === true
 
-		// Step 0: Check for first-run setup
-		if (process.env.FORCE_FIRST_TIME_SETUP === "true" || await needsFirstRunSetup()) {
+		// Step 0: Check for first-run setup (skip in JSON mode - non-interactive)
+		if (!isJsonMode && (process.env.FORCE_FIRST_TIME_SETUP === "true" || await needsFirstRunSetup())) {
 			await launchFirstRunSetup()
 		}
 
@@ -66,19 +74,23 @@ export class EnhanceCommand {
 		if (this.issueTracker.providerName === 'github' && (await hasMultipleRemotes())) {
 			// Only relevant for GitHub - Linear doesn't use repo info
 			repo = await getConfiguredRepoFromSettings(settings)
-			logger.info(`Using GitHub repository: ${repo}`)
+			if (!isJsonMode) {
+				this.logger.info(`Using GitHub repository: ${repo}`)
+			}
 		}
 
 		// Step 1: Validate issue number
 		this.validateIssueNumber(issueNumber)
 
 		// Step 2: Fetch issue to verify it exists
-		logger.info(`Fetching issue #${issueNumber}...`)
+		if (!isJsonMode) {
+			this.logger.info(`Fetching issue #${issueNumber}...`)
+		}
 		const issue = await this.issueTracker.fetchIssue(issueNumber, repo)
-		logger.debug('Issue fetched successfully', { number: issue.number, title: issue.title })
+		this.logger.debug('Issue fetched successfully', { number: issue.number, title: issue.title })
 
 		// Step 3: Load agent configurations
-		logger.debug('Loading agent configurations...')
+		this.logger.debug('Loading agent configurations...')
 		const loadedAgents = await this.agentManager.loadAgents(settings)
 		const agents = this.agentManager.formatForCli(loadedAgents)
 
@@ -90,7 +102,7 @@ export class EnhanceCommand {
 		try {
 			const provider = this.issueTracker.providerName as 'github' | 'linear'
 			mcpConfig = await generateIssueManagementMcpConfig('issue', repo, provider, settings)
-			logger.debug('Generated MCP configuration for issue management:', { mcpConfig })
+			this.logger.debug('Generated MCP configuration for issue management:', { mcpConfig })
 
 			// Configure tool filtering for issue workflows
 			allowedTools = [
@@ -101,19 +113,22 @@ export class EnhanceCommand {
 			]
 			disallowedTools = ['Bash(gh api:*)']
 
-			logger.debug('Configured tool filtering for issue workflow', { allowedTools, disallowedTools })
+			this.logger.debug('Configured tool filtering for issue workflow', { allowedTools, disallowedTools })
 		} catch (error) {
 			// Log warning but continue without MCP
-			logger.warn(`Failed to generate MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			this.logger.warn(`Failed to generate MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 
 		// Step 4: Invoke Claude CLI with enhancer agent
-		logger.info('Invoking enhancer agent. This may take a moment...')
+		if (!isJsonMode) {
+			this.logger.info('Invoking enhancer agent. This may take a moment...')
+		}
 		const prompt = this.constructPrompt(issueNumber, author)
 		const response = await launchClaude(prompt, {
 			headless: true,
 			model: 'sonnet',
 			agents,
+			logger: this.logger,
 			...(mcpConfig && { mcpConfig }),
 			...(allowedTools && { allowedTools }),
 			...(disallowedTools && { disallowedTools }),
@@ -122,19 +137,42 @@ export class EnhanceCommand {
 		// Step 5: Parse response to determine outcome
 		const result = this.parseEnhancerResponse(response)
 
-		// Step 6: Handle browser interaction based on outcome
+		// Step 6: Handle JSON mode - return structured result
+		if (isJsonMode) {
+			const commentId = result.url ? this.extractCommentId(result.url) : 0
+			const resultData: EnhanceResult = {
+				url: result.url ?? issue.url,
+				id: commentId,
+				title: issue.title,
+				created_at: new Date().toISOString(),
+				enhanced: result.enhanced
+			}
+			return resultData
+		}
+
+		// Step 7: Handle non-JSON mode - browser interaction based on outcome
 		if (!result.enhanced) {
-			logger.success('Issue already has thorough description. No enhancement needed.')
+			this.logger.success('Issue already has thorough description. No enhancement needed.')
 			return
 		}
 
-		logger.success(`Issue #${issueNumber} enhanced successfully!`)
-		logger.info(`Enhanced specification available at: ${result.url}`)
+		this.logger.success(`Issue #${issueNumber} enhanced successfully!`)
+		this.logger.info(`Enhanced specification available at: ${result.url}`)
 
 		// Prompt to open browser (unless --no-browser flag is set)
 		if (!options.noBrowser && result.url) {
 			await this.promptAndOpenBrowser(result.url)
 		}
+	}
+
+	/**
+	 * Extract comment ID from GitHub comment URL
+	 * @param url - GitHub comment URL (e.g., https://github.com/owner/repo/issues/123#issuecomment-456789)
+	 * @returns Comment ID as number, or 0 if not found
+	 */
+	private extractCommentId(url: string): number {
+		const match = url.match(/issuecomment-(\d+)/)
+		return match?.[1] ? parseInt(match[1], 10) : 0
 	}
 
 	/**
@@ -188,8 +226,8 @@ export class EnhanceCommand {
 		}
 
 		const trimmed = response.trim()
-	
-		logger.debug(`RESPONSE FROM ENHANCER AGENT: '${trimmed}'`)
+
+		this.logger.debug(`RESPONSE FROM ENHANCER AGENT: '${trimmed}'`)
 
 		// Check for permission denied errors (case-insensitive)
 		if (trimmed.toLowerCase().startsWith('permission denied:')) {
@@ -227,7 +265,7 @@ export class EnhanceCommand {
 
 			// Check if user pressed 'q' to quit
 			if (key.toLowerCase() === 'q') {
-				logger.info('Skipping browser opening')
+				this.logger.info('Skipping browser opening')
 				return
 			}
 
@@ -235,7 +273,7 @@ export class EnhanceCommand {
 			await openBrowser(commentUrl)
 		} catch (error) {
 			// Browser opening failures should not be fatal
-			logger.warn(`Failed to open browser: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			this.logger.warn(`Failed to open browser: ${error instanceof Error ? error.message : 'Unknown error'}`)
 		}
 	}
 

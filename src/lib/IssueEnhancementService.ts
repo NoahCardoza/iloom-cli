@@ -1,21 +1,27 @@
 import type { IssueTracker } from './IssueTracker.js'
 import type { AgentManager } from './AgentManager.js'
 import type { SettingsManager } from './SettingsManager.js'
+import type { Logger } from '../utils/logger.js'
 import { launchClaude } from '../utils/claude.js'
 import { openBrowser } from '../utils/browser.js'
 import { waitForKeypress } from '../utils/prompt.js'
-import { logger } from '../utils/logger.js'
+import { logger as defaultLogger } from '../utils/logger.js'
 
 /**
  * Service for enhancing and creating issues with AI assistance.
  * Extracts reusable issue enhancement logic from StartCommand.
  */
 export class IssueEnhancementService {
+	private logger: Logger
+
 	constructor(
 		private issueTrackerService: IssueTracker,
 		private agentManager: AgentManager,
-		private settingsManager: SettingsManager
-	) {}
+		private settingsManager: SettingsManager,
+		logger?: Logger
+	) {
+		this.logger = logger ?? defaultLogger
+	}
 
 	/**
 	 * Expose issue tracker for provider checks
@@ -41,7 +47,7 @@ export class IssueEnhancementService {
 	 */
 	public async enhanceDescription(description: string): Promise<string> {
 		try {
-			logger.info('Enhancing description with Claude Code. This may take a moment...')
+			this.logger.info('Enhancing description with Claude Code. This may take a moment...')
 
 			// Load agent configurations
 			const settings = await this.settingsManager.loadSettings()
@@ -70,18 +76,19 @@ Your response should be the raw markdown that will become the GitHub issue body.
 				headless: true,
 				model: 'sonnet',
 				agents,
+				logger: this.logger,
 			})
 
 			if (enhanced && typeof enhanced === 'string') {
-				logger.success('Description enhanced successfully')
+				this.logger.success('Description enhanced successfully')
 				return enhanced
 			}
 
 			// Fallback to original description
-			logger.warn('Claude enhancement returned empty result, using original description')
+			this.logger.warn('Claude enhancement returned empty result, using original description')
 			return description
 		} catch (error) {
-			logger.warn(`Failed to enhance description: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			this.logger.warn(`Failed to enhance description: ${error instanceof Error ? error.message : 'Unknown error'}`)
 			return description
 		}
 	}
@@ -100,7 +107,7 @@ Your response should be the raw markdown that will become the GitHub issue body.
 		repository?: string,
 		labels?: string[]
 	): Promise<{ number: string | number; url: string }> {
-		logger.info('Creating GitHub issue from description...')
+		this.logger.info('Creating GitHub issue from description...')
 
 		const result = await this.issueTrackerService.createIssue(
 			originalDescription,  // Use original description as title
@@ -125,7 +132,7 @@ Your response should be the raw markdown that will become the GitHub issue body.
 
 		if (isNonInteractive) {
 			// In non-interactive environment: Skip all interactive operations
-			logger.info(`Running in non-interactive environment - skipping interactive prompts for issue #${issueNumber}`)
+			this.logger.info(`Running in non-interactive environment - skipping interactive prompts for issue #${issueNumber}`)
 			return
 		}
 

@@ -157,6 +157,8 @@ export interface StartOptions {
 export interface AddIssueOptions {
   // Optional body text for issue (skips AI enhancement)
   body?: string
+  // Output result as JSON
+  json?: boolean
 }
 
 export interface FeedbackOptions {
@@ -166,6 +168,7 @@ export interface FeedbackOptions {
 
 export interface EnhanceOptions {
   noBrowser?: boolean  // --no-browser flag - skip browser opening prompt
+  json?: boolean       // --json flag - output result as JSON
 }
 
 export interface FinishOptions {
@@ -196,6 +199,22 @@ export interface CleanupOptions {
 
 export interface ListOptions {
   json?: boolean
+}
+
+// JSON output result types for add-issue and enhance commands
+export interface AddIssueResult {
+  url: string
+  id: number
+  title: string
+  created_at: string
+}
+
+export interface EnhanceResult {
+  url: string
+  id: number
+  title: string
+  created_at: string
+  enhanced: boolean
 }
 
 // Deprecated: Result types - use exception-based error handling instead

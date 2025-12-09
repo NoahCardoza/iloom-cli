@@ -1,5 +1,5 @@
 import { program, Command, Option } from 'commander'
-import { logger } from './utils/logger.js'
+import { logger, createStderrLogger } from './utils/logger.js'
 import { GitWorktreeManager } from './lib/GitWorktreeManager.js'
 import { ShellCompletion } from './lib/ShellCompletion.js'
 import { SettingsManager } from './lib/SettingsManager.js'
@@ -322,18 +322,34 @@ program
   .description('Create and enhance GitHub issue without starting workspace')
   .argument('<description>', 'Natural language description of the issue (>50 chars, >2 spaces)')
   .option('--body <text>', 'Body text for issue (skips AI enhancement)')
-  .action(async (description: string, options: { body?: string }) => {
+  .option('--json', 'Output result as JSON')
+  .action(async (description: string, options: { body?: string; json?: boolean }) => {
     try {
+      // Create stderr logger for JSON mode so progress messages don't pollute stdout
+      const jsonLogger = options.json ? createStderrLogger() : undefined
       const settingsManager = new SettingsManager()
       const settings = await settingsManager.loadSettings()
       const issueTracker = IssueTrackerFactory.create(settings)
-      const enhancementService = new IssueEnhancementService(issueTracker, new AgentManager(), settingsManager)
-      const command = new AddIssueCommand(enhancementService, settingsManager)
-      const issueNumber = await command.execute({
+      // Pass logger to IssueEnhancementService for redirecting progress messages
+      const enhancementService = new IssueEnhancementService(issueTracker, new AgentManager(), settingsManager, jsonLogger)
+      // Pass logger to AddIssueCommand for redirecting its progress messages
+      const command = new AddIssueCommand(enhancementService, settingsManager, jsonLogger)
+      const result = await command.execute({
         description,
-        options: options.body ? { body: options.body } : {}
+        options: {
+          ...(options.body && { body: options.body }),
+          ...(options.json && { json: options.json })
+        }
       })
-      logger.success(`Issue #${issueNumber} created successfully`)
+
+      if (options.json && result) {
+        // JSON mode: output structured result and exit
+        console.log(JSON.stringify(result, null, 2))
+      } else if (result) {
+        // Non-JSON mode: display human-readable success message
+        const issueNumber = typeof result === 'object' ? result.id : result
+        logger.success(`Issue #${issueNumber} created successfully`)
+      }
       process.exit(0)
     } catch (error) {
       logger.error(`Failed to create issue: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -373,20 +389,32 @@ program
   .argument('<issue-number>', 'GitHub issue identifier to enhance', parseIssueIdentifier)
   .option('--no-browser', 'Skip browser opening prompt')
   .option('--author <username>', 'GitHub username to tag in questions (for CI usage)')
-  .action(async (issueNumber: string | number, options: { browser?: boolean; author?: string }) => {
+  .option('--json', 'Output result as JSON')
+  .action(async (issueNumber: string | number, options: { browser?: boolean; author?: string; json?: boolean }) => {
     try {
+      // Create stderr logger for JSON mode so progress messages don't pollute stdout
+      const jsonLogger = options.json ? createStderrLogger() : undefined
       const settingsManager = new SettingsManager()
       const settings = await settingsManager.loadSettings()
       const issueTracker = IssueTrackerFactory.create(settings)
-      const command = new EnhanceCommand(issueTracker)
-      await command.execute({
+      // Pass logger to EnhanceCommand for redirecting progress messages
+      const command = new EnhanceCommand(issueTracker, undefined, undefined, jsonLogger)
+      const result = await command.execute({
         issueNumber,
         options: {
           noBrowser: options.browser === false,
-          ...(options.author && { author: options.author })
+          ...(options.author && { author: options.author }),
+          ...(options.json && { json: options.json })
         }
       })
-      logger.success(`Enhancement process completed for issue #${issueNumber}`)
+
+      if (options.json && result) {
+        // JSON mode: output structured result and exit
+        console.log(JSON.stringify(result, null, 2))
+      } else {
+        // Non-JSON mode: display human-readable success message
+        logger.success(`Enhancement process completed for issue #${issueNumber}`)
+      }
       process.exit(0)
     } catch (error) {
       logger.error(`Failed to enhance issue: ${error instanceof Error ? error.message : 'Unknown error'}`)

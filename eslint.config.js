@@ -22,6 +22,7 @@ export default [
         __dirname: 'readonly',
         __filename: 'readonly',
         URL: 'readonly',
+        NodeJS: 'readonly',
       },
     },
     plugins: {
@@ -54,6 +55,7 @@ export default [
         __filename: 'readonly',
         global: 'readonly',
         URL: 'readonly',
+        NodeJS: 'readonly',
       },
     },
     plugins: {
@@ -90,6 +92,7 @@ export default [
         __filename: 'readonly',
         global: 'readonly',
         URL: 'readonly',
+        NodeJS: 'readonly',
       },
     },
     plugins: {
@@ -123,6 +126,7 @@ export default [
         Buffer: 'readonly',
         BufferEncoding: 'readonly',
         URL: 'readonly',
+        NodeJS: 'readonly',
       },
     },
     plugins: {

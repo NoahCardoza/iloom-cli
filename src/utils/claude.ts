@@ -20,6 +20,7 @@ export interface ClaudeCliOptions {
 	oneShot?: import('../types/index.js').OneShotMode // One-shot automation mode
 	setArguments?: string[] // Raw --set arguments to forward (e.g., ['workflows.issue.startIde=false'])
 	executablePath?: string // Executable path to use for spin command (e.g., 'il', 'il-125', or '/path/to/dist/cli.js')
+	logger?: import('./logger.js').Logger // Optional logger for progress output
 }
 
 /**
@@ -92,7 +93,8 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents } = options
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, logger: optionsLogger } = options
+	const log = optionsLogger ?? logger
 
 	// Build command arguments
 	const args: string[] = []
@@ -176,14 +178,14 @@ export async function launchClaude(
 					outputBuffer += text
 
 					if (isDebugMode) {
-						process.stdout.write(text) // Full JSON streaming in debug mode
+						log.stdout.write(text) // Full JSON streaming in debug mode
 					} else {
 						// Progress dots in non-debug mode with robot emoji prefix
 						if (isFirstProgress) {
-							process.stdout.write('🤖 .')
+							log.stdout.write('🤖 .')
 							isFirstProgress = false
 						} else {
-							process.stdout.write('.')
+							log.stdout.write('.')
 						}
 					}
 				})
@@ -197,7 +199,7 @@ export async function launchClaude(
 
 				// Clean up progress dots with newline in non-debug mode
 				if (!isDebugMode) {
-					process.stdout.write('\n')
+					log.stdout.write('\n')
 				}
 
 				return isJsonStreamFormat ? parseJsonStreamOutput(rawOutput) : rawOutput
@@ -205,14 +207,14 @@ export async function launchClaude(
 				// Fallback for mocked tests or when streaming not available
 				if (isDebugMode) {
 					// In debug mode, write to stdout even if not streaming (old behavior for tests)
-					process.stdout.write(result.stdout)
+					log.stdout.write(result.stdout)
 					if (result.stdout && !result.stdout.endsWith('\n')) {
-						process.stdout.write('\n')
+						log.stdout.write('\n')
 					}
 				} else {
 					// In non-debug mode, show a single progress dot even without streaming (for tests)
-					process.stdout.write('🤖 .')
-					process.stdout.write('\n')
+					log.stdout.write('🤖 .')
+					log.stdout.write('\n')
 				}
 				const rawOutput = result.stdout.trim()
 				return isJsonStreamFormat ? parseJsonStreamOutput(rawOutput) : rawOutput
