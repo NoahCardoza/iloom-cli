@@ -16,7 +16,7 @@ import { SettingsManager } from './lib/SettingsManager.js'
 
 // Helper function to run CLI command and capture output
 function runCLI(args: string[], cwd?: string): Promise<{ stdout: string; stderr: string; code: number | null }> {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     // Always run from project root where dist/cli.js is located
     const projectRoot = process.cwd()
     const child = spawn('node', [join(projectRoot, 'dist/cli.js'), ...args], {
@@ -27,6 +27,18 @@ function runCLI(args: string[], cwd?: string): Promise<{ stdout: string; stderr:
     let stdout = ''
     let stderr = ''
 
+    const timeout = globalThis.setTimeout(() => {
+      child.kill('SIGKILL')
+      reject(new Error(`CLI command timed out after 5000ms: ${args.join(' ')}`))
+    }, 5000)
+
+    const cleanup = () => {
+      globalThis.clearTimeout(timeout)
+      child.stdout.removeAllListeners()
+      child.stderr.removeAllListeners()
+      child.removeAllListeners()
+    }
+
     child.stdout.on('data', data => {
       stdout += data.toString()
     })
@@ -35,7 +47,13 @@ function runCLI(args: string[], cwd?: string): Promise<{ stdout: string; stderr:
       stderr += data.toString()
     })
 
+    child.on('error', error => {
+      cleanup()
+      reject(error)
+    })
+
     child.on('close', code => {
+      cleanup()
       resolve({ stdout, stderr, code })
     })
   })

@@ -10,9 +10,10 @@ export default defineConfig({
     poolOptions: {
       forks: {
         minForks: 1,
-        maxForks: 7,
+        maxForks: 4,
       },
     },
+    teardownTimeout: 10000,
     maxConcurrency: 5,
     coverage: {
       provider: 'v8',
