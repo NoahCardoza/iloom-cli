@@ -284,6 +284,7 @@ program
   .option('--child-loom', 'Force create as child loom (skip prompt)')
   .option('--no-child-loom', 'Force create as independent loom (skip prompt)')
   .option('--body <text>', 'Body text for issue (skips AI enhancement)')
+  .option('--json', 'Output result as JSON')
   .addOption(
     new Option('--one-shot <mode>', 'One-shot automation mode')
       .choices(['default', 'noReview', 'bypassPermissions'])
@@ -291,10 +292,17 @@ program
   )
   .action(async (identifier: string | undefined, options: StartOptions) => {
     try {
+      // Create stderr logger for JSON mode so progress messages don't pollute stdout
+      const jsonLogger = options.json ? createStderrLogger() : undefined
+
       let finalIdentifier = identifier
 
       // Interactive prompting when no identifier provided
       if (!finalIdentifier) {
+        if (options.json) {
+          logger.error('JSON mode requires identifier argument')
+          process.exit(1)
+        }
         const { promptInput } = await import('./utils/prompt.js')
         finalIdentifier = await promptInput('Enter issue number, PR number (pr/123), or branch name')
 
@@ -308,8 +316,15 @@ program
       const settingsManager = new SettingsManager()
       const settings = await settingsManager.loadSettings()
       const issueTracker = IssueTrackerFactory.create(settings)
-      const command = new StartCommand(issueTracker, undefined, undefined, settingsManager)
-      await command.execute({ identifier: finalIdentifier, options })
+      // Pass logger to StartCommand for redirecting progress messages in JSON mode
+      const command = new StartCommand(issueTracker, undefined, undefined, settingsManager, jsonLogger)
+      const result = await command.execute({ identifier: finalIdentifier, options })
+
+      if (options.json && result) {
+        // JSON mode: output structured result and exit
+        console.log(JSON.stringify(result, null, 2))
+      }
+      process.exit(0)
     } catch (error) {
       logger.error(`Failed to start workspace: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)

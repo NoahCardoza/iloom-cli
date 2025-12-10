@@ -1,5 +1,5 @@
 import fs from 'fs-extra'
-import { createLogger } from '../utils/logger.js'
+import { createLogger, type Logger } from '../utils/logger.js'
 import type {
   PortAssignmentOptions,
 } from '../types/environment.js'
@@ -10,10 +10,15 @@ import {
 } from '../utils/env.js'
 import { calculatePortForBranch } from '../utils/port.js'
 
-const logger = createLogger({ prefix: '📝' })
+const defaultLogger = createLogger({ prefix: '📝' })
 
 export class EnvironmentManager {
   private readonly backupSuffix: string = '.backup'
+  private logger: Logger
+
+  constructor(logger?: Logger) {
+    this.logger = logger ?? defaultLogger
+  }
 
   /**
    * Set or update an environment variable in a .env file
@@ -36,10 +41,10 @@ export class EnvironmentManager {
 
     if (!fileExists) {
       // File doesn't exist, create it
-      logger.info(`Creating ${filePath} with ${key}...`)
+      this.logger.info(`Creating ${filePath} with ${key}...`)
       const content = formatEnvLine(key, value)
       await fs.writeFile(filePath, content, 'utf8')
-      logger.success(`${filePath} created with ${key}`)
+      this.logger.success(`${filePath} created with ${key}`)
       return
     }
 
@@ -93,12 +98,12 @@ export class EnvironmentManager {
 
     // If variable wasn't in the file, add it at the end
     if (!variableUpdated) {
-      logger.info(`Adding ${key} to ${filePath}...`)
+      this.logger.info(`Adding ${key} to ${filePath}...`)
       newLines.push(formatEnvLine(key, value))
-      logger.success(`${key} added successfully`)
+      this.logger.success(`${key} added successfully`)
     } else {
-      logger.info(`Updating ${key} in ${filePath}...`)
-      logger.success(`${key} updated successfully`)
+      this.logger.info(`Updating ${key} in ${filePath}...`)
+      this.logger.success(`${key} updated successfully`)
     }
 
     // Write the updated content
@@ -117,7 +122,7 @@ export class EnvironmentManager {
       return parseEnvFile(content)
     } catch (error) {
       // If file doesn't exist or can't be read, return empty map
-      logger.debug(
+      this.logger.debug(
         `Could not read env file ${filePath}: ${error instanceof Error ? error.message : String(error)}`
       )
       return new Map()
@@ -144,12 +149,12 @@ export class EnvironmentManager {
   ): Promise<void> {
     const sourceExists = await fs.pathExists(source)
     if (!sourceExists) {
-      logger.debug(`Source file ${source} does not exist, skipping copy`)
+      this.logger.debug(`Source file ${source} does not exist, skipping copy`)
       return
     }
 
     await fs.copy(source, destination, { overwrite: false })
-    logger.success(`Copied ${source} to ${destination}`)
+    this.logger.success(`Copied ${source} to ${destination}`)
   }
 
   /**
@@ -267,7 +272,7 @@ export class EnvironmentManager {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const backupPath = `${filePath}${this.backupSuffix}-${timestamp}`
     await fs.copy(filePath, backupPath)
-    logger.debug(`Created backup at ${backupPath}`)
+    this.logger.debug(`Created backup at ${backupPath}`)
     return backupPath
   }
 }

@@ -5,7 +5,7 @@ import type { TerminalWindowOptions } from '../utils/terminal.js'
 import { openIdeWindow } from '../utils/ide.js'
 import { getDevServerLaunchCommand } from '../utils/dev-server.js'
 import { generateColorFromBranchName, hexToRgb } from '../utils/color.js'
-import { logger } from '../utils/logger.js'
+import { logger as defaultLogger, type Logger } from '../utils/logger.js'
 import { ClaudeContextManager } from './ClaudeContextManager.js'
 import type { SettingsManager } from './SettingsManager.js'
 import type { Capability } from '../types/loom.js'
@@ -37,8 +37,10 @@ export interface LaunchLoomOptions {
 export class LoomLauncher {
 	private claudeContext: ClaudeContextManager
 	private settings?: SettingsManager
+	private logger: Logger
 
-	constructor(claudeContext?: ClaudeContextManager, settings?: SettingsManager) {
+	constructor(claudeContext?: ClaudeContextManager, settings?: SettingsManager, logger?: Logger) {
+		this.logger = logger ?? defaultLogger
 		this.claudeContext = claudeContext ?? new ClaudeContextManager()
 		if (settings !== undefined) {
 			this.settings = settings
@@ -51,13 +53,13 @@ export class LoomLauncher {
 	async launchLoom(options: LaunchLoomOptions): Promise<void> {
 		const { enableClaude, enableCode, enableDevServer, enableTerminal } = options
 
-		logger.debug(`Launching loom components: Claude=${enableClaude}, Code=${enableCode}, DevServer=${enableDevServer}, Terminal=${enableTerminal}`)
+		this.logger.debug(`Launching loom components: Claude=${enableClaude}, Code=${enableCode}, DevServer=${enableDevServer}, Terminal=${enableTerminal}`)
 
 		const launchPromises: Promise<void>[] = []
 
 		// Launch VSCode if enabled
 		if (enableCode) {
-			logger.debug('Launching VSCode')
+			this.logger.debug('Launching VSCode')
 			launchPromises.push(this.launchVSCode(options))
 		}
 
@@ -91,7 +93,7 @@ export class LoomLauncher {
 		// Launch terminals based on count
 		if (terminalsToLaunch.length > 1) {
 			// Multiple terminals - launch as tabs in single window
-			logger.debug(`Launching ${terminalsToLaunch.length} terminals in single window`)
+			this.logger.debug(`Launching ${terminalsToLaunch.length} terminals in single window`)
 			launchPromises.push(this.launchMultipleTerminals(terminalsToLaunch, options))
 		} else if (terminalsToLaunch.length === 1) {
 			// Single terminal - launch standalone
@@ -100,7 +102,7 @@ export class LoomLauncher {
 				throw new Error('Terminal configuration is undefined')
 			}
 			const terminalType = terminal.type
-			logger.debug(`Launching single ${terminalType} terminal`)
+			this.logger.debug(`Launching single ${terminalType} terminal`)
 
 			if (terminalType === 'claude') {
 				launchPromises.push(this.launchClaudeTerminal(options))
@@ -114,7 +116,7 @@ export class LoomLauncher {
 		// Wait for all components to launch
 		await Promise.all(launchPromises)
 
-		logger.success('loom launched successfully')
+		this.logger.success('loom launched successfully')
 	}
 
 	/**
@@ -123,7 +125,7 @@ export class LoomLauncher {
 	private async launchVSCode(options: LaunchLoomOptions): Promise<void> {
 		const ideConfig = await this.settings?.loadSettings().then((s) => s.ide)
 		await openIdeWindow(options.worktreePath, ideConfig)
-		logger.info('IDE opened')
+		this.logger.info('IDE opened')
 	}
 
 	/**
@@ -141,7 +143,7 @@ export class LoomLauncher {
 			...(options.setArguments && { setArguments: options.setArguments }),
 			...(options.executablePath && { executablePath: options.executablePath }),
 		})
-		logger.info('Claude terminal opened')
+		this.logger.info('Claude terminal opened')
 	}
 
 	/**
@@ -169,7 +171,7 @@ export class LoomLauncher {
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
 		})
-		logger.info('Dev server terminal opened')
+		this.logger.info('Dev server terminal opened')
 	}
 
 	/**
@@ -190,7 +192,7 @@ export class LoomLauncher {
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
 		})
-		logger.info('Standalone terminal opened')
+		this.logger.info('Standalone terminal opened')
 	}
 
 	/**
@@ -300,7 +302,7 @@ export class LoomLauncher {
 		await openMultipleTerminalWindows(terminalOptions)
 
 		const terminalTypes = terminals.map((t) => t.type).join(' + ')
-		logger.info(`Multiple terminals opened: ${terminalTypes}`)
+		this.logger.info(`Multiple terminals opened: ${terminalTypes}`)
 	}
 
 	/**

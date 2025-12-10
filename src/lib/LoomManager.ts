@@ -18,7 +18,7 @@ import { loadEnvIntoProcess, findEnvFileForDatabaseUrl } from '../utils/env.js'
 import type { Loom, CreateLoomInput } from '../types/loom.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { Issue, PullRequest } from '../types/index.js'
-import { logger } from '../utils/logger.js'
+import { logger as defaultLogger, type Logger } from '../utils/logger.js'
 
 /**
  * LoomManager orchestrates the creation and management of looms (isolated workspaces)
@@ -26,6 +26,7 @@ import { logger } from '../utils/logger.js'
  */
 export class LoomManager {
   private metadataManager: MetadataManager
+  private logger: Logger
 
   constructor(
     private gitWorktree: GitWorktreeManager,
@@ -36,9 +37,11 @@ export class LoomManager {
     private capabilityDetector: ProjectCapabilityDetector,
     private cliIsolation: CLIIsolationManager,
     private settings: SettingsManager,
-    private database?: DatabaseManager
+    private database?: DatabaseManager,
+    logger?: Logger
   ) {
-    this.metadataManager = new MetadataManager()
+    this.logger = logger ?? defaultLogger
+    this.metadataManager = new MetadataManager(this.logger)
   }
 
   /**
@@ -66,7 +69,7 @@ export class LoomManager {
 
       return await this.database.getBranchNameFromConnectionString(connectionString, loomPath)
     } catch (error) {
-      logger.debug(`Could not get database branch for loom at ${loomPath}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      this.logger.debug(`Could not get database branch for loom at ${loomPath}: ${error instanceof Error ? error.message : 'Unknown error'}`)
       return null
     }
   }
@@ -78,26 +81,26 @@ export class LoomManager {
    */
   async createIloom(input: CreateLoomInput): Promise<Loom> {
     // 1. Fetch issue/PR data if needed
-    logger.info('Fetching issue data...')
+    this.logger.info('Fetching issue data...')
     const issueData = await this.fetchIssueData(input)
 
     // NEW: Check for existing worktree BEFORE generating branch name (for efficiency)
     if (input.type === 'issue' || input.type === 'pr' || input.type === 'branch') {
-      logger.info('Checking for existing worktree...')
+      this.logger.info('Checking for existing worktree...')
       const existing = await this.findExistingIloom(input, issueData)
       if (existing) {
-        logger.success(`Found existing worktree, reusing: ${existing.path}`)
+        this.logger.success(`Found existing worktree, reusing: ${existing.path}`)
         return await this.reuseIloom(existing, input, issueData)
       }
-      logger.info('No existing worktree found, creating new one...')
+      this.logger.info('No existing worktree found, creating new one...')
     }
 
     // 2. Generate or validate branch name
-    logger.info('Preparing branch name...')
+    this.logger.info('Preparing branch name...')
     const branchName = await this.prepareBranchName(input, issueData)
 
     // 3. Create git worktree (WITHOUT dependency installation)
-    logger.info('Creating git worktree...')
+    this.logger.info('Creating git worktree...')
     const worktreePath = await this.createWorktreeOnly(input, branchName)
 
     // 4. Load main .env variables into process.env (like bash script lines 336-339)
@@ -131,7 +134,7 @@ export class LoomManager {
       await installDependencies(worktreePath, true, true)
     } catch (error) {
       // Log warning but don't fail - matches bash script behavior
-      logger.warn(`Failed to install dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`, error)
+      this.logger.warn(`Failed to install dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`, error)
     }
 
     // 10. Setup database branch if configured
@@ -159,11 +162,11 @@ export class LoomManager {
             varName,
             connectionString
           )
-          logger.success('Database branch configured')
+          this.logger.success('Database branch configured')
           databaseBranch = branchName
         }
       } catch (error) {
-        logger.error(
+        this.logger.error(
           `Failed to setup database branch: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
         throw error  // Database creation failures are fatal
@@ -181,7 +184,7 @@ export class LoomManager {
         )
       } catch (error) {
         // Log warning but don't fail - matches dependency installation behavior
-        logger.warn(
+        this.logger.warn(
           `Failed to setup CLI isolation: ${error instanceof Error ? error.message : 'Unknown error'}`,
           error
         )
@@ -198,14 +201,14 @@ export class LoomManager {
 
     // Select distinct color using hex-based comparison
     const colorData = selectDistinctColor(branchName, usedHexColors)
-    logger.debug(`Selected color ${colorData.hex} for branch ${branchName} (${usedHexColors.length} colors in use globally)`)
+    this.logger.debug(`Selected color ${colorData.hex} for branch ${branchName} (${usedHexColors.length} colors in use globally)`)
 
     // Apply color synchronization (terminal and VSCode) based on settings
     try {
       await this.applyColorSynchronization(worktreePath, branchName, colorData, settingsData, input.options)
     } catch (error) {
       // Log warning but don't fail - colors are cosmetic
-      logger.warn(
+      this.logger.warn(
         `Failed to apply color synchronization: ${error instanceof Error ? error.message : 'Unknown error'}`,
         error
       )
@@ -214,14 +217,14 @@ export class LoomManager {
     // NEW: Move issue to In Progress (for new worktrees)
     if (input.type === 'issue') {
       try {
-        logger.info('Moving issue to In Progress...')
+        this.logger.info('Moving issue to In Progress...')
         // Check if provider supports this optional method
         if (this.issueTracker.moveIssueToInProgress) {
           await this.issueTracker.moveIssueToInProgress(input.identifier as number)
         }
       } catch (error) {
         // Warn but don't fail - matches bash script behavior
-        logger.warn(
+        this.logger.warn(
           `Failed to move issue to In Progress: ${error instanceof Error ? error.message : 'Unknown error'}`,
           error
         )
@@ -244,7 +247,7 @@ export class LoomManager {
 
       // Create ClaudeContextManager with shared SettingsManager to ensure CLI overrides work
       const claudeContext = new ClaudeContextManager(undefined, undefined, this.settings)
-      const launcher = new LoomLauncher(claudeContext, this.settings)
+      const launcher = new LoomLauncher(claudeContext, this.settings, this.logger)
 
       await launcher.launchLoom({
         enableClaude,
@@ -312,7 +315,7 @@ export class LoomManager {
       }),
     }
 
-    logger.success(`Created loom: ${loom.id} at ${loom.path}`)
+    this.logger.success(`Created loom: ${loom.id} at ${loom.path}`)
     return loom
   }
 
@@ -377,7 +380,7 @@ export class LoomManager {
 
       return worktrees.filter(wt => wt.path.includes(pattern))
     } catch (error) {
-      logger.debug(`Failed to find child looms: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      this.logger.debug(`Failed to find child looms: ${error instanceof Error ? error.message : 'Unknown error'}`)
       return []
     }
   }
@@ -404,12 +407,12 @@ export class LoomManager {
 
     const childLooms = await this.findChildLooms(targetBranch)
     if (childLooms.length > 0) {
-      logger.warn(`Found ${childLooms.length} child loom(s) that should be finished first:`)
+      this.logger.warn(`Found ${childLooms.length} child loom(s) that should be finished first:`)
       for (const child of childLooms) {
-        logger.warn(`  - ${child.path}`)
+        this.logger.warn(`  - ${child.path}`)
       }
-      logger.warn('')
-      logger.warn('To finish child looms:')
+      this.logger.warn('')
+      this.logger.warn('To finish child looms:')
       for (const child of childLooms) {
         // Extract identifier from child branch for finish command
         // Check PR first since PR branches often contain issue numbers too
@@ -420,9 +423,9 @@ export class LoomManager {
           ? prMatch[1]  // PR: use number
           : issueId ?? child.branch  // Issue: use extracted ID (alphanumeric or numeric), or branch name
 
-        logger.warn(`  il finish ${childIdentifier}`)
+        this.logger.warn(`  il finish ${childIdentifier}`)
       }
-      logger.warn('')
+      this.logger.warn('')
       return true
     }
 
@@ -488,7 +491,7 @@ export class LoomManager {
   ): Promise<string> {
     // Ensure repository has at least one commit (needed for worktree creation)
     // This handles the case where the repo is completely empty (post git init, pre-first commit)
-    logger.info('Ensuring repository has initial commit...')
+    this.logger.info('Ensuring repository has initial commit...')
     await ensureRepositoryHasCommits(this.gitWorktree.workingDirectory)
 
     // Load worktree prefix from settings
@@ -502,7 +505,7 @@ export class LoomManager {
         .replace(/\//g, '-')
         .replace(/[^a-zA-Z0-9-_]/g, '-')
       worktreePrefix = `${sanitizedBranchName}-looms/`
-      logger.info(`Creating child loom with prefix: ${worktreePrefix}`)
+      this.logger.info(`Creating child loom with prefix: ${worktreePrefix}`)
     }
 
     // Build options object, only including prefix if it's defined
@@ -524,10 +527,10 @@ export class LoomManager {
     // Fetch all remote branches to ensure we have latest refs (especially for PRs)
     // Ports: bash script lines 667-674
     if (input.type === 'pr') {
-      logger.info('Fetching all remote branches...')
+      this.logger.info('Fetching all remote branches...')
       try {
         await executeGitCommand(['fetch', 'origin'], { cwd: this.gitWorktree.workingDirectory })
-        logger.success('Successfully fetched from remote')
+        this.logger.success('Successfully fetched from remote')
       } catch (error) {
         throw new Error(
           `Failed to fetch from remote: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
@@ -561,13 +564,13 @@ export class LoomManager {
     // Reset PR branch to match remote exactly (if we created a new local branch)
     // Ports: bash script lines 689-713
     if (input.type === 'pr' && !branchExistedLocally) {
-      logger.info('Resetting new PR branch to match remote exactly...')
+      this.logger.info('Resetting new PR branch to match remote exactly...')
       try {
         await executeGitCommand(['reset', '--hard', `origin/${branchName}`], { cwd: worktreePath })
         await executeGitCommand(['branch', '--set-upstream-to', `origin/${branchName}`], { cwd: worktreePath })
-        logger.success('Successfully reset to match remote')
+        this.logger.success('Successfully reset to match remote')
       } catch (error) {
-        logger.warn(`Failed to reset to match remote: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        this.logger.warn(`Failed to reset to match remote: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
     }
 
@@ -604,22 +607,22 @@ export class LoomManager {
 
         // Skip if file is tracked by git (it will exist in worktree via git)
         if (await isFileTrackedByGit(pattern, mainWorkspacePath)) {
-          logger.debug(`Skipping ${pattern} (tracked by git, already in worktree)`)
+          this.logger.debug(`Skipping ${pattern} (tracked by git, already in worktree)`)
           continue
         }
 
         // Skip if file already exists in worktree
         if (await fs.pathExists(worktreeEnvPath)) {
-          logger.warn(`${pattern} already exists in worktree, skipping copy`)
+          this.logger.warn(`${pattern} already exists in worktree, skipping copy`)
           continue
         }
 
         // Copy the untracked env file
         await this.environment.copyIfExists(mainEnvPath, worktreeEnvPath)
-        logger.debug(`Copied ${pattern} to worktree`)
+        this.logger.debug(`Copied ${pattern} to worktree`)
       } catch (error) {
         // Handle gracefully if individual file fails to copy
-        logger.warn(`Warning: Failed to copy ${pattern}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        this.logger.warn(`Warning: Failed to copy ${pattern}: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
     }
   }
@@ -643,7 +646,7 @@ export class LoomManager {
 
       // Check if settings.local.json already exists in worktree
       if (await fs.pathExists(worktreeSettingsLocalPath)) {
-        logger.warn('settings.local.json already exists in worktree, skipping copy')
+        this.logger.warn('settings.local.json already exists in worktree, skipping copy')
       } else {
         await this.environment.copyIfExists(mainSettingsLocalPath, worktreeSettingsLocalPath)
       }
@@ -665,10 +668,10 @@ export class LoomManager {
         }
 
         await fs.writeFile(worktreeSettingsLocalPath, JSON.stringify(updatedSettings, null, 2))
-        logger.info(`Set mainBranch to ${parentBranchName} for child loom`)
+        this.logger.info(`Set mainBranch to ${parentBranchName} for child loom`)
       }
     } catch (error) {
-      logger.warn(`Warning: Failed to copy settings.local.json: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      this.logger.warn(`Warning: Failed to copy settings.local.json: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -691,12 +694,12 @@ export class LoomManager {
 
       // Check if settings.local.json already exists in worktree
       if (await fs.pathExists(worktreeClaudeSettingsPath)) {
-        logger.debug('.claude/settings.local.json already exists in worktree, skipping copy')
+        this.logger.debug('.claude/settings.local.json already exists in worktree, skipping copy')
       } else {
         await this.environment.copyIfExists(mainClaudeSettingsPath, worktreeClaudeSettingsPath)
       }
     } catch (error) {
-      logger.warn(`Warning: Failed to copy .claude/settings.local.json: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      this.logger.warn(`Warning: Failed to copy .claude/settings.local.json: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -737,11 +740,11 @@ export class LoomManager {
 
     if (result.error) {
       // Handle gracefully if .env files don't exist
-      logger.warn(`Warning: Could not load .env files: ${result.error.message}`)
+      this.logger.warn(`Warning: Could not load .env files: ${result.error.message}`)
     } else {
-      logger.info('Loaded environment variables using dotenv-flow')
+      this.logger.info('Loaded environment variables using dotenv-flow')
       if (result.parsed && Object.keys(result.parsed).length > 0) {
-        logger.debug(`Loaded ${Object.keys(result.parsed).length} environment variables`)
+        this.logger.debug(`Loaded ${Object.keys(result.parsed).length} environment variables`)
       }
     }
   }
@@ -805,7 +808,7 @@ export class LoomManager {
     const colorTerminal = options?.colorTerminal ?? settings.colors?.terminal ?? true
 
     if (!colorVscode && !colorTerminal) {
-      logger.debug('Color synchronization disabled for both VSCode and terminal')
+      this.logger.debug('Color synchronization disabled for both VSCode and terminal')
       return
     }
 
@@ -813,9 +816,9 @@ export class LoomManager {
     if (colorVscode) {
       const vscode = new VSCodeIntegration()
       await vscode.setTitleBarColor(worktreePath, colorData.hex)
-      logger.info(`Applied VSCode title bar color: ${colorData.hex} for branch: ${branchName}`)
+      this.logger.info(`Applied VSCode title bar color: ${colorData.hex} for branch: ${branchName}`)
     } else {
-      logger.debug('VSCode color sync disabled (default: false for safety)')
+      this.logger.debug('VSCode color sync disabled (default: false for safety)')
     }
 
     // Note: Terminal color is applied during window creation in LoomLauncher
@@ -916,7 +919,7 @@ export class LoomManager {
     // 5. Skip database branch creation for existing worktrees
     // The database branch should have been created when the worktree was first created
     // Matches bash script behavior: handle_existing_worktree() skips all setup
-    logger.info('Database branch assumed to be already configured for existing worktree')
+    this.logger.info('Database branch assumed to be already configured for existing worktree')
     const databaseBranch: string | undefined = undefined
 
     // 5.5. Read existing metadata to get colorHex (for reusing stored color)
@@ -927,12 +930,12 @@ export class LoomManager {
     if (existingMetadata?.colorHex) {
       // Use stored hex color (already migrated from colorIndex if needed in readMetadata)
       colorHex = existingMetadata.colorHex
-      logger.debug(`Reusing stored color ${colorHex} for branch ${branchName}`)
+      this.logger.debug(`Reusing stored color ${colorHex} for branch ${branchName}`)
     } else {
       // No metadata - fall back to hash-based
       const colorData = generateColorFromBranchName(branchName)
       colorHex = colorData.hex
-      logger.debug(`No stored color, using hash-based color ${colorHex} for branch ${branchName}`)
+      this.logger.debug(`No stored color, using hash-based color ${colorHex} for branch ${branchName}`)
     }
 
     // Apply color synchronization (VSCode colors for reused looms)
@@ -942,7 +945,7 @@ export class LoomManager {
       await this.applyColorSynchronization(worktreePath, branchName, colorData, settingsData, input.options)
     } catch (error) {
       // Log warning but don't fail - colors are cosmetic
-      logger.warn(
+      this.logger.warn(
         `Failed to apply color synchronization: ${error instanceof Error ? error.message : 'Unknown error'}`,
         error
       )
@@ -951,13 +954,13 @@ export class LoomManager {
     // 6. Move issue to In Progress (for reused worktrees too)
     if (input.type === 'issue') {
       try {
-        logger.info('Moving issue to In Progress...')
+        this.logger.info('Moving issue to In Progress...')
         // Check if provider supports this optional method
         if (this.issueTracker.moveIssueToInProgress) {
           await this.issueTracker.moveIssueToInProgress(input.identifier as number)
         }
       } catch (error) {
-        logger.warn(
+        this.logger.warn(
           `Failed to move issue to In Progress: ${error instanceof Error ? error.message : 'Unknown error'}`,
           error
         )
@@ -974,13 +977,13 @@ export class LoomManager {
     const executablePath = input.options?.executablePath
 
     if (enableClaude || enableCode || enableDevServer || enableTerminal) {
-      logger.info('Launching workspace components...')
+      this.logger.info('Launching workspace components...')
       const { LoomLauncher } = await import('./LoomLauncher.js')
       const { ClaudeContextManager } = await import('./ClaudeContextManager.js')
 
       // Create ClaudeContextManager with shared SettingsManager to ensure CLI overrides work
       const claudeContext = new ClaudeContextManager(undefined, undefined, this.settings)
-      const launcher = new LoomLauncher(claudeContext, this.settings)
+      const launcher = new LoomLauncher(claudeContext, this.settings, this.logger)
 
       await launcher.launchLoom({
         enableClaude,
@@ -1048,7 +1051,7 @@ export class LoomManager {
       }),
     }
 
-    logger.success(`Reused existing loom: ${loom.id} at ${loom.path}`)
+    this.logger.success(`Reused existing loom: ${loom.id} at ${loom.path}`)
     return loom
   }
 }

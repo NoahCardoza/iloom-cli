@@ -152,6 +152,8 @@ export interface StartOptions {
   oneShot?: OneShotMode
   // Optional body text for issue creation
   body?: string
+  // Output result as JSON
+  json?: boolean
 }
 
 export interface AddIssueOptions {
@@ -215,6 +217,17 @@ export interface EnhanceResult {
   title: string
   created_at: string
   enhanced: boolean
+}
+
+export interface StartResult {
+  id: string
+  path: string
+  branch: string
+  port?: number
+  type: 'issue' | 'pr' | 'branch'
+  identifier: string | number
+  title?: string
+  capabilities?: string[]
 }
 
 // Deprecated: Result types - use exception-based error handling instead

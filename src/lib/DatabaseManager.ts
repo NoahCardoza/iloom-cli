@@ -1,10 +1,10 @@
 import type { DatabaseProvider } from '../types/index.js'
 import { EnvironmentManager } from './EnvironmentManager.js'
-import { createLogger } from '../utils/logger.js'
+import { createLogger, type Logger } from '../utils/logger.js'
 import { hasVariableInAnyEnvFile } from '../utils/env.js'
 import fs from 'fs-extra'
 
-const logger = createLogger({ prefix: '🗂️' })
+const defaultLogger = createLogger({ prefix: '🗂️' })
 
 /**
  * Database Manager - orchestrates database operations with conditional execution
@@ -15,16 +15,20 @@ const logger = createLogger({ prefix: '🗂️' })
  * This ensures database branching only occurs for projects that actually use databases
  */
 export class DatabaseManager {
+  private logger: Logger
+
   constructor(
     private provider: DatabaseProvider,
     private environment: EnvironmentManager,
-    private databaseUrlEnvVarName: string = 'DATABASE_URL'
+    private databaseUrlEnvVarName: string = 'DATABASE_URL',
+    logger?: Logger
   ) {
+    this.logger = logger ?? defaultLogger
     // Debug: Show which database URL variable name is configured
     if (databaseUrlEnvVarName !== 'DATABASE_URL') {
-      logger.debug(`🔧 DatabaseManager configured with custom variable: ${databaseUrlEnvVarName}`)
+      this.logger.debug(`🔧 DatabaseManager configured with custom variable: ${databaseUrlEnvVarName}`)
     } else {
-      logger.debug('🔧 DatabaseManager using default variable: DATABASE_URL')
+      this.logger.debug('🔧 DatabaseManager using default variable: DATABASE_URL')
     }
   }
 
@@ -44,14 +48,14 @@ export class DatabaseManager {
   async shouldUseDatabaseBranching(workspacePath: string): Promise<boolean> {
     // Check for provider configuration
     if (!this.provider.isConfigured()) {
-      logger.debug('Skipping database branching: Database provider not configured')
+      this.logger.debug('Skipping database branching: Database provider not configured')
       return false
     }
 
     // Check if any dotenv-flow file has the configured database URL variable
     const hasDatabaseUrl = await this.hasDatabaseUrlInEnv(workspacePath)
     if (!hasDatabaseUrl) {
-      logger.debug(
+      this.logger.debug(
         'Skipping database branching: configured database URL variable not found in any env file'
       )
       return false
@@ -82,22 +86,22 @@ export class DatabaseManager {
 
     // Check CLI availability and authentication
     if (!(await this.provider.isCliAvailable())) {
-      logger.warn('Skipping database branch creation: Neon CLI not available')
-      logger.warn('Install with: npm install -g neonctl')
+      this.logger.warn('Skipping database branch creation: Neon CLI not available')
+      this.logger.warn('Install with: npm install -g neonctl')
       return null
     }
 
     try {
       const isAuth = await this.provider.isAuthenticated(cwd)
       if (!isAuth) {
-        logger.warn('Skipping database branch creation: Not authenticated with Neon CLI')
-        logger.warn('Run: neon auth')
+        this.logger.warn('Skipping database branch creation: Not authenticated with Neon CLI')
+        this.logger.warn('Run: neon auth')
         return null
       }
     } catch (error) {
       // Authentication check failed with an unexpected error - surface it
       const errorMessage = error instanceof Error ? error.message : String(error)
-      logger.error(`Database authentication check failed: ${errorMessage}`)
+      this.logger.error(`Database authentication check failed: ${errorMessage}`)
       throw error
     }
 
@@ -105,10 +109,10 @@ export class DatabaseManager {
       // Create the branch (which checks for preview first)
       // Pass fromBranch if provided (for child looms), otherwise undefined (uses configured parent)
       const connectionString = await this.provider.createBranch(branchName, fromBranch, cwd)
-      logger.success(`Database branch ready: ${this.provider.sanitizeBranchName(branchName)}`)
+      this.logger.success(`Database branch ready: ${this.provider.sanitizeBranchName(branchName)}`)
       return connectionString
     } catch (error) {
-      logger.error(
+      this.logger.error(
         `Failed to create database branch: ${error instanceof Error ? error.message : String(error)}`
       )
       throw error
@@ -142,7 +146,7 @@ export class DatabaseManager {
 
     // If shouldCleanup is explicitly true, validate provider configuration
     if (!this.provider.isConfigured()) {
-      logger.debug('Skipping database branch deletion: Database provider not configured')
+      this.logger.debug('Skipping database branch deletion: Database provider not configured')
       return {
         success: true,
         deleted: false,
@@ -153,7 +157,7 @@ export class DatabaseManager {
 
     // Check CLI availability and authentication
     if (!(await this.provider.isCliAvailable())) {
-      logger.info('Skipping database branch deletion: CLI tool not available')
+      this.logger.info('Skipping database branch deletion: CLI tool not available')
       return {
         success: false,
         deleted: false,
@@ -166,7 +170,7 @@ export class DatabaseManager {
     try {
       const isAuth = await this.provider.isAuthenticated(cwd)
       if (!isAuth) {
-        logger.warn('Skipping database branch deletion: Not authenticated with DB Provider')
+        this.logger.warn('Skipping database branch deletion: Not authenticated with DB Provider')
         return {
           success: false,
           deleted: false,
@@ -178,7 +182,7 @@ export class DatabaseManager {
     } catch (error) {
       // Authentication check failed with an unexpected error - surface it
       const errorMessage = error instanceof Error ? error.message : String(error)
-      logger.error(`Database authentication check failed: ${errorMessage}`)
+      this.logger.error(`Database authentication check failed: ${errorMessage}`)
       return {
         success: false,
         deleted: false,
@@ -194,7 +198,7 @@ export class DatabaseManager {
       return result
     } catch (error) {
       // Unexpected error (shouldn't happen since provider returns result object)
-      logger.warn(
+      this.logger.warn(
         `Unexpected error in database deletion: ${error instanceof Error ? error.message : String(error)}`
       )
       return {
@@ -217,7 +221,7 @@ export class DatabaseManager {
   async getBranchNameFromConnectionString(connectionString: string, cwd?: string): Promise<string | null> {
     // Check if provider supports reverse lookup (duck typing)
     if (!this.provider.isConfigured()) {
-      logger.debug('Provider not configured, skipping reverse lookup')
+      this.logger.debug('Provider not configured, skipping reverse lookup')
       return null
     }
 
@@ -226,7 +230,7 @@ export class DatabaseManager {
       return this.provider.getBranchNameFromConnectionString(connectionString, cwd)
     }
 
-    logger.debug('Provider does not support reverse lookup')
+    this.logger.debug('Provider does not support reverse lookup')
     return null
   }
 
@@ -239,9 +243,9 @@ export class DatabaseManager {
     try {
       // Debug: Show what we're looking for
       if (this.databaseUrlEnvVarName !== 'DATABASE_URL') {
-        logger.debug(`Looking for custom database URL variable: ${this.databaseUrlEnvVarName}`)
+        this.logger.debug(`Looking for custom database URL variable: ${this.databaseUrlEnvVarName}`)
       } else {
-        logger.debug('Looking for default database URL variable: DATABASE_URL')
+        this.logger.debug('Looking for default database URL variable: DATABASE_URL')
       }
 
       // Check all dotenv-flow files for the configured variable
@@ -254,9 +258,9 @@ export class DatabaseManager {
 
       if (hasConfiguredVar) {
         if (this.databaseUrlEnvVarName !== 'DATABASE_URL') {
-          logger.debug(`✅ Found custom database URL variable: ${this.databaseUrlEnvVarName}`)
+          this.logger.debug(`✅ Found custom database URL variable: ${this.databaseUrlEnvVarName}`)
         } else {
-          logger.debug(`✅ Found default database URL variable: DATABASE_URL`)
+          this.logger.debug(`✅ Found default database URL variable: DATABASE_URL`)
         }
         return true
       }
@@ -264,7 +268,7 @@ export class DatabaseManager {
       // If user explicitly configured a custom variable name (not the default)
       // and it's missing, throw an error
       if (this.databaseUrlEnvVarName !== 'DATABASE_URL') {
-        logger.debug(`❌ Custom database URL variable '${this.databaseUrlEnvVarName}' not found in any env file`)
+        this.logger.debug(`❌ Custom database URL variable '${this.databaseUrlEnvVarName}' not found in any env file`)
         throw new Error(
           `Configured database URL environment variable '${this.databaseUrlEnvVarName}' not found in any dotenv-flow file. ` +
           `Please add it to an .env file or update your iloom configuration.`
@@ -280,9 +284,9 @@ export class DatabaseManager {
       )
 
       if (hasDefaultVar) {
-        logger.debug('✅ Found fallback DATABASE_URL variable')
+        this.logger.debug('✅ Found fallback DATABASE_URL variable')
       } else {
-        logger.debug('❌ No DATABASE_URL variable found in any env file')
+        this.logger.debug('❌ No DATABASE_URL variable found in any env file')
       }
       return hasDefaultVar
     } catch (error) {

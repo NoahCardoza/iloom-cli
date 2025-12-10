@@ -1,5 +1,5 @@
 import type { BranchNameStrategy, BranchGenerationOptions } from '../types/branch-naming.js'
-import { logger } from '../utils/logger.js'
+import { logger as defaultLogger, type Logger } from '../utils/logger.js'
 
 // ============================================
 // Strategy Classes
@@ -56,12 +56,15 @@ export interface BranchNamingService {
  */
 export class DefaultBranchNamingService implements BranchNamingService {
 	private defaultStrategy: BranchNameStrategy
+	private logger: Logger
 
 	constructor(options?: {
 		strategy?: BranchNameStrategy
 		useClaude?: boolean
 		claudeModel?: string
+		logger?: Logger
 	}) {
+		this.logger = options?.logger ?? defaultLogger
 		// Set up default strategy based on options
 		if (options?.strategy) {
 			this.defaultStrategy = options.strategy
@@ -78,7 +81,7 @@ export class DefaultBranchNamingService implements BranchNamingService {
 		// Use provided strategy or fall back to default
 		const nameStrategy = strategy ?? this.defaultStrategy
 
-		logger.debug('Generating branch name', {
+		this.logger.debug('Generating branch name', {
 			issueNumber,
 			title,
 			strategy: nameStrategy.constructor.name,
