@@ -3,14 +3,12 @@ import path from 'path'
 import os from 'os'
 import { runScript } from '../utils/package-manager.js'
 import { readPackageJson, hasScript } from '../utils/package-json.js'
-import { logger as defaultLogger, type Logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 
 export class CLIIsolationManager {
   private readonly iloomBinDir: string
-  private logger: Logger
 
-  constructor(logger?: Logger) {
-    this.logger = logger ?? defaultLogger
+  constructor() {
     this.iloomBinDir = path.join(os.homedir(), '.iloom', 'bin')
   }
 
@@ -59,13 +57,13 @@ export class CLIIsolationManager {
     const pkgJson = await readPackageJson(worktreePath)
 
     if (!hasScript(pkgJson, 'build')) {
-      this.logger.warn('No build script found in package.json - skipping build')
+      getLogger().warn('No build script found in package.json - skipping build')
       return
     }
 
-    this.logger.info('Building CLI tool...')
+    getLogger().info('Building CLI tool...')
     await runScript('build', worktreePath, [], { quiet: true })
-    this.logger.success('Build completed')
+    getLogger().success('Build completed')
   }
 
   /**
@@ -118,7 +116,7 @@ export class CLIIsolationManager {
       // Create symlink
       await fs.symlink(targetPath, symlinkPath)
 
-      this.logger.success(`CLI available: ${versionedName}`)
+      getLogger().success(`CLI available: ${versionedName}`)
       symlinkNames.push(versionedName)
     }
 
@@ -139,10 +137,10 @@ export class CLIIsolationManager {
     const rcFile = this.getShellRcFile(shell)
 
     // Print setup instructions
-    this.logger.warn('\n⚠️  One-time PATH setup required:')
-    this.logger.warn(`   Add to ${rcFile}:`)
-    this.logger.warn(`   export PATH="$HOME/.iloom/bin:$PATH"`)
-    this.logger.warn(`   Then run: source ${rcFile}\n`)
+    getLogger().warn('\n⚠️  One-time PATH setup required:')
+    getLogger().warn(`   Add to ${rcFile}:`)
+    getLogger().warn(`   export PATH="$HOME/.iloom/bin:$PATH"`)
+    getLogger().warn(`   Then run: source ${rcFile}\n`)
   }
 
   /**
@@ -197,7 +195,7 @@ export class CLIIsolationManager {
             }
 
             // Log warning for other errors but continue cleanup
-            this.logger.warn(
+            getLogger().warn(
               `Failed to remove symlink ${file}: ${error instanceof Error ? error.message : 'Unknown error'}`
             )
           }
@@ -207,7 +205,7 @@ export class CLIIsolationManager {
       // Handle missing bin directory gracefully
       const isEnoent = error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'
       if (isEnoent) {
-        this.logger.warn('No CLI executables directory found - nothing to cleanup')
+        getLogger().warn('No CLI executables directory found - nothing to cleanup')
         return []
       }
 
@@ -216,7 +214,7 @@ export class CLIIsolationManager {
     }
 
     if (removed.length > 0) {
-      this.logger.success(`Removed CLI executables: ${removed.join(', ')}`)
+      getLogger().success(`Removed CLI executables: ${removed.join(', ')}`)
     }
 
     return removed
@@ -257,7 +255,7 @@ export class CLIIsolationManager {
           }
         } catch (error) {
           // Skip files we can't read
-          this.logger.warn(
+          getLogger().warn(
             `Failed to check symlink ${file}: ${error instanceof Error ? error.message : 'Unknown error'}`
           )
         }
@@ -290,9 +288,9 @@ export class CLIIsolationManager {
       try {
         await fs.unlink(symlink.path)
         removedCount++
-        this.logger.success(`Removed orphaned symlink: ${symlink.name}`)
+        getLogger().success(`Removed orphaned symlink: ${symlink.name}`)
       } catch (error) {
-        this.logger.warn(
+        getLogger().warn(
           `Failed to remove orphaned symlink ${symlink.name}: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
       }

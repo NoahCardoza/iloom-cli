@@ -1,4 +1,4 @@
-import { logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ResourceCleanup } from '../lib/ResourceCleanup.js'
 import { ProcessManager } from '../lib/process/ProcessManager.js'
@@ -56,10 +56,10 @@ export class CleanupCommand {
     // Load environment variables first
     const envResult = loadEnvIntoProcess()
     if (envResult.error) {
-      logger.debug(`Environment loading warning: ${envResult.error.message}`)
+      getLogger().debug(`Environment loading warning: ${envResult.error.message}`)
     }
     if (envResult.parsed) {
-      logger.debug(`Loaded ${Object.keys(envResult.parsed).length} environment variables`)
+      getLogger().debug(`Loaded ${Object.keys(envResult.parsed).length} environment variables`)
     }
 
     this.gitWorktreeManager = gitWorktreeManager ?? new GitWorktreeManager()
@@ -144,14 +144,14 @@ export class CleanupCommand {
 
     // If we can't determine the target branch, skip the check
     if (!targetBranch) {
-      logger.debug(`Cannot determine target branch for child loom check`)
+      getLogger().debug(`Cannot determine target branch for child loom check`)
       return
     }
 
     // Check if the TARGET loom has any child looms
     const hasChildLooms = await this.loomManager.checkAndWarnChildLooms(targetBranch)
     if (hasChildLooms) {
-      logger.error('Cannot cleanup loom while child looms exist. Please finish child looms first.')
+      getLogger().error('Cannot cleanup loom while child looms exist. Please finish child looms first.')
       process.exit(1)
     }
   }
@@ -172,16 +172,16 @@ export class CleanupCommand {
     await this.checkForChildLooms(parsed)
 
     // Step 3: Execute based on mode
-    logger.info(`Cleanup mode: ${parsed.mode}`)
+    getLogger().info(`Cleanup mode: ${parsed.mode}`)
 
     if (parsed.mode === 'single') {
       await this.executeSingleCleanup(parsed)
     } else if (parsed.mode === 'list') {
-      logger.info('Would list all worktrees')  // TODO: Implement in Sub-issue #2
-      logger.success('Command parsing and validation successful')
+      getLogger().info('Would list all worktrees')  // TODO: Implement in Sub-issue #2
+      getLogger().success('Command parsing and validation successful')
     } else if (parsed.mode === 'all') {
-      logger.info('Would remove all worktrees')  // TODO: Implement in Sub-issue #5
-      logger.success('Command parsing and validation successful')
+      getLogger().info('Would remove all worktrees')  // TODO: Implement in Sub-issue #5
+      getLogger().success('Command parsing and validation successful')
     } else if (parsed.mode === 'issue') {
       await this.executeIssueCleanup(parsed)
     }
@@ -352,13 +352,13 @@ export class CleanupCommand {
     }
 
     // Step 2: Display worktree details
-    logger.info(`Preparing to cleanup worktree: ${identifier}`)
+    getLogger().info(`Preparing to cleanup worktree: ${identifier}`)
 
     // Step 3: Confirmation - worktree removal
     if (!force) {
       const confirmWorktree = await promptConfirmation('Remove this worktree?', true)
       if (!confirmWorktree) {
-        logger.info('Cleanup cancelled')
+        getLogger().info('Cleanup cancelled')
         return
       }
     }
@@ -383,9 +383,9 @@ export class CleanupCommand {
 
     // Final success message
     if (cleanupResult.success) {
-      logger.success('Cleanup completed successfully')
+      getLogger().success('Cleanup completed successfully')
     } else {
-      logger.warn('Cleanup completed with errors - see details above')
+      getLogger().warn('Cleanup completed with errors - see details above')
     }
   }
 
@@ -393,21 +393,21 @@ export class CleanupCommand {
    * Report cleanup operation results to user
    */
   private reportCleanupResults(result: CleanupResult): void {
-    logger.info('Cleanup operations:')
+    getLogger().info('Cleanup operations:')
 
     result.operations.forEach(op => {
       const status = op.success ? '✓' : '✗'
       const message = op.error ? `${op.message}: ${op.error}` : op.message
 
       if (op.success) {
-        logger.info(`  ${status} ${message}`)
+        getLogger().info(`  ${status} ${message}`)
       } else {
-        logger.error(`  ${status} ${message}`)
+        getLogger().error(`  ${status} ${message}`)
       }
     })
 
     if (result.errors.length > 0) {
-      logger.warn(`${result.errors.length} error(s) occurred during cleanup`)
+      getLogger().warn(`${result.errors.length} error(s) occurred during cleanup`)
     }
   }
 
@@ -424,7 +424,7 @@ export class CleanupCommand {
 
     const { force, dryRun } = parsed.options
 
-    logger.info(`Finding worktrees related to GitHub issue/PR #${issueNumber}...`)
+    getLogger().info(`Finding worktrees related to GitHub issue/PR #${issueNumber}...`)
 
     // Step 1: Get all worktrees and filter by path pattern
     const worktrees = await this.gitWorktreeManager.listWorktrees()
@@ -441,8 +441,8 @@ export class CleanupCommand {
     })
 
     if (matchingWorktrees.length === 0) {
-      logger.warn(`No worktrees found for GitHub issue/PR #${issueNumber}`)
-      logger.info(`Searched for worktree paths containing: ${issueNumber}, _pr_${issueNumber}, issue-${issueNumber}, etc.`)
+      getLogger().warn(`No worktrees found for GitHub issue/PR #${issueNumber}`)
+      getLogger().info(`Searched for worktree paths containing: ${issueNumber}, _pr_${issueNumber}, issue-${issueNumber}, etc.`)
       return
     }
 
@@ -455,9 +455,9 @@ export class CleanupCommand {
       }))
 
     // Step 3: Display preview
-    logger.info(`Found ${targets.length} worktree(s) related to issue/PR #${issueNumber}:`)
+    getLogger().info(`Found ${targets.length} worktree(s) related to issue/PR #${issueNumber}:`)
     for (const target of targets) {
-      logger.info(`  🌿 ${target.branchName} (${target.worktreePath})`)
+      getLogger().info(`  🌿 ${target.branchName} (${target.worktreePath})`)
     }
 
     // Step 4: Batch confirmation (unless --force)
@@ -467,7 +467,7 @@ export class CleanupCommand {
         true
       )
       if (!confirmCleanup) {
-        logger.info('Cleanup cancelled')
+        getLogger().info('Cleanup cancelled')
         return
       }
     }
@@ -479,7 +479,7 @@ export class CleanupCommand {
     let failed = 0
 
     for (const target of targets) {
-      logger.info(`Processing worktree: ${target.branchName}`)
+      getLogger().info(`Processing worktree: ${target.branchName}`)
 
       // Cleanup worktree using ResourceCleanup with ParsedInput
       // Now includes branch deletion with 5-point safety check BEFORE any deletion
@@ -509,13 +509,13 @@ export class CleanupCommand {
 
         if (result.success) {
           worktreesRemoved++
-          logger.success(`  Worktree removed: ${target.branchName}`)
+          getLogger().success(`  Worktree removed: ${target.branchName}`)
 
           // Check if branch was deleted
           const branchOperation = result.operations.find(op => op.type === 'branch')
           if (branchOperation?.success) {
             branchesDeleted++
-            logger.success(`  Branch deleted: ${target.branchName}`)
+            getLogger().success(`  Branch deleted: ${target.branchName}`)
           }
 
           // Check if database branch was actually deleted (use explicit deleted field)
@@ -527,26 +527,26 @@ export class CleanupCommand {
           }
         } else {
           failed++
-          logger.error(`  Failed to remove worktree: ${target.branchName}`)
+          getLogger().error(`  Failed to remove worktree: ${target.branchName}`)
         }
       } catch (error) {
         failed++
         const errMsg = error instanceof Error ? error.message : 'Unknown error'
-        logger.error(`  Failed to cleanup: ${errMsg}`)
+        getLogger().error(`  Failed to cleanup: ${errMsg}`)
         continue // Continue with next worktree even if this one failed
       }
     }
 
     // Step 7: Report statistics
-    logger.success(`Completed cleanup for issue/PR #${issueNumber}:`)
-    logger.info(`   📁 Worktrees removed: ${worktreesRemoved}`)
-    logger.info(`   🌿 Branches deleted: ${branchesDeleted}`)
+    getLogger().success(`Completed cleanup for issue/PR #${issueNumber}:`)
+    getLogger().info(`   📁 Worktrees removed: ${worktreesRemoved}`)
+    getLogger().info(`   🌿 Branches deleted: ${branchesDeleted}`)
     if (databaseBranchesDeletedList.length > 0) {
       // Display branch names in the format requested
-      logger.info(`   🗂️ Database branches deleted: ${databaseBranchesDeletedList.join(', ')}`)
+      getLogger().info(`   🗂️ Database branches deleted: ${databaseBranchesDeletedList.join(', ')}`)
     }
     if (failed > 0) {
-      logger.warn(`   ❌ Failed operations: ${failed}`)
+      getLogger().warn(`   ❌ Failed operations: ${failed}`)
     }
   }
 }

@@ -1,4 +1,4 @@
-import { logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 import type { IssueTracker } from '../lib/IssueTracker.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ValidationRunner } from '../lib/ValidationRunner.js'
@@ -68,10 +68,10 @@ export class FinishCommand {
 		// Load environment variables first
 		const envResult = loadEnvIntoProcess()
 		if (envResult.error) {
-			logger.debug(`Environment loading warning: ${envResult.error.message}`)
+			getLogger().debug(`Environment loading warning: ${envResult.error.message}`)
 		}
 		if (envResult.parsed) {
-			logger.debug(`Loaded ${Object.keys(envResult.parsed).length} environment variables`)
+			getLogger().debug(`Loaded ${Object.keys(envResult.parsed).length} environment variables`)
 		}
 
 		this.issueTracker = issueTracker
@@ -169,14 +169,14 @@ export class FinishCommand {
 
 		// If we can't determine the target branch, skip the check
 		if (!targetBranch) {
-			logger.debug(`Cannot determine target branch for child loom check`)
+			getLogger().debug(`Cannot determine target branch for child loom check`)
 			return
 		}
 
 		// Check if the TARGET loom has any child looms
 		const hasChildLooms = await this.loomManager.checkAndWarnChildLooms(targetBranch)
 		if (hasChildLooms) {
-			logger.error('Cannot finish loom while child looms exist. Please finish child looms first.')
+			getLogger().error('Cannot finish loom while child looms exist. Please finish child looms first.')
 			process.exit(1)
 		}
 	}
@@ -197,7 +197,7 @@ export class FinishCommand {
 			settings.mergeBehavior?.mode === 'github-pr' || this.issueTracker.providerName === 'github'
 		if (needsRepo && (await hasMultipleRemotes())) {
 			repo = await getConfiguredRepoFromSettings(settings)
-			logger.info(`Using GitHub repository: ${repo}`)
+			getLogger().info(`Using GitHub repository: ${repo}`)
 		}
 
 		// Step 2: Parse input (or auto-detect from current directory)
@@ -211,7 +211,7 @@ export class FinishCommand {
 		const worktrees = await this.validateInput(parsed, input.options, repo)
 
 		// Step 3: Log success
-		logger.info(`Validated input: ${this.formatParsedInput(parsed)}`)
+		getLogger().info(`Validated input: ${this.formatParsedInput(parsed)}`)
 
 		// Get worktree for workflow execution
 		const worktree = worktrees[0]
@@ -324,7 +324,7 @@ export class FinishCommand {
 
 		if (prMatch?.[1]) {
 			const prNumber = parseInt(prMatch[1], 10)
-			logger.debug(`Auto-detected PR #${prNumber} from directory: ${currentDir}`)
+			getLogger().debug(`Auto-detected PR #${prNumber} from directory: ${currentDir}`)
 			return {
 				type: 'pr',
 				number: prNumber,
@@ -337,7 +337,7 @@ export class FinishCommand {
 		const issueNumber = extractIssueNumber(currentDir)
 
 		if (issueNumber !== null) {
-			logger.debug(
+			getLogger().debug(
 				`Auto-detected issue #${issueNumber} from directory: ${currentDir}`
 			)
 			return {
@@ -362,7 +362,7 @@ export class FinishCommand {
 		// Try to extract issue from branch name
 		const branchIssueNumber = extractIssueNumber(currentBranch)
 		if (branchIssueNumber !== null) {
-			logger.debug(
+			getLogger().debug(
 				`Auto-detected issue #${branchIssueNumber} from branch: ${currentBranch}`
 			)
 			return {
@@ -406,7 +406,7 @@ export class FinishCommand {
 
 				// For PRs, we allow closed/merged state (cleanup-only mode)
 				// But we still validate it exists
-				logger.debug(`Validated PR #${parsed.number} (state: ${pr.state})`)
+				getLogger().debug(`Validated PR #${parsed.number} (state: ${pr.state})`)
 
 				// Find associated worktree
 				return await this.findWorktreeForIdentifier(parsed)
@@ -427,7 +427,7 @@ export class FinishCommand {
 					)
 				}
 
-				logger.debug(`Validated issue #${parsed.number} (state: ${issue.state})`)
+				getLogger().debug(`Validated issue #${parsed.number} (state: ${issue.state})`)
 
 				// Find associated worktree
 				return await this.findWorktreeForIdentifier(parsed)
@@ -445,7 +445,7 @@ export class FinishCommand {
 					)
 				}
 
-				logger.debug(`Validated branch name: ${parsed.branchName}`)
+				getLogger().debug(`Validated branch name: ${parsed.branchName}`)
 
 				// Find associated worktree
 				return await this.findWorktreeForIdentifier(parsed)
@@ -520,7 +520,7 @@ export class FinishCommand {
 			)
 		}
 
-		logger.debug(`Found worktree: ${worktree.path}`)
+		getLogger().debug(`Found worktree: ${worktree.path}`)
 
 		return [worktree]
 	}
@@ -562,14 +562,14 @@ export class FinishCommand {
 	): Promise<void> {
 		// Step 1: Run pre-merge validations FIRST (Sub-Issue #47)
 		if (!options.dryRun) {
-			logger.info('Running pre-merge validations...')
+			getLogger().info('Running pre-merge validations...')
 
 			await this.validationRunner.runValidations(worktree.path, {
 				dryRun: options.dryRun ?? false,
 			})
-			logger.success('All validations passed')
+			getLogger().success('All validations passed')
 		} else {
-			logger.info('[DRY RUN] Would run pre-merge validations')
+			getLogger().info('[DRY RUN] Would run pre-merge validations')
 		}
 
 		// Step 2: Detect uncommitted changes AFTER validation passes
@@ -578,9 +578,9 @@ export class FinishCommand {
 		// Step 3: Commit changes only if validation passed AND changes exist
 		if (gitStatus.hasUncommittedChanges) {
 			if (options.dryRun) {
-				logger.info('[DRY RUN] Would auto-commit uncommitted changes (validation passed)')
+				getLogger().info('[DRY RUN] Would auto-commit uncommitted changes (validation passed)')
 			} else {
-				logger.info('Validation passed, auto-committing uncommitted changes...')
+				getLogger().info('Validation passed, auto-committing uncommitted changes...')
 
 				// Load settings to get skipVerify configuration
 				const settings = await this.settingsManager.loadSettings(worktree.path)
@@ -598,17 +598,17 @@ export class FinishCommand {
 
 				try {
 					await this.commitManager.commitChanges(worktree.path, commitOptions)
-					logger.success('Changes committed successfully')
+					getLogger().success('Changes committed successfully')
 				} catch (error) {
 					if (error instanceof UserAbortedCommitError) {
-						logger.info('Commit aborted by user')
+						getLogger().info('Commit aborted by user')
 						return  // Exit workflow gracefully
 					}
 					throw error  // Re-throw other errors
 				}
 			}
 		} else {
-			logger.debug('No uncommitted changes found')
+			getLogger().debug('No uncommitted changes found')
 		}
 
 		// Step 3.5: Check merge mode from settings and branch workflow
@@ -631,7 +631,7 @@ export class FinishCommand {
 		}
 
 		// Step 4: Rebase branch on main
-		logger.info('Rebasing branch on main...')
+		getLogger().info('Rebasing branch on main...')
 
 		const mergeOptions: MergeOptions = {
 			dryRun: options.dryRun ?? false,
@@ -639,18 +639,18 @@ export class FinishCommand {
 		}
 
 		await this.mergeManager.rebaseOnMain(worktree.path, mergeOptions)
-		logger.success('Branch rebased successfully')
+		getLogger().success('Branch rebased successfully')
 
 		// Step 5: Perform fast-forward merge
-		logger.info('Performing fast-forward merge...')
+		getLogger().info('Performing fast-forward merge...')
 		await this.mergeManager.performFastForwardMerge(worktree.branch, worktree.path, mergeOptions)
-		logger.success('Fast-forward merge completed successfully')
+		getLogger().success('Fast-forward merge completed successfully')
 
 		// Step 5.5: Install dependencies in main worktree
 		if (options.dryRun) {
-			logger.info('[DRY RUN] Would install dependencies in main worktree')
+			getLogger().info('[DRY RUN] Would install dependencies in main worktree')
 		} else {
-			logger.info('Installing dependencies in main worktree...')
+			getLogger().info('Installing dependencies in main worktree...')
 			const mainWorktreePath = await findMainWorktreePathWithSettings(worktree.path, this.settingsManager)
 			await installDependencies(mainWorktreePath, true, true)
 		}
@@ -659,7 +659,7 @@ export class FinishCommand {
 		if (!options.skipBuild) {
 			await this.runPostMergeBuild(worktree.path, options)
 		} else {
-			logger.debug('Skipping build verification (--skip-build flag provided)')
+			getLogger().debug('Skipping build verification (--skip-build flag provided)')
 		}
 
 		// Step 6: Post-merge cleanup
@@ -681,12 +681,12 @@ export class FinishCommand {
 		// Branch based on PR state
 		if (pr.state === 'closed' || pr.state === 'merged') {
 			// Closed/Merged PR workflow
-			logger.info(`PR #${parsed.number} is ${pr.state.toUpperCase()} - skipping to cleanup`)
+			getLogger().info(`PR #${parsed.number} is ${pr.state.toUpperCase()} - skipping to cleanup`)
 
 			// Check for uncommitted changes and warn (unless --force)
 			const gitStatus = await this.commitManager.detectUncommittedChanges(worktree.path)
 			if (gitStatus.hasUncommittedChanges && !options.force) {
-				logger.warn('PR has uncommitted changes')
+				getLogger().warn('PR has uncommitted changes')
 				throw new Error(
 					'Cannot cleanup PR with uncommitted changes. ' +
 					'Commit or stash changes, then run again with --force to cleanup anyway.'
@@ -699,10 +699,10 @@ export class FinishCommand {
 			// - closed: enable checks (may have unpushed commits)
 			await this.performPRCleanup(parsed, options, worktree, pr.state as 'closed' | 'merged')
 
-			logger.success(`PR #${parsed.number} cleanup completed`)
+			getLogger().success(`PR #${parsed.number} cleanup completed`)
 		} else {
 			// Open PR workflow
-			logger.info(`PR #${parsed.number} is OPEN - will push changes and keep worktree active`)
+			getLogger().info(`PR #${parsed.number} is OPEN - will push changes and keep worktree active`)
 
 			// Step 1: Detect uncommitted changes
 			const gitStatus = await this.commitManager.detectUncommittedChanges(worktree.path)
@@ -710,9 +710,9 @@ export class FinishCommand {
 			// Step 2: Commit changes if any exist
 			if (gitStatus.hasUncommittedChanges) {
 				if (options.dryRun) {
-					logger.info('[DRY RUN] Would commit uncommitted changes')
+					getLogger().info('[DRY RUN] Would commit uncommitted changes')
 				} else {
-					logger.info('Committing uncommitted changes...')
+					getLogger().info('Committing uncommitted changes...')
 
 					// Load settings to get skipVerify configuration
 					const settings = await this.settingsManager.loadSettings(worktree.path)
@@ -724,34 +724,34 @@ export class FinishCommand {
 							skipVerify,
 							// Do NOT pass issueNumber for PRs - no "Fixes #" trailer needed
 						})
-						logger.success('Changes committed')
+						getLogger().success('Changes committed')
 					} catch (error) {
 						if (error instanceof UserAbortedCommitError) {
-							logger.info('Commit aborted by user')
+							getLogger().info('Commit aborted by user')
 							return  // Exit workflow gracefully
 						}
 						throw error  // Re-throw other errors
 					}
 				}
 			} else {
-				logger.debug('No uncommitted changes found')
+				getLogger().debug('No uncommitted changes found')
 			}
 
 			// Step 3: Push to remote
 			if (options.dryRun) {
-				logger.info(`[DRY RUN] Would push changes to origin/${pr.branch}`)
+				getLogger().info(`[DRY RUN] Would push changes to origin/${pr.branch}`)
 			} else {
-				logger.info('Pushing changes to remote...')
+				getLogger().info('Pushing changes to remote...')
 				await pushBranchToRemote(pr.branch, worktree.path, {
 					dryRun: false
 				})
-				logger.success(`Changes pushed to PR #${parsed.number}`)
+				getLogger().success(`Changes pushed to PR #${parsed.number}`)
 			}
 
 			// Step 4: Log success and guidance
-			logger.success(`PR #${parsed.number} updated successfully`)
-			logger.info('Worktree remains active for continued work')
-			logger.info(`To cleanup when done: il cleanup ${parsed.number}`)
+			getLogger().success(`PR #${parsed.number} updated successfully`)
+			getLogger().info('Worktree remains active for continued work')
+			getLogger().info(`To cleanup when done: il cleanup ${parsed.number}`)
 		}
 	}
 
@@ -767,11 +767,11 @@ export class FinishCommand {
 	): Promise<void> {
 		// Step 1: Push branch to origin
 		if (options.dryRun) {
-			logger.info('[DRY RUN] Would push branch to origin')
+			getLogger().info('[DRY RUN] Would push branch to origin')
 		} else {
-			logger.info('Pushing branch to origin...')
+			getLogger().info('Pushing branch to origin...')
 			await pushBranchToRemote(worktree.branch, worktree.path, { dryRun: false })
-			logger.success('Branch pushed successfully')
+			getLogger().success('Branch pushed successfully')
 		}
 
 		// Step 2: Initialize PRManager with settings
@@ -785,15 +785,15 @@ export class FinishCommand {
 				const issue = await this.issueTracker.fetchIssue(parsed.number)
 				prTitle = issue.title
 			} catch (error) {
-				logger.debug('Could not fetch issue title, using branch name', { error })
+				getLogger().debug('Could not fetch issue title, using branch name', { error })
 			}
 		}
 
 		// Step 4: Create or open PR
 		if (options.dryRun) {
-			logger.info('[DRY RUN] Would create GitHub PR')
-			logger.info(`  Title: ${prTitle}`)
-			logger.info(`  Base: ${settings.mainBranch ?? 'main'}`)
+			getLogger().info('[DRY RUN] Would create GitHub PR')
+			getLogger().info(`  Title: ${prTitle}`)
+			getLogger().info(`  Base: ${settings.mainBranch ?? 'main'}`)
 		} else {
 			const baseBranch = settings.mainBranch ?? 'main'
 			const openInBrowser = options.noBrowser !== true
@@ -808,9 +808,9 @@ export class FinishCommand {
 			)
 
 			if (result.wasExisting) {
-				logger.success(`Existing pull request: ${result.url}`)
+				getLogger().success(`Existing pull request: ${result.url}`)
 			} else {
-				logger.success(`Pull request created: ${result.url}`)
+				getLogger().success(`Pull request created: ${result.url}`)
 			}
 
 			// Step 5: Interactive cleanup prompt (unless flags override)
@@ -829,19 +829,19 @@ export class FinishCommand {
 	): Promise<void> {
 		if (options.cleanup === true) {
 			// Explicit --cleanup flag: perform cleanup
-			logger.info('Cleaning up worktree (--cleanup flag)...')
+			getLogger().info('Cleaning up worktree (--cleanup flag)...')
 			await this.performWorktreeCleanup(parsed, options, worktree)
 		} else if (options.cleanup === false) {
 			// Explicit --no-cleanup flag: keep worktree
-			logger.info('Worktree kept active for continued work (--no-cleanup flag)')
-			logger.info(`To cleanup later: il cleanup ${parsed.originalInput}`)
+			getLogger().info('Worktree kept active for continued work (--no-cleanup flag)')
+			getLogger().info(`To cleanup later: il cleanup ${parsed.originalInput}`)
 		} else {
 			// No flag: prompt user for decision
-			logger.info('')
-			logger.info('PR created successfully. Would you like to clean up the worktree?')
-			logger.info(`  Worktree: ${worktree.path}`)
-			logger.info(`  Branch: ${worktree.branch}`)
-			logger.info('')
+			getLogger().info('')
+			getLogger().info('PR created successfully. Would you like to clean up the worktree?')
+			getLogger().info(`  Worktree: ${worktree.path}`)
+			getLogger().info(`  Branch: ${worktree.branch}`)
+			getLogger().info('')
 
 			const shouldCleanup = await promptConfirmation(
 				'Clean up worktree now?',
@@ -851,7 +851,7 @@ export class FinishCommand {
 			if (shouldCleanup) {
 				await this.performWorktreeCleanup(parsed, options, worktree)
 			} else {
-				logger.info('Worktree kept active. Run `il cleanup` when ready.')
+				getLogger().info('Worktree kept active. Run `il cleanup` when ready.')
 			}
 		}
 	}
@@ -881,7 +881,7 @@ export class FinishCommand {
 		}
 
 		try {
-			logger.info('Starting worktree cleanup...')
+			getLogger().info('Starting worktree cleanup...')
 
 			await this.ensureResourceCleanup()
 			if (!this.resourceCleanup) {
@@ -894,10 +894,10 @@ export class FinishCommand {
 			this.reportCleanupResults(result)
 
 			if (!result.success) {
-				logger.warn('Some cleanup operations failed - manual cleanup may be required')
+				getLogger().warn('Some cleanup operations failed - manual cleanup may be required')
 				this.showManualCleanupInstructions(worktree)
 			} else {
-				logger.success('Worktree cleanup completed successfully')
+				getLogger().success('Worktree cleanup completed successfully')
 			}
 
 			// Warn if running from within the worktree being finished
@@ -906,8 +906,8 @@ export class FinishCommand {
 			}
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-			logger.warn(`Cleanup failed: ${errorMessage}`)
-			logger.warn('Manual cleanup may be required')
+			getLogger().warn(`Cleanup failed: ${errorMessage}`)
+			getLogger().warn('Manual cleanup may be required')
 			this.showManualCleanupInstructions(worktree)
 		}
 	}
@@ -974,7 +974,7 @@ export class FinishCommand {
 			this.reportCleanupResults(result)
 
 			if (!result.success) {
-				logger.warn('Some cleanup operations failed - manual cleanup may be required')
+				getLogger().warn('Some cleanup operations failed - manual cleanup may be required')
 				this.showManualCleanupInstructions(worktree)
 			} else {
 				// Warn if running from within the worktree being finished (only on successful cleanup)
@@ -984,7 +984,7 @@ export class FinishCommand {
 			}
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-			logger.warn(`Cleanup failed: ${errorMessage}`)
+			getLogger().warn(`Cleanup failed: ${errorMessage}`)
 			this.showManualCleanupInstructions(worktree)
 			throw error // Re-throw to fail the command
 		}
@@ -1003,20 +1003,20 @@ export class FinishCommand {
 
 		// Check if dry-run
 		if (options.dryRun) {
-			logger.info('[DRY RUN] Would run post-merge build')
+			getLogger().info('[DRY RUN] Would run post-merge build')
 			return
 		}
 
-		logger.info('Running post-merge build...')
+		getLogger().info('Running post-merge build...')
 
 		const result = await this.buildRunner.runBuild(mainWorktreePath, {
 			dryRun: options.dryRun ?? false,
 		})
 
 		if (result.skipped) {
-			logger.debug(`Build skipped: ${result.reason}`)
+			getLogger().debug(`Build skipped: ${result.reason}`)
 		} else {
-			logger.success('Post-merge build completed successfully')
+			getLogger().success('Post-merge build completed successfully')
 		}
 	}
 
@@ -1056,7 +1056,7 @@ export class FinishCommand {
 		}
 
 		try {
-			logger.info('Starting post-merge cleanup...')
+			getLogger().info('Starting post-merge cleanup...')
 
 			if (!this.resourceCleanup) {
 				throw new Error('Failed to initialize ResourceCleanup')
@@ -1067,11 +1067,11 @@ export class FinishCommand {
 			this.reportCleanupResults(result)
 
 			if (!result.success) {
-				logger.warn('Some cleanup operations failed - manual cleanup may be required')
+				getLogger().warn('Some cleanup operations failed - manual cleanup may be required')
 				// Show helpful recovery message
 				this.showManualCleanupInstructions(worktree)
 			} else {
-				logger.success('Post-merge cleanup completed successfully')
+				getLogger().success('Post-merge cleanup completed successfully')
 			}
 
 			// Warn if running from within the worktree being finished
@@ -1082,8 +1082,8 @@ export class FinishCommand {
 			// Catch cleanup errors to prevent finish command from failing
 			// (merge already succeeded - cleanup failures are non-fatal)
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-			logger.warn(`Cleanup failed: ${errorMessage}`)
-			logger.warn('Merge completed successfully, but manual cleanup is required')
+			getLogger().warn(`Cleanup failed: ${errorMessage}`)
+			getLogger().warn('Merge completed successfully, but manual cleanup is required')
 			this.showManualCleanupInstructions(worktree)
 		}
 	}
@@ -1096,15 +1096,15 @@ export class FinishCommand {
 			return
 		}
 
-		logger.info('Cleanup operations:')
+		getLogger().info('Cleanup operations:')
 		for (const op of result.operations) {
 			const status = op.success ? '✓' : '✗'
 			const message = op.error ? `${op.message}: ${op.error}` : op.message
 
 			if (op.success) {
-				logger.info(`  ${status} ${message}`)
+				getLogger().info(`  ${status} ${message}`)
 			} else {
-				logger.warn(`  ${status} ${message}`)
+				getLogger().warn(`  ${status} ${message}`)
 			}
 		}
 	}
@@ -1113,10 +1113,10 @@ export class FinishCommand {
 	 * Show manual cleanup instructions when cleanup fails
 	 */
 	private showManualCleanupInstructions(worktree: GitWorktree): void {
-		logger.info('\nManual cleanup commands:')
-		logger.info(`  1. Remove worktree: git worktree remove ${worktree.path}`)
-		logger.info(`  2. Delete branch: git branch -d ${worktree.branch}`)
-		logger.info(`  3. Check dev servers: lsof -i :PORT (and kill if needed)`)
+		getLogger().info('\nManual cleanup commands:')
+		getLogger().info(`  1. Remove worktree: git worktree remove ${worktree.path}`)
+		getLogger().info(`  2. Delete branch: git branch -d ${worktree.branch}`)
+		getLogger().info(`  3. Check dev servers: lsof -i :PORT (and kill if needed)`)
 	}
 
 	/**
@@ -1132,9 +1132,9 @@ export class FinishCommand {
 	 * Display warning to close terminal/IDE when running from within finished loom
 	 */
 	private showTerminalCloseWarning(worktree: GitWorktree): void {
-		logger.info('')
-		logger.info('You are currently in the directory of the loom that was just finished.')
-		logger.info('Please close this terminal and any IDE/terminal windows using this directory.')
-		logger.info(`Directory: ${worktree.path}`)
+		getLogger().info('')
+		getLogger().info('You are currently in the directory of the loom that was just finished.')
+		getLogger().info('Please close this terminal and any IDE/terminal windows using this directory.')
+		getLogger().info(`Directory: ${worktree.path}`)
 	}
 }

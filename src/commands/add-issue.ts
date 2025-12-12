@@ -1,10 +1,9 @@
 import type { AddIssueOptions, AddIssueResult } from '../types/index.js'
-import type { Logger } from '../utils/logger.js'
 import { IssueEnhancementService } from '../lib/IssueEnhancementService.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
-import { logger as defaultLogger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 import { capitalizeFirstLetter } from '../utils/text.js'
 
 /**
@@ -22,12 +21,10 @@ export interface AddIssueCommandInput {
 export class AddIssueCommand {
 	private enhancementService: IssueEnhancementService
 	private settingsManager: SettingsManager
-	private logger: Logger
 
-	constructor(enhancementService: IssueEnhancementService, settingsManager?: SettingsManager, logger?: Logger) {
+	constructor(enhancementService: IssueEnhancementService, settingsManager?: SettingsManager) {
 		this.enhancementService = enhancementService
 		this.settingsManager = settingsManager ?? new SettingsManager()
-		this.logger = logger ?? defaultLogger
 	}
 
 	/**
@@ -58,7 +55,7 @@ export class AddIssueCommand {
 			// Only relevant for GitHub - Linear doesn't use repo info
 			repo = await getConfiguredRepoFromSettings(settings)
 			if (!isJsonMode) {
-				this.logger.info(`Using GitHub repository: ${repo}`)
+				getLogger().info(`Using GitHub repository: ${repo}`)
 			}
 		}
 

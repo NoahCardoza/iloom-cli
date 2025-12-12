@@ -5,7 +5,7 @@ import type { IssueTracker } from './IssueTracker.js'
 import { GitHubService } from './GitHubService.js'
 import { LinearService, type LinearServiceConfig } from './LinearService.js'
 import type { IloomSettings } from './SettingsManager.js'
-import { logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 
 export type IssueTrackerProviderType = 'github' | 'linear'
 
@@ -29,12 +29,12 @@ export class IssueTrackerFactory {
 	static create(settings: IloomSettings): IssueTracker {
 		const provider = settings.issueManagement?.provider ?? 'github'
 
-		logger.debug(`IssueTrackerFactory: Creating tracker for provider "${provider}"`)
-		logger.debug(`IssueTrackerFactory: issueManagement settings:`, JSON.stringify(settings.issueManagement, null, 2))
+		getLogger().debug(`IssueTrackerFactory: Creating tracker for provider "${provider}"`)
+		getLogger().debug(`IssueTrackerFactory: issueManagement settings:`, JSON.stringify(settings.issueManagement, null, 2))
 
 		switch (provider) {
 			case 'github':
-				logger.debug('IssueTrackerFactory: Creating GitHubService')
+				getLogger().debug('IssueTrackerFactory: Creating GitHubService')
 				return new GitHubService()
 			case 'linear': {
 				const linearSettings = settings.issueManagement?.linear
@@ -47,7 +47,7 @@ export class IssueTrackerFactory {
 					linearConfig.branchFormat = linearSettings.branchFormat
 				}
 
-				logger.debug(`IssueTrackerFactory: Creating LinearService with config:`, JSON.stringify(linearConfig, null, 2))
+				getLogger().debug(`IssueTrackerFactory: Creating LinearService with config:`, JSON.stringify(linearConfig, null, 2))
 				return new LinearService(linearConfig)
 			}
 			default:

@@ -1,26 +1,22 @@
 import type { IssueTracker } from './IssueTracker.js'
 import type { AgentManager } from './AgentManager.js'
 import type { SettingsManager } from './SettingsManager.js'
-import type { Logger } from '../utils/logger.js'
 import { launchClaude } from '../utils/claude.js'
 import { openBrowser } from '../utils/browser.js'
 import { waitForKeypress } from '../utils/prompt.js'
-import { logger as defaultLogger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 
 /**
  * Service for enhancing and creating issues with AI assistance.
  * Extracts reusable issue enhancement logic from StartCommand.
  */
 export class IssueEnhancementService {
-	private logger: Logger
-
 	constructor(
 		private issueTrackerService: IssueTracker,
 		private agentManager: AgentManager,
-		private settingsManager: SettingsManager,
-		logger?: Logger
+		private settingsManager: SettingsManager
 	) {
-		this.logger = logger ?? defaultLogger
+		// No-op - logger now uses AsyncLocalStorage context
 	}
 
 	/**
@@ -47,7 +43,7 @@ export class IssueEnhancementService {
 	 */
 	public async enhanceDescription(description: string): Promise<string> {
 		try {
-			this.logger.info('Enhancing description with Claude Code. This may take a moment...')
+			getLogger().info('Enhancing description with Claude Code. This may take a moment...')
 
 			// Load agent configurations
 			const settings = await this.settingsManager.loadSettings()
@@ -76,19 +72,19 @@ Your response should be the raw markdown that will become the GitHub issue body.
 				headless: true,
 				model: 'sonnet',
 				agents,
-				logger: this.logger,
+				logger: getLogger(),
 			})
 
 			if (enhanced && typeof enhanced === 'string') {
-				this.logger.success('Description enhanced successfully')
+				getLogger().success('Description enhanced successfully')
 				return enhanced
 			}
 
 			// Fallback to original description
-			this.logger.warn('Claude enhancement returned empty result, using original description')
+			getLogger().warn('Claude enhancement returned empty result, using original description')
 			return description
 		} catch (error) {
-			this.logger.warn(`Failed to enhance description: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			getLogger().warn(`Failed to enhance description: ${error instanceof Error ? error.message : 'Unknown error'}`)
 			return description
 		}
 	}
@@ -107,7 +103,7 @@ Your response should be the raw markdown that will become the GitHub issue body.
 		repository?: string,
 		labels?: string[]
 	): Promise<{ number: string | number; url: string }> {
-		this.logger.info('Creating GitHub issue from description...')
+		getLogger().info('Creating GitHub issue from description...')
 
 		const result = await this.issueTrackerService.createIssue(
 			originalDescription,  // Use original description as title
@@ -132,7 +128,7 @@ Your response should be the raw markdown that will become the GitHub issue body.
 
 		if (isNonInteractive) {
 			// In non-interactive environment: Skip all interactive operations
-			this.logger.info(`Running in non-interactive environment - skipping interactive prompts for issue #${issueNumber}`)
+			getLogger().info(`Running in non-interactive environment - skipping interactive prompts for issue #${issueNumber}`)
 			return
 		}
 

@@ -1,7 +1,7 @@
 import path from 'path'
 import os from 'os'
 import fs from 'fs-extra'
-import { logger as defaultLogger, type Logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 
 /**
  * Schema for metadata JSON file
@@ -68,10 +68,8 @@ export interface LoomMetadata {
  */
 export class MetadataManager {
   private readonly loomsDir: string
-  private logger: Logger
 
-  constructor(logger?: Logger) {
-    this.logger = logger ?? defaultLogger
+  constructor() {
     this.loomsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'looms')
   }
 
@@ -140,10 +138,10 @@ export class MetadataManager {
       const filePath = this.getFilePath(worktreePath)
       await fs.writeFile(filePath, JSON.stringify(content, null, 2), { mode: 0o644 })
 
-      this.logger.debug(`Metadata written for worktree: ${worktreePath}`)
+      getLogger().debug(`Metadata written for worktree: ${worktreePath}`)
     } catch (error) {
       // Log warning but don't throw - metadata is supplementary
-      this.logger.warn(
+      getLogger().warn(
         `Failed to write metadata for worktree: ${error instanceof Error ? error.message : String(error)}`
       )
     }
@@ -186,7 +184,7 @@ export class MetadataManager {
       }
     } catch (error) {
       // Return null on any error (graceful degradation per spec)
-      this.logger.debug(
+      getLogger().debug(
         `Could not read metadata for worktree ${worktreePath}: ${error instanceof Error ? error.message : String(error)}`
       )
       return null
@@ -243,14 +241,14 @@ export class MetadataManager {
           })
         } catch (error) {
           // Skip individual files that fail to parse (graceful degradation)
-          this.logger.debug(
+          getLogger().debug(
             `Skipping metadata file ${file}: ${error instanceof Error ? error.message : String(error)}`
           )
         }
       }
     } catch (error) {
       // Log error but return empty array (graceful degradation)
-      this.logger.debug(
+      getLogger().debug(
         `Could not list metadata files: ${error instanceof Error ? error.message : String(error)}`
       )
     }
@@ -272,16 +270,16 @@ export class MetadataManager {
 
       // Check if file exists - silently return if not
       if (!(await fs.pathExists(filePath))) {
-        this.logger.debug(`No metadata file to delete for worktree: ${worktreePath}`)
+        getLogger().debug(`No metadata file to delete for worktree: ${worktreePath}`)
         return
       }
 
       // Delete the file
       await fs.unlink(filePath)
-      this.logger.debug(`Metadata deleted for worktree: ${worktreePath}`)
+      getLogger().debug(`Metadata deleted for worktree: ${worktreePath}`)
     } catch (error) {
       // Log warning on permission error but don't throw (per spec section 3.3)
-      this.logger.warn(
+      getLogger().warn(
         `Failed to delete metadata for worktree: ${error instanceof Error ? error.message : String(error)}`
       )
     }

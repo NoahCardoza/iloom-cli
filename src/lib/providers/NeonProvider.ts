@@ -1,9 +1,7 @@
 import { execa, type ExecaError } from 'execa'
 import type { DatabaseProvider } from '../../types/index.js'
-import { createLogger } from '../../utils/logger.js'
+import { getLogger } from '../../utils/logger-context.js'
 import { promptConfirmation } from '../../utils/prompt.js'
-
-const logger = createLogger({ prefix: '🗂️' })
 
 interface NeonBranch {
   name: string
@@ -57,7 +55,7 @@ export class NeonProvider implements DatabaseProvider {
   private _isConfigured: boolean = false
 
   constructor(private config: NeonConfig) {
-    logger.debug('NeonProvider initialized with config:', {
+    getLogger().debug('NeonProvider initialized with config:', {
       projectId: config.projectId,
       parentBranch: config.parentBranch,
       hasProjectId: !!config.projectId,
@@ -68,8 +66,8 @@ export class NeonProvider implements DatabaseProvider {
     // This allows the provider to be instantiated even when Neon is not being used
     const validation = validateNeonConfig(config)
     if (!validation.valid) {
-      logger.debug(`NeonProvider not configured: ${validation.error}`)
-      logger.debug('Neon database branching will not be used')
+      getLogger().debug(`NeonProvider not configured: ${validation.error}`)
+      getLogger().debug('Neon database branching will not be used')
       this._isConfigured = false
     } else {
       this._isConfigured = true
@@ -99,10 +97,10 @@ export class NeonProvider implements DatabaseProvider {
 
     // Log the exact command being executed for debugging
     const command = `neon ${args.join(' ')}`
-    logger.debug(`Executing Neon CLI command: ${command}`)
-    logger.debug(`Project ID being used: ${this.config.projectId}`)
+    getLogger().debug(`Executing Neon CLI command: ${command}`)
+    getLogger().debug(`Project ID being used: ${this.config.projectId}`)
     if (cwd) {
-      logger.debug(`Working directory: ${cwd}`)
+      getLogger().debug(`Working directory: ${cwd}`)
     }
 
     const result = await execa('neon', args, {
@@ -261,7 +259,7 @@ export class NeonProvider implements DatabaseProvider {
     // Check for exact preview branch match with slash pattern
     const slashPattern = `preview/${branchName}`
     if (await this.branchExists(slashPattern, cwd)) {
-      logger.info(`Found Vercel preview database: ${slashPattern}`)
+      getLogger().info(`Found Vercel preview database: ${slashPattern}`)
       return slashPattern
     }
 
@@ -269,7 +267,7 @@ export class NeonProvider implements DatabaseProvider {
     const sanitized = this.sanitizeBranchName(branchName)
     const underscorePattern = `preview_${sanitized}`
     if (await this.branchExists(underscorePattern, cwd)) {
-      logger.info(`Found Vercel preview database: ${underscorePattern}`)
+      getLogger().info(`Found Vercel preview database: ${underscorePattern}`)
       return underscorePattern
     }
 
@@ -285,7 +283,7 @@ export class NeonProvider implements DatabaseProvider {
    * @param cwd - Optional working directory to run commands from
    */
   private async removeExpiration(branchName: string, cwd?: string): Promise<void> {
-    logger.info(`Removing expiration date from branch: ${branchName}`)
+    getLogger().info(`Removing expiration date from branch: ${branchName}`)
     await this.executeNeonCommand([
       'branches',
       'set-expiration',
@@ -293,7 +291,7 @@ export class NeonProvider implements DatabaseProvider {
       '--project-id',
       this.config.projectId,
     ], cwd)
-    logger.success(`Expiration date removed from ${branchName}`)
+    getLogger().success(`Expiration date removed from ${branchName}`)
   }
 
   /**
@@ -312,7 +310,7 @@ export class NeonProvider implements DatabaseProvider {
     const previewBranch = await this.findPreviewBranch(name, cwd)
     if (previewBranch) {
       const connectionString = await this.getConnectionString(previewBranch, cwd)
-      logger.success(`Using existing Vercel preview database: ${previewBranch}`)
+      getLogger().success(`Using existing Vercel preview database: ${previewBranch}`)
       return connectionString
     }
 
@@ -320,9 +318,9 @@ export class NeonProvider implements DatabaseProvider {
     const sanitizedName = this.sanitizeBranchName(name)
     const parentBranch = fromBranch ?? this.config.parentBranch
 
-    logger.info('Creating Neon database branch...')
-    logger.info(`  Parent branch: ${parentBranch}`)
-    logger.info(`  New branch: ${sanitizedName}`)
+    getLogger().info('Creating Neon database branch...')
+    getLogger().info(`  Parent branch: ${parentBranch}`)
+    getLogger().info(`  New branch: ${sanitizedName}`)
 
     try {
       // Create the database branch
@@ -341,13 +339,13 @@ export class NeonProvider implements DatabaseProvider {
       const errorMessage = error instanceof Error ? error.message : String(error)
       if (errorMessage.toLowerCase().includes('expiration') &&
           errorMessage.toLowerCase().includes('child')) {
-        logger.warn('Parent branch has an expiration date - removing it to allow child branch creation')
+        getLogger().warn('Parent branch has an expiration date - removing it to allow child branch creation')
 
         // Remove expiration from parent branch
         await this.removeExpiration(parentBranch, cwd)
 
         // Retry branch creation
-        logger.info('Retrying database branch creation...')
+        getLogger().info('Retrying database branch creation...')
         await this.executeNeonCommand([
           'branches',
           'create',
@@ -364,10 +362,10 @@ export class NeonProvider implements DatabaseProvider {
       }
     }
 
-    logger.success('Database branch created successfully')
+    getLogger().success('Database branch created successfully')
 
     // Get the connection string for the new branch
-    logger.info('Getting connection string for new database branch...')
+    getLogger().info('Getting connection string for new database branch...')
     const connectionString = await this.getConnectionString(sanitizedName, cwd)
 
     return connectionString
@@ -390,9 +388,9 @@ export class NeonProvider implements DatabaseProvider {
     if (isPreview) {
       const previewBranch = await this.findPreviewBranch(name, cwd)
       if (previewBranch) {
-        logger.warn(`Found Vercel preview database: ${previewBranch}`)
-        logger.warn('Preview databases are managed by Vercel and will be cleaned up automatically')
-        logger.warn('Manual deletion may interfere with Vercel\'s preview deployments')
+        getLogger().warn(`Found Vercel preview database: ${previewBranch}`)
+        getLogger().warn('Preview databases are managed by Vercel and will be cleaned up automatically')
+        getLogger().warn('Manual deletion may interfere with Vercel\'s preview deployments')
 
         const confirmed = await promptConfirmation(
           'Delete preview database anyway?',
@@ -402,7 +400,7 @@ export class NeonProvider implements DatabaseProvider {
         if (confirmed) {
           // User confirmed - delete preview branch
           try {
-            logger.info(`Deleting Vercel preview database: ${previewBranch}`)
+            getLogger().info(`Deleting Vercel preview database: ${previewBranch}`)
             await this.executeNeonCommand([
               'branches',
               'delete',
@@ -410,7 +408,7 @@ export class NeonProvider implements DatabaseProvider {
               '--project-id',
               this.config.projectId,
             ], cwd)
-            logger.success('Preview database deleted successfully')
+            getLogger().success('Preview database deleted successfully')
             return {
               success: true,
               deleted: true,
@@ -419,7 +417,7 @@ export class NeonProvider implements DatabaseProvider {
             }
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error)
-            logger.error(`Failed to delete preview database: ${errorMessage}`)
+            getLogger().error(`Failed to delete preview database: ${errorMessage}`)
             return {
               success: false,
               deleted: false,
@@ -430,7 +428,7 @@ export class NeonProvider implements DatabaseProvider {
           }
         } else {
           // User declined deletion
-          logger.info('Skipping preview database deletion')
+          getLogger().info('Skipping preview database deletion')
           return {
             success: true,
             deleted: false,
@@ -444,13 +442,13 @@ export class NeonProvider implements DatabaseProvider {
     }
 
     // Check for regular branch
-    logger.info(`Checking for Neon database branch: ${sanitizedName}`)
+    getLogger().info(`Checking for Neon database branch: ${sanitizedName}`)
 
     try {
       const exists = await this.branchExists(sanitizedName, cwd)
 
       if (!exists) {
-        logger.info(`No database branch found for '${name}'`)
+        getLogger().info(`No database branch found for '${name}'`)
         return {
           success: true,
           deleted: false,
@@ -460,7 +458,7 @@ export class NeonProvider implements DatabaseProvider {
       }
 
       // Branch exists - delete it
-      logger.info(`Deleting Neon database branch: ${sanitizedName}`)
+      getLogger().info(`Deleting Neon database branch: ${sanitizedName}`)
       await this.executeNeonCommand([
         'branches',
         'delete',
@@ -468,7 +466,7 @@ export class NeonProvider implements DatabaseProvider {
         '--project-id',
         this.config.projectId,
       ], cwd)
-      logger.success('Database branch deleted successfully')
+      getLogger().success('Database branch deleted successfully')
 
       return {
         success: true,
@@ -478,7 +476,7 @@ export class NeonProvider implements DatabaseProvider {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      logger.error(`Failed to delete database branch: ${errorMessage}`)
+      getLogger().error(`Failed to delete database branch: ${errorMessage}`)
       return {
         success: false,
         deleted: false,
@@ -527,7 +525,7 @@ export class NeonProvider implements DatabaseProvider {
   async getBranchNameFromConnectionString(connectionString: string, cwd?: string): Promise<string | null> {
     const endpointId = this.extractEndpointId(connectionString)
     if (!endpointId) {
-      logger.debug('Could not extract endpoint ID from connection string')
+      getLogger().debug('Could not extract endpoint ID from connection string')
       return null
     }
     return this.getBranchNameFromEndpoint(endpointId, cwd)

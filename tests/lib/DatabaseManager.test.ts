@@ -4,15 +4,20 @@ import type { DatabaseProvider } from '../../src/types/index.js'
 import { EnvironmentManager } from '../../src/lib/EnvironmentManager.js'
 
 // Mock the logger
-vi.mock('../../src/utils/logger.js', () => ({
-  createLogger: vi.fn(() => ({
+vi.mock('../../src/utils/logger.js', () => {
+  const mockLogger = {
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
     success: vi.fn(),
-  })),
-}))
+  }
+  return {
+    logger: mockLogger,
+    createLogger: vi.fn(() => mockLogger),
+    createStderrLogger: vi.fn(() => mockLogger),
+  }
+})
 
 // Mock fs-extra for pathExists
 vi.mock('fs-extra', () => ({

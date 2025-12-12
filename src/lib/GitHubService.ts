@@ -19,7 +19,7 @@ import {
 	updateProjectItemField,
 	createIssue,
 } from '../utils/github.js'
-import { logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 import { promptConfirmation } from '../utils/prompt.js'
 import type { IssueTracker } from './IssueTracker.js'
 
@@ -61,14 +61,14 @@ export class GitHubService implements IssueTracker {
 		const number = parseInt(numberMatch[1], 10)
 
 		// Try PR first (based on bash script logic at lines 500-533)
-		logger.debug('Checking if input is a PR', { number })
+		getLogger().debug('Checking if input is a PR', { number })
 		const pr = await this.isValidPR(number, repo)
 		if (pr) {
 			return { type: 'pr', identifier: number.toString(), rawInput: input }
 		}
 
 		// Try issue next (lines 536-575 in bash)
-		logger.debug('Checking if input is an issue', { number })
+		getLogger().debug('Checking if input is an issue', { number })
 		const issue = await this.isValidIssue(number, repo)
 		if (issue) {
 			return { type: 'issue', identifier: number.toString(), rawInput: input }
@@ -189,12 +189,12 @@ export class GitHubService implements IssueTracker {
 		repository?: string,
 		labels?: string[]
 	): Promise<{ number: string | number; url: string }> {
-		// logger.info('Creating GitHub issue', { title })
+		// getLogger().info('Creating GitHub issue', { title })
 		return createIssue(title, body, { repo: repository, labels })
 	}
 
 	public async getIssueUrl(issueNumber: number, repo?: string): Promise<string> {
-		logger.debug('Fetching issue URL', { issueNumber, repo })
+		getLogger().debug('Fetching issue URL', { issueNumber, repo })
 		const issue = await fetchGhIssue(issueNumber, repo)
 		return issue.url
 	}
@@ -202,13 +202,13 @@ export class GitHubService implements IssueTracker {
 	// GitHub Projects integration
 	public async moveIssueToInProgress(issueNumber: number): Promise<void> {
 		// Based on bash script lines 374-463
-		logger.info('Moving issue to In Progress in GitHub Projects', {
+		getLogger().info('Moving issue to In Progress in GitHub Projects', {
 			issueNumber,
 		})
 
 		// Check for project scope
 		if (!(await hasProjectScope())) {
-			logger.warn('Missing project scope in GitHub CLI auth')
+			getLogger().warn('Missing project scope in GitHub CLI auth')
 			throw new GitHubError(
 				GitHubErrorCode.MISSING_SCOPE,
 				'GitHub CLI lacks project scope. Run: gh auth refresh -s project'
@@ -224,7 +224,7 @@ export class GitHubService implements IssueTracker {
 			}>(['repo', 'view', '--json', 'owner,name'])
 			owner = repoInfo.owner.login
 		} catch (error) {
-			logger.warn('Could not determine repository info', { error })
+			getLogger().warn('Could not determine repository info', { error })
 			return
 		}
 
@@ -233,12 +233,12 @@ export class GitHubService implements IssueTracker {
 		try {
 			projects = await fetchProjectList(owner)
 		} catch (error) {
-			logger.warn('Could not fetch projects', { owner, error })
+			getLogger().warn('Could not fetch projects', { owner, error })
 			return
 		}
 
 		if (!projects.length) {
-			logger.warn('No projects found', { owner })
+			getLogger().warn('No projects found', { owner })
 			return
 		}
 
@@ -258,7 +258,7 @@ export class GitHubService implements IssueTracker {
 		try {
 			items = await fetchProjectItems(project.number, owner)
 		} catch (error) {
-			logger.debug('Could not fetch project items', { project: project.number, error })
+			getLogger().debug('Could not fetch project items', { project: project.number, error })
 			return
 		}
 
@@ -269,7 +269,7 @@ export class GitHubService implements IssueTracker {
 		)
 
 		if (!item) {
-			logger.debug('Issue not found in project', {
+			getLogger().debug('Issue not found in project', {
 				issueNumber,
 				projectNumber: project.number,
 			})
@@ -281,14 +281,14 @@ export class GitHubService implements IssueTracker {
 		try {
 			fieldsData = await fetchProjectFields(project.number, owner)
 		} catch (error) {
-			logger.debug('Could not fetch project fields', { project: project.number, error })
+			getLogger().debug('Could not fetch project fields', { project: project.number, error })
 			return
 		}
 
 		// Find Status field and In Progress option
 		const statusField = fieldsData.fields.find((f) => f.name === 'Status')
 		if (!statusField) {
-			logger.debug('No Status field found in project', { projectNumber: project.number })
+			getLogger().debug('No Status field found in project', { projectNumber: project.number })
 			return
 		}
 
@@ -297,7 +297,7 @@ export class GitHubService implements IssueTracker {
 		)
 
 		if (!inProgressOption) {
-			logger.debug('No In Progress option found in Status field', { projectNumber: project.number })
+			getLogger().debug('No In Progress option found in Status field', { projectNumber: project.number })
 			return
 		}
 
@@ -310,12 +310,12 @@ export class GitHubService implements IssueTracker {
 				inProgressOption.id
 			)
 
-			logger.info('Updated issue status in project', {
+			getLogger().info('Updated issue status in project', {
 				issueNumber,
 				projectNumber: project.number,
 			})
 		} catch (error) {
-			logger.debug('Could not update project item', { item: item.id, error })
+			getLogger().debug('Could not update project item', { item: item.id, error })
 		}
 	}
 

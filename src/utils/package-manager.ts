@@ -1,5 +1,5 @@
 import { execa, type ExecaError } from 'execa'
-import { logger } from './logger.js'
+import { getLogger } from './logger-context.js'
 import fs from 'fs-extra'
 import path from 'path'
 
@@ -35,14 +35,14 @@ export async function detectPackageManager(cwd: string = process.cwd()): Promise
         // Parse "pnpm@8.15.0" or "pnpm@10.16.1+sha512..." -> "pnpm"
         const manager = packageJson.packageManager.split('@')[0]
         if (isValidPackageManager(manager)) {
-          logger.debug(`Detected package manager from package.json: ${manager}`)
+          getLogger().debug(`Detected package manager from package.json: ${manager}`)
           return manager
         }
       }
     }
   } catch (error) {
     // If package.json doesn't exist, is malformed, or unreadable, continue to next detection method
-    logger.debug(`Could not read packageManager from package.json: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    getLogger().debug(`Could not read packageManager from package.json: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 
   // 2. Check lock files (priority: pnpm > npm > yarn)
@@ -54,7 +54,7 @@ export async function detectPackageManager(cwd: string = process.cwd()): Promise
 
   for (const { file, manager } of lockFiles) {
     if (await fs.pathExists(path.join(cwd, file))) {
-      logger.debug(`Detected package manager from lock file ${file}: ${manager}`)
+      getLogger().debug(`Detected package manager from lock file ${file}: ${manager}`)
       return manager
     }
   }
@@ -64,7 +64,7 @@ export async function detectPackageManager(cwd: string = process.cwd()): Promise
   for (const manager of managers) {
     try {
       await execa(manager, ['--version'])
-      logger.debug(`Detected installed package manager: ${manager}`)
+      getLogger().debug(`Detected installed package manager: ${manager}`)
       return manager
     } catch {
       // Continue to next manager
@@ -72,7 +72,7 @@ export async function detectPackageManager(cwd: string = process.cwd()): Promise
   }
 
   // 4. Default to npm (always available in Node.js environments)
-  logger.debug('No package manager detected, defaulting to npm')
+  getLogger().debug('No package manager detected, defaulting to npm')
   return 'npm'
 }
 
@@ -90,19 +90,19 @@ export async function installDependencies(
 ): Promise<void> {
   // Check if package.json exists before attempting installation
   if (!cwd) {
-    logger.debug('Skipping dependency installation - no working directory provided')
+    getLogger().debug('Skipping dependency installation - no working directory provided')
     return
   }
 
   const pkgPath = path.join(cwd, 'package.json')
   if (!(await fs.pathExists(pkgPath))) {
-    logger.debug('Skipping dependency installation - no package.json found')
+    getLogger().debug('Skipping dependency installation - no package.json found')
     return
   }
 
   const packageManager = await detectPackageManager(cwd)
 
-  logger.info(`Installing dependencies with ${packageManager}...`)
+  getLogger().info(`Installing dependencies with ${packageManager}...`)
 
   const args: string[] = ['install']
 
@@ -129,7 +129,7 @@ export async function installDependencies(
       timeout: 300000,   // 5 minute timeout for install
     })
 
-    logger.success('Dependencies installed successfully')
+    getLogger().success('Dependencies installed successfully')
   } catch (error) {
     const execaError = error as ExecaError
     const stderr = execaError.stderr ?? execaError.message ?? 'Unknown error'

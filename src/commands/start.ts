@@ -1,5 +1,5 @@
 import path from 'path'
-import { logger as defaultLogger, type Logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 import type { IssueTracker } from '../lib/IssueTracker.js'
 import { LoomManager } from '../lib/LoomManager.js'
 import { DefaultBranchNamingService } from '../lib/BranchNamingService.js'
@@ -38,16 +38,13 @@ export class StartCommand {
 	private loomManager: LoomManager | null = null
 	private settingsManager: SettingsManager
 	private providedLoomManager: LoomManager | undefined
-	private logger: Logger
 
 	constructor(
 		issueTracker: IssueTracker,
 		loomManager?: LoomManager,
 		_agentManager?: AgentManager,  // Kept for API compatibility
-		settingsManager?: SettingsManager,
-		logger?: Logger
+		settingsManager?: SettingsManager
 	) {
-		this.logger = logger ?? defaultLogger
 		this.issueTracker = issueTracker
 		this.settingsManager = settingsManager ?? new SettingsManager()
 		// Store provided LoomManager for testing, but don't initialize yet
@@ -56,10 +53,10 @@ export class StartCommand {
 		// Load environment variables first
 		const envResult = loadEnvIntoProcess()
 		if (envResult.error) {
-			this.logger.debug(`Environment loading warning: ${envResult.error.message}`)
+			getLogger().debug(`Environment loading warning: ${envResult.error.message}`)
 		}
 		if (envResult.parsed) {
-			this.logger.debug(`Loaded ${Object.keys(envResult.parsed).length} environment variables`)
+			getLogger().debug(`Loaded ${Object.keys(envResult.parsed).length} environment variables`)
 		}
 	}
 
@@ -84,14 +81,14 @@ export class StartCommand {
 		const settings = await this.settingsManager.loadSettings()
 
 		// Create DatabaseManager with NeonProvider and EnvironmentManager
-		const environmentManager = new EnvironmentManager(this.logger)
+		const environmentManager = new EnvironmentManager()
 		const neonProvider = createNeonProviderFromSettings(settings)
 		const databaseUrlEnvVarName = settings.capabilities?.database?.databaseUrlEnvVarName ?? 'DATABASE_URL'
 
-		const databaseManager = new DatabaseManager(neonProvider, environmentManager, databaseUrlEnvVarName, this.logger)
+		const databaseManager = new DatabaseManager(neonProvider, environmentManager, databaseUrlEnvVarName)
 
 		// Create BranchNamingService (defaults to Claude-based strategy)
-		const branchNaming = new DefaultBranchNamingService({ useClaude: true, logger: this.logger })
+		const branchNaming = new DefaultBranchNamingService({ useClaude: true })
 
 		this.loomManager = new LoomManager(
 			new GitWorktreeManager(mainWorktreePath),
@@ -100,10 +97,9 @@ export class StartCommand {
 			environmentManager,  // Reuse same instance
 			new ClaudeContextManager(),
 			new ProjectCapabilityDetector(),
-			new CLIIsolationManager(this.logger),
+			new CLIIsolationManager(),
 			this.settingsManager,  // Use same instance with CLI overrides
-			databaseManager,  // Add database manager
-			this.logger
+			databaseManager  // Add database manager
 		)
 
 		return this.loomManager
@@ -126,7 +122,7 @@ export class StartCommand {
 				const newSettings = await this.settingsManager.loadSettings()
 				const newProvider = newSettings.issueManagement?.provider ?? 'github'
 				if (newProvider !== this.issueTracker.providerName) {
-					this.logger.debug(`Reinitializing issue tracker: provider changed to "${newProvider}"`)
+					getLogger().debug(`Reinitializing issue tracker: provider changed to "${newProvider}"`)
 					this.issueTracker = IssueTrackerFactory.create(newSettings)
 				}
 			}
@@ -137,7 +133,7 @@ export class StartCommand {
 			if (this.issueTracker.providerName === 'github' && (await hasMultipleRemotes())) {
 				// Only relevant for GitHub - Linear doesn't use repo info
 				repo = await getConfiguredRepoFromSettings(initialSettings)
-				this.logger.info(`Using GitHub repository: ${repo}`)
+				getLogger().info(`Using GitHub repository: ${repo}`)
 			}
 
 			// Step 0.5: Initialize LoomManager with main worktree path
@@ -166,11 +162,11 @@ export class StartCommand {
 				// Check for explicit flag first
 				if (input.options.childLoom === true) {
 					// --child-loom flag: force child loom (no prompt)
-					this.logger.info(`Creating as child loom of ${parentDisplay} (--child-loom flag)`)
+					getLogger().info(`Creating as child loom of ${parentDisplay} (--child-loom flag)`)
 				} else if (input.options.childLoom === false) {
 					// --no-child-loom flag: force independent (no prompt)
 					parentLoom = null
-					this.logger.info('Creating as independent loom (--no-child-loom flag)')
+					getLogger().info('Creating as independent loom (--no-child-loom flag)')
 				} else {
 					// No flag: use existing behavior (prompt or error if non-interactive)
 					// JSON mode requires explicit flag
@@ -184,24 +180,24 @@ export class StartCommand {
 							true // Default yes
 						)
 					} else {
-						this.logger.error(`Non-interactive environment detected, use either --child-loom or --no-child-loom to specify behavior`)
+						getLogger().error(`Non-interactive environment detected, use either --child-loom or --no-child-loom to specify behavior`)
 						process.exit(1)
 					}
 
 					if (!createAsChild) {
 						parentLoom = null // User declined, proceed as normal loom
-						this.logger.info('Creating as independent loom')
+						getLogger().info('Creating as independent loom')
 					}
 				}
 			} else if (input.options.childLoom === true) {
 				// --child-loom flag but not in a parent loom - ignore silently (per requirements)
-				this.logger.debug('--child-loom flag provided but not running from inside an existing loom (ignored)')
+				getLogger().debug('--child-loom flag provided but not running from inside an existing loom (ignored)')
 			}
 			// Note: --no-child-loom when no parent is a no-op (already independent)
 
 			// Step 2.5: Handle description input - create GitHub issue
 			if (parsed.type === 'description') {
-				this.logger.info('Creating GitHub issue from description...')
+				getLogger().info('Creating GitHub issue from description...')
 				// Apply first-letter capitalization to title and body
 				const title = capitalizeFirstLetter(parsed.originalInput)
 				const body = input.options.body ? capitalizeFirstLetter(input.options.body) : ""
@@ -209,7 +205,7 @@ export class StartCommand {
 					title,  // Use capitalized description as title
 					body    // Use capitalized body or empty
 				)
-				this.logger.success(`Created issue #${result.number}: ${result.url}`)
+				getLogger().success(`Created issue #${result.number}: ${result.url}`)
 				// Update parsed to be an issue type with the new number
 				parsed.type = 'issue'
 				parsed.number = result.number
@@ -227,7 +223,7 @@ export class StartCommand {
 					'This can be dangerous. Do you want to proceed?'
 				)
 				if (!confirmed) {
-					this.logger.info('Operation cancelled by user')
+					getLogger().info('Operation cancelled by user')
 					process.exit(0)
 				}
 			}
@@ -244,7 +240,7 @@ export class StartCommand {
 			const executablePath = getExecutablePath()
 
 			// Step 3: Log success and create loom
-			this.logger.info(`Validated input: ${this.formatParsedInput(parsed)}`)
+			getLogger().info(`Validated input: ${this.formatParsedInput(parsed)}`)
 
 			// Step 4: Create loom using LoomManager
 			const identifier =
@@ -258,7 +254,7 @@ export class StartCommand {
 			const enableDevServer = input.options.devServer ?? workflowConfig?.startDevServer ?? true
 			const enableTerminal = input.options.terminal ?? workflowConfig?.startTerminal ?? false
 
-			this.logger.debug('Final workflow config values:', {
+			getLogger().debug('Final workflow config values:', {
 				enableClaude,
 				enableCode,
 				enableDevServer,
@@ -281,14 +277,14 @@ export class StartCommand {
 				},
 			})
 
-			this.logger.success(`Created loom: ${loom.id} at ${loom.path}`)
-			this.logger.info(`   Branch: ${loom.branch}`)
+			getLogger().success(`Created loom: ${loom.id} at ${loom.path}`)
+			getLogger().info(`   Branch: ${loom.branch}`)
 			// Only show port for web projects
 			if (loom.capabilities?.includes('web')) {
-				this.logger.info(`   Port: ${loom.port}`)
+				getLogger().info(`   Port: ${loom.port}`)
 			}
 			if (loom.issueData?.title) {
-				this.logger.info(`   Title: ${loom.issueData.title}`)
+				getLogger().info(`   Title: ${loom.issueData.title}`)
 			}
 
 			// Return StartResult in JSON mode
@@ -306,9 +302,9 @@ export class StartCommand {
 			}
 		} catch (error) {
 			if (error instanceof Error) {
-				this.logger.error(`${error.message}`)
+				getLogger().error(`${error.message}`)
 			} else {
-				this.logger.error('An unknown error occurred')
+				getLogger().error('An unknown error occurred')
 			}
 			throw error
 		}
@@ -427,7 +423,7 @@ export class StartCommand {
 				// Fetch and validate PR state
 				const pr = await this.issueTracker.fetchPR(parsed.number, repo)
 				await this.issueTracker.validatePRState(pr)
-				this.logger.debug(`Validated PR #${parsed.number}`)
+				getLogger().debug(`Validated PR #${parsed.number}`)
 				break
 			}
 
@@ -438,7 +434,7 @@ export class StartCommand {
 				// Fetch and validate issue state
 				const issue = await this.issueTracker.fetchIssue(parsed.number, repo)
 				await this.issueTracker.validateIssueState(issue)
-				this.logger.debug(`Validated issue #${parsed.number}`)
+				getLogger().debug(`Validated issue #${parsed.number}`)
 				break
 			}
 
@@ -452,13 +448,13 @@ export class StartCommand {
 						'Invalid branch name. Use only letters, numbers, hyphens, underscores, and slashes'
 					)
 				}
-				this.logger.debug(`Validated branch name: ${parsed.branchName}`)
+				getLogger().debug(`Validated branch name: ${parsed.branchName}`)
 				break
 			}
 
 			case 'description': {
 				// Description inputs are valid - they will be converted to issues
-				this.logger.debug('Detected description input', {
+				getLogger().debug('Detected description input', {
 					length: parsed.originalInput.length
 				})
 				break
@@ -534,7 +530,7 @@ export class StartCommand {
 				return null
 			}
 
-			this.logger.debug(`Detected parent loom: ${parentLoom.type} ${parentLoom.identifier} at ${parentLoom.path}`)
+			getLogger().debug(`Detected parent loom: ${parentLoom.type} ${parentLoom.identifier} at ${parentLoom.path}`)
 
 			const result: {
 				type: 'issue' | 'pr' | 'branch'
@@ -559,14 +555,14 @@ export class StartCommand {
 				const databaseBranch = await loomManager.getDatabaseBranchForLoom(parentLoom.path)
 				if (databaseBranch) {
 					result.databaseBranch = databaseBranch
-					this.logger.debug(`Detected parent database branch: ${databaseBranch}`)
+					getLogger().debug(`Detected parent database branch: ${databaseBranch}`)
 				}
 			}
 
 			return result
 		} catch (error) {
 			// If detection fails for any reason, just return null (don't break the start workflow)
-			this.logger.debug(`Failed to detect parent loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
+			getLogger().debug(`Failed to detect parent loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
 			return null
 		}
 	}
