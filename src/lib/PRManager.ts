@@ -2,7 +2,7 @@ import { executeGhCommand } from '../utils/github.js'
 import { launchClaude, detectClaudeCli } from '../utils/claude.js'
 import { getEffectivePRTargetRemote, getConfiguredRepoFromSettings, parseGitRemotes } from '../utils/remote.js'
 import { openBrowser } from '../utils/browser.js'
-import { logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 import type { IloomSettings } from './SettingsManager.js'
 
 interface ExistingPR {
@@ -17,7 +17,9 @@ interface PRCreationResult {
 }
 
 export class PRManager {
-	constructor(private settings: IloomSettings) {}
+	constructor(private settings: IloomSettings) {
+		// Uses getLogger() for all logging operations
+	}
 
 	/**
 	 * Check if a PR already exists for the given branch
@@ -38,7 +40,7 @@ export class PRManager {
 
 			return null
 		} catch (error) {
-			logger.debug('Error checking for existing PR', { error })
+		getLogger().debug('Error checking for existing PR', { error })
 			return null
 		}
 	}
@@ -70,7 +72,7 @@ export class PRManager {
 					}
 				}
 			} catch (error) {
-				logger.debug('Claude PR body generation failed, using template', { error })
+			getLogger().debug('Claude PR body generation failed, using template', { error })
 			}
 		}
 
@@ -222,7 +224,7 @@ Start your response immediately with the PR body text.
 
 				if (originRemote) {
 					headValue = `${originRemote.owner}:${branchName}`
-					logger.debug(`Fork workflow detected, using head: ${headValue}`)
+				getLogger().debug(`Fork workflow detected, using head: ${headValue}`)
 				}
 			}
 
@@ -274,10 +276,10 @@ Start your response immediately with the PR body text.
 	async openPRInBrowser(url: string): Promise<void> {
 		try {
 			await openBrowser(url)
-			logger.debug('Opened PR in browser', { url })
+		getLogger().debug('Opened PR in browser', { url })
 		} catch (error) {
 			// Don't fail the whole operation if browser opening fails
-			logger.warn('Failed to open PR in browser', { error })
+		getLogger().warn('Failed to open PR in browser', { error })
 		}
 	}
 
@@ -303,7 +305,7 @@ Start your response immediately with the PR body text.
 		const existingPR = await this.checkForExistingPR(branchName, worktreePath)
 
 		if (existingPR) {
-			logger.info(`Pull request already exists: ${existingPR.url}`)
+		getLogger().info(`Pull request already exists: ${existingPR.url}`)
 
 			if (openInBrowser) {
 				await this.openPRInBrowser(existingPR.url)
@@ -320,7 +322,7 @@ Start your response immediately with the PR body text.
 		const body = await this.generatePRBody(issueNumber, worktreePath)
 
 		// Create new PR
-		logger.info('Creating pull request...')
+	getLogger().info('Creating pull request...')
 		const url = await this.createPR(branchName, title, body, baseBranch, worktreePath)
 
 		// Extract PR number from URL

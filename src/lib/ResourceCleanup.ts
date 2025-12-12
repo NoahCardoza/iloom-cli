@@ -5,7 +5,7 @@ import { ProcessManager } from './process/ProcessManager.js'
 import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager } from './MetadataManager.js'
-import { logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber, isBranchMergedIntoMain, checkRemoteBranchStatus, type RemoteBranchStatus } from '../utils/git.js'
 
 import type {
@@ -52,7 +52,7 @@ export class ResourceCleanup {
 		const errors: Error[] = []
 
 		const displayIdentifier = parsed.branchName ?? parsed.number?.toString() ?? parsed.originalInput
-		logger.info(`Starting cleanup for: ${displayIdentifier}`)
+		getLogger().info(`Starting cleanup for: ${displayIdentifier}`)
 
 		// Extract number from ParsedInput for port calculation
 		const number = parsed.number
@@ -112,7 +112,7 @@ export class ResourceCleanup {
 				throw new Error(`No worktree found for identifier: ${displayIdentifier}`)
 			}
 
-			logger.debug(`Found worktree: path="${worktree.path}", branch="${worktree.branch}"`)
+			getLogger().debug(`Found worktree: path="${worktree.path}", branch="${worktree.branch}"`)
 		} catch (error) {
 			const err = error instanceof Error ? error : new Error('Unknown error')
 			errors.push(err)
@@ -143,7 +143,7 @@ export class ResourceCleanup {
 			// Log warnings if any
 			if (safety.warnings.length > 0) {
 				safety.warnings.forEach(warning => {
-					logger.warn(warning)
+					getLogger().warn(warning)
 				})
 			}
 		}
@@ -161,7 +161,7 @@ export class ResourceCleanup {
 				databaseConfig = { shouldCleanup, envFilePath }
 			} catch (error) {
 				// If we can't read the config, we'll skip database cleanup
-				logger.warn(
+			getLogger().warn(
 					`Failed to read database config from ${envFilePath}, skipping database cleanup: ${
 						error instanceof Error ? error.message : String(error)
 					}`
@@ -176,7 +176,7 @@ export class ResourceCleanup {
 			try {
 				mainWorktreePath = await findMainWorktreePathWithSettings(worktree.path, this.settingsManager)
 			} catch (error) {
-				logger.warn(
+			getLogger().warn(
 					`Failed to find main worktree path: ${error instanceof Error ? error.message : String(error)}`
 				)
 			}
@@ -210,7 +210,7 @@ export class ResourceCleanup {
 				// Step 4.5: Delete metadata file after worktree removal (spec section 3.3)
 				// This is idempotent - silently succeeds if file doesn't exist
 				await this.metadataManager.deleteMetadata(worktree.path)
-				logger.debug(`Metadata file cleanup attempted for: ${worktree.path}`)
+			getLogger().debug(`Metadata file cleanup attempted for: ${worktree.path}`)
 			} catch (error) {
 				const err = error instanceof Error ? error : new Error('Unknown error')
 				errors.push(err)
@@ -282,7 +282,7 @@ export class ResourceCleanup {
 					// Log warning but don't fail
 					const err = error instanceof Error ? error : new Error('Unknown error')
 					errors.push(err)
-					logger.warn(
+				getLogger().warn(
 						`CLI symlink cleanup failed: ${err.message}`
 					)
 					operations.push({
@@ -318,7 +318,7 @@ export class ResourceCleanup {
 							// Create operation result based on what actually happened
 							if (deletionResult.deleted) {
 								// Branch was actually deleted
-								logger.info(`Database branch deleted: ${worktree.branch}`)
+							getLogger().info(`Database branch deleted: ${worktree.branch}`)
 								operations.push({
 									type: 'database',
 									success: true,
@@ -327,7 +327,7 @@ export class ResourceCleanup {
 								})
 							} else if (deletionResult.notFound) {
 								// Branch didn't exist - not an error, just nothing to delete
-								logger.debug(`No database branch found for: ${worktree.branch}`)
+							getLogger().debug(`No database branch found for: ${worktree.branch}`)
 								operations.push({
 									type: 'database',
 									success: true,
@@ -336,7 +336,7 @@ export class ResourceCleanup {
 								})
 							} else if (deletionResult.userDeclined) {
 								// User declined preview database deletion
-								logger.info('Preview database deletion declined by user')
+							getLogger().info('Preview database deletion declined by user')
 								operations.push({
 									type: 'database',
 									success: true,
@@ -347,7 +347,7 @@ export class ResourceCleanup {
 								// Deletion failed with error
 								const errorMsg = deletionResult.error ?? 'Unknown error'
 								errors.push(new Error(errorMsg))
-								logger.warn(`Database cleanup failed: ${errorMsg}`)
+							getLogger().warn(`Database cleanup failed: ${errorMsg}`)
 								operations.push({
 									type: 'database',
 									success: false, // Non-fatal, but report error
@@ -358,7 +358,7 @@ export class ResourceCleanup {
 							} else {
 								// Unexpected state - log for debugging
 								errors.push(new Error('Database cleanup in an unknown state'))
-								logger.warn('Database deletion returned unexpected result state')
+							getLogger().warn('Database deletion returned unexpected result state')
 								operations.push({
 									type: 'database',
 									success: false,
@@ -369,7 +369,7 @@ export class ResourceCleanup {
 						} catch (error) {
 							// Unexpected exception (shouldn't happen with result object pattern)
 							errors.push(error instanceof Error ? error : new Error(String(error)))
-							logger.warn(
+						getLogger().warn(
 								`Unexpected database cleanup exception: ${error instanceof Error ? error.message : String(error)}`
 							)
 							operations.push({
@@ -421,23 +421,23 @@ export class ResourceCleanup {
 	 * Terminate dev server on specified port
 	 */
 	async terminateDevServer(port: number): Promise<boolean> {
-		logger.debug(`Checking for dev server on port ${port}`)
+	getLogger().debug(`Checking for dev server on port ${port}`)
 
 		const processInfo = await this.processManager.detectDevServer(port)
 
 		if (!processInfo) {
-			logger.debug(`No process found on port ${port}`)
+		getLogger().debug(`No process found on port ${port}`)
 			return false
 		}
 
 		if (!processInfo.isDevServer) {
-			logger.warn(
+		getLogger().warn(
 				`Process on port ${port} (${processInfo.name}) doesn't appear to be a dev server, skipping`
 			)
 			return false
 		}
 
-		logger.info(`Terminating dev server: ${processInfo.name} (PID: ${processInfo.pid})`)
+	getLogger().info(`Terminating dev server: ${processInfo.name} (PID: ${processInfo.pid})`)
 
 		await this.processManager.terminateProcess(processInfo.pid)
 
@@ -481,12 +481,12 @@ export class ResourceCleanup {
 			})
 		} catch {
 			// Branch doesn't exist - already deleted, return success
-			logger.debug(`Branch ${branchName} does not exist, skipping deletion`)
+		getLogger().debug(`Branch ${branchName} does not exist, skipping deletion`)
 			return true
 		}
 
 		if (options.dryRun) {
-			logger.info(`[DRY RUN] Would delete branch: ${branchName}`)
+		getLogger().info(`[DRY RUN] Would delete branch: ${branchName}`)
 			return true
 		}
 
@@ -498,14 +498,14 @@ export class ResourceCleanup {
 				cwd: workingDir
 			})
 
-			logger.info(`Branch deleted: ${branchName}`)
+		getLogger().info(`Branch deleted: ${branchName}`)
 			return true
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error)
 
 			// Handle "branch not found" - may occur in race conditions
 			if (errorMessage.includes('not found') || errorMessage.includes('does not exist')) {
-				logger.debug(`Branch ${branchName} already deleted`)
+			getLogger().debug(`Branch ${branchName} already deleted`)
 				return true
 			}
 
@@ -539,7 +539,7 @@ export class ResourceCleanup {
 	 */
 	async cleanupDatabase(branchName: string, worktreePath: string): Promise<boolean> {
 		if (!this.database) {
-			logger.debug('Database manager not available, skipping database cleanup')
+		getLogger().debug('Database manager not available, skipping database cleanup')
 			return false
 		}
 
@@ -554,7 +554,7 @@ export class ResourceCleanup {
 				cwd = await findMainWorktreePathWithSettings(worktreePath, this.settingsManager)
 			} catch (error) {
 				// If we can't find main worktree, commands will run from current directory
-				logger.debug(
+			getLogger().debug(
 					`Could not find main worktree path, using current directory: ${error instanceof Error ? error.message : String(error)}`
 				)
 			}
@@ -568,25 +568,25 @@ export class ResourceCleanup {
 
 			// Only return true if deletion actually occurred
 			if (result.deleted) {
-				logger.info(`Database branch deleted: ${branchName}`)
+			getLogger().info(`Database branch deleted: ${branchName}`)
 				return true
 			} else if (result.notFound) {
-				logger.debug(`No database branch found for: ${branchName}`)
+			getLogger().debug(`No database branch found for: ${branchName}`)
 				return false
 			} else if (result.userDeclined) {
-				logger.info('Preview database deletion declined by user')
+			getLogger().info('Preview database deletion declined by user')
 				return false
 			} else if (!result.success) {
-				logger.warn(`Database cleanup failed: ${result.error ?? 'Unknown error'}`)
+			getLogger().warn(`Database cleanup failed: ${result.error ?? 'Unknown error'}`)
 				return false
 			} else {
 				// Unexpected state
-				logger.debug('Database deletion returned unexpected result')
+			getLogger().debug('Database deletion returned unexpected result')
 				return false
 			}
 		} catch (error) {
 			// Unexpected exception
-			logger.warn(
+		getLogger().warn(
 				`Unexpected database cleanup error: ${error instanceof Error ? error.message : String(error)}`
 			)
 			return false

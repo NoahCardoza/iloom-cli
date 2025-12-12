@@ -1,4 +1,4 @@
-import { logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 import { detectPackageManager, runScript } from '../utils/package-manager.js'
 import { readPackageJson, hasScript } from '../utils/package-json.js'
 import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
@@ -39,7 +39,7 @@ export class BuildRunner {
 			const hasBuildScript = hasScript(pkgJson, 'build')
 
 			if (!hasBuildScript) {
-				logger.debug('Skipping build - no build script found')
+			getLogger().debug('Skipping build - no build script found')
 				return {
 					success: true,
 					skipped: true,
@@ -50,7 +50,7 @@ export class BuildRunner {
 		} catch (error) {
 			// Handle missing package.json - skip build for non-Node.js projects
 			if (error instanceof Error && error.message.includes('package.json not found')) {
-				logger.debug('Skipping build - no package.json found (non-Node.js project)')
+			getLogger().debug('Skipping build - no package.json found (non-Node.js project)')
 				return {
 					success: true,
 					skipped: true,
@@ -67,7 +67,7 @@ export class BuildRunner {
 		const isCLIProject = capabilities.capabilities.includes('cli')
 
 		if (!isCLIProject) {
-			logger.debug('Skipping build - not a CLI project (no bin field)')
+		getLogger().debug('Skipping build - not a CLI project (no bin field)')
 			return {
 				success: true,
 				skipped: true,
@@ -83,7 +83,7 @@ export class BuildRunner {
 		if (options.dryRun) {
 			const command =
 				packageManager === 'npm' ? 'npm run build' : `${packageManager} build`
-			logger.info(`[DRY RUN] Would run: ${command}`)
+		getLogger().info(`[DRY RUN] Would run: ${command}`)
 			return {
 				success: true,
 				skipped: false,
@@ -92,11 +92,11 @@ export class BuildRunner {
 		}
 
 		// Step 5: Execute build
-		logger.info('Running build...')
+	getLogger().info('Running build...')
 
 		try {
 			await runScript('build', buildPath, [], { quiet: true })
-			logger.success('Build completed successfully')
+		getLogger().success('Build completed successfully')
 
 			return {
 				success: true,

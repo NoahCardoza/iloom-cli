@@ -469,16 +469,35 @@ program
   .option('--no-browser', 'Skip opening PR in browser (github-pr mode only)')
   .option('--cleanup', 'Clean up worktree after PR creation (github-pr mode only)')
   .option('--no-cleanup', 'Keep worktree after PR creation (github-pr mode only)')
+  .option('--json', 'Output result as JSON')
   .action(async (identifier: string | undefined, options: FinishOptions) => {
-    try {
-      const settingsManager = new SettingsManager()
-      const settings = await settingsManager.loadSettings()
-      const issueTracker = IssueTrackerFactory.create(settings)
-      const command = new FinishCommand(issueTracker)
-      await command.execute({ identifier, options })
-    } catch (error) {
-      logger.error(`Failed to finish workspace: ${error instanceof Error ? error.message : 'Unknown error'}`)
-      process.exit(1)
+    const executeAction = async (): Promise<void> => {
+      try {
+        const settingsManager = new SettingsManager()
+        const settings = await settingsManager.loadSettings()
+        const issueTracker = IssueTrackerFactory.create(settings)
+        const command = new FinishCommand(issueTracker)
+        const result = await command.execute({ identifier, options })
+        if (options.json && result) {
+          console.log(JSON.stringify(result, null, 2))
+        }
+        process.exit(0)
+      } catch (error) {
+        if (options.json) {
+          console.log(JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
+        } else {
+          logger.error(`Failed to finish workspace: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+        process.exit(1)
+      }
+    }
+
+    // Wrap execution in logger context for JSON mode
+    if (options.json) {
+      const jsonLogger = createStderrLogger()
+      await withLogger(jsonLogger, executeAction)
+    } else {
+      await executeAction()
     }
   })
 
@@ -586,21 +605,40 @@ program
   .option('-i, --issue <number>', 'Cleanup by issue number', parseInt)
   .option('-f, --force', 'Skip confirmations and force removal')
   .option('--dry-run', 'Show what would be done without doing it')
+  .option('--json', 'Output result as JSON')
   .action(async (identifier?: string, options?: CleanupOptions) => {
-    try {
-      const { CleanupCommand } = await import('./commands/cleanup.js')
-      const command = new CleanupCommand()
-      const input: { identifier?: string; options: CleanupOptions } = {
-        options: options ?? {}
+    const executeAction = async (): Promise<void> => {
+      try {
+        const { CleanupCommand } = await import('./commands/cleanup.js')
+        const command = new CleanupCommand()
+        const input: { identifier?: string; options: CleanupOptions } = {
+          options: options ?? {}
+        }
+        if (identifier) {
+          input.identifier = identifier
+        }
+        const result = await command.execute(input)
+        if (options?.json && result) {
+          console.log(JSON.stringify(result, null, 2))
+        }
+        process.exit(0)
+      } catch (error) {
+        if (options?.json) {
+          console.log(JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
+        } else {
+          // Error message is already well-formatted (e.g., "Cannot cleanup:\n\n...")
+          logger.error(error instanceof Error ? error.message : 'Unknown error')
+        }
+        process.exit(1)
       }
-      if (identifier) {
-        input.identifier = identifier
-      }
-      await command.execute(input)
-    } catch (error) {
-      // Error message is already well-formatted (e.g., "Cannot cleanup:\n\n...")
-      logger.error(error instanceof Error ? error.message : 'Unknown error')
-      process.exit(1)
+    }
+
+    // Wrap execution in logger context for JSON mode
+    if (options?.json) {
+      const jsonLogger = createStderrLogger()
+      await withLogger(jsonLogger, executeAction)
+    } else {
+      await executeAction()
     }
   })
 

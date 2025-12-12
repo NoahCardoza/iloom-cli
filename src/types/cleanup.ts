@@ -28,6 +28,8 @@ export interface CleanupResult {
 	branchName?: string
 	/** Overall success status */
 	success: boolean
+	/** Whether this was a dry-run operation */
+	dryRun?: boolean
 	/** Individual operation results */
 	operations: OperationResult[]
 	/** Errors encountered during cleanup */

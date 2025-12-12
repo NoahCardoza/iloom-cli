@@ -1,5 +1,5 @@
 import { executeGitCommand, findMainWorktreePathWithSettings } from '../utils/git.js'
-import { logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { SettingsManager } from './SettingsManager.js'
 import type { MergeOptions } from '../types/index.js'
@@ -39,7 +39,7 @@ export class MergeManager {
 		const { dryRun = false, force = false } = options
 		const mainBranch = await this.getMainBranch(worktreePath)
 
-		logger.info(`Starting rebase on ${mainBranch} branch...`)
+		getLogger().info(`Starting rebase on ${mainBranch} branch...`)
 
 		// Step 1: Check if main branch exists
 		try {
@@ -80,7 +80,7 @@ export class MergeManager {
 
 		// If merge-base matches main HEAD, branch is already up to date
 		if (mergeBaseTrimmed === mainHeadTrimmed) {
-			logger.success(`Branch is already up to date with ${mainBranch}. No rebase needed.`)
+			getLogger().success(`Branch is already up to date with ${mainBranch}. No rebase needed.`)
 			return
 		}
 
@@ -94,25 +94,25 @@ export class MergeManager {
 
 		if (commits) {
 			// Show commits that will be rebased
-			logger.info(`Found ${commitLines.length} commit(s) to rebase:`)
-			commitLines.forEach((commit) => logger.info(`  ${commit}`))
+			getLogger().info(`Found ${commitLines.length} commit(s) to rebase:`)
+			commitLines.forEach((commit) => getLogger().info(`  ${commit}`))
 		} else {
 			// Main has moved forward but branch has no new commits
-			logger.info(`${mainBranch} branch has moved forward. Rebasing to update branch...`)
+			getLogger().info(`${mainBranch} branch has moved forward. Rebasing to update branch...`)
 		}
 
 		// Step 5: User confirmation (unless force mode or dry-run)
 		if (!force && !dryRun) {
 			// TODO: Implement interactive prompt for confirmation
 			// For now, proceeding automatically (use --force to skip this message)
-			logger.info('Proceeding with rebase... (use --force to skip confirmations)')
+			getLogger().info('Proceeding with rebase... (use --force to skip confirmations)')
 		}
 
 		// Step 6: Execute rebase (unless dry-run)
 		if (dryRun) {
-			logger.info(`[DRY RUN] Would execute: git rebase ${mainBranch}`)
+			getLogger().info(`[DRY RUN] Would execute: git rebase ${mainBranch}`)
 			if (commitLines.length > 0) {
-				logger.info(`[DRY RUN] This would rebase ${commitLines.length} commit(s)`)
+				getLogger().info(`[DRY RUN] This would rebase ${commitLines.length} commit(s)`)
 			}
 			return
 		}
@@ -120,14 +120,14 @@ export class MergeManager {
 		// Execute rebase
 		try {
 			await executeGitCommand(['rebase', mainBranch], { cwd: worktreePath })
-			logger.success('Rebase completed successfully!')
+			getLogger().success('Rebase completed successfully!')
 		} catch (error) {
 			// Detect conflicts
 			const conflictedFiles = await this.detectConflictedFiles(worktreePath)
 
 			if (conflictedFiles.length > 0) {
 				// Try Claude-assisted resolution first
-				logger.info('Merge conflicts detected, attempting Claude-assisted resolution...')
+				getLogger().info('Merge conflicts detected, attempting Claude-assisted resolution...')
 
 				const resolved = await this.attemptClaudeConflictResolution(
 					worktreePath,
@@ -135,7 +135,7 @@ export class MergeManager {
 				)
 
 				if (resolved) {
-					logger.success('Conflicts resolved with Claude assistance, rebase completed')
+					getLogger().success('Conflicts resolved with Claude assistance, rebase completed')
 					return // Continue with successful rebase
 				}
 
@@ -206,7 +206,7 @@ export class MergeManager {
 	): Promise<void> {
 		const { dryRun = false, force = false } = options
 
-		logger.info('Starting fast-forward merge...')
+		getLogger().info('Starting fast-forward merge...')
 
 		// Step 1: Find where main branch is checked out
 		// This copies the bash script approach: find main worktree, run commands from there
@@ -218,7 +218,7 @@ export class MergeManager {
 		const mainBranch = await this.getMainBranch(worktreePath)
 
 		// Step 3: No need to checkout main - it's already checked out in mainWorktreePath
-		logger.debug(`Using ${mainBranch} branch location: ${mainWorktreePath}`)
+		getLogger().debug(`Using ${mainBranch} branch location: ${mainWorktreePath}`)
 
 		// Step 4: Verify on main branch
 		const currentBranch = await executeGitCommand(['branch', '--show-current'], {
@@ -245,34 +245,34 @@ export class MergeManager {
 
 		// If no commits, branch has no changes ahead of main
 		if (!commits) {
-			logger.success(`Branch has no commits ahead of ${mainBranch}. No merge needed.`)
+			getLogger().success(`Branch has no commits ahead of ${mainBranch}. No merge needed.`)
 			return
 		}
 
 		// Show commits that will be merged
 		const commitLines = commits.split('\n')
-		logger.info(`Found ${commitLines.length} commit(s) to merge:`)
-		commitLines.forEach((commit) => logger.info(`  ${commit}`))
+		getLogger().info(`Found ${commitLines.length} commit(s) to merge:`)
+		commitLines.forEach((commit) => getLogger().info(`  ${commit}`))
 
 		// Step 7: User confirmation (unless force mode or dry-run)
 		if (!force && !dryRun) {
 			// TODO: Implement interactive prompt for confirmation
 			// For now, proceeding automatically (use --force to skip this message)
-			logger.info('Proceeding with fast-forward merge... (use --force to skip confirmations)')
+			getLogger().info('Proceeding with fast-forward merge... (use --force to skip confirmations)')
 		}
 
 		// Step 8: Execute merge (unless dry-run)
 		if (dryRun) {
-			logger.info(`[DRY RUN] Would execute: git merge --ff-only ${branchName}`)
-			logger.info(`[DRY RUN] This would merge ${commitLines.length} commit(s)`)
+			getLogger().info(`[DRY RUN] Would execute: git merge --ff-only ${branchName}`)
+			getLogger().info(`[DRY RUN] This would merge ${commitLines.length} commit(s)`)
 			return
 		}
 
 		// Execute fast-forward merge
 		try {
-			logger.debug(`Executing fast-forward merge of ${branchName} into ${mainBranch} using cwd: ${mainWorktreePath}...`)
+			getLogger().debug(`Executing fast-forward merge of ${branchName} into ${mainBranch} using cwd: ${mainWorktreePath}...`)
 			await executeGitCommand(['merge', '--ff-only', branchName], { cwd: mainWorktreePath })
-			logger.success(`Fast-forward merge completed! Merged ${commitLines.length} commit(s).`)
+			getLogger().success(`Fast-forward merge completed! Merged ${commitLines.length} commit(s).`)
 		} catch (error) {
 			throw new Error(
 				`Fast-forward merge failed: ${error instanceof Error ? error.message : String(error)}\n\n` +
@@ -341,11 +341,11 @@ export class MergeManager {
 		// Check if Claude CLI is available
 		const isClaudeAvailable = await detectClaudeCli()
 		if (!isClaudeAvailable) {
-			logger.debug('Claude CLI not available, skipping conflict resolution')
+			getLogger().debug('Claude CLI not available, skipping conflict resolution')
 			return false
 		}
 
-		logger.info(`Launching Claude to resolve conflicts in ${conflictedFiles.length} file(s)...`)
+		getLogger().info(`Launching Claude to resolve conflicts in ${conflictedFiles.length} file(s)...`)
 
 		// Hard-coded prompt matching bash script line 844
 		// No templates, no complexity - just the essential instruction
@@ -368,7 +368,7 @@ export class MergeManager {
 			const remainingConflicts = await this.detectConflictedFiles(worktreePath)
 
 			if (remainingConflicts.length > 0) {
-				logger.warn(
+				getLogger().warn(
 					`Conflicts still exist in ${remainingConflicts.length} file(s) after Claude assistance`
 				)
 				return false
@@ -378,13 +378,13 @@ export class MergeManager {
 			const rebaseInProgress = await this.isRebaseInProgress(worktreePath)
 
 			if (rebaseInProgress) {
-				logger.warn('Rebase still in progress after Claude assistance')
+				getLogger().warn('Rebase still in progress after Claude assistance')
 				return false
 			}
 
 			return true
 		} catch (error) {
-			logger.warn('Claude conflict resolution failed', {
+			getLogger().warn('Claude conflict resolution failed', {
 				error: error instanceof Error ? error.message : String(error),
 			})
 			return false

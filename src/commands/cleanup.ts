@@ -160,12 +160,15 @@ export class CleanupCommand {
    * Main entry point for the cleanup command
    * Parses input, validates options, and determines operation mode
    */
-  public async execute(input: CleanupCommandInput): Promise<void> {
+  public async execute(input: CleanupCommandInput): Promise<CleanupResult | void> {
     // Step 1: Parse input and determine mode
     const parsed = this.parseInput(input)
 
     // Step 2: Validate option combinations
     this.validateInput(parsed)
+
+    // Note: JSON mode auto-skips routine confirmations (programmatic use can't interact)
+    // Safety checks still require --force to bypass (ResourceCleanup.validateWorktreeSafety throws errors)
 
     // Step 2.5: Check for child looms AFTER parsing input
     // This ensures we only block when cleaning the CURRENT loom (parent), not a child
@@ -175,7 +178,7 @@ export class CleanupCommand {
     getLogger().info(`Cleanup mode: ${parsed.mode}`)
 
     if (parsed.mode === 'single') {
-      await this.executeSingleCleanup(parsed)
+      return await this.executeSingleCleanup(parsed)
     } else if (parsed.mode === 'list') {
       getLogger().info('Would list all worktrees')  // TODO: Implement in Sub-issue #2
       getLogger().success('Command parsing and validation successful')
@@ -183,7 +186,7 @@ export class CleanupCommand {
       getLogger().info('Would remove all worktrees')  // TODO: Implement in Sub-issue #5
       getLogger().success('Command parsing and validation successful')
     } else if (parsed.mode === 'issue') {
-      await this.executeIssueCleanup(parsed)
+      return await this.executeIssueCleanup(parsed)
     }
   }
 
@@ -329,7 +332,7 @@ export class CleanupCommand {
    * Implements two-stage confirmation: worktree removal, then branch deletion
    * Uses IdentifierParser for pattern-based detection without GitHub API calls
    */
-  private async executeSingleCleanup(parsed: ParsedCleanupInput): Promise<void> {
+  private async executeSingleCleanup(parsed: ParsedCleanupInput): Promise<CleanupResult> {
     const identifier = parsed.branchName ?? parsed.identifier ?? ''
     if (!identifier) {
       throw new Error('No identifier found for cleanup')
@@ -354,12 +357,21 @@ export class CleanupCommand {
     // Step 2: Display worktree details
     getLogger().info(`Preparing to cleanup worktree: ${identifier}`)
 
-    // Step 3: Confirmation - worktree removal
-    if (!force) {
+    // Step 3: Routine confirmation - worktree removal
+    // Skip if --force (user explicitly bypasses) or --json (programmatic use can't interact)
+    // Note: Safety checks (uncommitted changes, unmerged work) still require --force to bypass
+    if (!force && !parsed.options.json) {
       const confirmWorktree = await promptConfirmation('Remove this worktree?', true)
       if (!confirmWorktree) {
         getLogger().info('Cleanup cancelled')
-        return
+        return {
+          identifier,
+          success: false,
+          dryRun: dryRun ?? false,
+          operations: [],
+          errors: [],
+          rollbackRequired: false,
+        }
       }
     }
 
@@ -378,6 +390,9 @@ export class CleanupCommand {
       checkMergeSafety: true  // Run 5-point safety check BEFORE any deletion
     })
 
+    // Add dryRun flag to result
+    cleanupResult.dryRun = dryRun ?? false
+
     // Step 5: Report cleanup results
     this.reportCleanupResults(cleanupResult)
 
@@ -387,6 +402,8 @@ export class CleanupCommand {
     } else {
       getLogger().warn('Cleanup completed with errors - see details above')
     }
+
+    return cleanupResult
   }
 
   /**
@@ -416,7 +433,7 @@ export class CleanupCommand {
    * Searches for worktrees by their path patterns (e.g., issue-25, pr-25, 25-feature, _pr_25)
    * Implements bash cleanup-worktree.sh remove_worktrees_by_issue() (lines 157-242)
    */
-  private async executeIssueCleanup(parsed: ParsedCleanupInput): Promise<void> {
+  private async executeIssueCleanup(parsed: ParsedCleanupInput): Promise<CleanupResult> {
     const issueNumber = parsed.issueNumber
     if (issueNumber === undefined) {
       throw new Error('No issue/PR number provided for cleanup')
@@ -443,7 +460,14 @@ export class CleanupCommand {
     if (matchingWorktrees.length === 0) {
       getLogger().warn(`No worktrees found for GitHub issue/PR #${issueNumber}`)
       getLogger().info(`Searched for worktree paths containing: ${issueNumber}, _pr_${issueNumber}, issue-${issueNumber}, etc.`)
-      return
+      return {
+        identifier: String(issueNumber),
+        success: true,
+        dryRun: dryRun ?? false,
+        operations: [],
+        errors: [],
+        rollbackRequired: false,
+      }
     }
 
     // Step 2: Build targets list from matching worktrees
@@ -457,18 +481,27 @@ export class CleanupCommand {
     // Step 3: Display preview
     getLogger().info(`Found ${targets.length} worktree(s) related to issue/PR #${issueNumber}:`)
     for (const target of targets) {
-      getLogger().info(`  🌿 ${target.branchName} (${target.worktreePath})`)
+      getLogger().info(`  Branch: ${target.branchName} (${target.worktreePath})`)
     }
 
-    // Step 4: Batch confirmation (unless --force)
-    if (!force) {
+    // Step 4: Routine batch confirmation
+    // Skip if --force (user explicitly bypasses) or --json (programmatic use can't interact)
+    // Note: Safety checks per-worktree (uncommitted changes, unmerged work) still require --force to bypass
+    if (!force && !parsed.options.json) {
       const confirmCleanup = await promptConfirmation(
         `Remove ${targets.length} worktree(s)?`,
         true
       )
       if (!confirmCleanup) {
         getLogger().info('Cleanup cancelled')
-        return
+        return {
+          identifier: String(issueNumber),
+          success: false,
+          dryRun: dryRun ?? false,
+          operations: [],
+          errors: [],
+          rollbackRequired: false,
+        }
       }
     }
 
@@ -539,14 +572,28 @@ export class CleanupCommand {
 
     // Step 7: Report statistics
     getLogger().success(`Completed cleanup for issue/PR #${issueNumber}:`)
-    getLogger().info(`   📁 Worktrees removed: ${worktreesRemoved}`)
-    getLogger().info(`   🌿 Branches deleted: ${branchesDeleted}`)
+    getLogger().info(`   Worktrees removed: ${worktreesRemoved}`)
+    getLogger().info(`   Branches deleted: ${branchesDeleted}`)
     if (databaseBranchesDeletedList.length > 0) {
       // Display branch names in the format requested
-      getLogger().info(`   🗂️ Database branches deleted: ${databaseBranchesDeletedList.join(', ')}`)
+      getLogger().info(`   Database branches deleted: ${databaseBranchesDeletedList.join(', ')}`)
     }
     if (failed > 0) {
-      getLogger().warn(`   ❌ Failed operations: ${failed}`)
+      getLogger().warn(`   Failed operations: ${failed}`)
+    }
+
+    // Return aggregated result
+    return {
+      identifier: String(issueNumber),
+      success: failed === 0,
+      dryRun: dryRun ?? false,
+      operations: [
+        { type: 'worktree' as const, success: true, message: `Removed ${worktreesRemoved} worktree(s)` },
+        { type: 'branch' as const, success: true, message: `Deleted ${branchesDeleted} branch(es)` },
+        ...(databaseBranchesDeletedList.length > 0 ? [{ type: 'database' as const, success: true, message: `Deleted ${databaseBranchesDeletedList.length} database branch(es)`, deleted: true }] : []),
+      ],
+      errors: [],
+      rollbackRequired: false,
     }
   }
 }

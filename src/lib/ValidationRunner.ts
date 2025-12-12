@@ -1,4 +1,4 @@
-import { logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 import { detectPackageManager, runScript } from '../utils/package-manager.js'
 import { readPackageJson, hasScript } from '../utils/package-json.js'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
@@ -13,6 +13,10 @@ import type {
  * Runs typecheck, lint, and tests in sequence with fail-fast behavior
  */
 export class ValidationRunner {
+	constructor() {
+		// Uses getLogger() for all logging operations
+	}
+
 	/**
 	 * Run all validations in sequence: typecheck → lint → test
 	 * Fails fast on first error
@@ -92,7 +96,7 @@ export class ValidationRunner {
 			}
 
 			if (!scriptToRun) {
-				logger.debug('Skipping typecheck - no compile or typecheck script found')
+				getLogger().debug('Skipping typecheck - no compile or typecheck script found')
 				return {
 					step: 'typecheck',
 					passed: true,
@@ -103,7 +107,7 @@ export class ValidationRunner {
 		} catch (error) {
 			// Handle missing package.json - skip validation for non-Node.js projects
 			if (error instanceof Error && error.message.includes('package.json not found')) {
-				logger.debug('Skipping typecheck - no package.json found (non-Node.js project)')
+				getLogger().debug('Skipping typecheck - no package.json found (non-Node.js project)')
 				return {
 					step: 'typecheck',
 					passed: true,
@@ -122,7 +126,7 @@ export class ValidationRunner {
 				packageManager === 'npm'
 					? `npm run ${scriptToRun}`
 					: `${packageManager} ${scriptToRun}`
-			logger.info(`[DRY RUN] Would run: ${command}`)
+			getLogger().info(`[DRY RUN] Would run: ${command}`)
 			return {
 				step: scriptToRun,
 				passed: true,
@@ -131,11 +135,11 @@ export class ValidationRunner {
 			}
 		}
 
-		logger.info(`Running ${scriptToRun}...`)
+		getLogger().info(`Running ${scriptToRun}...`)
 
 		try {
 			await runScript(scriptToRun, worktreePath, [], { quiet: true })
-			logger.success(`${scriptToRun.charAt(0).toUpperCase() + scriptToRun.slice(1)} passed`)
+			getLogger().success(`${scriptToRun.charAt(0).toUpperCase() + scriptToRun.slice(1)} passed`)
 
 			return {
 				step: scriptToRun,
@@ -190,7 +194,7 @@ export class ValidationRunner {
 			const hasLintScript = hasScript(pkgJson, 'lint')
 
 			if (!hasLintScript) {
-				logger.debug('Skipping lint - no lint script found')
+				getLogger().debug('Skipping lint - no lint script found')
 				return {
 					step: 'lint',
 					passed: true,
@@ -201,7 +205,7 @@ export class ValidationRunner {
 		} catch (error) {
 			// Handle missing package.json - skip validation for non-Node.js projects
 			if (error instanceof Error && error.message.includes('package.json not found')) {
-				logger.debug('Skipping lint - no package.json found (non-Node.js project)')
+				getLogger().debug('Skipping lint - no package.json found (non-Node.js project)')
 				return {
 					step: 'lint',
 					passed: true,
@@ -218,7 +222,7 @@ export class ValidationRunner {
 		if (dryRun) {
 			const command =
 				packageManager === 'npm' ? 'npm run lint' : `${packageManager} lint`
-			logger.info(`[DRY RUN] Would run: ${command}`)
+			getLogger().info(`[DRY RUN] Would run: ${command}`)
 			return {
 				step: 'lint',
 				passed: true,
@@ -227,11 +231,11 @@ export class ValidationRunner {
 			}
 		}
 
-		logger.info('Running lint...')
+		getLogger().info('Running lint...')
 
 		try {
 			await runScript('lint', worktreePath, [], { quiet: true })
-			logger.success('Linting passed')
+			getLogger().success('Linting passed')
 
 			return {
 				step: 'lint',
@@ -284,7 +288,7 @@ export class ValidationRunner {
 			const hasTestScript = hasScript(pkgJson, 'test')
 
 			if (!hasTestScript) {
-				logger.debug('Skipping tests - no test script found')
+				getLogger().debug('Skipping tests - no test script found')
 				return {
 					step: 'test',
 					passed: true,
@@ -295,7 +299,7 @@ export class ValidationRunner {
 		} catch (error) {
 			// Handle missing package.json - skip validation for non-Node.js projects
 			if (error instanceof Error && error.message.includes('package.json not found')) {
-				logger.debug('Skipping tests - no package.json found (non-Node.js project)')
+				getLogger().debug('Skipping tests - no package.json found (non-Node.js project)')
 				return {
 					step: 'test',
 					passed: true,
@@ -312,7 +316,7 @@ export class ValidationRunner {
 		if (dryRun) {
 			const command =
 				packageManager === 'npm' ? 'npm run test' : `${packageManager} test`
-			logger.info(`[DRY RUN] Would run: ${command}`)
+			getLogger().info(`[DRY RUN] Would run: ${command}`)
 			return {
 				step: 'test',
 				passed: true,
@@ -321,11 +325,11 @@ export class ValidationRunner {
 			}
 		}
 
-		logger.info('Running tests...')
+		getLogger().info('Running tests...')
 
 		try {
 			await runScript('test', worktreePath, [], { quiet: true })
-			logger.success('Tests passed')
+			getLogger().success('Tests passed')
 
 			return {
 				step: 'test',
@@ -380,7 +384,7 @@ export class ValidationRunner {
 		// Check if Claude CLI is available
 		const isClaudeAvailable = await detectClaudeCli()
 		if (!isClaudeAvailable) {
-			logger.debug('Claude CLI not available, skipping auto-fix')
+			getLogger().debug('Claude CLI not available, skipping auto-fix')
 			return false
 		}
 
@@ -391,7 +395,7 @@ export class ValidationRunner {
 		const prompt = this.getClaudePrompt(validationType, validationCommand)
 
 		const validationTypeCapitalized = validationType.charAt(0).toUpperCase() + validationType.slice(1)
-		logger.info(`Launching Claude to help fix ${validationTypeCapitalized} errors...`)
+		getLogger().info(`Launching Claude to help fix ${validationTypeCapitalized} errors...`)
 
 		try {
 			// Launch Claude in interactive mode with acceptEdits permission
@@ -403,21 +407,21 @@ export class ValidationRunner {
 			})
 
 			// After Claude completes, re-run validation to verify fix
-			logger.info(`Re-running ${validationTypeCapitalized} after Claude's fixes...`)
+			getLogger().info(`Re-running ${validationTypeCapitalized} after Claude's fixes...`)
 
 			try {
 				await runScript(validationType, worktreePath, [], { quiet: true })
 				// Validation passed after Claude fix
-				logger.success(`${validationTypeCapitalized} passed after Claude auto-fix`)
+				getLogger().success(`${validationTypeCapitalized} passed after Claude auto-fix`)
 				return true
 			} catch {
 				// Validation still failing after Claude's attempt
-				logger.warn(`${validationTypeCapitalized} still failing after Claude's help`)
+				getLogger().warn(`${validationTypeCapitalized} still failing after Claude's help`)
 				return false
 			}
 		} catch (error) {
 			// Claude launch failed or crashed
-			logger.warn('Claude auto-fix failed', {
+			getLogger().warn('Claude auto-fix failed', {
 				error: error instanceof Error ? error.message : String(error),
 			})
 			return false

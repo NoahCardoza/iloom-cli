@@ -1,5 +1,5 @@
 import { executeGitCommand } from '../utils/git.js'
-import { logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 import { launchClaude, detectClaudeCli } from '../utils/claude.js'
 import { promptCommitAction } from '../utils/prompt.js'
 import { UserAbortedCommitError } from '../types/index.js'
@@ -10,6 +10,10 @@ import type { GitStatus, CommitOptions } from '../types/index.js'
  * Ports logic from bash/merge-and-clean.sh lines 610-643
  */
 export class CommitManager {
+  constructor() {
+    // Uses getLogger() for all logging operations
+  }
+
   /**
    * Detect uncommitted changes in a worktree
    * Parses git status --porcelain output into structured GitStatus
@@ -47,11 +51,11 @@ export class CommitManager {
   async commitChanges(worktreePath: string, options: CommitOptions): Promise<void> {
     // Step 1: Check dry-run mode
     if (options.dryRun) {
-      logger.info('[DRY RUN] Would run: git add -A')
-      logger.info('[DRY RUN] Would generate commit message with Claude (if available)')
+      getLogger().info('[DRY RUN] Would run: git add -A')
+      getLogger().info('[DRY RUN] Would generate commit message with Claude (if available)')
       const fallbackMessage = this.generateFallbackMessage(options)
       const verifyFlag = options.skipVerify ? ' --no-verify' : ''
-      logger.info(`[DRY RUN] Would commit with message${verifyFlag}: ${fallbackMessage}`)
+      getLogger().info(`[DRY RUN] Would commit with message${verifyFlag}: ${fallbackMessage}`)
       return
     }
 
@@ -66,7 +70,7 @@ export class CommitManager {
       try {
         message = await this.generateClaudeCommitMessage(worktreePath, options.issueNumber)
       } catch (error) {
-        logger.debug('Claude commit message generation failed, using fallback', { error })
+        getLogger().debug('Claude commit message generation failed, using fallback', { error })
       }
     }
 
@@ -75,7 +79,7 @@ export class CommitManager {
 
     // Step 4: Log warning if --no-verify is configured
     if (options.skipVerify) {
-      logger.warn('⚠️  Skipping pre-commit hooks (--no-verify configured in settings)')
+      getLogger().warn('Skipping pre-commit hooks (--no-verify configured in settings)')
     }
 
     // Step 5: Commit with user review via prompt (unless noReview specified)
@@ -104,7 +108,7 @@ export class CommitManager {
           await executeGitCommand(commitArgs, { cwd: worktreePath })
         } else {
           // action === 'edit': Use git editor for user review
-          logger.info('Opening git editor for commit message review...')
+          getLogger().info('Opening git editor for commit message review...')
           const commitArgs = ['commit', '-e', '-m', message]
           if (options.skipVerify) {
             commitArgs.push('--no-verify')
@@ -123,7 +127,7 @@ export class CommitManager {
       }
       // Handle "nothing to commit" scenario gracefully
       if (error instanceof Error && error.message.includes('nothing to commit')) {
-        logger.info('No changes to commit')
+        getLogger().info('No changes to commit')
         return
       }
       // Re-throw all other errors (including pre-commit hook failures)
@@ -206,33 +210,33 @@ export class CommitManager {
   ): Promise<string | null> {
     const startTime = Date.now()
 
-    logger.info('Starting Claude commit message generation...', {
+    getLogger().info('Starting Claude commit message generation...', {
       worktreePath: worktreePath.split('/').pop(), // Just show the folder name for privacy
       issueNumber
     })
 
     // Check if Claude CLI is available
-    logger.debug('Checking Claude CLI availability...')
+    getLogger().debug('Checking Claude CLI availability...')
     const isClaudeAvailable = await detectClaudeCli()
     if (!isClaudeAvailable) {
-      logger.info('Claude CLI not available, skipping Claude commit message generation')
+      getLogger().info('Claude CLI not available, skipping Claude commit message generation')
       return null
     }
-    logger.debug('Claude CLI is available')
+    getLogger().debug('Claude CLI is available')
 
     // Build XML-based structured prompt
-    logger.debug('Building commit message prompt...')
+    getLogger().debug('Building commit message prompt...')
     const prompt = this.buildCommitMessagePrompt(issueNumber)
-    logger.debug('Prompt built', { promptLength: prompt.length })
+    getLogger().debug('Prompt built', { promptLength: prompt.length })
 
     // Debug log the actual prompt content for troubleshooting
-    logger.debug('Claude prompt content:', {
+    getLogger().debug('Claude prompt content:', {
       prompt: prompt,
       truncatedPreview: prompt.substring(0, 500) + (prompt.length > 500 ? '...[truncated]' : '')
     })
 
     try {
-      logger.info('Calling Claude CLI for commit message generation...')
+      getLogger().info('Calling Claude CLI for commit message generation...')
       const claudeStartTime = Date.now()
 
       // Debug log the Claude call parameters
@@ -242,7 +246,7 @@ export class CommitManager {
         model: 'claude-haiku-4-5-20251001', // Fast, cost-effective model
         timeout: 120000, // 120 second timeout
       }
-      logger.debug('Claude CLI call parameters:', {
+      getLogger().debug('Claude CLI call parameters:', {
         options: claudeOptions,
         worktreePathForAnalysis: worktreePath,
         addDirContents: 'Will include entire worktree directory for analysis'
@@ -252,23 +256,23 @@ export class CommitManager {
       const result = await launchClaude(prompt, claudeOptions)
 
       const claudeDuration = Date.now() - claudeStartTime
-      logger.debug('Claude API call completed', { duration: `${claudeDuration}ms` })
+      getLogger().debug('Claude API call completed', { duration: `${claudeDuration}ms` })
 
       if (typeof result !== 'string') {
-        logger.warn('Claude returned non-string result', { resultType: typeof result })
+        getLogger().warn('Claude returned non-string result', { resultType: typeof result })
         return null
       }
 
-      logger.debug('Raw Claude output received', {
+      getLogger().debug('Raw Claude output received', {
         outputLength: result.length,
         preview: result.substring(0, 200) + (result.length > 200 ? '...' : '')
       })
 
 
       // Sanitize output - remove meta-commentary and clean formatting
-      logger.debug('Sanitizing Claude output...')
+      getLogger().debug('Sanitizing Claude output...')
       const sanitized = this.sanitizeClaudeOutput(result)
-      logger.debug('Output sanitized', {
+      getLogger().debug('Output sanitized', {
         originalLength: result.length,
         sanitizedLength: sanitized.length,
         sanitized: sanitized.substring(0, 200) + (sanitized.length > 200 ? '...' : '')
@@ -276,7 +280,7 @@ export class CommitManager {
 
       // Ensure empty strings are rejected
       if (!sanitized) {
-        logger.warn('Claude returned empty message after sanitization')
+        getLogger().warn('Claude returned empty message after sanitization')
         return null
       }
 
@@ -286,14 +290,14 @@ export class CommitManager {
         // Add Fixes trailer if not already present
         if (!finalMessage.includes(`Fixes #${issueNumber}`)) {
           finalMessage = `${finalMessage}\n\nFixes #${issueNumber}`
-          logger.debug(`Added "Fixes #${issueNumber}" trailer to commit message`)
+          getLogger().debug(`Added "Fixes #${issueNumber}" trailer to commit message`)
         } else {
-          logger.debug(`"Fixes #${issueNumber}" already present in commit message`)
+          getLogger().debug(`"Fixes #${issueNumber}" already present in commit message`)
         }
       }
 
       const totalDuration = Date.now() - startTime
-      logger.info('Claude commit message generated successfully', {
+      getLogger().info('Claude commit message generated successfully', {
         message: finalMessage,
         totalDuration: `${totalDuration}ms`,
         claudeApiDuration: `${claudeDuration}ms`
@@ -305,12 +309,12 @@ export class CommitManager {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
       if (errorMessage.includes('timed out') || errorMessage.includes('timeout')) {
-        logger.warn('Claude commit message generation timed out after 45 seconds', {
+        getLogger().warn('Claude commit message generation timed out after 45 seconds', {
           totalDuration: `${totalDuration}ms`,
           worktreePath: worktreePath.split('/').pop()
         })
       } else {
-        logger.warn('Failed to generate commit message with Claude', {
+        getLogger().warn('Failed to generate commit message with Claude', {
           error: errorMessage,
           totalDuration: `${totalDuration}ms`,
           worktreePath: worktreePath.split('/').pop()

@@ -21,6 +21,7 @@ import {
   getDefaultBranch,
   findMainWorktreePathWithSettings,
 } from '../utils/git.js'
+import { getLogger } from '../utils/logger-context.js'
 import type { SettingsManager } from './SettingsManager.js'
 
 /**
@@ -156,11 +157,10 @@ export class GitWorktreeManager {
 
     if (!worktree) {
       // Add debug logging to help diagnose the issue
-      const { logger } = await import('../utils/logger.js')
-      logger.debug(`Looking for worktree path: ${worktreePath}`)
-      logger.debug(`Found ${worktrees.length} worktrees:`)
+      getLogger().debug(`Looking for worktree path: ${worktreePath}`)
+      getLogger().debug(`Found ${worktrees.length} worktrees:`)
       worktrees.forEach((wt, i) => {
-        logger.debug(`  ${i}: path="${wt.path}", branch="${wt.branch}"`)
+        getLogger().debug(`  ${i}: path="${wt.path}", branch="${wt.branch}"`)
       })
       throw new Error(`Worktree not found: ${worktreePath}`)
     }

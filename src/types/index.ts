@@ -180,6 +180,7 @@ export interface FinishOptions {
   skipBuild?: boolean // --skip-build - Skip post-merge build verification
   noBrowser?: boolean // --no-browser - Skip opening PR in browser (github-pr mode only)
   cleanup?: boolean   // --cleanup / --no-cleanup - Control worktree cleanup after PR creation
+  json?: boolean      // --json - Output result as JSON
 }
 
 /**
@@ -197,6 +198,8 @@ export interface CleanupOptions {
   force?: boolean
   /** Show what would be done without actually doing it */
   dryRun?: boolean
+  /** Output result as JSON */
+  json?: boolean
 }
 
 export interface ListOptions {
@@ -228,6 +231,22 @@ export interface StartResult {
   identifier: string | number
   title?: string
   capabilities?: string[]
+}
+
+export interface FinishResult {
+  success: boolean
+  type: 'issue' | 'pr' | 'branch'
+  identifier: string | number
+  /** Whether this was a dry-run operation */
+  dryRun?: boolean
+  operations: Array<{
+    type: 'validation' | 'commit' | 'rebase' | 'merge' | 'cleanup' | 'pr-creation' | 'build'
+    message: string
+    success: boolean
+    error?: string
+  }>
+  prUrl?: string
+  cleanupResult?: import('./cleanup.js').CleanupResult
 }
 
 // Deprecated: Result types - use exception-based error handling instead

@@ -22,7 +22,7 @@ import { installDependencies } from '../utils/package-manager.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import { promptConfirmation } from '../utils/prompt.js'
-import { UserAbortedCommitError } from '../types/index.js'
+import { UserAbortedCommitError, type FinishResult } from '../types/index.js'
 import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions, PullRequest } from '../types/index.js'
 import type { ResourceCleanupOptions, CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
@@ -184,7 +184,27 @@ export class FinishCommand {
 	/**
 	 * Main entry point for finish command
 	 */
-	public async execute(input: FinishCommandInput): Promise<void> {
+	public async execute(input: FinishCommandInput): Promise<FinishResult | void> {
+		const isJsonMode = input.options.json === true
+
+		// Initialize result object for JSON mode
+		const result: FinishResult = {
+			success: false,
+			type: 'issue',
+			identifier: '',
+			dryRun: input.options.dryRun ?? false,
+			operations: [],
+		}
+
+		// JSON mode validation - require explicit flags for interactive prompts
+		if (isJsonMode) {
+			const settings = await this.settingsManager.loadSettings()
+			// In github-pr mode, require explicit --cleanup or --no-cleanup
+			if (settings.mergeBehavior?.mode === 'github-pr' && input.options.cleanup === undefined) {
+				throw new Error('JSON mode with github-pr workflow requires --cleanup or --no-cleanup flag. Use: il finish --json --cleanup <identifier>')
+			}
+		}
+
 		// Step 1: Load settings and get configured repo for GitHub operations
 		const settings = await this.settingsManager.loadSettings()
 
@@ -202,6 +222,10 @@ export class FinishCommand {
 
 		// Step 2: Parse input (or auto-detect from current directory)
 		const parsed = await this.parseInput(input.identifier, input.options)
+
+		// Update result with parsed type and identifier
+		result.type = parsed.type
+		result.identifier = parsed.number ?? parsed.branchName ?? ''
 
 		// Step 2.5: Check for child looms AFTER parsing input
 		// This ensures we only block when finishing the CURRENT loom (parent), not a child
@@ -230,10 +254,18 @@ export class FinishCommand {
 				throw new Error('Issue tracker does not support pull requests')
 			}
 			const pr = await this.issueTracker.fetchPR(parsed.number, repo)
-			await this.executePRWorkflow(parsed, input.options, worktree, pr)
+			await this.executePRWorkflow(parsed, input.options, worktree, pr, result)
 		} else {
 			// Execute traditional issue/branch workflow
-			await this.executeIssueWorkflow(parsed, input.options, worktree)
+			await this.executeIssueWorkflow(parsed, input.options, worktree, result)
+		}
+
+		// Mark overall success if we got here without throwing
+		result.success = true
+
+		// Return result in JSON mode
+		if (isJsonMode) {
+			return result
 		}
 	}
 
@@ -558,7 +590,8 @@ export class FinishCommand {
 	private async executeIssueWorkflow(
 		parsed: ParsedFinishInput,
 		options: FinishOptions,
-		worktree: GitWorktree
+		worktree: GitWorktree,
+		result: FinishResult
 	): Promise<void> {
 		// Step 1: Run pre-merge validations FIRST (Sub-Issue #47)
 		if (!options.dryRun) {
@@ -568,8 +601,18 @@ export class FinishCommand {
 				dryRun: options.dryRun ?? false,
 			})
 			getLogger().success('All validations passed')
+			result.operations.push({
+				type: 'validation',
+				message: 'Pre-merge validations passed',
+				success: true,
+			})
 		} else {
 			getLogger().info('[DRY RUN] Would run pre-merge validations')
+			result.operations.push({
+				type: 'validation',
+				message: 'Would run pre-merge validations (dry-run)',
+				success: true,
+			})
 		}
 
 		// Step 2: Detect uncommitted changes AFTER validation passes
@@ -579,6 +622,11 @@ export class FinishCommand {
 		if (gitStatus.hasUncommittedChanges) {
 			if (options.dryRun) {
 				getLogger().info('[DRY RUN] Would auto-commit uncommitted changes (validation passed)')
+				result.operations.push({
+					type: 'commit',
+					message: 'Would auto-commit uncommitted changes (dry-run)',
+					success: true,
+				})
 			} else {
 				getLogger().info('Validation passed, auto-committing uncommitted changes...')
 
@@ -599,9 +647,19 @@ export class FinishCommand {
 				try {
 					await this.commitManager.commitChanges(worktree.path, commitOptions)
 					getLogger().success('Changes committed successfully')
+					result.operations.push({
+						type: 'commit',
+						message: 'Changes committed successfully',
+						success: true,
+					})
 				} catch (error) {
 					if (error instanceof UserAbortedCommitError) {
 						getLogger().info('Commit aborted by user')
+						result.operations.push({
+							type: 'commit',
+							message: 'Commit aborted by user',
+							success: false,
+						})
 						return  // Exit workflow gracefully
 					}
 					throw error  // Re-throw other errors
@@ -626,7 +684,7 @@ export class FinishCommand {
 			}
 
 			// Execute github-pr workflow instead of local merge
-			await this.executeGitHubPRWorkflow(parsed, options, worktree, settings)
+			await this.executeGitHubPRWorkflow(parsed, options, worktree, settings, result)
 			return
 		}
 
@@ -640,11 +698,21 @@ export class FinishCommand {
 
 		await this.mergeManager.rebaseOnMain(worktree.path, mergeOptions)
 		getLogger().success('Branch rebased successfully')
+		result.operations.push({
+			type: 'rebase',
+			message: 'Branch rebased on main',
+			success: true,
+		})
 
 		// Step 5: Perform fast-forward merge
 		getLogger().info('Performing fast-forward merge...')
 		await this.mergeManager.performFastForwardMerge(worktree.branch, worktree.path, mergeOptions)
 		getLogger().success('Fast-forward merge completed successfully')
+		result.operations.push({
+			type: 'merge',
+			message: 'Fast-forward merge completed',
+			success: true,
+		})
 
 		// Step 5.5: Install dependencies in main worktree
 		if (options.dryRun) {
@@ -657,13 +725,13 @@ export class FinishCommand {
 
 		// Step 5.6: Run post-merge build verification (CLI projects only)
 		if (!options.skipBuild) {
-			await this.runPostMergeBuild(worktree.path, options)
+			await this.runPostMergeBuild(worktree.path, options, result)
 		} else {
 			getLogger().debug('Skipping build verification (--skip-build flag provided)')
 		}
 
 		// Step 6: Post-merge cleanup
-		await this.performPostMergeCleanup(parsed, options, worktree)
+		await this.performPostMergeCleanup(parsed, options, worktree, result)
 	}
 
 	/**
@@ -676,7 +744,8 @@ export class FinishCommand {
 		parsed: ParsedFinishInput,
 		options: FinishOptions,
 		worktree: GitWorktree,
-		pr: PullRequest
+		pr: PullRequest,
+		result: FinishResult
 	): Promise<void> {
 		// Branch based on PR state
 		if (pr.state === 'closed' || pr.state === 'merged') {
@@ -697,9 +766,14 @@ export class FinishCommand {
 			// Pass PR state to enable appropriate safety checks:
 			// - merged: skip checks (work is in main)
 			// - closed: enable checks (may have unpushed commits)
-			await this.performPRCleanup(parsed, options, worktree, pr.state as 'closed' | 'merged')
+			await this.performPRCleanup(parsed, options, worktree, pr.state as 'closed' | 'merged', result)
 
 			getLogger().success(`PR #${parsed.number} cleanup completed`)
+			result.operations.push({
+				type: 'cleanup',
+				message: `PR #${parsed.number} cleanup completed`,
+				success: true,
+			})
 		} else {
 			// Open PR workflow
 			getLogger().info(`PR #${parsed.number} is OPEN - will push changes and keep worktree active`)
@@ -711,6 +785,11 @@ export class FinishCommand {
 			if (gitStatus.hasUncommittedChanges) {
 				if (options.dryRun) {
 					getLogger().info('[DRY RUN] Would commit uncommitted changes')
+					result.operations.push({
+						type: 'commit',
+						message: 'Would commit uncommitted changes (dry-run)',
+						success: true,
+					})
 				} else {
 					getLogger().info('Committing uncommitted changes...')
 
@@ -725,9 +804,19 @@ export class FinishCommand {
 							// Do NOT pass issueNumber for PRs - no "Fixes #" trailer needed
 						})
 						getLogger().success('Changes committed')
+						result.operations.push({
+							type: 'commit',
+							message: 'Changes committed successfully',
+							success: true,
+						})
 					} catch (error) {
 						if (error instanceof UserAbortedCommitError) {
 							getLogger().info('Commit aborted by user')
+							result.operations.push({
+								type: 'commit',
+								message: 'Commit aborted by user',
+								success: false,
+							})
 							return  // Exit workflow gracefully
 						}
 						throw error  // Re-throw other errors
@@ -752,6 +841,9 @@ export class FinishCommand {
 			getLogger().success(`PR #${parsed.number} updated successfully`)
 			getLogger().info('Worktree remains active for continued work')
 			getLogger().info(`To cleanup when done: il cleanup ${parsed.number}`)
+
+			// Set PR URL in result
+			result.prUrl = pr.url
 		}
 	}
 
@@ -763,7 +855,8 @@ export class FinishCommand {
 		parsed: ParsedFinishInput,
 		options: FinishOptions,
 		worktree: GitWorktree,
-		settings: import('../lib/SettingsManager.js').IloomSettings
+		settings: import('../lib/SettingsManager.js').IloomSettings,
+		finishResult: FinishResult
 	): Promise<void> {
 		// Step 1: Push branch to origin
 		if (options.dryRun) {
@@ -794,11 +887,16 @@ export class FinishCommand {
 			getLogger().info('[DRY RUN] Would create GitHub PR')
 			getLogger().info(`  Title: ${prTitle}`)
 			getLogger().info(`  Base: ${settings.mainBranch ?? 'main'}`)
+			finishResult.operations.push({
+				type: 'pr-creation',
+				message: 'Would create GitHub PR (dry-run)',
+				success: true,
+			})
 		} else {
 			const baseBranch = settings.mainBranch ?? 'main'
 			const openInBrowser = options.noBrowser !== true
 
-			const result = await prManager.createOrOpenPR(
+			const prResult = await prManager.createOrOpenPR(
 				worktree.branch,
 				prTitle,
 				parsed.type === 'issue' ? parsed.number : undefined,
@@ -807,14 +905,27 @@ export class FinishCommand {
 				openInBrowser
 			)
 
-			if (result.wasExisting) {
-				getLogger().success(`Existing pull request: ${result.url}`)
+			if (prResult.wasExisting) {
+				getLogger().success(`Existing pull request: ${prResult.url}`)
+				finishResult.operations.push({
+					type: 'pr-creation',
+					message: `Found existing pull request`,
+					success: true,
+				})
 			} else {
-				getLogger().success(`Pull request created: ${result.url}`)
+				getLogger().success(`Pull request created: ${prResult.url}`)
+				finishResult.operations.push({
+					type: 'pr-creation',
+					message: `Pull request created`,
+					success: true,
+				})
 			}
 
+			// Set PR URL in result
+			finishResult.prUrl = prResult.url
+
 			// Step 5: Interactive cleanup prompt (unless flags override)
-			await this.handlePRCleanupPrompt(parsed, options, worktree)
+			await this.handlePRCleanupPrompt(parsed, options, worktree, finishResult)
 		}
 	}
 
@@ -825,12 +936,13 @@ export class FinishCommand {
 	private async handlePRCleanupPrompt(
 		parsed: ParsedFinishInput,
 		options: FinishOptions,
-		worktree: GitWorktree
+		worktree: GitWorktree,
+		finishResult: FinishResult
 	): Promise<void> {
 		if (options.cleanup === true) {
 			// Explicit --cleanup flag: perform cleanup
 			getLogger().info('Cleaning up worktree (--cleanup flag)...')
-			await this.performWorktreeCleanup(parsed, options, worktree)
+			await this.performWorktreeCleanup(parsed, options, worktree, finishResult)
 		} else if (options.cleanup === false) {
 			// Explicit --no-cleanup flag: keep worktree
 			getLogger().info('Worktree kept active for continued work (--no-cleanup flag)')
@@ -849,7 +961,7 @@ export class FinishCommand {
 			)
 
 			if (shouldCleanup) {
-				await this.performWorktreeCleanup(parsed, options, worktree)
+				await this.performWorktreeCleanup(parsed, options, worktree, finishResult)
 			} else {
 				getLogger().info('Worktree kept active. Run `il cleanup` when ready.')
 			}
@@ -863,7 +975,8 @@ export class FinishCommand {
 	private async performWorktreeCleanup(
 		parsed: ParsedFinishInput,
 		options: FinishOptions,
-		worktree: GitWorktree
+		worktree: GitWorktree,
+		finishResult: FinishResult
 	): Promise<void> {
 		// Convert ParsedFinishInput to ParsedInput
 		const cleanupInput: ParsedInput = {
@@ -888,16 +1001,29 @@ export class FinishCommand {
 				throw new Error('Failed to initialize ResourceCleanup')
 			}
 
-			const result = await this.resourceCleanup.cleanupWorktree(cleanupInput, cleanupOptions)
+			const cleanupResult = await this.resourceCleanup.cleanupWorktree(cleanupInput, cleanupOptions)
 
 			// Report cleanup results
-			this.reportCleanupResults(result)
+			this.reportCleanupResults(cleanupResult)
 
-			if (!result.success) {
+			// Add cleanup result to finish result
+			finishResult.cleanupResult = cleanupResult
+
+			if (!cleanupResult.success) {
 				getLogger().warn('Some cleanup operations failed - manual cleanup may be required')
 				this.showManualCleanupInstructions(worktree)
+				finishResult.operations.push({
+					type: 'cleanup',
+					message: 'Worktree cleanup partially failed',
+					success: false,
+				})
 			} else {
 				getLogger().success('Worktree cleanup completed successfully')
+				finishResult.operations.push({
+					type: 'cleanup',
+					message: 'Worktree cleanup completed',
+					success: true,
+				})
 			}
 
 			// Warn if running from within the worktree being finished
@@ -909,6 +1035,12 @@ export class FinishCommand {
 			getLogger().warn(`Cleanup failed: ${errorMessage}`)
 			getLogger().warn('Manual cleanup may be required')
 			this.showManualCleanupInstructions(worktree)
+			finishResult.operations.push({
+				type: 'cleanup',
+				message: 'Worktree cleanup failed',
+				success: false,
+				error: errorMessage,
+			})
 		}
 	}
 
@@ -925,12 +1057,14 @@ export class FinishCommand {
 	 * @param options - Finish options
 	 * @param worktree - The worktree to clean up
 	 * @param prState - The PR state ('closed' or 'merged')
+	 * @param finishResult - Result object to populate
 	 */
 	private async performPRCleanup(
 		parsed: ParsedFinishInput,
 		options: FinishOptions,
 		worktree: GitWorktree,
-		prState: 'closed' | 'merged'
+		prState: 'closed' | 'merged',
+		finishResult: FinishResult
 	): Promise<void> {
 		// Convert to ParsedInput format
 		const cleanupInput: ParsedInput = {
@@ -969,11 +1103,12 @@ export class FinishCommand {
 			if (!this.resourceCleanup) {
 				throw new Error('Failed to initialize ResourceCleanup')
 			}
-			const result = await this.resourceCleanup.cleanupWorktree(cleanupInput, cleanupOptions)
+			const cleanupResult = await this.resourceCleanup.cleanupWorktree(cleanupInput, cleanupOptions)
 
-			this.reportCleanupResults(result)
+			this.reportCleanupResults(cleanupResult)
+			finishResult.cleanupResult = cleanupResult
 
-			if (!result.success) {
+			if (!cleanupResult.success) {
 				getLogger().warn('Some cleanup operations failed - manual cleanup may be required')
 				this.showManualCleanupInstructions(worktree)
 			} else {
@@ -996,7 +1131,8 @@ export class FinishCommand {
 	 */
 	private async runPostMergeBuild(
 		worktreePath: string,
-		options: FinishOptions
+		options: FinishOptions,
+		finishResult: FinishResult
 	): Promise<void> {
 		// Find main worktree path
 		const mainWorktreePath = await findMainWorktreePathWithSettings(worktreePath, this.settingsManager)
@@ -1004,19 +1140,34 @@ export class FinishCommand {
 		// Check if dry-run
 		if (options.dryRun) {
 			getLogger().info('[DRY RUN] Would run post-merge build')
+			finishResult.operations.push({
+				type: 'build',
+				message: 'Would run post-merge build (dry-run)',
+				success: true,
+			})
 			return
 		}
 
 		getLogger().info('Running post-merge build...')
 
-		const result = await this.buildRunner.runBuild(mainWorktreePath, {
+		const buildResult = await this.buildRunner.runBuild(mainWorktreePath, {
 			dryRun: options.dryRun ?? false,
 		})
 
-		if (result.skipped) {
-			getLogger().debug(`Build skipped: ${result.reason}`)
+		if (buildResult.skipped) {
+			getLogger().debug(`Build skipped: ${buildResult.reason}`)
+			finishResult.operations.push({
+				type: 'build',
+				message: `Build skipped: ${buildResult.reason}`,
+				success: true,
+			})
 		} else {
 			getLogger().success('Post-merge build completed successfully')
+			finishResult.operations.push({
+				type: 'build',
+				message: 'Post-merge build completed',
+				success: true,
+			})
 		}
 	}
 
@@ -1028,7 +1179,8 @@ export class FinishCommand {
 	private async performPostMergeCleanup(
 		parsed: ParsedFinishInput,
 		options: FinishOptions,
-		worktree: GitWorktree
+		worktree: GitWorktree,
+		finishResult: FinishResult
 	): Promise<void> {
 		// Ensure loomManager is initialized first
 		await this.ensureResourceCleanup()
@@ -1061,17 +1213,28 @@ export class FinishCommand {
 			if (!this.resourceCleanup) {
 				throw new Error('Failed to initialize ResourceCleanup')
 			}
-			const result = await this.resourceCleanup.cleanupWorktree(cleanupInput, cleanupOptions)
+			const cleanupResult = await this.resourceCleanup.cleanupWorktree(cleanupInput, cleanupOptions)
 
 			// Report cleanup results
-			this.reportCleanupResults(result)
+			this.reportCleanupResults(cleanupResult)
+			finishResult.cleanupResult = cleanupResult
 
-			if (!result.success) {
+			if (!cleanupResult.success) {
 				getLogger().warn('Some cleanup operations failed - manual cleanup may be required')
 				// Show helpful recovery message
 				this.showManualCleanupInstructions(worktree)
+				finishResult.operations.push({
+					type: 'cleanup',
+					message: 'Post-merge cleanup partially failed',
+					success: false,
+				})
 			} else {
 				getLogger().success('Post-merge cleanup completed successfully')
+				finishResult.operations.push({
+					type: 'cleanup',
+					message: 'Post-merge cleanup completed',
+					success: true,
+				})
 			}
 
 			// Warn if running from within the worktree being finished
@@ -1085,6 +1248,12 @@ export class FinishCommand {
 			getLogger().warn(`Cleanup failed: ${errorMessage}`)
 			getLogger().warn('Merge completed successfully, but manual cleanup is required')
 			this.showManualCleanupInstructions(worktree)
+			finishResult.operations.push({
+				type: 'cleanup',
+				message: 'Post-merge cleanup failed',
+				success: false,
+				error: errorMessage,
+			})
 		}
 	}
 
