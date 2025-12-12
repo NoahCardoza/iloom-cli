@@ -1590,6 +1590,80 @@ describe('IgniteCommand', () => {
 		})
 	})
 
+	describe('Session ID for Claude Code resume support', () => {
+		it('should generate deterministic sessionId from workspace path', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const workspacePath = '/path/to/feat/issue-305__session-id'
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue(workspacePath)
+
+			try {
+				await command.execute()
+
+				// Verify launchClaude was called with sessionId
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				expect(launchClaudeCall[1]).toHaveProperty('sessionId')
+
+				// sessionId should be a valid UUID v5 format
+				const sessionId = launchClaudeCall[1].sessionId as string
+				expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should produce same sessionId for same workspace path', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const workspacePath = '/path/to/feat/issue-305__session-id'
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue(workspacePath)
+
+			try {
+				await command.execute()
+				const sessionId1 = launchClaudeSpy.mock.calls[0][1].sessionId as string
+
+				launchClaudeSpy.mockClear()
+
+				await command.execute()
+				const sessionId2 = launchClaudeSpy.mock.calls[0][1].sessionId as string
+
+				// Same workspace path should produce same sessionId
+				expect(sessionId1).toBe(sessionId2)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should produce different sessionId for different workspace paths', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const originalCwd = process.cwd
+
+			try {
+				// First execution with workspace1
+				process.cwd = vi.fn().mockReturnValue('/path/to/workspace1')
+				await command.execute()
+				const sessionId1 = launchClaudeSpy.mock.calls[0][1].sessionId as string
+
+				launchClaudeSpy.mockClear()
+
+				// Second execution with workspace2
+				process.cwd = vi.fn().mockReturnValue('/path/to/workspace2')
+				await command.execute()
+				const sessionId2 = launchClaudeSpy.mock.calls[0][1].sessionId as string
+
+				// Different workspace paths should produce different sessionIds
+				expect(sessionId1).not.toBe(sessionId2)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+	})
+
 	describe('First-time user experience', () => {
 		it('should set FIRST_TIME_USER variable when isFirstRun returns true', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)

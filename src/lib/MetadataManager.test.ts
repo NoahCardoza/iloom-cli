@@ -83,6 +83,7 @@ describe('MetadataManager', () => {
       pr_numbers: [],
       issueTracker: 'github',
       colorHex: '#dcebff',
+      sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
     }
 
     beforeEach(() => {
@@ -123,6 +124,7 @@ describe('MetadataManager', () => {
         pr_numbers: [],
         issueTracker: 'github',
         colorHex: '#dcebff',
+        sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
       })
 
       vi.useRealTimers()
@@ -150,6 +152,14 @@ describe('MetadataManager', () => {
       const writtenContent = JSON.parse(writeCall?.[1] as string)
       expect(writtenContent.issueTracker).toBe('github')
     })
+
+    it('should write sessionId to JSON file', async () => {
+      await manager.writeMetadata(worktreePath, metadataInput)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.sessionId).toBe('6ba7b810-9dad-11d1-80b4-00c04fd430c8')
+    })
   })
 
   describe('readMetadata', () => {
@@ -167,6 +177,7 @@ describe('MetadataManager', () => {
         pr_numbers: [],
         issueTracker: 'github',
         colorHex: '#f5dceb',
+        sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
       })
       vi.mocked(fs.pathExists).mockResolvedValue(true)
       vi.mocked(fs.readFile).mockResolvedValue(mockContent)
@@ -183,6 +194,7 @@ describe('MetadataManager', () => {
         pr_numbers: [],
         issueTracker: 'github',
         colorHex: '#f5dceb',
+        sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
       })
     })
 
@@ -207,7 +219,30 @@ describe('MetadataManager', () => {
         pr_numbers: [],
         issueTracker: null,
         colorHex: null,
+        sessionId: null,
       })
+    })
+
+    it('should return null sessionId for legacy files without sessionId', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Legacy loom without sessionId',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__legacy',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+        // Note: no sessionId field
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.sessionId).toBeNull()
     })
 
     it('should return null if file does not exist', async () => {
@@ -287,6 +322,7 @@ describe('MetadataManager', () => {
             pr_numbers: [],
             issueTracker: 'github',
             colorHex: '#ff0000',
+            sessionId: '11111111-1111-1111-1111-111111111111',
           })
         }
         return JSON.stringify({
@@ -300,6 +336,7 @@ describe('MetadataManager', () => {
           pr_numbers: [],
           issueTracker: 'github',
           colorHex: '#00ff00',
+          sessionId: '22222222-2222-2222-2222-222222222222',
         })
       })
 
@@ -316,6 +353,7 @@ describe('MetadataManager', () => {
         pr_numbers: [],
         issueTracker: 'github',
         colorHex: '#ff0000',
+        sessionId: '11111111-1111-1111-1111-111111111111',
       })
       expect(result[1]).toEqual({
         description: 'Project 2 loom',
@@ -327,6 +365,7 @@ describe('MetadataManager', () => {
         pr_numbers: [],
         issueTracker: 'github',
         colorHex: '#00ff00',
+        sessionId: '22222222-2222-2222-2222-222222222222',
       })
     })
 
@@ -422,6 +461,7 @@ describe('MetadataManager', () => {
         pr_numbers: [],
         issueTracker: null,
         colorHex: null,
+        sessionId: null,
       })
     })
 

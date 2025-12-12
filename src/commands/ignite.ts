@@ -2,12 +2,13 @@ import path from 'path'
 import { logger } from '../utils/logger.js'
 import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
-import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
+import { launchClaude, ClaudeCliOptions, generateDeterministicSessionId } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables } from '../lib/PromptTemplateManager.js'
 import { generateIssueManagementMcpConfig } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
 import { extractIssueNumber } from '../utils/git.js'
@@ -110,9 +111,22 @@ export class IgniteCommand {
 			}
 
 			// Step 4: Build Claude CLI options
+			// Read session ID from metadata if available, otherwise generate deterministically
+			let sessionId: string
+			const metadataManager = new MetadataManager()
+			const metadata = await metadataManager.readMetadata(context.workspacePath)
+			if (metadata?.sessionId) {
+				sessionId = metadata.sessionId
+				logger.debug('Using session ID from metadata', { sessionId })
+			} else {
+				sessionId = generateDeterministicSessionId(context.workspacePath)
+				logger.debug('Generated session ID (no metadata found)', { sessionId, workspacePath: context.workspacePath })
+			}
+
 			const claudeOptions: ClaudeCliOptions = {
 				headless: false, // Enable stdio: 'inherit' for current terminal
 				addDir: context.workspacePath,
+				sessionId, // Enable Claude Code session resume
 			}
 
 			// Add optional model if present

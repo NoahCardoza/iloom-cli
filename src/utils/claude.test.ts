@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { execa, type ExecaReturnValue } from 'execa'
 import { existsSync } from 'node:fs'
-import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow } from './claude.js'
+import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow, generateDeterministicSessionId } from './claude.js'
 import { logger } from './logger.js'
 
 vi.mock('execa')
@@ -27,6 +27,51 @@ describe('claude utils', () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks()
+	})
+
+	describe('generateDeterministicSessionId', () => {
+		it('should generate a valid UUID v5 format', () => {
+			const path = '/path/to/workspace'
+			const sessionId = generateDeterministicSessionId(path)
+
+			// Verify UUID format: 8-4-4-4-12 hex characters
+			expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+		})
+
+		it('should be deterministic - same path produces same UUID', () => {
+			const path = '/path/to/workspace'
+			const sessionId1 = generateDeterministicSessionId(path)
+			const sessionId2 = generateDeterministicSessionId(path)
+
+			expect(sessionId1).toBe(sessionId2)
+		})
+
+		it('should produce different UUIDs for different paths', () => {
+			const sessionId1 = generateDeterministicSessionId('/path/to/workspace1')
+			const sessionId2 = generateDeterministicSessionId('/path/to/workspace2')
+
+			expect(sessionId1).not.toBe(sessionId2)
+		})
+
+		it('should handle paths with special characters', () => {
+			const path = '/path/with spaces/and-dashes/and_underscores'
+			const sessionId = generateDeterministicSessionId(path)
+
+			expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+		})
+
+		it('should handle empty string path', () => {
+			const sessionId = generateDeterministicSessionId('')
+
+			expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+		})
+
+		it('should handle very long paths', () => {
+			const longPath = '/a'.repeat(500)
+			const sessionId = generateDeterministicSessionId(longPath)
+
+			expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+		})
 	})
 
 	describe('detectClaudeCli', () => {
@@ -360,12 +405,12 @@ describe('claude utils', () => {
 				const result = await launchClaude(prompt, { headless: false })
 
 				expect(result).toBeUndefined()
-				// Interactive mode runs in current terminal with stdio: inherit
+				// Interactive mode runs in current terminal with stdio array (pipe stderr for error detection)
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
 					['--add-dir', '/tmp', '--', prompt],
 					expect.objectContaining({
-						stdio: 'inherit',
+						stdio: ['inherit', 'inherit', 'pipe'],
 						timeout: 0
 					})
 				)
@@ -390,7 +435,7 @@ describe('claude utils', () => {
 					'claude',
 					['--model', 'opus', '--permission-mode', 'plan', '--add-dir', '/workspace', '--add-dir', '/tmp', '--', prompt],
 					expect.objectContaining({
-						stdio: 'inherit'
+						stdio: ['inherit', 'inherit', 'pipe']
 					})
 				)
 			})
@@ -414,7 +459,7 @@ describe('claude utils', () => {
 					['--add-dir', workspacePath, '--add-dir', '/tmp', '--', prompt],
 					expect.objectContaining({
 						cwd: workspacePath,
-						stdio: 'inherit'
+						stdio: ['inherit', 'inherit', 'pipe']
 					})
 				)
 			})
@@ -452,7 +497,7 @@ describe('claude utils', () => {
 					'claude',
 					['--add-dir', '/tmp', '--', prompt],
 					expect.objectContaining({
-						stdio: 'inherit'
+						stdio: ['inherit', 'inherit', 'pipe']
 					})
 				)
 			})
@@ -476,7 +521,7 @@ describe('claude utils', () => {
 					'claude',
 					['--add-dir', '/tmp', '--', prompt],
 					expect.objectContaining({
-						stdio: 'inherit'
+						stdio: ['inherit', 'inherit', 'pipe']
 					})
 				)
 			})
@@ -501,7 +546,7 @@ describe('claude utils', () => {
 					'claude',
 					['--add-dir', '/tmp', '--append-system-prompt', systemPrompt, '--', userPrompt],
 					expect.objectContaining({
-						stdio: 'inherit',
+						stdio: ['inherit', 'inherit', 'pipe'],
 						timeout: 0,
 					})
 				)
@@ -535,7 +580,7 @@ describe('claude utils', () => {
 						'--', userPrompt
 					],
 					expect.objectContaining({
-						stdio: 'inherit',
+						stdio: ['inherit', 'inherit', 'pipe'],
 						timeout: 0,
 						cwd: '/workspace',
 					})
@@ -615,7 +660,7 @@ describe('claude utils', () => {
 					'claude',
 					['--add-dir', '/tmp', '--', prompt],
 					expect.objectContaining({
-						stdio: 'inherit',
+						stdio: ['inherit', 'inherit', 'pipe'],
 					})
 				)
 			})
@@ -766,7 +811,7 @@ describe('claude utils', () => {
 						'--', prompt
 					],
 					expect.objectContaining({
-						stdio: 'inherit'
+						stdio: ['inherit', 'inherit', 'pipe']
 					})
 				)
 			})
@@ -968,7 +1013,7 @@ describe('claude utils', () => {
 						'--', prompt
 					],
 					expect.objectContaining({
-						stdio: 'inherit'
+						stdio: ['inherit', 'inherit', 'pipe']
 					})
 				)
 			})
@@ -1151,7 +1196,7 @@ describe('claude utils', () => {
 					'claude',
 					['--add-dir', '/tmp', '--agents', JSON.stringify(agents), '--', prompt],
 					expect.objectContaining({
-						stdio: 'inherit',
+						stdio: ['inherit', 'inherit', 'pipe'],
 					}),
 				)
 			})
@@ -1214,6 +1259,293 @@ describe('claude utils', () => {
 						JSON.stringify(agents),
 					],
 					expect.any(Object),
+				)
+			})
+		})
+
+		describe('sessionId parameter', () => {
+			it('should include --session-id flag when sessionId provided', async () => {
+				const prompt = 'Test prompt'
+				const sessionId = '12345678-1234-5678-1234-567812345678'
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: true,
+					sessionId,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp', '--session-id', sessionId],
+					expect.any(Object)
+				)
+			})
+
+			it('should omit --session-id flag when sessionId not provided', async () => {
+				const prompt = 'Test prompt'
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, { headless: true })
+
+				const execaCall = vi.mocked(execa).mock.calls[0]
+				expect(execaCall[1]).not.toContain('--session-id')
+			})
+
+			it('should work with sessionId in interactive mode', async () => {
+				const prompt = 'Test prompt'
+				const sessionId = '12345678-1234-5678-1234-567812345678'
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: false,
+					sessionId,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['--add-dir', '/tmp', '--session-id', sessionId, '--', prompt],
+					expect.objectContaining({
+						stdio: ['inherit', 'inherit', 'pipe'],
+					})
+				)
+			})
+
+			it('should combine sessionId with other options in correct order', async () => {
+				const prompt = 'Test prompt'
+				const sessionId = '12345678-1234-5678-1234-567812345678'
+				const agents = { 'test-agent': { description: 'Test', prompt: 'Test', tools: ['Read'], model: 'sonnet' } }
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: true,
+					model: 'opus',
+					addDir: '/workspace',
+					agents,
+					sessionId,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					[
+						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
+						'--model', 'opus',
+						'--add-dir', '/workspace',
+						'--add-dir', '/tmp',
+						'--agents', JSON.stringify(agents),
+						'--session-id', sessionId,
+					],
+					expect.any(Object)
+				)
+			})
+
+			it('should retry with --resume when session ID is already in use (headless mode)', async () => {
+				const prompt = 'Test prompt'
+				const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
+
+				// First call fails with "Session ID already in use"
+				vi.mocked(execa).mockRejectedValueOnce({
+					stderr: `Error: Session ID ${sessionId} is already in use.`,
+					exitCode: 1,
+				})
+
+				// Retry with --resume succeeds
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'resumed output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				const result = await launchClaude(prompt, {
+					headless: true,
+					sessionId,
+				})
+
+				expect(result).toBe('resumed output')
+				expect(execa).toHaveBeenCalledTimes(2)
+
+				// Verify first call used --session-id
+				expect(execa).toHaveBeenNthCalledWith(
+					1,
+					'claude',
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp', '--session-id', sessionId],
+					expect.any(Object)
+				)
+
+				// Verify retry used --resume instead of --session-id
+				expect(execa).toHaveBeenNthCalledWith(
+					2,
+					'claude',
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp', '--resume', sessionId],
+					expect.any(Object)
+				)
+			})
+
+			it('should retry with --resume when session ID is already in use (interactive mode)', async () => {
+				const prompt = 'Test prompt'
+				const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
+
+				// First call fails with "Session ID already in use"
+				vi.mocked(execa).mockRejectedValueOnce({
+					stderr: `Error: Session ID ${sessionId} is already in use.`,
+					exitCode: 1,
+				})
+
+				// Retry with --resume succeeds
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: false,
+					sessionId,
+				})
+
+				expect(execa).toHaveBeenCalledTimes(2)
+
+				// Verify first call used --session-id with piped stderr for error detection
+				expect(execa).toHaveBeenNthCalledWith(
+					1,
+					'claude',
+					['--add-dir', '/tmp', '--session-id', sessionId, '--', prompt],
+					expect.objectContaining({ stdio: ['inherit', 'inherit', 'pipe'] })
+				)
+
+				// Verify retry used --resume with full inherit for interactive experience
+				expect(execa).toHaveBeenNthCalledWith(
+					2,
+					'claude',
+					['--add-dir', '/tmp', '--resume', sessionId, '--', prompt],
+					expect.objectContaining({ stdio: 'inherit' })
+				)
+			})
+
+			it('should not retry if sessionId is not provided', async () => {
+				const prompt = 'Test prompt'
+				const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
+
+				// Call fails with "Session ID already in use" but sessionId option not provided
+				vi.mocked(execa).mockRejectedValueOnce({
+					stderr: `Error: Session ID ${sessionId} is already in use.`,
+					exitCode: 1,
+				})
+
+				await expect(launchClaude(prompt, { headless: true })).rejects.toThrow(
+					`Claude CLI error: Error: Session ID ${sessionId} is already in use.`
+				)
+
+				expect(execa).toHaveBeenCalledTimes(1)
+			})
+
+			it('should throw error if retry also fails', async () => {
+				const prompt = 'Test prompt'
+				const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
+
+				// First call fails with "Session ID already in use"
+				vi.mocked(execa).mockRejectedValueOnce({
+					stderr: `Error: Session ID ${sessionId} is already in use.`,
+					exitCode: 1,
+				})
+
+				// Retry also fails
+				vi.mocked(execa).mockRejectedValueOnce({
+					stderr: 'Some other error on retry',
+					exitCode: 1,
+				})
+
+				await expect(launchClaude(prompt, {
+					headless: true,
+					sessionId,
+				})).rejects.toThrow('Claude CLI error: Some other error on retry')
+
+				expect(execa).toHaveBeenCalledTimes(2)
+			})
+
+			it('should extract session ID from error message correctly', async () => {
+				const prompt = 'Test prompt'
+				const providedSessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
+				const errorSessionId = 'abcd1234-5678-90ab-cdef-1234567890ab'
+
+				// First call fails with different session ID in error
+				vi.mocked(execa).mockRejectedValueOnce({
+					stderr: `Error: Session ID ${errorSessionId} is already in use.`,
+					exitCode: 1,
+				})
+
+				// Retry with extracted session ID succeeds
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: true,
+					sessionId: providedSessionId,
+				})
+
+				// Verify retry uses the session ID from error message, not the provided one
+				expect(execa).toHaveBeenNthCalledWith(
+					2,
+					'claude',
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp', '--resume', errorSessionId],
+					expect.any(Object)
+				)
+			})
+
+			it('should preserve other args when retrying with --resume', async () => {
+				const prompt = 'Test prompt'
+				const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
+
+				vi.mocked(execa).mockRejectedValueOnce({
+					stderr: `Error: Session ID ${sessionId} is already in use.`,
+					exitCode: 1,
+				})
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: true,
+					model: 'opus',
+					addDir: '/workspace',
+					sessionId,
+				})
+
+				// Verify retry preserves model and addDir but replaces --session-id with --resume
+				expect(execa).toHaveBeenNthCalledWith(
+					2,
+					'claude',
+					[
+						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
+						'--model', 'opus',
+						'--add-dir', '/workspace',
+						'--add-dir', '/tmp',
+						'--resume', sessionId,
+					],
+					expect.any(Object)
 				)
 			})
 		})

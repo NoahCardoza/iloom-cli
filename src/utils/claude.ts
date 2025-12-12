@@ -1,8 +1,46 @@
 import { execa } from 'execa'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 import { logger } from './logger.js'
 import { openTerminalWindow } from './terminal.js'
+
+/**
+ * Generate a deterministic UUID v5 from a worktree path
+ * Uses SHA1 hash with URL namespace to create a consistent session ID
+ * that can be used to resume Claude Code sessions
+ */
+export function generateDeterministicSessionId(worktreePath: string): string {
+	// UUID v5 namespace for URLs (RFC 4122)
+	const URL_NAMESPACE = '6ba7b811-9dad-11d1-80b4-00c04fd430c8'
+
+	// Create SHA1 hash of namespace + path
+	const hash = createHash('sha1')
+
+	// Convert namespace UUID to bytes
+	const namespaceBytes = Buffer.from(URL_NAMESPACE.replace(/-/g, ''), 'hex')
+	hash.update(namespaceBytes)
+	hash.update(worktreePath)
+
+	const digest = hash.digest()
+
+	// Format as UUID v5:
+	// - Set version (bits 12-15 of time_hi_and_version) to 5
+	// - Set variant (bits 6-7 of clock_seq_hi_and_reserved) to binary 10
+	const bytes = Array.from(digest.subarray(0, 16))
+
+	// Set version to 5 (byte 6, high nibble)
+	const byte6 = bytes[6] ?? 0
+	bytes[6] = (byte6 & 0x0f) | 0x50
+
+	// Set variant to RFC 4122 (byte 8, high 2 bits = 10)
+	const byte8 = bytes[8] ?? 0
+	bytes[8] = (byte8 & 0x3f) | 0x80
+
+	// Format as UUID string
+	const hex = Buffer.from(bytes).toString('hex')
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
+}
 
 export interface ClaudeCliOptions {
 	model?: string
@@ -21,6 +59,7 @@ export interface ClaudeCliOptions {
 	setArguments?: string[] // Raw --set arguments to forward (e.g., ['workflows.issue.startIde=false'])
 	executablePath?: string // Executable path to use for spin command (e.g., 'il', 'il-125', or '/path/to/dist/cli.js')
 	logger?: import('./logger.js').Logger // Optional logger for progress output
+	sessionId?: string // Session ID for Claude Code resume support (must be valid UUID)
 }
 
 /**
@@ -93,7 +132,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, logger: optionsLogger } = options
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, logger: optionsLogger } = options
 	const log = optionsLogger ?? logger
 
 	// Build command arguments
@@ -146,6 +185,11 @@ export async function launchClaude(
 	// Add --agents flag if provided
 	if (agents) {
 		args.push('--agents', JSON.stringify(agents))
+	}
+
+	// Add --session-id flag if provided (enables Claude Code session resume)
+	if (sessionId) {
+		args.push('--session-id', sessionId)
 	}
 
 	try {
@@ -224,15 +268,47 @@ export async function launchClaude(
 			// Used for conflict resolution, error fixing, etc.
 			// This is the simple approach: claude -- "prompt"
 
-			// Execute in current terminal (blocking, inherits stdio)
-			await execa('claude', [...args, '--', prompt], {
-				...(addDir && { cwd: addDir }),
-				stdio: 'inherit', // Let user interact directly in current terminal
-				timeout: 0, // Disable timeout
-				verbose: logger.isDebugEnabled(),
-			})
+			// First attempt: capture stderr to detect session ID conflicts
+			// stdin/stdout inherit for interactivity, stderr captured for error detection
+			try {
+				await execa('claude', [...args, '--', prompt], {
+					...(addDir && { cwd: addDir }),
+					stdio: ['inherit', 'inherit', 'pipe'], // Capture stderr to detect session conflicts
+					timeout: 0, // Disable timeout
+					verbose: logger.isDebugEnabled(),
+				})
+				return
+			} catch (interactiveError) {
+				const interactiveExecaError = interactiveError as { stderr?: string; message?: string }
+				const interactiveErrorMessage = interactiveExecaError.stderr ?? interactiveExecaError.message ?? ''
 
-			return
+				// Check for session ID conflict
+				const sessionMatch = interactiveErrorMessage.match(/Session ID ([0-9a-f-]+) is already in use/i)
+				const conflictSessionId = sessionMatch?.[1]
+				if (sessionMatch && sessionId && conflictSessionId) {
+					log.debug(`Session ID ${conflictSessionId} already in use, retrying with --resume`)
+
+					// Rebuild args with --resume instead of --session-id
+					const resumeArgs = args.filter((arg, idx) => {
+						if (arg === '--session-id') return false
+						if (idx > 0 && args[idx - 1] === '--session-id') return false
+						return true
+					})
+					resumeArgs.push('--resume', conflictSessionId)
+
+					// Retry with full stdio inherit for proper interactive experience
+					await execa('claude', [...resumeArgs, '--', prompt], {
+						...(addDir && { cwd: addDir }),
+						stdio: 'inherit',
+						timeout: 0,
+						verbose: logger.isDebugEnabled(),
+					})
+					return
+				}
+
+				// Not a session conflict, re-throw
+				throw interactiveError
+			}
 		}
 	} catch (error) {
 		// Check for specific Claude CLI errors
@@ -242,8 +318,96 @@ export async function launchClaude(
 			exitCode?: number
 		}
 
-		// Re-throw with more context
 		const errorMessage = execaError.stderr ?? execaError.message ?? 'Unknown Claude CLI error'
+
+		// Check for "Session ID ... is already in use" error and retry with --resume
+		const sessionInUseMatch = errorMessage.match(/Session ID ([0-9a-f-]+) is already in use/i)
+		const extractedSessionId = sessionInUseMatch?.[1]
+		if (sessionInUseMatch && sessionId && extractedSessionId) {
+			log.debug(`Session ID ${extractedSessionId} already in use, retrying with --resume`)
+
+			// Rebuild args with --resume instead of --session-id
+			const resumeArgs = args.filter((arg, idx) => {
+				// Filter out --session-id and its value
+				if (arg === '--session-id') return false
+				if (idx > 0 && args[idx - 1] === '--session-id') return false
+				return true
+			})
+			resumeArgs.push('--resume', extractedSessionId)
+
+			try {
+				if (headless) {
+					const isDebugMode = logger.isDebugEnabled()
+					const execaOptions = {
+						input: prompt,
+						timeout: 0,
+						...(addDir && { cwd: addDir }),
+						verbose: isDebugMode,
+						...(isDebugMode && { stdio: ['pipe', 'pipe', 'pipe'] as const }),
+					}
+
+					const subprocess = execa('claude', resumeArgs, execaOptions)
+					const isJsonStreamFormat = resumeArgs.includes('--output-format') && resumeArgs.includes('stream-json')
+
+					let outputBuffer = ''
+					let isStreaming = false
+					let isFirstProgress = true
+					if (subprocess.stdout && typeof subprocess.stdout.on === 'function') {
+						isStreaming = true
+						subprocess.stdout.on('data', (chunk: Buffer) => {
+							const text = chunk.toString()
+							outputBuffer += text
+							if (isDebugMode) {
+								log.stdout.write(text)
+							} else {
+								if (isFirstProgress) {
+									log.stdout.write('🤖 .')
+									isFirstProgress = false
+								} else {
+									log.stdout.write('.')
+								}
+							}
+						})
+					}
+
+					const result = await subprocess
+
+					if (isStreaming) {
+						const rawOutput = outputBuffer.trim()
+						if (!isDebugMode) {
+							log.stdout.write('\n')
+						}
+						return isJsonStreamFormat ? parseJsonStreamOutput(rawOutput) : rawOutput
+					} else {
+						if (isDebugMode) {
+							log.stdout.write(result.stdout)
+							if (result.stdout && !result.stdout.endsWith('\n')) {
+								log.stdout.write('\n')
+							}
+						} else {
+							log.stdout.write('🤖 .')
+							log.stdout.write('\n')
+						}
+						const rawOutput = result.stdout.trim()
+						return isJsonStreamFormat ? parseJsonStreamOutput(rawOutput) : rawOutput
+					}
+				} else {
+					await execa('claude', [...resumeArgs, '--', prompt], {
+						...(addDir && { cwd: addDir }),
+						stdio: 'inherit',
+						timeout: 0,
+						verbose: logger.isDebugEnabled(),
+					})
+					return
+				}
+			} catch (retryError) {
+				const retryExecaError = retryError as { stderr?: string; message?: string }
+				const retryErrorMessage = retryExecaError.stderr ?? retryExecaError.message ?? 'Unknown Claude CLI error'
+				throw new Error(`Claude CLI error: ${retryErrorMessage}`)
+			}
+		}
+
+		// Re-throw with more context
 		throw new Error(`Claude CLI error: ${errorMessage}`)
 	}
 }

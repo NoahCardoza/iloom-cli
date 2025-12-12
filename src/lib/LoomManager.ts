@@ -11,6 +11,7 @@ import { VSCodeIntegration } from './VSCodeIntegration.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager, type WriteMetadataInput } from './MetadataManager.js'
 import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit } from '../utils/git.js'
+import { generateDeterministicSessionId } from '../utils/claude.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName, selectDistinctColor, hexToRgb, type ColorData } from '../utils/color.js'
 import { DatabaseManager } from './DatabaseManager.js'
@@ -278,6 +279,9 @@ export class LoomManager {
     const issue_numbers: string[] = input.type === 'issue' ? [String(input.identifier)] : []
     const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []
 
+    // Generate deterministic session ID for Claude Code resume support
+    const sessionId = generateDeterministicSessionId(worktreePath)
+
     const metadataInput: WriteMetadataInput = {
       description,
       branchName,
@@ -287,6 +291,7 @@ export class LoomManager {
       pr_numbers,
       issueTracker: this.issueTracker.providerName,
       colorHex: colorData.hex,
+      sessionId,
     }
     await this.metadataManager.writeMetadata(worktreePath, metadataInput)
 
@@ -1014,6 +1019,9 @@ export class LoomManager {
       const issue_numbers: string[] = input.type === 'issue' ? [String(input.identifier)] : []
       const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []
 
+      // Generate deterministic session ID for Claude Code resume support
+      const sessionId = generateDeterministicSessionId(worktreePath)
+
       const metadataInput: WriteMetadataInput = {
         description,
         branchName,
@@ -1023,6 +1031,7 @@ export class LoomManager {
         pr_numbers,
         issueTracker: this.issueTracker.providerName,
         colorHex,
+        sessionId,
       }
       await this.metadataManager.writeMetadata(worktreePath, metadataInput)
     }

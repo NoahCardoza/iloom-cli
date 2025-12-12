@@ -19,6 +19,7 @@ export interface MetadataFile {
   pr_numbers?: string[]
   issueTracker?: string
   colorHex?: string // Stored hex color (e.g., "#dcebff") - robust against palette changes
+  sessionId?: string // Claude Code session ID for resume support
 }
 
 /**
@@ -35,6 +36,7 @@ export interface WriteMetadataInput {
   pr_numbers: string[]
   issueTracker: string
   colorHex: string // Hex color (e.g., "#dcebff") - robust against palette changes
+  sessionId: string // Claude Code session ID for resume support (required for new looms)
 }
 
 /**
@@ -50,6 +52,7 @@ export interface LoomMetadata {
   pr_numbers: string[]
   issueTracker: string | null
   colorHex: string | null // Hex color (e.g., "#dcebff") - robust against palette changes
+  sessionId: string | null // Claude Code session ID (null for legacy looms)
 }
 
 /**
@@ -130,6 +133,7 @@ export class MetadataManager {
         pr_numbers: input.pr_numbers,
         issueTracker: input.issueTracker,
         colorHex: input.colorHex,
+        sessionId: input.sessionId,
       }
 
       // 3. Write to slugified filename
@@ -178,6 +182,7 @@ export class MetadataManager {
         pr_numbers: data.pr_numbers ?? [],
         issueTracker: data.issueTracker ?? null,
         colorHex: data.colorHex ?? null,
+        sessionId: data.sessionId ?? null,
       }
     } catch (error) {
       // Return null on any error (graceful degradation per spec)
@@ -234,6 +239,7 @@ export class MetadataManager {
             pr_numbers: data.pr_numbers ?? [],
             issueTracker: data.issueTracker ?? null,
             colorHex: data.colorHex ?? null,
+            sessionId: data.sessionId ?? null,
           })
         } catch (error) {
           // Skip individual files that fail to parse (graceful degradation)
