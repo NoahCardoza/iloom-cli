@@ -1,0 +1,60 @@
+You are generating a summary of THIS conversation - the development session you just completed.
+
+## Context
+- Issue/PR: #ISSUE_NUMBER
+- Branch: BRANCH_NAME
+- Loom Type: LOOM_TYPE
+
+## Your Task
+
+Reflect on THIS conversation (the one you're currently in) and generate a concise summary focused on:
+
+1. **Key Insights**: What important learnings emerged during implementation?
+2. **Decisions Made**: What significant technical decisions were made and why?
+3. **Challenges Encountered**: What obstacles were faced and how were they resolved?
+4. **Mistakes and Corrections**: What mistakes were made and what was learned from them?
+
+## Output Format
+
+**CRITICAL: Your entire output will be posted DIRECTLY as a comment on the issue. Do NOT include:**
+- Any meta-commentary about the summary (e.g., "This summary is ready to be posted...")
+- Any preamble or introduction before the markdown
+- Any explanation of what you're doing
+- Any text after the closing `</details>` tag
+
+**Output ONLY the markdown content below, starting with `## iloom Session Summary` and ending with `</details>`.**
+
+Structure it with key themes visible at the top, then detailed sections wrapped in collapsible tags:
+
+```markdown
+## iloom Session Summary
+
+**Key Themes:**
+- [Theme 1 - one sentence]
+- [Theme 2 - one sentence]
+- [Theme 3 - one sentence]
+
+---
+
+<details>
+<summary>Session Details (click to expand)</summary>
+
+### Key Insights
+- [Insight 1]
+- [Insight 2]
+
+### Decisions Made
+- [Decision and rationale]
+
+### Challenges Resolved
+- [Challenge and resolution]
+
+### Lessons Learned
+- [What could be done better next time]
+
+</details>
+```
+
+Keep the visible themes section brief (3-5 bullet points, one sentence each). The detailed sections inside the collapsible can be more comprehensive. Focus on information that would help future developers or AI agents working on similar tasks.
+
+**REMINDER: Output ONLY the markdown. No commentary before or after. Your response IS the comment.**

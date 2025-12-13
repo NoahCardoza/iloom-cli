@@ -16,6 +16,7 @@ import { PRManager } from '../lib/PRManager.js'
 import { LoomManager } from '../lib/LoomManager.js'
 import { ClaudeContextManager } from '../lib/ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
+import { SessionSummaryService } from '../lib/SessionSummaryService.js'
 import { findMainWorktreePathWithSettings, pushBranchToRemote, extractIssueNumber } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { installDependencies } from '../utils/package-manager.js'
@@ -52,6 +53,7 @@ export class FinishCommand {
 	private buildRunner: BuildRunner
 	private settingsManager: SettingsManager
 	private loomManager?: LoomManager
+	private sessionSummaryService?: SessionSummaryService
 
 	constructor(
 		issueTracker: IssueTracker,
@@ -730,6 +732,9 @@ export class FinishCommand {
 			getLogger().debug('Skipping build verification (--skip-build flag provided)')
 		}
 
+		// Step 5.7: Generate session summary (non-blocking, preview-only in dry-run)
+		await this.generateSessionSummaryIfConfigured(parsed, worktree, options)
+
 		// Step 6: Post-merge cleanup
 		await this.performPostMergeCleanup(parsed, options, worktree, result)
 	}
@@ -923,6 +928,9 @@ export class FinishCommand {
 
 			// Set PR URL in result
 			finishResult.prUrl = prResult.url
+
+			// Step 4.5: Generate session summary (non-blocking, preview-only in dry-run)
+			await this.generateSessionSummaryIfConfigured(parsed, worktree, options)
 
 			// Step 5: Interactive cleanup prompt (unless flags override)
 			await this.handlePRCleanupPrompt(parsed, options, worktree, finishResult)
@@ -1123,6 +1131,58 @@ export class FinishCommand {
 			this.showManualCleanupInstructions(worktree)
 			throw error // Re-throw to fail the command
 		}
+	}
+
+	/**
+	 * Generate and post session summary if configured
+	 *
+	 * Non-blocking: Catches all errors and logs warnings instead of throwing
+	 * This ensures the finish workflow continues even if summary generation fails
+	 *
+	 * In dry-run mode: generates summary and shows preview, but doesn't post
+	 */
+	private async generateSessionSummaryIfConfigured(
+		parsed: ParsedFinishInput,
+		worktree: GitWorktree,
+		options: FinishOptions
+	): Promise<void> {
+		// Skip for branch type (no issue to comment on)
+		if (parsed.type === 'branch') {
+			return
+		}
+
+		// Initialize SessionSummaryService lazily
+		this.sessionSummaryService ??= new SessionSummaryService(
+			undefined, // Use default PromptTemplateManager
+			undefined, // Use default MetadataManager
+			this.settingsManager
+		)
+
+		if (options.dryRun) {
+			// In dry-run mode: generate but don't post, show preview
+			try {
+				const result = await this.sessionSummaryService.generateSummary(
+					worktree.path,
+					worktree.branch,
+					parsed.type,
+					parsed.number
+				)
+				const preview = result.summary.slice(0, 100).replace(/\n/g, ' ')
+				getLogger().info(`[DRY RUN] Would post session summary: "${preview}..."`)
+			} catch (error) {
+				const errorMessage = error instanceof Error ? error.message : String(error)
+				getLogger().warn(`[DRY RUN] Session summary generation failed: ${errorMessage}`)
+			}
+			return
+		}
+
+		// Generate and post summary (non-blocking)
+		await this.sessionSummaryService.generateAndPostSummary({
+			worktreePath: worktree.path,
+			issueNumber: parsed.number ?? 0,
+			branchName: worktree.branch,
+			loomType: parsed.type,
+		})
 	}
 
 	/**

@@ -1093,6 +1093,48 @@ program
     }
   })
 
+// Command for session summary generation
+program
+  .command('summary')
+  .description('Generate Claude session summary for a loom')
+  .argument('[identifier]', 'Issue number, PR number (pr/123), or branch name (auto-detected if omitted)')
+  .option('--with-comment', 'Post summary as a comment to the issue/PR')
+  .option('--json', 'Output result as JSON')
+  .action(async (identifier: string | undefined, options: { withComment?: boolean; json?: boolean }) => {
+    const executeAction = async (): Promise<void> => {
+      try {
+        const { SummaryCommand } = await import('./commands/summary.js')
+        const command = new SummaryCommand()
+        const result = await command.execute({ identifier, options })
+
+        if (options.json && result) {
+          // JSON mode: output structured result and exit
+          console.log(JSON.stringify(result, null, 2))
+        }
+        process.exit(0)
+      } catch (error) {
+        if (options.json) {
+          // JSON mode: output error as JSON
+          console.log(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
+        } else {
+          logger.error(`Summary failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+          if (error instanceof Error && error.stack) {
+            logger.debug(error.stack)
+          }
+        }
+        process.exit(1)
+      }
+    }
+
+    // Wrap execution in logger context for JSON mode
+    if (options.json) {
+      const jsonLogger = createStderrLogger()
+      await withLogger(jsonLogger, executeAction)
+    } else {
+      await executeAction()
+    }
+  })
+
 // Test command for Neon integration
 program
   .command('test-neon')

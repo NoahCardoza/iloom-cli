@@ -51,7 +51,9 @@ iloom stops the "Context Window Tetris." It treats context as a first-class conc
 *   **Scale Understanding:** Because every loom holds its own isolated environment (Git worktree, DB branch, local server), you can switch between 5 complex features without losing your place or your AI's context.
     
 *   **Visible Reasoning:** The AI's decisions are documented publicly. Your team sees the plan, and "future you" knows exactly why a decision was made.
-    
+
+*   **Automatic Session Summaries:** When you finish a loom, iloom captures key insights, decisions, and lessons learned from your Claude session and posts them to the issue. These summaries become institutional knowledge that informs future tasks.
+
 
 _iloom is not just a tool for managing git worktrees - it's a control plane for maintaining alignment between you and your AI assistant._
 
@@ -73,8 +75,8 @@ iloom uses your existing Claude subscription to build a shared mental model of y
 
  # ... You, the iloom agents and Claude build the feature together in the isolated environment ...
  
- # 4. Finish & Merge  # Validates code (test/lint), handles merge conflicts, and cleans up the worktree/DB.
- il finish 
+ # 4. Finish & Merge  # Validates code, generates session summary, merges, and cleans up.
+ il finish
  ```
 
 **The iloom Difference:** il start doesn't just create a branch. It launches a multi-agent workflow that surfaces assumptions and creates a structured plan in your issue tracker **before you even need to look at your IDE.**
@@ -222,6 +224,9 @@ This example shows how to configure a project-wide default (e.g., GitHub remote)
   },
   "spin": {
     "model": "opus" // Claude model for spin orchestrator: opus (default), sonnet, or haiku
+  },
+  "summary": {
+    "model": "sonnet" // Claude model for session summaries: sonnet (default), opus, or haiku
   }
 }
 ```

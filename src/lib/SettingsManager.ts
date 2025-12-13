@@ -28,6 +28,17 @@ export const SpinAgentSettingsSchema = z.object({
 })
 
 /**
+ * Zod schema for summary settings with default model
+ * Used for session summary generation configuration
+ */
+export const SummarySettingsSchema = z.object({
+	model: z
+		.enum(['sonnet', 'opus', 'haiku'])
+		.default('sonnet')
+		.describe('Claude model shorthand for session summary generation'),
+})
+
+/**
  * Zod schema for workflow permission configuration
  */
 export const WorkflowPermissionSchema = z.object({
@@ -55,6 +66,10 @@ export const WorkflowPermissionSchema = z.object({
 		.boolean()
 		.default(false)
 		.describe('Launch terminal window without dev server when starting this workflow type'),
+	generateSummary: z
+		.boolean()
+		.default(true)
+		.describe('Generate and post Claude session summary when finishing this workflow type'),
 })
 
 /**
@@ -86,6 +101,10 @@ export const WorkflowPermissionSchemaNoDefaults = z.object({
 		.boolean()
 		.optional()
 		.describe('Launch terminal window without dev server when starting this workflow type'),
+	generateSummary: z
+		.boolean()
+		.optional()
+		.describe('Generate and post Claude session summary when finishing this workflow type'),
 })
 
 /**
@@ -270,6 +289,9 @@ export const IloomSettingsSchema = z.object({
 	spin: SpinAgentSettingsSchema.optional().describe(
 		'Spin orchestrator configuration. Model defaults to opus when not configured.',
 	),
+	summary: SummarySettingsSchema.optional().describe(
+		'Session summary generation configuration. Model defaults to sonnet when not configured.',
+	),
 	capabilities: CapabilitiesSettingsSchema.describe('Project capability configurations'),
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
@@ -426,6 +448,12 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		})
 		.optional()
 		.describe('Spin orchestrator configuration'),
+	summary: z
+		.object({
+			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
+		})
+		.optional()
+		.describe('Session summary generation configuration'),
 	capabilities: CapabilitiesSettingsSchemaNoDefaults.describe('Project capability configurations'),
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
@@ -519,6 +547,11 @@ export type AgentSettings = z.infer<typeof AgentSettingsSchema>
  * TypeScript type for spin agent settings derived from Zod schema
  */
 export type SpinAgentSettings = z.infer<typeof SpinAgentSettingsSchema>
+
+/**
+ * TypeScript type for summary settings derived from Zod schema
+ */
+export type SummarySettings = z.infer<typeof SummarySettingsSchema>
 
 /**
  * TypeScript type for workflow permission configuration derived from Zod schema
@@ -813,15 +846,23 @@ export class SettingsManager {
 
 	/**
 	 * Get the spin orchestrator model with default applied
-	 * Returns 'opus' when not configured (via schema default or fallback)
+	 * Default is defined in SpinAgentSettingsSchema
 	 *
 	 * @param settings - Pre-loaded settings object
 	 * @returns Model shorthand ('opus', 'sonnet', or 'haiku')
 	 */
 	getSpinModel(settings?: IloomSettings): 'sonnet' | 'opus' | 'haiku' {
-		// If spin object exists and has model, return it
-		// Otherwise return 'opus' as the default
-		// Note: The fallback handles the case where spin is optional and undefined
-		return settings?.spin?.model ?? 'opus'
+		return settings?.spin?.model ?? SpinAgentSettingsSchema.parse({}).model
+	}
+
+	/**
+	 * Get the session summary model with default applied
+	 * Default is defined in SummarySettingsSchema
+	 *
+	 * @param settings - Pre-loaded settings object
+	 * @returns Model shorthand ('opus', 'sonnet', or 'haiku')
+	 */
+	getSummaryModel(settings?: IloomSettings): 'sonnet' | 'opus' | 'haiku' {
+		return settings?.summary?.model ?? SummarySettingsSchema.parse({}).model
 	}
 }

@@ -1,0 +1,275 @@
+/**
+ * SessionSummaryService: Generates and posts Claude session summaries
+ *
+ * This service orchestrates:
+ * 1. Reading session metadata to get session ID
+ * 2. Loading and processing the session-summary prompt template
+ * 3. Invoking Claude headless to generate the summary
+ * 4. Posting the summary as a comment to the issue/PR
+ */
+
+import { logger } from '../utils/logger.js'
+import { launchClaude, generateDeterministicSessionId } from '../utils/claude.js'
+import { PromptTemplateManager } from './PromptTemplateManager.js'
+import { MetadataManager } from './MetadataManager.js'
+import { SettingsManager, type IloomSettings } from './SettingsManager.js'
+import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
+import type { IssueProvider } from '../mcp/types.js'
+
+/**
+ * Input for generating and posting a session summary
+ */
+export interface SessionSummaryInput {
+	worktreePath: string
+	issueNumber: string | number
+	branchName: string
+	loomType: 'issue' | 'pr' | 'branch'
+}
+
+/**
+ * Result from generating a session summary
+ */
+export interface SessionSummaryResult {
+	summary: string
+	sessionId: string
+}
+
+/**
+ * Service that generates and posts Claude session summaries to issues
+ */
+export class SessionSummaryService {
+	private templateManager: PromptTemplateManager
+	private metadataManager: MetadataManager
+	private settingsManager: SettingsManager
+
+	constructor(
+		templateManager?: PromptTemplateManager,
+		metadataManager?: MetadataManager,
+		settingsManager?: SettingsManager
+	) {
+		this.templateManager = templateManager ?? new PromptTemplateManager()
+		this.metadataManager = metadataManager ?? new MetadataManager()
+		this.settingsManager = settingsManager ?? new SettingsManager()
+	}
+
+	/**
+	 * Generate and post a session summary to the issue
+	 *
+	 * Non-blocking: Catches all errors and logs warnings instead of throwing
+	 * This ensures the finish workflow continues even if summary generation fails
+	 */
+	async generateAndPostSummary(input: SessionSummaryInput): Promise<void> {
+		try {
+			// 1. Skip for branch type (no issue to comment on)
+			if (input.loomType === 'branch') {
+				logger.debug('Skipping session summary: branch type has no associated issue')
+				return
+			}
+
+			// 2. Read metadata to get sessionId, or generate deterministically
+			const metadata = await this.metadataManager.readMetadata(input.worktreePath)
+			const sessionId = metadata?.sessionId ?? generateDeterministicSessionId(input.worktreePath)
+
+			// 3. Load settings to check generateSummary config
+			const settings = await this.settingsManager.loadSettings(input.worktreePath)
+			if (!this.shouldGenerateSummary(input.loomType, settings)) {
+				logger.debug(`Skipping session summary: generateSummary is disabled for ${input.loomType} workflow`)
+				return
+			}
+
+			logger.info('Generating session summary...')
+
+			// 4. Load and process the session-summary template
+			const prompt = await this.templateManager.getPrompt('session-summary', {
+				ISSUE_NUMBER: String(input.issueNumber),
+				BRANCH_NAME: input.branchName,
+				LOOM_TYPE: input.loomType,
+			})
+
+			// 5. Invoke Claude headless to generate summary
+			// Use --resume with session ID so Claude knows which conversation to summarize
+			const summaryModel = this.settingsManager.getSummaryModel(settings)
+			const summaryResult = await launchClaude(prompt, {
+				headless: true,
+				model: summaryModel,
+				sessionId: sessionId, // Resume this session so Claude has conversation context
+			})
+
+			if (!summaryResult || typeof summaryResult !== 'string' || summaryResult.trim() === '') {
+				logger.warn('Session summary generation returned empty result')
+				return
+			}
+
+			let summary = summaryResult.trim()
+
+			// 6. Check if Claude couldn't access conversation history and use fallback
+			if (this.indicatesNoConversationAccess(summary)) {
+				logger.debug('Claude could not access conversation history, using fallback summary')
+				summary = this.getFallbackSummary(input.branchName, input.issueNumber)
+			}
+
+			// 7. Post summary to issue
+			await this.postSummaryToIssue(input.issueNumber, summary, settings)
+
+			logger.success('Session summary posted to issue')
+		} catch (error) {
+			// Non-blocking: Log warning but don't throw
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			logger.warn(`Failed to generate session summary: ${errorMessage}`)
+			logger.debug('Session summary generation error details:', { error })
+		}
+	}
+
+	/**
+	 * Generate a session summary without posting it
+	 *
+	 * This method is useful for previewing the summary or for use by CLI commands
+	 * that want to display the summary before optionally posting it.
+	 *
+	 * @param worktreePath - Path to the worktree
+	 * @param branchName - Name of the branch
+	 * @param loomType - Type of loom ('issue' | 'pr' | 'branch')
+	 * @param issueNumber - Issue or PR number (optional, for template variables)
+	 * @returns The generated summary and session ID
+	 * @throws Error if Claude invocation fails
+	 */
+	async generateSummary(
+		worktreePath: string,
+		branchName: string,
+		loomType: 'issue' | 'pr' | 'branch',
+		issueNumber?: string | number
+	): Promise<SessionSummaryResult> {
+		// 1. Read metadata or generate deterministic session ID
+		const metadata = await this.metadataManager.readMetadata(worktreePath)
+		const sessionId = metadata?.sessionId ?? generateDeterministicSessionId(worktreePath)
+
+		// 2. Load settings for model configuration
+		const settings = await this.settingsManager.loadSettings(worktreePath)
+
+		logger.info('Generating session summary...')
+
+		// 3. Load and process the session-summary template
+		const prompt = await this.templateManager.getPrompt('session-summary', {
+			ISSUE_NUMBER: issueNumber !== undefined ? String(issueNumber) : '',
+			BRANCH_NAME: branchName,
+			LOOM_TYPE: loomType,
+		})
+
+		// 4. Invoke Claude headless to generate summary
+		const summaryModel = this.settingsManager.getSummaryModel(settings)
+		const summaryResult = await launchClaude(prompt, {
+			headless: true,
+			model: summaryModel,
+			sessionId: sessionId,
+		})
+
+		if (!summaryResult || typeof summaryResult !== 'string' || summaryResult.trim() === '') {
+			throw new Error('Session summary generation returned empty result')
+		}
+
+		let summary = summaryResult.trim()
+
+		// 5. Check if Claude couldn't access conversation history and use fallback
+		if (this.indicatesNoConversationAccess(summary)) {
+			logger.debug('Claude could not access conversation history, using fallback summary')
+			summary = this.getFallbackSummary(branchName, issueNumber ?? 'unknown')
+		}
+
+		return {
+			summary,
+			sessionId: sessionId,
+		}
+	}
+
+	/**
+	 * Post a summary to an issue (used by both generateAndPostSummary and CLI commands)
+	 *
+	 * @param issueNumber - Issue or PR number to post to
+	 * @param summary - The summary text to post
+	 * @param worktreePath - Path to worktree for loading settings (optional)
+	 */
+	async postSummary(
+		issueNumber: string | number,
+		summary: string,
+		worktreePath?: string
+	): Promise<void> {
+		const settings = await this.settingsManager.loadSettings(worktreePath)
+		await this.postSummaryToIssue(issueNumber, summary, settings)
+		logger.success('Session summary posted to issue')
+	}
+
+	/**
+	 * Determine if summary should be generated based on loom type and settings
+	 *
+	 * @param loomType - The type of loom being finished
+	 * @param settings - The loaded iloom settings
+	 * @returns true if summary should be generated
+	 */
+	shouldGenerateSummary(
+		loomType: 'issue' | 'pr' | 'branch',
+		settings: IloomSettings
+	): boolean {
+		// Branch type never generates summaries (no issue to comment on)
+		if (loomType === 'branch') {
+			return false
+		}
+
+		// Get workflow-specific config
+		const workflowConfig =
+			loomType === 'issue'
+				? settings.workflows?.issue
+				: settings.workflows?.pr
+
+		// Default to true if not explicitly set (for issue and pr types)
+		return workflowConfig?.generateSummary ?? true
+	}
+
+	/**
+	 * Post the summary as a comment to the issue
+	 */
+	private async postSummaryToIssue(
+		issueNumber: string | number,
+		summary: string,
+		settings: IloomSettings
+	): Promise<void> {
+		// Get the issue management provider from settings
+		const providerType = (settings.issueManagement?.provider ?? 'github') as IssueProvider
+		const provider = IssueManagementProviderFactory.create(providerType)
+
+		// Create the comment
+		await provider.createComment({
+			number: String(issueNumber),
+			body: summary,
+			type: 'issue',
+		})
+	}
+
+	/**
+	 * Check if Claude's response indicates it couldn't access conversation history
+	 */
+	private indicatesNoConversationAccess(response: string): boolean {
+		const lowerResponse = response.toLowerCase()
+		const indicators = [
+			"don't have access",
+			"do not have access",
+			"cannot access",
+			"can't access",
+			"no access to",
+			"unable to access",
+			"conversation history",
+			"session transcript",
+			"provide the conversation",
+			"need the actual conversation",
+		]
+		return indicators.some((indicator) => lowerResponse.includes(indicator))
+	}
+
+	/**
+	 * Generate a fallback summary when conversation history is not accessible
+	 */
+	private getFallbackSummary(_branchName: string, _issueNumber: string | number): string {
+		return `## iloom Session Summary
+
+Summary could not be generated.`
+	}
+}

@@ -249,6 +249,14 @@ export interface FinishResult {
   cleanupResult?: import('./cleanup.js').CleanupResult
 }
 
+export interface SummaryResult {
+  summary: string
+  sessionId: string
+  issueNumber?: string | number
+  branchName: string
+  loomType: 'issue' | 'pr' | 'branch'
+}
+
 // Deprecated: Result types - use exception-based error handling instead
 // export type Result<T, E = Error> = { success: true; data: T } | { success: false; error: E }
 

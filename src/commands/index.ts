@@ -25,3 +25,6 @@ export { ContributeCommand } from './contribute.js'
 
 export { DevServerCommand } from './dev-server.js'
 export type { DevServerCommandInput, DevServerResult } from './dev-server.js'
+
+export { SummaryCommand } from './summary.js'
+export type { SummaryCommandInput, SummaryOptions } from './summary.js'

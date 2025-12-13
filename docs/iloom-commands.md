@@ -13,6 +13,7 @@ Complete documentation for all iloom CLI commands, options, and flags.
 - [Context & Development Commands](#context--development-commands)
   - [il spin](#il-spin)
   - [il open](#il-open)
+  - [il summary](#il-summary)
 - [Issue Management Commands](#issue-management-commands)
   - [il add-issue](#il-add-issue)
   - [il enhance](#il-enhance)
@@ -420,6 +421,79 @@ il open 25
 il open 25 --help
 il open 25 --version
 ```
+
+---
+
+### il summary
+
+Generate a summary of the Claude Code session for the current or specified loom.
+
+**Usage:**
+```bash
+il summary [identifier] [options]
+```
+
+**Arguments:**
+- `[identifier]` - Optional issue number, PR number, or branch name
+- If omitted, auto-detects current loom from working directory
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--with-comment` | Post the summary as a comment to the issue/PR |
+| `--json` | Output as JSON (for programmatic use) |
+
+**Behavior:**
+
+1. Auto-detects loom if no identifier provided
+2. Generates deterministic session ID if not in metadata
+3. Invokes Claude to reflect on the session and generate insights
+4. Prints summary to stdout (or outputs JSON with `--json`)
+5. Optionally posts as issue comment with `--with-comment`
+
+**Output includes:**
+- Key themes from the development session
+- Insights and learnings
+- Decisions made and rationale
+- Challenges resolved
+- Lessons learned
+
+**Examples:**
+
+```bash
+# Generate summary for current loom
+il summary
+
+# Generate summary for specific issue
+il summary 25
+
+# Generate and post as comment to issue
+il summary --with-comment
+
+# Output as JSON for scripting
+il summary --json
+
+# Combine: specific issue, post comment, JSON output
+il summary 42 --with-comment --json
+```
+
+**JSON Output Format:**
+```json
+{
+  "success": true,
+  "summary": "## iloom Session Summary\n...",
+  "sessionId": "abc-123-def",
+  "issueNumber": "42",
+  "branchName": "feat/issue-42-feature",
+  "loomType": "issue"
+}
+```
+
+**Notes:**
+- For branch-type looms, `--with-comment` is silently ignored (no issue to post to)
+- Summary generation uses the Claude haiku model for speed
+- Session summaries are also auto-generated during `il finish` (configurable via `generateSummary` setting)
 
 ---
 

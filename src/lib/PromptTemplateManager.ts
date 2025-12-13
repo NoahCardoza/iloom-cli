@@ -30,6 +30,10 @@ export interface TemplateVariables {
 	SETTINGS_SCHEMA_CONTENT?: string
 	FIRST_TIME_USER?: boolean
 	VSCODE_SETTINGS_GITIGNORED?: string
+	// Session summary template variables
+	SESSION_CONTEXT?: string  // Session ID for Claude to reference its conversation
+	BRANCH_NAME?: string      // Branch being finished
+	LOOM_TYPE?: string        // 'issue' or 'pr'
 }
 
 export class PromptTemplateManager {
@@ -74,7 +78,7 @@ export class PromptTemplateManager {
 	/**
 	 * Load a template file by name
 	 */
-	async loadTemplate(templateName: 'issue' | 'pr' | 'regular' | 'init'): Promise<string> {
+	async loadTemplate(templateName: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary'): Promise<string> {
 		const templatePath = path.join(this.templateDir, `${templateName}-prompt.txt`)
 
 		logger.debug('Loading template', {
@@ -187,6 +191,19 @@ export class PromptTemplateManager {
 
 		if (variables.VSCODE_SETTINGS_GITIGNORED !== undefined) {
 			result = result.replace(/VSCODE_SETTINGS_GITIGNORED/g, variables.VSCODE_SETTINGS_GITIGNORED)
+		}
+
+		// Session summary template variables
+		if (variables.SESSION_CONTEXT !== undefined) {
+			result = result.replace(/SESSION_CONTEXT/g, variables.SESSION_CONTEXT)
+		}
+
+		if (variables.BRANCH_NAME !== undefined) {
+			result = result.replace(/BRANCH_NAME/g, variables.BRANCH_NAME)
+		}
+
+		if (variables.LOOM_TYPE !== undefined) {
+			result = result.replace(/LOOM_TYPE/g, variables.LOOM_TYPE)
 		}
 
 		return result
@@ -307,7 +324,7 @@ export class PromptTemplateManager {
 	 * Get a fully processed prompt for a workflow type
 	 */
 	async getPrompt(
-		type: 'issue' | 'pr' | 'regular' | 'init',
+		type: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary',
 		variables: TemplateVariables
 	): Promise<string> {
 		const template = await this.loadTemplate(type)
