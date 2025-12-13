@@ -53,17 +53,16 @@ export class MergeManager {
 			)
 		}
 
-		// Step 2: Check for uncommitted changes (defensive check)
+		// Step 2: Check for uncommitted changes and create WIP commit if needed
 		const statusOutput = await executeGitCommand(['status', '--porcelain'], {
 			cwd: worktreePath,
 		})
 
+		let wipCommitHash: string | null = null
 		if (statusOutput.trim()) {
-			throw new Error(
-				'Uncommitted changes detected. Please commit or stash changes before rebasing.\n' +
-					'Run: git status to see uncommitted changes\n' +
-					'Or: il finish will automatically commit them for you'
-			)
+			getLogger().info('Uncommitted changes detected, creating temporary WIP commit...')
+			wipCommitHash = await this.createWipCommit(worktreePath)
+			getLogger().debug(`Created WIP commit: ${wipCommitHash}`)
 		}
 
 		// Step 3: Check if rebase is needed by comparing merge-base with main HEAD
@@ -121,6 +120,11 @@ export class MergeManager {
 		try {
 			await executeGitCommand(['rebase', mainBranch], { cwd: worktreePath })
 			getLogger().success('Rebase completed successfully!')
+
+			// Restore WIP commit if created
+			if (wipCommitHash) {
+				await this.restoreWipCommit(worktreePath, wipCommitHash)
+			}
 		} catch (error) {
 			// Detect conflicts
 			const conflictedFiles = await this.detectConflictedFiles(worktreePath)
@@ -136,6 +140,11 @@ export class MergeManager {
 
 				if (resolved) {
 					getLogger().success('Conflicts resolved with Claude assistance, rebase completed')
+
+					// Restore WIP commit if created
+					if (wipCommitHash) {
+						await this.restoreWipCommit(worktreePath, wipCommitHash)
+					}
 					return // Continue with successful rebase
 				}
 
@@ -302,6 +311,54 @@ export class MergeManager {
 		} catch {
 			// If command fails, return empty array (might not be a conflict)
 			return []
+		}
+	}
+
+	/**
+	 * Create a temporary WIP commit to preserve uncommitted changes during rebase
+	 * Stages all changes (tracked, untracked) using git add -A
+	 * @param worktreePath - Path to the worktree
+	 * @returns The commit hash of the WIP commit
+	 * @private
+	 */
+	private async createWipCommit(worktreePath: string): Promise<string> {
+		// Stage all changes including untracked files
+		await executeGitCommand(['add', '-A'], { cwd: worktreePath })
+
+		// Create WIP commit with distinctive message
+		await executeGitCommand(['commit', '-m', 'WIP: Auto-stash for rebase'], { cwd: worktreePath })
+
+		// Get and return the commit hash
+		const hash = await executeGitCommand(['rev-parse', 'HEAD'], { cwd: worktreePath })
+		return hash.trim()
+	}
+
+	/**
+	 * Restore uncommitted changes from WIP commit via soft reset
+	 * Logs warning but does not fail if soft reset fails (changes are safe in commit history)
+	 * @param worktreePath - Path to the worktree
+	 * @param wipCommitHash - Original WIP commit hash for verification logging
+	 * @private
+	 */
+	private async restoreWipCommit(worktreePath: string, wipCommitHash: string): Promise<void> {
+		getLogger().info('Restoring uncommitted changes from WIP commit...')
+
+		try {
+			// Soft reset to parent - changes become staged
+			await executeGitCommand(['reset', '--soft', 'HEAD~1'], { cwd: worktreePath })
+
+			// Unstage files to restore to original working directory state
+			await executeGitCommand(['reset', 'HEAD'], { cwd: worktreePath })
+
+			getLogger().success('Restored uncommitted changes from WIP commit')
+		} catch (error) {
+			// Log warning but consider rebase successful - work is not lost
+			getLogger().warn(
+				`Failed to restore WIP commit (${wipCommitHash}). ` +
+					`Your changes are safe in the commit history. ` +
+					`Manual recovery: git reset --soft HEAD~1`,
+				{ error: error instanceof Error ? error.message : String(error) }
+			)
 		}
 	}
 

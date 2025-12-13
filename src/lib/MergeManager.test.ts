@@ -187,16 +187,161 @@ describe('MergeManager', () => {
 			}
 		})
 
-		it('should error if uncommitted changes exist before rebase', async () => {
-			// Mock: uncommitted changes detected
+		it('should create WIP commit when uncommitted changes exist before rebase', async () => {
+			// Mock: uncommitted changes detected, WIP commit created, rebase succeeds
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('') // show-ref
 				.mockResolvedValueOnce('M src/file1.ts\nA src/file2.ts') // status: changes exist
+				.mockResolvedValueOnce('') // git add -A
+				.mockResolvedValueOnce('') // git commit -m WIP
+				.mockResolvedValueOnce('abc123wipcommit') // rev-parse HEAD (WIP commit hash)
+				.mockResolvedValueOnce('def456') // merge-base
+				.mockResolvedValueOnce('ghi789') // rev-parse main
+				.mockResolvedValueOnce('def456 Commit 1') // log
+				.mockResolvedValueOnce('') // rebase main: success
+				.mockResolvedValueOnce('') // reset --soft HEAD~1
+				.mockResolvedValueOnce('') // reset HEAD
 
-			// Expect: should throw error about uncommitted changes
-			await expect(
-				manager.rebaseOnMain('/test/worktree', { force: true })
-			).rejects.toThrow(/uncommitted changes/i)
+			// Should succeed without throwing
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: WIP commit was created
+			expect(git.executeGitCommand).toHaveBeenCalledWith(['add', '-A'], expect.objectContaining({ cwd: '/test/worktree' }))
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['commit', '-m', 'WIP: Auto-stash for rebase'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+
+			// Verify: WIP commit was restored
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['reset', '--soft', 'HEAD~1'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['reset', 'HEAD'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+		})
+	})
+
+	describe('WIP Commit Workflow', () => {
+		it('should rebase without WIP commit when no uncommitted changes', async () => {
+			// Mock: no uncommitted changes, rebase succeeds
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status: clean
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // rebase
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: git add -A was NOT called (no WIP commit)
+			expect(git.executeGitCommand).not.toHaveBeenCalledWith(['add', '-A'], expect.any(Object))
+		})
+
+		it('should include untracked files in WIP commit using git add -A', async () => {
+			// Mock: untracked files exist
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('?? newfile.ts') // status: untracked file
+				.mockResolvedValueOnce('') // git add -A (stages all including untracked)
+				.mockResolvedValueOnce('') // git commit -m WIP
+				.mockResolvedValueOnce('wipcommithash') // rev-parse HEAD
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('abc123') // rev-parse main (already up to date)
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: git add -A was called (includes untracked files)
+			expect(git.executeGitCommand).toHaveBeenCalledWith(['add', '-A'], expect.objectContaining({ cwd: '/test/worktree' }))
+		})
+
+		it('should handle conflicts with Claude assistance when WIP commit present', async () => {
+			// Mock: WIP commit created, rebase fails with conflict, Claude resolves
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('M src/file.ts') // status: changes exist
+				.mockResolvedValueOnce('') // git add -A
+				.mockResolvedValueOnce('') // git commit -m WIP
+				.mockResolvedValueOnce('wipcommithash') // rev-parse HEAD (WIP hash)
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
+				.mockResolvedValueOnce('src/file.ts') // conflicted files (first check)
+				.mockResolvedValueOnce('') // conflicted files (after Claude - resolved)
+				.mockResolvedValueOnce('') // rebase not in progress
+				.mockResolvedValueOnce('') // reset --soft HEAD~1 (restore WIP)
+				.mockResolvedValueOnce('') // reset HEAD (unstage)
+
+			vi.mocked(claude.detectClaudeCli).mockResolvedValueOnce(true)
+			vi.mocked(claude.launchClaude).mockResolvedValueOnce(undefined)
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: WIP commit was created and restored after Claude resolution
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['commit', '-m', 'WIP: Auto-stash for rebase'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['reset', '--soft', 'HEAD~1'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+		})
+
+		it('should log warning but succeed when soft reset fails', async () => {
+			// Mock: WIP commit created, rebase succeeds, soft reset fails
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('M src/file.ts') // status: changes exist
+				.mockResolvedValueOnce('') // git add -A
+				.mockResolvedValueOnce('') // git commit -m WIP
+				.mockResolvedValueOnce('wipcommithash') // rev-parse HEAD
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // rebase main: success
+				.mockRejectedValueOnce(new Error('reset failed')) // reset --soft HEAD~1 fails
+
+			// Should NOT throw - rebase is considered successful even if restore fails
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: reset was attempted
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['reset', '--soft', 'HEAD~1'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+		})
+
+		it('should restore changes correctly after successful rebase', async () => {
+			// Mock: full WIP workflow with restoration
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('M src/file.ts\n?? newfile.ts') // status: mixed changes
+				.mockResolvedValueOnce('') // git add -A
+				.mockResolvedValueOnce('') // git commit -m WIP
+				.mockResolvedValueOnce('wipcommithash123') // rev-parse HEAD
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // rebase main: success
+				.mockResolvedValueOnce('') // reset --soft HEAD~1
+				.mockResolvedValueOnce('') // reset HEAD (unstage)
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: two-step reset to restore working directory state
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['reset', '--soft', 'HEAD~1'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['reset', 'HEAD'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
 		})
 	})
 
