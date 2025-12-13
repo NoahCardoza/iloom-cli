@@ -748,10 +748,11 @@ describe('MergeManager', () => {
 
 			// Verify Claude was called with correct prompt and options
 			expect(claude.launchClaude).toHaveBeenCalledWith(
-				expect.stringContaining('resolve the git rebase conflicts'),
+				'Help me with this rebase please.',
 				expect.objectContaining({
 					addDir: '/test/worktree',
 					headless: false,
+					appendSystemPrompt: expect.stringContaining('resolve the git rebase conflicts'),
 				})
 			)
 		})
@@ -868,11 +869,11 @@ describe('MergeManager', () => {
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
 
-			// Verify prompt contains key instructions
-			const promptCall = vi.mocked(claude.launchClaude).mock.calls[0][0]
-			expect(promptCall).toContain('resolve the git rebase conflicts')
-			expect(promptCall).toContain('git add')
-			expect(promptCall).toContain('git rebase --continue')
+			// Verify appendSystemPrompt contains key instructions
+			const options = vi.mocked(claude.launchClaude).mock.calls[0][1]
+			expect(options?.appendSystemPrompt).toContain('resolve the git rebase conflicts')
+			expect(options?.appendSystemPrompt).toContain('git add')
+			expect(options?.appendSystemPrompt).toContain('git rebase --continue')
 		})
 	})
 })

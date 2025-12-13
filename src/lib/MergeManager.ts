@@ -349,17 +349,21 @@ export class MergeManager {
 
 		// Hard-coded prompt matching bash script line 844
 		// No templates, no complexity - just the essential instruction
-		const prompt =
+		const systemPrompt =
 			`Please help resolve the git rebase conflicts in this repository. ` +
 			`Analyze the conflicted files, understand the changes from both branches, ` +
 			`fix the conflicts, then run 'git add .' to stage the resolved files, ` +
 			`and finally run 'git rebase --continue' to continue the rebase process. ` +
-			`Handle the entire workflow for me.`
+			`Once the issue is resolved, tell the user they can use /exit to continue with the process.`
+
+		const prompt =
+			`Help me with this rebase please.`
 
 		try {
 			// Launch Claude interactively in current terminal
 			// User will interact directly with Claude to resolve conflicts
 			await launchClaude(prompt, {
+				appendSystemPrompt: systemPrompt,
 				addDir: worktreePath,
 				headless: false, // Interactive - runs in current terminal with stdio: inherit
 			})
