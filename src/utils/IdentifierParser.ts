@@ -1,5 +1,6 @@
 import type { ParsedInput } from '../commands/start.js'
 import type { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { extractIssueNumber, extractPRNumber } from './git.js'
 
 /**
  * IdentifierParser provides consistent identifier parsing across commands
@@ -9,13 +10,19 @@ import type { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
  * 1. For numeric input (e.g., "42", "#66"):
  *    - Check for PR worktree first (_pr_N pattern in path)
  *    - Then check for issue worktree (issue-N pattern in branch)
- * 2. For non-numeric input:
- *    - Treat as branch name and verify worktree exists
+ * 2. For alphanumeric input (e.g., "ENG-123"):
+ *    - Check for issue worktree with alphanumeric identifier
+ * 3. For branch-style input (e.g., "feat/issue-42__description", "pr/123"):
+ *    - Find matching worktree by branch name
+ *    - Extract PR number from branch name if present (priority)
+ *    - Extract issue number from branch name if present
+ *    - Return as PR/issue type if number found, otherwise branch type
  *
  * This ensures:
  * - No unnecessary GitHub API calls
  * - Consistent behavior across finish/cleanup commands
  * - PR detection takes priority over issue detection
+ * - Issue numbers are extracted from branch names for "Fixes #N" commit trailers
  */
 export class IdentifierParser {
 	constructor(private gitWorktreeManager: GitWorktreeManager) {}
@@ -87,6 +94,27 @@ export class IdentifierParser {
 		// Non-numeric/non-alphanumeric input: treat as branch name
 		const branchWorktree = await this.gitWorktreeManager.findWorktreeForBranch(cleanId)
 		if (branchWorktree) {
+			// Priority 1: Check for PR pattern in the input
+			const prFromBranch = extractPRNumber(cleanId)
+			if (prFromBranch !== null) {
+				return {
+					type: 'pr',
+					number: prFromBranch,
+					originalInput,
+				}
+			}
+
+			// Priority 2: Try to extract issue number from branch name
+			// This handles cases like "feat/issue-42__description" passed as explicit input
+			const issueFromBranch = extractIssueNumber(cleanId)
+			if (issueFromBranch !== null) {
+				return {
+					type: 'issue',
+					number: issueFromBranch,
+					originalInput,
+				}
+			}
+
 			return {
 				type: 'branch',
 				branchName: cleanId,

@@ -240,6 +240,88 @@ describe('IdentifierParser', () => {
 					parser.parseForPatternDetection('non-existent-branch')
 				).rejects.toThrow('No worktree found for identifier: non-existent-branch')
 			})
+
+			it('should extract issue number from branch name with issue-NN__ pattern', async () => {
+				const mockBranchWorktree: GitWorktree = {
+					path: '/test/feat-issue-42-feature',
+					branch: 'feat/issue-42__add-feature',
+					commit: 'abc123',
+					bare: false,
+					detached: false,
+					locked: false,
+				}
+
+				mockGitWorktreeManager.findWorktreeForBranch.mockResolvedValue(mockBranchWorktree)
+
+				const result = await parser.parseForPatternDetection('feat/issue-42__add-feature')
+
+				expect(result).toEqual({
+					type: 'issue',
+					number: '42',
+					originalInput: 'feat/issue-42__add-feature',
+				} as ParsedInput)
+			})
+
+			it('should extract issue number from branch name with issue-NN- pattern', async () => {
+				const mockBranchWorktree: GitWorktree = {
+					path: '/test/issue-123-fix-bug',
+					branch: 'issue-123-fix-bug',
+					commit: 'abc123',
+					bare: false,
+					detached: false,
+					locked: false,
+				}
+
+				mockGitWorktreeManager.findWorktreeForBranch.mockResolvedValue(mockBranchWorktree)
+
+				const result = await parser.parseForPatternDetection('issue-123-fix-bug')
+
+				expect(result).toEqual({
+					type: 'issue',
+					number: '123',
+					originalInput: 'issue-123-fix-bug',
+				} as ParsedInput)
+			})
+
+			it('should extract PR number from branch name with pr/ pattern', async () => {
+				const mockBranchWorktree: GitWorktree = {
+					path: '/test/pr-456',
+					branch: 'pr/456',
+					commit: 'abc123',
+					bare: false,
+					detached: false,
+					locked: false,
+				}
+
+				mockGitWorktreeManager.findWorktreeForBranch.mockResolvedValue(mockBranchWorktree)
+
+				const result = await parser.parseForPatternDetection('pr/456')
+
+				expect(result).toEqual({
+					type: 'pr',
+					number: 456,
+					originalInput: 'pr/456',
+				} as ParsedInput)
+			})
+
+			it('should prioritize PR extraction over issue extraction for branch names', async () => {
+				// A branch name like "pr-123" should be detected as PR even if it also contains issue pattern
+				const mockBranchWorktree: GitWorktree = {
+					path: '/test/feature-pr-123',
+					branch: 'feature/pr-123',
+					commit: 'abc123',
+					bare: false,
+					detached: false,
+					locked: false,
+				}
+
+				mockGitWorktreeManager.findWorktreeForBranch.mockResolvedValue(mockBranchWorktree)
+
+				const result = await parser.parseForPatternDetection('feature/pr-123')
+
+				expect(result.type).toBe('pr')
+				expect(result.number).toBe(123)
+			})
 		})
 
 		describe('Error handling', () => {
