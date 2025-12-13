@@ -696,6 +696,21 @@ program
     }
   })
 
+program
+  .command('projects')
+  .description('List configured iloom projects')
+  .option('--json', 'Output as JSON (default behavior)')
+  .action(async (options: { json?: boolean }) => {
+    try {
+      const { ProjectsCommand } = await import('./commands/projects.js')
+      const command = new ProjectsCommand()
+      const result = await command.execute(options)
+      console.log(JSON.stringify(result, null, 2))
+    } catch (error) {
+      logger.error(`Failed to list projects: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
 
 program
   .command('init')

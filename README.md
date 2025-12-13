@@ -140,6 +140,7 @@ Command Reference
 | `il finish` | `dn` | Validate tests/lint, commit, handle conflicts, and merge/PR. |
 | `il cleanup` | `remove` | Safely remove a loom and its database branch without merging. |
 | `il list` |  | Show active looms and paths. |
+| `il projects` |  | List configured projects (JSON output). |
 | `il spin` |  | Launch Claude inside the current loom with context auto-detected. |
 | `il open` | `run` | Open loom in browser (web) or run your CLI tool. |
 | `il dev-server` | `dev` | Start dev server in foreground for a workspace. |
