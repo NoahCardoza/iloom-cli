@@ -151,8 +151,7 @@ export class CleanupCommand {
     // Check if the TARGET loom has any child looms
     const hasChildLooms = await this.loomManager.checkAndWarnChildLooms(targetBranch)
     if (hasChildLooms) {
-      getLogger().error('Cannot cleanup loom while child looms exist. Please finish child looms first.')
-      process.exit(1)
+      throw new Error('Cannot cleanup loom while child looms exist. Please \'finish\' or \'cleanup\' child looms first.')
     }
   }
 
@@ -182,9 +181,25 @@ export class CleanupCommand {
     } else if (parsed.mode === 'list') {
       getLogger().info('Would list all worktrees')  // TODO: Implement in Sub-issue #2
       getLogger().success('Command parsing and validation successful')
+      return {
+        identifier: 'list',
+        success: true,
+        dryRun: parsed.options.dryRun ?? false,
+        operations: [],
+        errors: [],
+        rollbackRequired: false,
+      }
     } else if (parsed.mode === 'all') {
       getLogger().info('Would remove all worktrees')  // TODO: Implement in Sub-issue #5
       getLogger().success('Command parsing and validation successful')
+      return {
+        identifier: 'all',
+        success: true,
+        dryRun: parsed.options.dryRun ?? false,
+        operations: [],
+        errors: [],
+        rollbackRequired: false,
+      }
     } else if (parsed.mode === 'issue') {
       return await this.executeIssueCleanup(parsed)
     }

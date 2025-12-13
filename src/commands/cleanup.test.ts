@@ -84,6 +84,15 @@ describe('CleanupCommand', () => {
       })
 
     })
+
+    it('should return CleanupResult when --list flag provided', async () => {
+      const result = await command.execute({ options: { list: true } })
+
+      expect(result).toBeDefined()
+      expect(result?.success).toBe(true)
+      expect(result?.identifier).toBe('list')
+      expect(result?.operations).toEqual([])
+    })
   })
 
   describe('Option Parsing - All Mode', () => {
@@ -101,6 +110,15 @@ describe('CleanupCommand', () => {
         options: { all: true }
       })
 
+    })
+
+    it('should return CleanupResult when --all flag provided', async () => {
+      const result = await command.execute({ options: { all: true } })
+
+      expect(result).toBeDefined()
+      expect(result?.success).toBe(true)
+      expect(result?.identifier).toBe('all')
+      expect(result?.operations).toEqual([])
     })
   })
 

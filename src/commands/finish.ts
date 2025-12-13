@@ -178,7 +178,7 @@ export class FinishCommand {
 		// Check if the TARGET loom has any child looms
 		const hasChildLooms = await this.loomManager.checkAndWarnChildLooms(targetBranch)
 		if (hasChildLooms) {
-			getLogger().error('Cannot finish loom while child looms exist. Please finish child looms first.')
+			getLogger().error('Cannot finish loom while child looms exist. Please \'finish\' or \'cleanup\' child looms first.')
 			process.exit(1)
 		}
 	}
