@@ -2,6 +2,14 @@ import { execa } from 'execa'
 import { logger } from './logger.js'
 
 /**
+ * Check if running inside VSCode's integrated terminal
+ * VSCode sets TERM_PROGRAM=vscode in its integrated terminal
+ */
+export function isRunningInVSCode(): boolean {
+	return process.env.TERM_PROGRAM === 'vscode'
+}
+
+/**
  * Check if VSCode command-line tool is available
  */
 export async function isVSCodeAvailable(): Promise<boolean> {

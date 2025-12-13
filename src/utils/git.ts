@@ -10,7 +10,7 @@ import { logger } from './logger.js'
  */
 export async function executeGitCommand(
   args: string[],
-  options?: { cwd?: string; timeout?: number; stdio?: 'inherit' | 'pipe' }
+  options?: { cwd?: string; timeout?: number; stdio?: 'inherit' | 'pipe'; env?: NodeJS.ProcessEnv }
 ): Promise<string> {
   try {
     const result = await execa('git', args, {
@@ -19,6 +19,8 @@ export async function executeGitCommand(
       encoding: 'utf8',
       stdio: options?.stdio ?? 'pipe',
       verbose: logger.isDebugEnabled(),
+      // Spread env conditionally - only include if defined
+      ...(options?.env && { env: options.env }),
     })
 
     return result.stdout

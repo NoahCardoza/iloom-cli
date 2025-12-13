@@ -1,9 +1,43 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { isVSCodeAvailable, openVSCodeWindow } from './vscode.js'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { isVSCodeAvailable, openVSCodeWindow, isRunningInVSCode } from './vscode.js'
 import { execa } from 'execa'
 
 // Mock execa
 vi.mock('execa')
+
+describe('isRunningInVSCode', () => {
+	const originalEnv = process.env
+
+	beforeEach(() => {
+		// Create a fresh copy of process.env for each test
+		process.env = { ...originalEnv }
+	})
+
+	afterEach(() => {
+		// Restore original environment
+		process.env = originalEnv
+	})
+
+	it('should return true when TERM_PROGRAM is vscode', () => {
+		process.env.TERM_PROGRAM = 'vscode'
+		expect(isRunningInVSCode()).toBe(true)
+	})
+
+	it('should return false when TERM_PROGRAM is not vscode', () => {
+		process.env.TERM_PROGRAM = 'iTerm.app'
+		expect(isRunningInVSCode()).toBe(false)
+	})
+
+	it('should return false when TERM_PROGRAM is undefined', () => {
+		delete process.env.TERM_PROGRAM
+		expect(isRunningInVSCode()).toBe(false)
+	})
+
+	it('should return false when TERM_PROGRAM is empty string', () => {
+		process.env.TERM_PROGRAM = ''
+		expect(isRunningInVSCode()).toBe(false)
+	})
+})
 
 describe('isVSCodeAvailable', () => {
 	beforeEach(() => {

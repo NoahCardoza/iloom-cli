@@ -3,6 +3,7 @@ import { CommitManager } from './CommitManager.js'
 import * as git from '../utils/git.js'
 import * as claude from '../utils/claude.js'
 import * as prompt from '../utils/prompt.js'
+import * as vscode from '../utils/vscode.js'
 import { logger } from '../utils/logger.js'
 import { UserAbortedCommitError } from '../types/index.js'
 
@@ -10,6 +11,15 @@ import { UserAbortedCommitError } from '../types/index.js'
 vi.mock('../utils/git.js')
 vi.mock('../utils/claude.js')
 vi.mock('../utils/prompt.js')
+vi.mock('../utils/vscode.js')
+vi.mock('node:fs/promises', () => ({
+  writeFile: vi.fn().mockResolvedValue(undefined),
+  readFile: vi.fn().mockResolvedValue('Test commit message\n\n# comment line'),
+  unlink: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('execa', () => ({
+  execa: vi.fn().mockResolvedValue({ stdout: '', stderr: '' }),
+}))
 vi.mock('../utils/logger.js', () => ({
   logger: {
     info: vi.fn(),
@@ -41,6 +51,9 @@ describe('CommitManager', () => {
     // Default to 'edit' action to maintain backward compatibility with existing tests
     // that expect the editor flow (git commit -e -m)
     vi.mocked(prompt.promptCommitAction).mockResolvedValue('edit')
+    // Default VSCode mocks - not running in VSCode by default
+    vi.mocked(vscode.isRunningInVSCode).mockReturnValue(false)
+    vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(false)
   })
 
   afterEach(() => {
@@ -1057,6 +1070,153 @@ describe('CommitManager', () => {
         ['commit', '-e', '-m', 'WIP: Auto-commit uncommitted changes', '--no-verify'],
         { cwd: mockWorktreePath, stdio: 'inherit', timeout: 300000 }
       )
+    })
+  })
+
+  describe('VSCode Editor Integration', () => {
+    // Import mocked modules for assertions
+    let fsPromises: typeof import('node:fs/promises')
+    let execaMock: typeof import('execa')
+
+    beforeEach(async () => {
+      fsPromises = await import('node:fs/promises')
+      execaMock = await import('execa')
+      vi.mocked(claude.detectClaudeCli).mockResolvedValue(false)
+      vi.mocked(prompt.promptCommitAction).mockResolvedValue('edit')
+    })
+
+    describe('when running in VSCode terminal', () => {
+      beforeEach(() => {
+        vi.mocked(vscode.isRunningInVSCode).mockReturnValue(true)
+      })
+
+      it('should use VSCode editor flow when VSCode CLI is available', async () => {
+        vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+        vi.mocked(fsPromises.readFile).mockResolvedValue('Edited commit message\n\n# comment')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // Should write initial commit message file
+        expect(fsPromises.writeFile).toHaveBeenCalled()
+        // Should invoke VSCode with --wait flag
+        expect(execaMock.execa).toHaveBeenCalledWith(
+          'code',
+          ['--wait', expect.stringContaining('.COMMIT_EDITMSG')],
+          expect.objectContaining({ cwd: mockWorktreePath, stdio: 'inherit' })
+        )
+        // Should commit with -F flag using the file
+        expect(git.executeGitCommand).toHaveBeenCalledWith(
+          ['commit', '-F', expect.stringContaining('.COMMIT_EDITMSG')],
+          { cwd: mockWorktreePath }
+        )
+        // Should clean up the file
+        expect(fsPromises.unlink).toHaveBeenCalled()
+      })
+
+      it('should strip comment lines from edited message', async () => {
+        vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+        vi.mocked(fsPromises.readFile).mockResolvedValue('Line 1\n# comment\nLine 2')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // The final writeFile should have stripped comments
+        const writeFileCalls = vi.mocked(fsPromises.writeFile).mock.calls
+        const finalWrite = writeFileCalls[writeFileCalls.length - 1]
+        expect(finalWrite[1]).toBe('Line 1\nLine 2')
+      })
+
+      it('should throw UserAbortedCommitError when message is empty after stripping comments', async () => {
+        vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true)
+        vi.mocked(fsPromises.readFile).mockResolvedValue('# only comments\n# here')
+
+        await expect(manager.commitChanges(mockWorktreePath, { dryRun: false }))
+          .rejects.toThrow(UserAbortedCommitError)
+      })
+
+      it('should fall back to git editor when VSCode CLI is unavailable', async () => {
+        vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(false)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // Should NOT use execa for VSCode
+        expect(execaMock.execa).not.toHaveBeenCalled()
+        // Should use standard git commit -e flow
+        expect(git.executeGitCommand).toHaveBeenCalledWith(
+          ['commit', '-e', '-m', 'WIP: Auto-commit uncommitted changes'],
+          { cwd: mockWorktreePath, stdio: 'inherit', timeout: 300000 }
+        )
+      })
+
+      it('should NOT affect accept flow', async () => {
+        vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true)
+        vi.mocked(prompt.promptCommitAction).mockResolvedValue('accept')
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // Accept flow should NOT use VSCode editor
+        expect(execaMock.execa).not.toHaveBeenCalled()
+        // Should use direct commit with -m flag
+        expect(git.executeGitCommand).toHaveBeenCalledWith(
+          ['commit', '-m', 'WIP: Auto-commit uncommitted changes'],
+          { cwd: mockWorktreePath }
+        )
+      })
+
+      it('should include --no-verify flag when skipVerify=true', async () => {
+        vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+        vi.mocked(fsPromises.readFile).mockResolvedValue('Test message')
+
+        await manager.commitChanges(mockWorktreePath, { skipVerify: true, dryRun: false })
+
+        expect(git.executeGitCommand).toHaveBeenCalledWith(
+          ['commit', '-F', expect.stringContaining('.COMMIT_EDITMSG'), '--no-verify'],
+          { cwd: mockWorktreePath }
+        )
+      })
+
+      it('should clean up commit message file even on error', async () => {
+        vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true)
+        vi.mocked(fsPromises.readFile).mockResolvedValue('# only comments')
+
+        await expect(manager.commitChanges(mockWorktreePath, { dryRun: false }))
+          .rejects.toThrow()
+
+        // Should still clean up
+        expect(fsPromises.unlink).toHaveBeenCalled()
+      })
+    })
+
+    describe('when NOT running in VSCode terminal', () => {
+      beforeEach(() => {
+        vi.mocked(vscode.isRunningInVSCode).mockReturnValue(false)
+      })
+
+      it('should use standard git editor flow', async () => {
+        vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true) // Even if CLI available
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // Should NOT use VSCode editor
+        expect(execaMock.execa).not.toHaveBeenCalled()
+        expect(git.executeGitCommand).toHaveBeenCalledWith(
+          ['commit', '-e', '-m', 'WIP: Auto-commit uncommitted changes'],
+          { cwd: mockWorktreePath, stdio: 'inherit', timeout: 300000 }
+        )
+      })
+
+      it('should NOT call isVSCodeAvailable when not running in VSCode', async () => {
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        expect(vscode.isVSCodeAvailable).not.toHaveBeenCalled()
+      })
     })
   })
 })

@@ -2,8 +2,12 @@ import { executeGitCommand } from '../utils/git.js'
 import { getLogger } from '../utils/logger-context.js'
 import { launchClaude, detectClaudeCli } from '../utils/claude.js'
 import { promptCommitAction } from '../utils/prompt.js'
+import { isRunningInVSCode, isVSCodeAvailable } from '../utils/vscode.js'
 import { UserAbortedCommitError } from '../types/index.js'
 import type { GitStatus, CommitOptions } from '../types/index.js'
+import { writeFile, readFile, unlink } from 'node:fs/promises'
+import { join } from 'node:path'
+import { execa } from 'execa'
 
 /**
  * CommitManager handles uncommitted changes detection and auto-commit
@@ -108,16 +112,24 @@ export class CommitManager {
           await executeGitCommand(commitArgs, { cwd: worktreePath })
         } else {
           // action === 'edit': Use git editor for user review
-          getLogger().info('Opening git editor for commit message review...')
-          const commitArgs = ['commit', '-e', '-m', message]
-          if (options.skipVerify) {
-            commitArgs.push('--no-verify')
+          getLogger().info('Opening editor for commit message review...')
+
+          // Use VSCode-specific flow when running in VSCode terminal
+          // This opens the file in the current VSCode window instead of a random one
+          if (isRunningInVSCode() && await isVSCodeAvailable()) {
+            await this.commitWithVSCodeEditor(worktreePath, message, options)
+          } else {
+            // Standard git editor flow for non-VSCode environments
+            const commitArgs = ['commit', '-e', '-m', message]
+            if (options.skipVerify) {
+              commitArgs.push('--no-verify')
+            }
+            await executeGitCommand(commitArgs, {
+              cwd: worktreePath,
+              stdio: 'inherit',
+              timeout: 300000 // 5 minutes for interactive editing
+            })
           }
-          await executeGitCommand(commitArgs, {
-            cwd: worktreePath,
-            stdio: 'inherit',
-            timeout: 300000 // 5 minutes for interactive editing
-          })
         }
       }
     } catch (error) {
@@ -135,6 +147,74 @@ export class CommitManager {
     }
   }
 
+
+  /**
+   * Commit with VSCode editor - handles file creation, editing, and commit ourselves
+   * to ensure the file opens in the current VSCode window (preserves IPC context)
+   */
+  private async commitWithVSCodeEditor(
+    worktreePath: string,
+    message: string,
+    options: CommitOptions
+  ): Promise<void> {
+    // Put the commit message file in the worktree root so VSCode opens it in the correct
+    // window (files within a workspace folder open in that workspace's window)
+    const commitMsgPath = join(worktreePath, '.COMMIT_EDITMSG')
+
+    // Write the initial commit message (with git-style comments)
+    const initialContent = `${message}
+
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+#
+# Save and close the file to complete the commit.
+`
+    await writeFile(commitMsgPath, initialContent, 'utf-8')
+
+    try {
+      getLogger().debug(`Opening commit message in VSCode: ${commitMsgPath}`)
+
+      // Open the file - since it's in the worktree root, VSCode will open it
+      // in the window that has this folder open
+      await execa('code', ['--wait', commitMsgPath], {
+        cwd: worktreePath,
+        stdio: 'inherit'
+      })
+
+      // Read the edited message
+      const editedContent = await readFile(commitMsgPath, 'utf-8')
+
+      // Strip comment lines and trim
+      const finalMessage = editedContent
+        .split('\n')
+        .filter(line => !line.startsWith('#'))
+        .join('\n')
+        .trim()
+
+      // Check for empty message (user aborted)
+      if (!finalMessage) {
+        throw new UserAbortedCommitError()
+      }
+
+      // Commit with the edited message
+      const commitArgs = ['commit', '-F', commitMsgPath]
+      if (options.skipVerify) {
+        commitArgs.push('--no-verify')
+      }
+
+      // Rewrite the file without comments for git commit -F
+      await writeFile(commitMsgPath, finalMessage, 'utf-8')
+      await executeGitCommand(commitArgs, { cwd: worktreePath })
+
+    } finally {
+      // Clean up - git normally handles this but we should be safe
+      try {
+        await unlink(commitMsgPath)
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  }
 
   /**
    * Generate simple fallback commit message when Claude unavailable
