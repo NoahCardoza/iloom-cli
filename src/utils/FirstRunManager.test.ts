@@ -11,6 +11,8 @@ describe('FirstRunManager', () => {
 	beforeEach(() => {
 		// Mock os.homedir()
 		vi.mocked(os.homedir).mockReturnValue('/home/user')
+		// Default mock for fs.realpath - passthrough behavior (no symlink resolution)
+		vi.mocked(fs.realpath).mockImplementation(async (p) => String(p))
 	})
 
 	describe('isFirstRun', () => {
@@ -279,6 +281,107 @@ describe('FirstRunManager', () => {
 			)
 
 			process.cwd = originalCwd
+		})
+	})
+
+	describe('symlink resolution', () => {
+		describe('isProjectConfigured', () => {
+			it('resolves symlinks before checking marker file', async () => {
+				const manager = new FirstRunManager()
+
+				// Mock fs.realpath to return resolved path
+				vi.mocked(fs.realpath).mockResolvedValue('/real/path/to/project')
+				vi.mocked(fs.pathExists).mockResolvedValue(true)
+
+				const result = await manager.isProjectConfigured('/symlink/path/to/project')
+
+				expect(result).toBe(true)
+				expect(fs.realpath).toHaveBeenCalledWith('/symlink/path/to/project')
+				expect(fs.pathExists).toHaveBeenCalledWith(
+					'/home/user/.config/iloom-ai/projects/real__path__to__project'
+				)
+			})
+
+			it('falls back to original path when symlink resolution fails', async () => {
+				const manager = new FirstRunManager()
+
+				// Mock fs.realpath to reject
+				vi.mocked(fs.realpath).mockRejectedValue(new Error('ENOENT: no such file or directory'))
+				vi.mocked(fs.pathExists).mockResolvedValue(true)
+
+				const result = await manager.isProjectConfigured('/broken/symlink/path')
+
+				expect(result).toBe(true)
+				// Should fall back to original path
+				expect(fs.pathExists).toHaveBeenCalledWith(
+					'/home/user/.config/iloom-ai/projects/broken__symlink__path'
+				)
+			})
+		})
+
+		describe('markProjectAsConfigured', () => {
+			it('stores resolved path in marker file content', async () => {
+				const manager = new FirstRunManager()
+
+				// Mock fs.realpath to return resolved path
+				vi.mocked(fs.realpath).mockResolvedValue('/real/path/to/project')
+				vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+				vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+				await manager.markProjectAsConfigured('/symlink/path/to/project')
+
+				expect(fs.realpath).toHaveBeenCalledWith('/symlink/path/to/project')
+				// Verify marker filename uses resolved path
+				expect(fs.writeFile).toHaveBeenCalledWith(
+					'/home/user/.config/iloom-ai/projects/real__path__to__project',
+					expect.any(String),
+					'utf8'
+				)
+
+				// Verify projectPath in marker content uses resolved path
+				const calls = vi.mocked(fs.writeFile).mock.calls
+				const [, jsonContent] = calls[0]
+				const parsed = JSON.parse(String(jsonContent))
+				expect(parsed.projectPath).toBe('/real/path/to/project')
+			})
+
+			it('falls back to original path when symlink resolution fails', async () => {
+				const manager = new FirstRunManager()
+
+				// Mock fs.realpath to reject
+				vi.mocked(fs.realpath).mockRejectedValue(new Error('ENOENT'))
+				vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+				vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+				await manager.markProjectAsConfigured('/broken/symlink')
+
+				// Should use original path
+				expect(fs.writeFile).toHaveBeenCalledWith(
+					'/home/user/.config/iloom-ai/projects/broken__symlink',
+					expect.any(String),
+					'utf8'
+				)
+			})
+		})
+
+		describe('fixupLegacyProject', () => {
+			it('resolves symlinks before checking for legacy project', async () => {
+				const manager = new FirstRunManager()
+
+				// Mock fs.realpath to return resolved path
+				vi.mocked(fs.realpath).mockResolvedValue('/real/path/to/project')
+				// Project already has marker (at resolved path)
+				vi.mocked(fs.pathExists).mockResolvedValue(true)
+
+				const result = await manager.fixupLegacyProject('/symlink/path/to/project')
+
+				expect(result).toEqual({ isConfigured: true, wasFixedUp: false })
+				expect(fs.realpath).toHaveBeenCalledWith('/symlink/path/to/project')
+				// Should check marker at resolved path
+				expect(fs.pathExists).toHaveBeenCalledWith(
+					'/home/user/.config/iloom-ai/projects/real__path__to__project'
+				)
+			})
 		})
 	})
 

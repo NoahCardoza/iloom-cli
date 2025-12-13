@@ -33,6 +33,19 @@ export class FirstRunManager {
 	}
 
 	/**
+	 * Resolve symlinks in project path to get canonical path
+	 * Falls back to original path on errors (broken symlinks, permissions, etc.)
+	 */
+	private async resolveProjectPath(projectPath: string): Promise<string> {
+		try {
+			return await fs.realpath(projectPath)
+		} catch {
+			logger.debug('resolveProjectPath: Failed to resolve symlink, using original path', { projectPath })
+			return projectPath
+		}
+	}
+
+	/**
 	 * Convert a project path to a readable filename
 	 * /Users/adam/Projects/my-app -> Users__adam__Projects__my-app
 	 */
@@ -60,7 +73,8 @@ export class FirstRunManager {
 	 * Returns true if project marker file exists
 	 */
 	async isProjectConfigured(projectPath?: string): Promise<boolean> {
-		const resolvedPath = projectPath ?? process.cwd()
+		const inputPath = projectPath ?? process.cwd()
+		const resolvedPath = await this.resolveProjectPath(inputPath)
 		const markerPath = this.getProjectMarkerPath(resolvedPath)
 		logger.debug('isProjectConfigured: Checking for marker file', { markerPath })
 		try {
@@ -115,7 +129,8 @@ export class FirstRunManager {
 	 * This combined return avoids duplicate isProjectConfigured() calls in needsFirstRunSetup()
 	 */
 	async fixupLegacyProject(projectPath?: string): Promise<{ isConfigured: boolean; wasFixedUp: boolean }> {
-		const resolvedPath = projectPath ?? process.cwd()
+		const inputPath = projectPath ?? process.cwd()
+		const resolvedPath = await this.resolveProjectPath(inputPath)
 		logger.debug('fixupLegacyProject: Checking for legacy project', { projectPath: resolvedPath })
 
 		// Check if already has global marker - no fixup needed, but project IS configured
@@ -143,7 +158,8 @@ export class FirstRunManager {
 	 * Creates a marker file with project metadata
 	 */
 	async markProjectAsConfigured(projectPath?: string): Promise<void> {
-		const resolvedPath = projectPath ?? process.cwd()
+		const inputPath = projectPath ?? process.cwd()
+		const resolvedPath = await this.resolveProjectPath(inputPath)
 		const markerPath = this.getProjectMarkerPath(resolvedPath)
 		logger.debug('markProjectAsConfigured: Creating marker file', { markerPath })
 		try {
