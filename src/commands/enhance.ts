@@ -124,7 +124,6 @@ export class EnhanceCommand {
 			headless: true,
 			model: 'sonnet',
 			agents,
-			logger: getLogger(),
 			...(mcpConfig && { mcpConfig }),
 			...(allowedTools && { allowedTools }),
 			...(disallowedTools && { disallowedTools }),

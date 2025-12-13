@@ -72,7 +72,6 @@ Your response should be the raw markdown that will become the GitHub issue body.
 				headless: true,
 				model: 'sonnet',
 				agents,
-				logger: getLogger(),
 			})
 
 			if (enhanced && typeof enhanced === 'string') {

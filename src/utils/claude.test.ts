@@ -4,6 +4,19 @@ import { existsSync } from 'node:fs'
 import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow, generateDeterministicSessionId } from './claude.js'
 import { logger } from './logger.js'
 
+const mockLogger = {
+	debug: vi.fn(),
+	warn: vi.fn(),
+	error: vi.fn(),
+	info: vi.fn(),
+	success: vi.fn(),
+	setDebug: vi.fn(),
+	isDebugEnabled: vi.fn().mockReturnValue(false),
+	stdout: {
+		write: vi.fn().mockReturnValue(true),
+	},
+}
+
 vi.mock('execa')
 vi.mock('node:fs')
 vi.mock('./logger.js', () => ({
@@ -16,6 +29,9 @@ vi.mock('./logger.js', () => ({
 			write: vi.fn().mockReturnValue(true),
 		},
 	},
+}))
+vi.mock('./logger-context.js', () => ({
+	getLogger: vi.fn(() => mockLogger),
 }))
 
 type MockExecaReturn = Partial<ExecaReturnValue<string>>
@@ -327,7 +343,7 @@ describe('claude utils', () => {
 				)
 
 				// Verify JSON output was written to logger.stdout
-				expect(logger.stdout.write).toHaveBeenCalledWith('{"type":"message","text":"Hello"}\n{"type":"thinking","text":"Let me think"}')
+				expect(mockLogger.stdout.write).toHaveBeenCalledWith('{"type":"message","text":"Hello"}\n{"type":"thinking","text":"Let me think"}')
 				expect(result).toBe('{"type":"message","text":"Hello"}\n{"type":"thinking","text":"Let me think"}')
 
 				// Reset logger mock
@@ -361,8 +377,8 @@ describe('claude utils', () => {
 				)
 
 				// Verify progress dots were shown instead of full JSON, followed by cleanup newline
-				expect(logger.stdout.write).toHaveBeenCalledWith('🤖 .')
-				expect(logger.stdout.write).toHaveBeenCalledWith('\n')
+				expect(mockLogger.stdout.write).toHaveBeenCalledWith('🤖 .')
+				expect(mockLogger.stdout.write).toHaveBeenCalledWith('\n')
 
 				// Verify result is parsed from JSON
 				expect(result).toBe('Hello World')

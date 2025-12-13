@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { logger } from './logger.js'
+import { getLogger } from './logger-context.js'
 import { openTerminalWindow } from './terminal.js'
 
 /**
@@ -58,7 +59,6 @@ export interface ClaudeCliOptions {
 	oneShot?: import('../types/index.js').OneShotMode // One-shot automation mode
 	setArguments?: string[] // Raw --set arguments to forward (e.g., ['workflows.issue.startIde=false'])
 	executablePath?: string // Executable path to use for spin command (e.g., 'il', 'il-125', or '/path/to/dist/cli.js')
-	logger?: import('./logger.js').Logger // Optional logger for progress output
 	sessionId?: string // Session ID for Claude Code resume support (must be valid UUID)
 }
 
@@ -132,8 +132,8 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, logger: optionsLogger } = options
-	const log = optionsLogger ?? logger
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId } = options
+	const log = getLogger()
 
 	// Build command arguments
 	const args: string[] = []
