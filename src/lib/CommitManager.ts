@@ -325,6 +325,7 @@ export class CommitManager {
         addDir: worktreePath,
         model: 'claude-haiku-4-5-20251001', // Fast, cost-effective model
         timeout: 120000, // 120 second timeout
+        appendSystemPrompt: 'Output only the requested content. Never include preamble, analysis, or meta-commentary. Your response is used verbatim.',
       }
       getLogger().debug('Claude CLI call parameters:', {
         options: claudeOptions,
