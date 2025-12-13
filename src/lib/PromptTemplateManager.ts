@@ -34,6 +34,7 @@ export interface TemplateVariables {
 	SESSION_CONTEXT?: string  // Session ID for Claude to reference its conversation
 	BRANCH_NAME?: string      // Branch being finished
 	LOOM_TYPE?: string        // 'issue' or 'pr'
+	COMPACT_SUMMARIES?: string  // Extracted compact summaries from session transcript
 }
 
 export class PromptTemplateManager {
@@ -206,6 +207,10 @@ export class PromptTemplateManager {
 			result = result.replace(/LOOM_TYPE/g, variables.LOOM_TYPE)
 		}
 
+		if (variables.COMPACT_SUMMARIES !== undefined) {
+			result = result.replace(/COMPACT_SUMMARIES/g, variables.COMPACT_SUMMARIES)
+		}
+
 		return result
 	}
 
@@ -315,6 +320,17 @@ export class PromptTemplateManager {
 		} else {
 			// Remove the entire conditional block
 			result = result.replace(interactiveModeRegex, '')
+		}
+
+		// Process COMPACT_SUMMARIES conditionals
+		const compactSummariesRegex = /\{\{#IF COMPACT_SUMMARIES\}\}(.*?)\{\{\/IF COMPACT_SUMMARIES\}\}/gs
+
+		if (variables.COMPACT_SUMMARIES !== undefined && variables.COMPACT_SUMMARIES !== '') {
+			// Include the content, remove the conditional markers
+			result = result.replace(compactSummariesRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(compactSummariesRegex, '')
 		}
 
 		return result

@@ -10,6 +10,7 @@
 
 import { logger } from '../utils/logger.js'
 import { launchClaude, generateDeterministicSessionId } from '../utils/claude.js'
+import { readSessionContext } from '../utils/claude-transcript.js'
 import { PromptTemplateManager } from './PromptTemplateManager.js'
 import { MetadataManager } from './MetadataManager.js'
 import { SettingsManager, type IloomSettings } from './SettingsManager.js'
@@ -79,14 +80,26 @@ export class SessionSummaryService {
 
 			logger.info('Generating session summary...')
 
-			// 4. Load and process the session-summary template
+			// 4. Try to read compact summaries from session transcript for additional context
+			logger.debug(`Looking for session transcript with sessionId: ${sessionId}`)
+			const compactSummaries = await readSessionContext(input.worktreePath, sessionId)
+			if (compactSummaries) {
+				logger.debug(`Found compact summaries (${compactSummaries.length} chars)`)
+			} else {
+				logger.debug('No compact summaries found in session transcript')
+			}
+
+			// 5. Load and process the session-summary template
 			const prompt = await this.templateManager.getPrompt('session-summary', {
 				ISSUE_NUMBER: String(input.issueNumber),
 				BRANCH_NAME: input.branchName,
 				LOOM_TYPE: input.loomType,
+				COMPACT_SUMMARIES: compactSummaries ?? '',
 			})
 
-			// 5. Invoke Claude headless to generate summary
+			logger.debug('Session summary prompt:\n' + prompt)
+
+			// 6. Invoke Claude headless to generate summary
 			// Use --resume with session ID so Claude knows which conversation to summarize
 			const summaryModel = this.settingsManager.getSummaryModel(settings)
 			const summaryResult = await launchClaude(prompt, {
@@ -100,15 +113,15 @@ export class SessionSummaryService {
 				return
 			}
 
-			let summary = summaryResult.trim()
+			const summary = summaryResult.trim()
 
-			// 6. Check if Claude couldn't access conversation history and use fallback
-			if (this.indicatesNoConversationAccess(summary)) {
-				logger.debug('Claude could not access conversation history, using fallback summary')
-				summary = this.getFallbackSummary(input.branchName, input.issueNumber)
+			// 7. Skip posting if summary is too short (likely failed generation)
+			if (summary.length < 100) {
+				logger.warn('Session summary too short, skipping post')
+				return
 			}
 
-			// 7. Post summary to issue
+			// 8. Post summary to issue
 			await this.postSummaryToIssue(input.issueNumber, summary, settings)
 
 			logger.success('Session summary posted to issue')
@@ -148,14 +161,26 @@ export class SessionSummaryService {
 
 		logger.info('Generating session summary...')
 
-		// 3. Load and process the session-summary template
+		// 3. Try to read compact summaries from session transcript for additional context
+		logger.debug(`Looking for session transcript with sessionId: ${sessionId}`)
+		const compactSummaries = await readSessionContext(worktreePath, sessionId)
+		if (compactSummaries) {
+			logger.debug(`Found compact summaries (${compactSummaries.length} chars)`)
+		} else {
+			logger.debug('No compact summaries found in session transcript')
+		}
+
+		// 4. Load and process the session-summary template
 		const prompt = await this.templateManager.getPrompt('session-summary', {
 			ISSUE_NUMBER: issueNumber !== undefined ? String(issueNumber) : '',
 			BRANCH_NAME: branchName,
 			LOOM_TYPE: loomType,
+			COMPACT_SUMMARIES: compactSummaries ?? '',
 		})
 
-		// 4. Invoke Claude headless to generate summary
+		logger.debug('Session summary prompt:\n' + prompt)
+
+		// 5. Invoke Claude headless to generate summary
 		const summaryModel = this.settingsManager.getSummaryModel(settings)
 		const summaryResult = await launchClaude(prompt, {
 			headless: true,
@@ -167,12 +192,11 @@ export class SessionSummaryService {
 			throw new Error('Session summary generation returned empty result')
 		}
 
-		let summary = summaryResult.trim()
+		const summary = summaryResult.trim()
 
-		// 5. Check if Claude couldn't access conversation history and use fallback
-		if (this.indicatesNoConversationAccess(summary)) {
-			logger.debug('Claude could not access conversation history, using fallback summary')
-			summary = this.getFallbackSummary(branchName, issueNumber ?? 'unknown')
+		// 6. Check if summary is too short (likely failed generation)
+		if (summary.length < 100) {
+			throw new Error('Session summary too short - generation may have failed')
 		}
 
 		return {
@@ -242,34 +266,5 @@ export class SessionSummaryService {
 			body: summary,
 			type: 'issue',
 		})
-	}
-
-	/**
-	 * Check if Claude's response indicates it couldn't access conversation history
-	 */
-	private indicatesNoConversationAccess(response: string): boolean {
-		const lowerResponse = response.toLowerCase()
-		const indicators = [
-			"don't have access",
-			"do not have access",
-			"cannot access",
-			"can't access",
-			"no access to",
-			"unable to access",
-			"conversation history",
-			"session transcript",
-			"provide the conversation",
-			"need the actual conversation",
-		]
-		return indicators.some((indicator) => lowerResponse.includes(indicator))
-	}
-
-	/**
-	 * Generate a fallback summary when conversation history is not accessible
-	 */
-	private getFallbackSummary(_branchName: string, _issueNumber: string | number): string {
-		return `## iloom Session Summary
-
-Summary could not be generated.`
 	}
 }

@@ -5,11 +5,28 @@ You are generating a summary of THIS conversation - the development session you 
 - Branch: BRANCH_NAME
 - Loom Type: LOOM_TYPE
 
+
+{{#IF COMPACT_SUMMARIES}}
+
+**CRITICAL: How to use the following section:** The summaries below are from earlier in this session, before the conversation was compacted to save context space. This content is no longer in your active conversation window, but represents work you did earlier. Use this to:
+- Recall what was discussed, decided, and implemented before compaction
+- Ensure your summary covers the FULL session, not just recent messages
+- Avoid contradicting or repeating earlier decisions
+- FAILURE TO USE THE "Previous Conversation Context" SECTION REPRESENTS A FAILURE OF YOUR TASK
+
+## Previous Conversation Context - THIS SECTION CONTAINS CRITICAL INFO 
+------- BEGIN PREVIOUS CONTEXT ------
+
+COMPACT_SUMMARIES
+
+------- END PREVIOUS CONTEXT ------
+{{/IF COMPACT_SUMMARIES}}
+
 ## Your Task
 
-Reflect on THIS conversation (the one you're currently in) and generate a concise summary focused on:
+Reflect on THIS conversation (the one you're currently in){{#IF COMPACT_SUMMARIES}} AND the previous context above (THIS IS VERY IMPORTANT){{/IF COMPACT_SUMMARIES}}, and generate a concise summary focused on:
 
-1. **Key Insights**: What important learnings emerged during implementation?
+1. **Key Insights**: What important learnings emerged during implementation{{#IF COMPACT_SUMMARIES}} INCLUDING the previous context above (THIS IS VERY IMPORTANT){{/IF COMPACT_SUMMARIES}}?
 2. **Decisions Made**: What significant technical decisions were made and why?
 3. **Challenges Encountered**: What obstacles were faced and how were they resolved?
 4. **Mistakes and Corrections**: What mistakes were made and what was learned from them?
@@ -58,3 +75,8 @@ Structure it with key themes visible at the top, then detailed sections wrapped 
 Keep the visible themes section brief (3-5 bullet points, one sentence each). The detailed sections inside the collapsible can be more comprehensive. Focus on information that would help future developers or AI agents working on similar tasks.
 
 **REMINDER: Output ONLY the markdown. No commentary before or after. Your response IS the comment.**
+
+## VALIDATION CHECKLIST - FAILING THIS LIST MEANS FAILING THE TASK:
+* Did you ouput ONLY the markdown with no commentary before or after?
+{{#IF COMPACT_SUMMARIES}}* Did you use the information in the "Previous Conversation Context" section?{{/IF COMPACT_SUMMARIES}}
+

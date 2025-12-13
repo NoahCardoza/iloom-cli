@@ -10,6 +10,11 @@ vi.mock('../utils/claude.js', () => ({
 	launchClaude: vi.fn(),
 }))
 
+// Mock the claude-transcript utility
+vi.mock('../utils/claude-transcript.js', () => ({
+	readSessionContext: vi.fn(),
+}))
+
 // Mock the IssueManagementProviderFactory
 vi.mock('../mcp/IssueManagementProviderFactory.js', () => ({
 	IssueManagementProviderFactory: {
@@ -19,6 +24,7 @@ vi.mock('../mcp/IssueManagementProviderFactory.js', () => ({
 
 // Import mocked modules
 import { launchClaude } from '../utils/claude.js'
+import { readSessionContext } from '../utils/claude-transcript.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 
 describe('SessionSummaryService', () => {
@@ -100,8 +106,11 @@ describe('SessionSummaryService', () => {
 		// Setup factory mock
 		vi.mocked(IssueManagementProviderFactory.create).mockReturnValue(mockIssueProvider)
 
-		// Setup Claude mock
-		vi.mocked(launchClaude).mockResolvedValue('## Session Summary\n\n### Key Insights\n- Test insight')
+		// Setup Claude mock - must be > 100 chars to pass length check
+		vi.mocked(launchClaude).mockResolvedValue('## iloom Session Summary\n\n**Key Themes:**\n- Theme one about testing\n- Theme two about implementation\n\n### Key Insights\n- Test insight one\n- Test insight two')
+
+		// Setup transcript mock - returns null by default (no compact summaries)
+		vi.mocked(readSessionContext).mockResolvedValue(null)
 
 		// Create service with mocks
 		service = new SessionSummaryService(
@@ -121,11 +130,12 @@ describe('SessionSummaryService', () => {
 			// Verify settings were loaded
 			expect(mockSettingsManager.loadSettings).toHaveBeenCalledWith(defaultInput.worktreePath)
 
-			// Verify template was loaded with correct variables
+			// Verify template was loaded with correct variables (COMPACT_SUMMARIES is empty when no transcript)
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', {
 				ISSUE_NUMBER: '123',
 				BRANCH_NAME: 'feat/issue-123__test-feature',
 				LOOM_TYPE: 'issue',
+				COMPACT_SUMMARIES: '',
 			})
 
 			// Verify Claude was called
@@ -139,7 +149,7 @@ describe('SessionSummaryService', () => {
 			expect(IssueManagementProviderFactory.create).toHaveBeenCalledWith('github')
 			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
 				number: '123',
-				body: '## Session Summary\n\n### Key Insights\n- Test insight',
+				body: '## iloom Session Summary\n\n**Key Themes:**\n- Theme one about testing\n- Theme two about implementation\n\n### Key Insights\n- Test insight one\n- Test insight two',
 				type: 'issue',
 			})
 		})
@@ -234,6 +244,15 @@ describe('SessionSummaryService', () => {
 			expect(mockIssueProvider.createComment).not.toHaveBeenCalled()
 		})
 
+		it('should skip when Claude returns summary too short (<100 chars)', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('Short summary')
+
+			await service.generateAndPostSummary(defaultInput)
+
+			// Should not post short summary
+			expect(mockIssueProvider.createComment).not.toHaveBeenCalled()
+		})
+
 		it('should work with PR loom type', async () => {
 			const prInput: SessionSummaryInput = {
 				...defaultInput,
@@ -253,8 +272,47 @@ describe('SessionSummaryService', () => {
 
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
 				LOOM_TYPE: 'pr',
+				COMPACT_SUMMARIES: '',
 			}))
 			expect(mockIssueProvider.createComment).toHaveBeenCalled()
+		})
+
+		it('should include compact summaries in prompt when transcript exists', async () => {
+			const compactSummary = 'Summary of previous conversation: implemented feature X'
+			vi.mocked(readSessionContext).mockResolvedValue(compactSummary)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			// Verify transcript was read with correct session ID
+			expect(readSessionContext).toHaveBeenCalledWith(
+				defaultInput.worktreePath,
+				'test-session-id-12345'
+			)
+
+			// Verify compact summaries were included in template variables
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', {
+				ISSUE_NUMBER: '123',
+				BRANCH_NAME: 'feat/issue-123__test-feature',
+				LOOM_TYPE: 'issue',
+				COMPACT_SUMMARIES: compactSummary,
+			})
+		})
+
+		it('should work without compact summaries (short sessions)', async () => {
+			vi.mocked(readSessionContext).mockResolvedValue(null)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			// Should still call Claude and post comment
+			expect(launchClaude).toHaveBeenCalled()
+			expect(mockIssueProvider.createComment).toHaveBeenCalled()
+		})
+
+		it('should handle transcript read errors gracefully', async () => {
+			vi.mocked(readSessionContext).mockRejectedValue(new Error('Permission denied'))
+
+			// Should not throw - non-blocking
+			await expect(service.generateAndPostSummary(defaultInput)).resolves.not.toThrow()
 		})
 	})
 
