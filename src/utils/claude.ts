@@ -339,8 +339,10 @@ export async function launchClaude(
 			try {
 				if (headless) {
 					const isDebugMode = logger.isDebugEnabled()
-					// Note: When using --resume, we omit the prompt (input) since the session already has context
+					// Note: In headless mode, we still need to pass the prompt even with --resume
+					// because there's no interactive input mechanism
 					const execaOptions = {
+						input: prompt,
 						timeout: 0,
 						...(addDir && { cwd: addDir }),
 						verbose: isDebugMode,

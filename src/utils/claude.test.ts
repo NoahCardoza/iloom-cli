@@ -1406,12 +1406,12 @@ describe('claude utils', () => {
 				)
 
 				// Verify retry used --resume instead of --session-id
-				// Note: prompt is omitted when using --resume since the session already has context
+				// Note: In headless mode, prompt is still passed via input since there's no interactive mechanism
 				expect(execa).toHaveBeenNthCalledWith(
 					2,
 					'claude',
 					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp', '--resume', sessionId],
-					expect.not.objectContaining({ input: prompt })
+					expect.objectContaining({ input: prompt })
 				)
 			})
 
@@ -1550,7 +1550,7 @@ describe('claude utils', () => {
 				})
 
 				// Verify retry preserves model and addDir but replaces --session-id with --resume
-				// and omits the prompt since the session already has context
+				// In headless mode, prompt is still passed via input since there's no interactive mechanism
 				expect(execa).toHaveBeenNthCalledWith(
 					2,
 					'claude',
@@ -1564,7 +1564,7 @@ describe('claude utils', () => {
 						'--add-dir', '/tmp',
 						'--resume', sessionId,
 					],
-					expect.not.objectContaining({ input: prompt })
+					expect.objectContaining({ input: prompt })
 				)
 			})
 		})
