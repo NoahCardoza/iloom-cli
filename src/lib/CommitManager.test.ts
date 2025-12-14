@@ -57,6 +57,9 @@ describe('CommitManager', () => {
     // Default Cursor mocks - not running in Cursor by default
     vi.mocked(vscode.isRunningInCursor).mockReturnValue(false)
     vi.mocked(vscode.isCursorAvailable).mockResolvedValue(false)
+    // Default Antigravity mocks - not running in Antigravity by default
+    vi.mocked(vscode.isRunningInAntigravity).mockReturnValue(false)
+    vi.mocked(vscode.isAntigravityAvailable).mockResolvedValue(false)
   })
 
   afterEach(() => {
@@ -1347,6 +1350,168 @@ describe('CommitManager', () => {
 
       it('should clean up commit message file even on error', async () => {
         vi.mocked(vscode.isCursorAvailable).mockResolvedValue(true)
+        vi.mocked(fsPromises.readFile).mockResolvedValue('# only comments')
+
+        await expect(manager.commitChanges(mockWorktreePath, { dryRun: false }))
+          .rejects.toThrow()
+
+        // Should still clean up
+        expect(fsPromises.unlink).toHaveBeenCalled()
+      })
+    })
+  })
+
+  describe('Antigravity Editor Integration', () => {
+    // Import mocked modules for assertions
+    let fsPromises: typeof import('node:fs/promises')
+    let execaMock: typeof import('execa')
+
+    beforeEach(async () => {
+      fsPromises = await import('node:fs/promises')
+      execaMock = await import('execa')
+      vi.mocked(claude.detectClaudeCli).mockResolvedValue(false)
+      vi.mocked(prompt.promptCommitAction).mockResolvedValue('edit')
+      // Reset Antigravity mocks - default to not running in Antigravity
+      vi.mocked(vscode.isRunningInAntigravity).mockReturnValue(false)
+      vi.mocked(vscode.isAntigravityAvailable).mockResolvedValue(false)
+    })
+
+    describe('when running in Antigravity terminal', () => {
+      beforeEach(() => {
+        vi.mocked(vscode.isRunningInAntigravity).mockReturnValue(true)
+      })
+
+      it('should use Antigravity editor flow when Antigravity CLI is available', async () => {
+        vi.mocked(vscode.isAntigravityAvailable).mockResolvedValue(true)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+        vi.mocked(fsPromises.readFile).mockResolvedValue('Edited commit message\n\n# comment')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // Should write initial commit message file
+        expect(fsPromises.writeFile).toHaveBeenCalled()
+        // Should invoke Antigravity with --wait flag
+        expect(execaMock.execa).toHaveBeenCalledWith(
+          'agy',
+          ['--wait', expect.stringContaining('.COMMIT_EDITMSG')],
+          expect.objectContaining({ cwd: mockWorktreePath, stdio: 'inherit' })
+        )
+        // Should commit with -F flag using the file
+        expect(git.executeGitCommand).toHaveBeenCalledWith(
+          ['commit', '-F', expect.stringContaining('.COMMIT_EDITMSG')],
+          { cwd: mockWorktreePath }
+        )
+        // Should clean up the file
+        expect(fsPromises.unlink).toHaveBeenCalled()
+      })
+
+      it('should take precedence over Cursor and VSCode detection', async () => {
+        // All three running/available to true
+        vi.mocked(vscode.isAntigravityAvailable).mockResolvedValue(true)
+        vi.mocked(vscode.isRunningInCursor).mockReturnValue(true)
+        vi.mocked(vscode.isCursorAvailable).mockResolvedValue(true)
+        vi.mocked(vscode.isRunningInVSCode).mockReturnValue(true)
+        vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+        vi.mocked(fsPromises.readFile).mockResolvedValue('Test message')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // Should use Antigravity, not Cursor or VSCode
+        expect(execaMock.execa).toHaveBeenCalledWith(
+          'agy',
+          expect.any(Array),
+          expect.any(Object)
+        )
+        // Should NOT have called Cursor
+        expect(execaMock.execa).not.toHaveBeenCalledWith(
+          'cursor',
+          expect.any(Array),
+          expect.any(Object)
+        )
+        // Should NOT have called VSCode
+        expect(execaMock.execa).not.toHaveBeenCalledWith(
+          'code',
+          expect.any(Array),
+          expect.any(Object)
+        )
+      })
+
+      it('should fall back to Cursor when Antigravity CLI unavailable but Cursor available', async () => {
+        vi.mocked(vscode.isAntigravityAvailable).mockResolvedValue(false)
+        vi.mocked(vscode.isRunningInCursor).mockReturnValue(true)
+        vi.mocked(vscode.isCursorAvailable).mockResolvedValue(true)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+        vi.mocked(fsPromises.readFile).mockResolvedValue('Test message')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // Should use Cursor instead
+        expect(execaMock.execa).toHaveBeenCalledWith(
+          'cursor',
+          expect.any(Array),
+          expect.any(Object)
+        )
+      })
+
+      it('should fall back to VSCode when both Antigravity and Cursor unavailable', async () => {
+        vi.mocked(vscode.isAntigravityAvailable).mockResolvedValue(false)
+        vi.mocked(vscode.isRunningInCursor).mockReturnValue(false)
+        vi.mocked(vscode.isRunningInVSCode).mockReturnValue(true)
+        vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+        vi.mocked(fsPromises.readFile).mockResolvedValue('Test message')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // Should use VSCode instead
+        expect(execaMock.execa).toHaveBeenCalledWith(
+          'code',
+          expect.any(Array),
+          expect.any(Object)
+        )
+      })
+
+      it('should fall back to git editor when no IDE CLI available', async () => {
+        vi.mocked(vscode.isAntigravityAvailable).mockResolvedValue(false)
+        vi.mocked(vscode.isRunningInCursor).mockReturnValue(false)
+        vi.mocked(vscode.isRunningInVSCode).mockReturnValue(false)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // Should NOT use execa for editors
+        expect(execaMock.execa).not.toHaveBeenCalled()
+        // Should use standard git commit -e flow
+        expect(git.executeGitCommand).toHaveBeenCalledWith(
+          ['commit', '-e', '-m', 'WIP: Auto-commit uncommitted changes'],
+          { cwd: mockWorktreePath, stdio: 'inherit', timeout: 300000 }
+        )
+      })
+
+      it('should include --no-verify flag when skipVerify=true', async () => {
+        vi.mocked(vscode.isAntigravityAvailable).mockResolvedValue(true)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+        vi.mocked(fsPromises.readFile).mockResolvedValue('Test message')
+
+        await manager.commitChanges(mockWorktreePath, { skipVerify: true, dryRun: false })
+
+        expect(git.executeGitCommand).toHaveBeenCalledWith(
+          ['commit', '-F', expect.stringContaining('.COMMIT_EDITMSG'), '--no-verify'],
+          { cwd: mockWorktreePath }
+        )
+      })
+
+      it('should throw UserAbortedCommitError when message is empty after stripping comments', async () => {
+        vi.mocked(vscode.isAntigravityAvailable).mockResolvedValue(true)
+        vi.mocked(fsPromises.readFile).mockResolvedValue('# only comments\n# here')
+
+        await expect(manager.commitChanges(mockWorktreePath, { dryRun: false }))
+          .rejects.toThrow(UserAbortedCommitError)
+      })
+
+      it('should clean up commit message file even on error', async () => {
+        vi.mocked(vscode.isAntigravityAvailable).mockResolvedValue(true)
         vi.mocked(fsPromises.readFile).mockResolvedValue('# only comments')
 
         await expect(manager.commitChanges(mockWorktreePath, { dryRun: false }))

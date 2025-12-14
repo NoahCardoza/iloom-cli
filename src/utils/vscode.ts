@@ -19,6 +19,15 @@ export function isRunningInCursor(): boolean {
 }
 
 /**
+ * Check if running inside Antigravity's integrated terminal
+ * Antigravity sets ANTIGRAVITY_CLI_ALIAS environment variable
+ * Note: This check should be done FIRST before Cursor and VSCode
+ */
+export function isRunningInAntigravity(): boolean {
+	return !!process.env.ANTIGRAVITY_CLI_ALIAS
+}
+
+/**
  * Check if VSCode command-line tool is available
  */
 export async function isVSCodeAvailable(): Promise<boolean> {
@@ -46,6 +55,22 @@ export async function isCursorAvailable(): Promise<boolean> {
 		return true
 	} catch (error) {
 		logger.debug('Cursor CLI not available', { error })
+		return false
+	}
+}
+
+/**
+ * Check if Antigravity command-line tool is available
+ */
+export async function isAntigravityAvailable(): Promise<boolean> {
+	try {
+		await execa('command', ['-v', 'agy'], {
+			shell: true,
+			timeout: 5000,
+		})
+		return true
+	} catch (error) {
+		logger.debug('Antigravity CLI not available', { error })
 		return false
 	}
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { isVSCodeAvailable, openVSCodeWindow, isRunningInVSCode, isRunningInCursor, isCursorAvailable } from './vscode.js'
+import { isVSCodeAvailable, openVSCodeWindow, isRunningInVSCode, isRunningInCursor, isCursorAvailable, isRunningInAntigravity, isAntigravityAvailable } from './vscode.js'
 import { execa } from 'execa'
 
 // Mock execa
@@ -74,6 +74,41 @@ describe('isRunningInCursor', () => {
 	})
 })
 
+describe('isRunningInAntigravity', () => {
+	const originalEnv = process.env
+
+	beforeEach(() => {
+		// Create a fresh copy of process.env for each test
+		process.env = { ...originalEnv }
+	})
+
+	afterEach(() => {
+		// Restore original environment
+		process.env = originalEnv
+	})
+
+	it('should return true when ANTIGRAVITY_CLI_ALIAS is set', () => {
+		process.env.ANTIGRAVITY_CLI_ALIAS = 'agy'
+		expect(isRunningInAntigravity()).toBe(true)
+	})
+
+	it('should return false when ANTIGRAVITY_CLI_ALIAS is not set', () => {
+		delete process.env.ANTIGRAVITY_CLI_ALIAS
+		expect(isRunningInAntigravity()).toBe(false)
+	})
+
+	it('should return false when ANTIGRAVITY_CLI_ALIAS is empty string', () => {
+		process.env.ANTIGRAVITY_CLI_ALIAS = ''
+		expect(isRunningInAntigravity()).toBe(false)
+	})
+
+	it('should return true even when TERM_PROGRAM is vscode (may coexist)', () => {
+		process.env.ANTIGRAVITY_CLI_ALIAS = 'agy'
+		process.env.TERM_PROGRAM = 'vscode'
+		expect(isRunningInAntigravity()).toBe(true)
+	})
+})
+
 describe('isVSCodeAvailable', () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
@@ -137,6 +172,40 @@ describe('isCursorAvailable', () => {
 		vi.mocked(execa).mockRejectedValue(new Error('Unknown error'))
 
 		const result = await isCursorAvailable()
+
+		expect(result).toBe(false)
+	})
+})
+
+describe('isAntigravityAvailable', () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+	})
+
+	it('should return true when agy command exists', async () => {
+		vi.mocked(execa).mockResolvedValue({} as unknown)
+
+		const result = await isAntigravityAvailable()
+
+		expect(result).toBe(true)
+		expect(execa).toHaveBeenCalledWith('command', ['-v', 'agy'], {
+			shell: true,
+			timeout: 5000,
+		})
+	})
+
+	it('should return false when agy command not found', async () => {
+		vi.mocked(execa).mockRejectedValue(new Error('Command not found'))
+
+		const result = await isAntigravityAvailable()
+
+		expect(result).toBe(false)
+	})
+
+	it('should handle command check errors gracefully', async () => {
+		vi.mocked(execa).mockRejectedValue(new Error('Unknown error'))
+
+		const result = await isAntigravityAvailable()
 
 		expect(result).toBe(false)
 	})
