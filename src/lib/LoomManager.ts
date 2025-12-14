@@ -10,7 +10,7 @@ import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { VSCodeIntegration } from './VSCodeIntegration.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager, type WriteMetadataInput } from './MetadataManager.js'
-import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit } from '../utils/git.js'
+import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit, extractPRNumber } from '../utils/git.js'
 import { generateDeterministicSessionId } from '../utils/claude.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName, selectDistinctColor, hexToRgb, type ColorData } from '../utils/color.js'
@@ -289,6 +289,7 @@ export class LoomManager {
       issueTracker: this.issueTracker.providerName,
       colorHex: colorData.hex,
       sessionId,
+      ...(input.parentLoom && { parentLoom: input.parentLoom }),
     }
     await this.metadataManager.writeMetadata(worktreePath, metadataInput)
 
@@ -768,8 +769,13 @@ export class LoomManager {
     const settingsData = await this.settings.loadSettings()
     const basePort = settingsData.capabilities?.web?.basePort ?? 3000
 
-    if (input.type === 'issue' && typeof input.identifier === 'number') {
-      return this.environment.calculatePort({ basePort, issueNumber: input.identifier })
+    if (input.type === 'issue') {
+      if (typeof input.identifier === 'number') {
+        return this.environment.calculatePort({ basePort, issueNumber: input.identifier })
+      } else if (typeof input.identifier === 'string') {
+        // Alphanumeric issue ID (e.g., Linear: ENG-123) - use hash-based port calculation
+        return this.environment.calculatePort({ basePort, branchName: input.identifier })
+      }
     }
 
     if (input.type === 'pr' && typeof input.identifier === 'number') {
@@ -782,7 +788,7 @@ export class LoomManager {
     }
 
     // Fallback: basePort only (shouldn't reach here with valid input)
-    throw new Error(`Unknown input type: ${input.type}`)
+    throw new Error(`Unknown input type: ${input.type} with identifier type: ${typeof input.identifier}`)
   }
 
 
@@ -829,25 +835,56 @@ export class LoomManager {
 
   /**
    * Map worktrees to loom objects
-   * This is a simplified conversion - in production we'd store loom metadata
-   * Now reads metadata from MetadataManager (spec section 3.2)
+   * Reads loom metadata from MetadataManager with branch name parsing as fallback
    */
   private async mapWorktreesToLooms(worktrees: GitWorktree[]): Promise<Loom[]> {
     return await Promise.all(worktrees.map(async (wt) => {
-      // Extract identifier from branch name
+      // Read metadata from persistent storage first
+      const loomMetadata = await this.metadataManager.readMetadata(wt.path)
+
+      // Priority 1: Use metadata as source of truth if available
       let type: 'issue' | 'pr' | 'branch' = 'branch'
       let identifier: string | number = wt.branch
 
-      if (wt.branch.startsWith('issue-')) {
-        type = 'issue'
-        identifier = parseInt(wt.branch.replace('issue-', ''), 10)
-      } else if (wt.branch.startsWith('pr-')) {
-        type = 'pr'
-        identifier = parseInt(wt.branch.replace('pr-', ''), 10)
-      }
+      if (loomMetadata?.issueType) {
+        type = loomMetadata.issueType
 
-      // Read metadata from persistent storage
-      const loomMetadata = await this.metadataManager.readMetadata(wt.path)
+        // Extract identifier from metadata based on type
+        if (type === 'issue' && loomMetadata.issue_numbers?.[0]) {
+          const issueId = loomMetadata.issue_numbers[0]
+          // Try to parse as number, otherwise keep as string (for alphanumeric IDs)
+          const numericId = parseInt(issueId, 10)
+          identifier = isNaN(numericId) ? issueId : numericId
+        } else if (type === 'pr' && loomMetadata.pr_numbers?.[0]) {
+          const prId = loomMetadata.pr_numbers[0]
+          // PRs are always numeric
+          identifier = parseInt(prId, 10)
+        } else if (type === 'branch') {
+          identifier = wt.branch
+        }
+      } else {
+        // Priority 2: Fall back to branch name parsing if metadata not available
+
+        // Check for PR pattern first (higher priority)
+        const prNumber = extractPRNumber(wt.branch)
+        if (prNumber !== null) {
+          type = 'pr'
+          identifier = prNumber
+        } else {
+          // Check for issue pattern
+          const issueNumber = extractIssueNumber(wt.branch)
+          if (issueNumber !== null) {
+            type = 'issue'
+            // Try to parse as number, otherwise keep as string (for alphanumeric IDs)
+            const numericId = parseInt(issueNumber, 10)
+            identifier = isNaN(numericId) ? issueNumber : numericId
+          } else {
+            // Default to branch type
+            type = 'branch'
+            identifier = wt.branch
+          }
+        }
+      }
 
       return {
         id: `${type}-${identifier}`,
@@ -1029,6 +1066,7 @@ export class LoomManager {
         issueTracker: this.issueTracker.providerName,
         colorHex,
         sessionId,
+        ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
       await this.metadataManager.writeMetadata(worktreePath, metadataInput)
     }

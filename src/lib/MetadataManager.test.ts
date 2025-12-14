@@ -160,6 +160,39 @@ describe('MetadataManager', () => {
       const writtenContent = JSON.parse(writeCall?.[1] as string)
       expect(writtenContent.sessionId).toBe('6ba7b810-9dad-11d1-80b4-00c04fd430c8')
     })
+
+    it('should write parentLoom fields when provided', async () => {
+      const inputWithParent = {
+        ...metadataInput,
+        parentLoom: {
+          type: 'issue' as const,
+          identifier: 100,
+          branchName: 'issue-100__parent-feature',
+          worktreePath: '/Users/jane/dev/parent-repo',
+          databaseBranch: 'db-branch-100',
+        },
+      }
+
+      await manager.writeMetadata(worktreePath, inputWithParent)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.parentLoom).toEqual({
+        type: 'issue',
+        identifier: 100,
+        branchName: 'issue-100__parent-feature',
+        worktreePath: '/Users/jane/dev/parent-repo',
+        databaseBranch: 'db-branch-100',
+      })
+    })
+
+    it('should not include parentLoom field when not provided', async () => {
+      await manager.writeMetadata(worktreePath, metadataInput)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.parentLoom).toBeUndefined()
+    })
   })
 
   describe('readMetadata', () => {
@@ -195,6 +228,7 @@ describe('MetadataManager', () => {
         issueTracker: 'github',
         colorHex: '#f5dceb',
         sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+        parentLoom: null,
       })
     })
 
@@ -220,6 +254,7 @@ describe('MetadataManager', () => {
         issueTracker: null,
         colorHex: null,
         sessionId: null,
+        parentLoom: null,
       })
     })
 
@@ -279,6 +314,64 @@ describe('MetadataManager', () => {
       const result = await manager.readMetadata(worktreePath)
 
       expect(result).toBeNull()
+    })
+
+    it('should return parentLoom when present in metadata file', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Child loom with parent',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-200__child-feature',
+        worktreePath: '/Users/jane/dev/child-repo',
+        issueType: 'issue',
+        issue_numbers: ['200'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+        sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+        parentLoom: {
+          type: 'issue',
+          identifier: 100,
+          branchName: 'issue-100__parent-feature',
+          worktreePath: '/Users/jane/dev/parent-repo',
+          databaseBranch: 'db-branch-100',
+        },
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.parentLoom).toEqual({
+        type: 'issue',
+        identifier: 100,
+        branchName: 'issue-100__parent-feature',
+        worktreePath: '/Users/jane/dev/parent-repo',
+        databaseBranch: 'db-branch-100',
+      })
+    })
+
+    it('should return null parentLoom for non-child looms', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Regular loom without parent',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__feature',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+        sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+        // Note: no parentLoom field
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.parentLoom).toBeNull()
     })
   })
 
@@ -354,6 +447,7 @@ describe('MetadataManager', () => {
         issueTracker: 'github',
         colorHex: '#ff0000',
         sessionId: '11111111-1111-1111-1111-111111111111',
+        parentLoom: null,
       })
       expect(result[1]).toEqual({
         description: 'Project 2 loom',
@@ -366,6 +460,7 @@ describe('MetadataManager', () => {
         issueTracker: 'github',
         colorHex: '#00ff00',
         sessionId: '22222222-2222-2222-2222-222222222222',
+        parentLoom: null,
       })
     })
 
@@ -462,6 +557,44 @@ describe('MetadataManager', () => {
         issueTracker: null,
         colorHex: null,
         sessionId: null,
+        parentLoom: null,
+      })
+    })
+
+    it('should include parentLoom in listed metadata', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockResolvedValue(['child-loom.json'] as unknown as string[])
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+        description: 'Child loom',
+        created_at: '2024-01-15T10:00:00.000Z',
+        version: 1,
+        branchName: 'issue-200__child',
+        worktreePath: '/Users/alice/child-project',
+        issueType: 'issue',
+        issue_numbers: ['200'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#ff0000',
+        sessionId: '33333333-3333-3333-3333-333333333333',
+        parentLoom: {
+          type: 'issue',
+          identifier: 100,
+          branchName: 'issue-100__parent',
+          worktreePath: '/Users/alice/parent-project',
+          databaseBranch: 'db-branch-100',
+        },
+      }))
+
+      const result = await manager.listAllMetadata()
+
+      expect(result).toHaveLength(1)
+      expect(result[0].parentLoom).toEqual({
+        type: 'issue',
+        identifier: 100,
+        branchName: 'issue-100__parent',
+        worktreePath: '/Users/alice/parent-project',
+        databaseBranch: 'db-branch-100',
       })
     })
 

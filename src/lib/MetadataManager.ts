@@ -20,6 +20,13 @@ export interface MetadataFile {
   issueTracker?: string
   colorHex?: string // Stored hex color (e.g., "#dcebff") - robust against palette changes
   sessionId?: string // Claude Code session ID for resume support
+  parentLoom?: {
+    type: 'issue' | 'pr' | 'branch'
+    identifier: string | number
+    branchName: string
+    worktreePath: string
+    databaseBranch?: string
+  }
 }
 
 /**
@@ -37,6 +44,13 @@ export interface WriteMetadataInput {
   issueTracker: string
   colorHex: string // Hex color (e.g., "#dcebff") - robust against palette changes
   sessionId: string // Claude Code session ID for resume support (required for new looms)
+  parentLoom?: {
+    type: 'issue' | 'pr' | 'branch'
+    identifier: string | number
+    branchName: string
+    worktreePath: string
+    databaseBranch?: string
+  }
 }
 
 /**
@@ -53,6 +67,13 @@ export interface LoomMetadata {
   issueTracker: string | null
   colorHex: string | null // Hex color (e.g., "#dcebff") - robust against palette changes
   sessionId: string | null // Claude Code session ID (null for legacy looms)
+  parentLoom: {
+    type: 'issue' | 'pr' | 'branch'
+    identifier: string | number
+    branchName: string
+    worktreePath: string
+    databaseBranch?: string
+  } | null
 }
 
 /**
@@ -132,6 +153,7 @@ export class MetadataManager {
         issueTracker: input.issueTracker,
         colorHex: input.colorHex,
         sessionId: input.sessionId,
+        ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
 
       // 3. Write to slugified filename
@@ -181,6 +203,7 @@ export class MetadataManager {
         issueTracker: data.issueTracker ?? null,
         colorHex: data.colorHex ?? null,
         sessionId: data.sessionId ?? null,
+        parentLoom: data.parentLoom ?? null,
       }
     } catch (error) {
       // Return null on any error (graceful degradation per spec)
@@ -238,6 +261,7 @@ export class MetadataManager {
             issueTracker: data.issueTracker ?? null,
             colorHex: data.colorHex ?? null,
             sessionId: data.sessionId ?? null,
+            parentLoom: data.parentLoom ?? null,
           })
         } catch (error) {
           // Skip individual files that fail to parse (graceful degradation)
