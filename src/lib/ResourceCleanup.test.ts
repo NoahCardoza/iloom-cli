@@ -6,7 +6,7 @@ import { ProcessManager } from './process/ProcessManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { ResourceCleanupOptions } from '../types/cleanup.js'
-import { executeGitCommand, findMainWorktreePathWithSettings, hasUncommittedChanges, isBranchMergedIntoMain, checkRemoteBranchStatus } from '../utils/git.js'
+import { executeGitCommand, findMainWorktreePathWithSettings, hasUncommittedChanges, isBranchMergedIntoMain, checkRemoteBranchStatus, getMergeTargetBranch, findWorktreeForBranch } from '../utils/git.js'
 import { logger } from '../utils/logger.js'
 
 // Mock dependencies
@@ -30,6 +30,8 @@ vi.mock('../utils/git.js', () => ({
 	findMainWorktreePathWithSettings: vi.fn(),
 	isBranchMergedIntoMain: vi.fn(),
 	checkRemoteBranchStatus: vi.fn(),
+	getMergeTargetBranch: vi.fn().mockResolvedValue('main'),
+	findWorktreeForBranch: vi.fn(),
 	extractIssueNumber: vi.fn((branch: string) => {
 		// Priority 1: New format - issue-{issueId}__
 		const newMatch = branch.match(/issue-([^_]+)__/i)
@@ -125,8 +127,10 @@ describe('ResourceCleanup', () => {
 			// Mock worktree removal
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
 
-			// Mock branch deletion
+			// Mock branch deletion pre-fetch and execution
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			// getMergeTargetBranch is called in Step 3.6 (pre-fetch) - returns 'main' from global mock
+			vi.mocked(findWorktreeForBranch).mockResolvedValueOnce('/path/to/main-worktree')
 			vi.mocked(executeGitCommand)
 				.mockResolvedValueOnce('abc123') // branch existence check
 				.mockResolvedValueOnce('') // branch deletion
@@ -153,6 +157,62 @@ describe('ResourceCleanup', () => {
 			expect(result.operations[1]?.type).toBe('worktree')
 			expect(result.operations[2]?.type).toBe('branch')
 			expect(result.operations[3]?.type).toBe('database')
+		})
+
+		it('should pre-fetch merge target BEFORE worktree deletion (bug fix for issue #328)', async () => {
+			// This test verifies the critical bug fix: merge target must be fetched
+			// BEFORE the worktree is deleted, because after deletion the metadata
+			// file won't be readable.
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+
+			// Mock safety checks
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: true,
+				remoteAhead: false,
+				localAhead: false,
+				networkError: false
+			})
+
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+
+			// Mock getMergeTargetBranch to return parent branch (simulating child loom)
+			vi.mocked(getMergeTargetBranch).mockResolvedValueOnce('issue-100__parent-feature')
+			// Mock findWorktreeForBranch to find where parent is checked out
+			vi.mocked(findWorktreeForBranch).mockResolvedValueOnce('/path/to/parent-worktree')
+
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockResolvedValueOnce('') // branch deletion
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			await resourceCleanup.cleanupWorktree(parsedInput, {
+				deleteBranch: true,
+				keepDatabase: true,
+			})
+
+			// Key assertion: getMergeTargetBranch should be called with the worktree path
+			// (which still exists at the time of the call, before Step 4 worktree deletion)
+			expect(getMergeTargetBranch).toHaveBeenCalledWith(
+				'/path/to/worktree',
+				expect.objectContaining({
+					settingsManager: mockSettingsManager,
+				})
+			)
+
+			// Verify the call order: getMergeTargetBranch should be called before removeWorktree
+			const getMergeTargetBranchCallOrder = vi.mocked(getMergeTargetBranch).mock.invocationCallOrder[0]
+			const removeWorktreeCallOrder = vi.mocked(mockGitWorktree.removeWorktree).mock.invocationCallOrder[0]
+			expect(getMergeTargetBranchCallOrder).toBeLessThan(removeWorktreeCallOrder!)
 		})
 
 		it('should handle missing dev server gracefully', async () => {
@@ -528,6 +588,125 @@ describe('ResourceCleanup', () => {
 			const result = await resourceCleanup.deleteBranch('test')
 
 			expect(result).toBe(true)
+		})
+
+		it('should run git branch -d from parent worktree when mergeTargetBranch is provided (child looms)', async () => {
+			// This test verifies the safer approach for issue #328:
+			// Instead of using -D (force delete), we find the worktree where the parent branch
+			// is checked out and run git branch -d from there. This lets git do its own
+			// safety verification naturally.
+			// The mergeTargetBranch is pre-fetched BEFORE worktree deletion (Step 3.6 in cleanupWorktree).
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockResolvedValueOnce('') // branch deletion
+
+			// Mock findWorktreeForBranch to return the parent worktree path
+			vi.mocked(findWorktreeForBranch).mockResolvedValueOnce('/path/to/parent-worktree')
+
+			const result = await resourceCleanup.deleteBranch('issue-101__child-feature', {
+				// mergeTargetBranch is pre-fetched before worktree deletion
+				mergeTargetBranch: 'issue-100__parent-feature'
+			})
+
+			expect(result).toBe(true)
+			// Verify getMergeTargetBranch was NOT called (we use pre-fetched value)
+			expect(getMergeTargetBranch).not.toHaveBeenCalled()
+			// Verify findWorktreeForBranch was called to find where parent branch is checked out
+			expect(findWorktreeForBranch).toHaveBeenCalledWith(
+				'issue-100__parent-feature',
+				'/path/to/main'
+			)
+			// Verify isBranchMergedIntoMain was NOT called (we use the safer worktree approach)
+			expect(isBranchMergedIntoMain).not.toHaveBeenCalled()
+			// Verify safe delete (-d) was used FROM the parent worktree
+			expect(executeGitCommand).toHaveBeenCalledWith(
+				['branch', '-d', 'issue-101__child-feature'],
+				{ cwd: '/path/to/parent-worktree' }
+			)
+		})
+
+		it('should use safe delete (-d) when branch is NOT merged into parent branch', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockRejectedValueOnce(new Error('branch not fully merged')) // branch deletion fails
+
+			// Mock findWorktreeForBranch to return the parent worktree path
+			vi.mocked(findWorktreeForBranch).mockResolvedValueOnce('/path/to/parent-worktree')
+
+			await expect(
+				resourceCleanup.deleteBranch('issue-101__child-feature', {
+					// mergeTargetBranch is pre-fetched before worktree deletion
+					mergeTargetBranch: 'issue-100__parent-feature'
+				})
+			).rejects.toThrow(/Cannot delete unmerged branch/)
+
+			// Verify getMergeTargetBranch was NOT called (we use pre-fetched value)
+			expect(getMergeTargetBranch).not.toHaveBeenCalled()
+			// Verify safe delete (-d) was used from parent worktree
+			expect(executeGitCommand).toHaveBeenCalledWith(
+				['branch', '-d', 'issue-101__child-feature'],
+				{ cwd: '/path/to/parent-worktree' }
+			)
+		})
+
+		it('should fall back to force delete (-D) when parent worktree not found but branch is merged', async () => {
+			// This test verifies the fallback behavior when findWorktreeForBranch fails
+			// (e.g., parent worktree doesn't exist). In this case, we fall back to
+			// checking merge status and using -D if merged.
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockResolvedValueOnce('') // branch deletion
+
+			// Mock findWorktreeForBranch to throw (parent worktree doesn't exist)
+			vi.mocked(findWorktreeForBranch).mockRejectedValueOnce(
+				new Error("No worktree found with branch 'issue-100__parent-feature' checked out")
+			)
+
+			// Mock isBranchMergedIntoMain to return true (branch is merged into parent)
+			vi.mocked(isBranchMergedIntoMain).mockResolvedValueOnce(true)
+
+			const result = await resourceCleanup.deleteBranch('issue-101__child-feature', {
+				// mergeTargetBranch is pre-fetched before worktree deletion
+				mergeTargetBranch: 'issue-100__parent-feature'
+			})
+
+			expect(result).toBe(true)
+			// Verify getMergeTargetBranch was NOT called (we use pre-fetched value)
+			expect(getMergeTargetBranch).not.toHaveBeenCalled()
+			// Verify isBranchMergedIntoMain WAS called as fallback
+			expect(isBranchMergedIntoMain).toHaveBeenCalledWith(
+				'issue-101__child-feature',
+				'issue-100__parent-feature',
+				'/path/to/main'
+			)
+			// Verify force delete (-D) was used (fallback behavior)
+			expect(executeGitCommand).toHaveBeenCalledWith(
+				['branch', '-D', 'issue-101__child-feature'],
+				{ cwd: '/path/to/main' }
+			)
+		})
+
+		it('should use safe delete (-d) when no mergeTargetBranch is provided', async () => {
+			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			vi.mocked(executeGitCommand)
+				.mockResolvedValueOnce('abc123') // branch existence check
+				.mockResolvedValueOnce('') // branch deletion
+
+			const result = await resourceCleanup.deleteBranch('feat/test-branch', {})
+
+			expect(result).toBe(true)
+			// Verify getMergeTargetBranch was NOT called (no mergeTargetBranch provided)
+			expect(getMergeTargetBranch).not.toHaveBeenCalled()
+			// Verify findWorktreeForBranch was NOT called (no mergeTargetBranch)
+			expect(findWorktreeForBranch).not.toHaveBeenCalled()
+			// Verify safe delete (-d) was used
+			expect(executeGitCommand).toHaveBeenCalledWith(
+				['branch', '-d', 'feat/test-branch'],
+				{ cwd: '/path/to/main' }
+			)
 		})
 	})
 
@@ -965,6 +1144,8 @@ describe('ResourceCleanup', () => {
 		})
 
 		it('should provide helpful error message for unpushed/unmerged branch (scenario 2)', async () => {
+			// Ensure getMergeTargetBranch returns 'main' for this test
+			vi.mocked(getMergeTargetBranch).mockResolvedValueOnce('main')
 			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
 			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
 			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
@@ -1005,11 +1186,13 @@ describe('ResourceCleanup', () => {
 				localAhead: false, // Same commits - safe
 				networkError: false
 			})
-			// isBranchMergedIntoMain should NOT be called because work is safe on remote
 			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
 			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			// getMergeTargetBranch returns 'main' by default from global mock
+			// findWorktreeForBranch finds the main worktree
+			vi.mocked(findWorktreeForBranch).mockResolvedValueOnce('/path/to/main-worktree')
 			vi.mocked(executeGitCommand)
 				.mockResolvedValueOnce('abc123') // branch existence check
 				.mockResolvedValueOnce('') // branch deletion
@@ -1023,7 +1206,9 @@ describe('ResourceCleanup', () => {
 			const result = await resourceCleanup.cleanupWorktree(parsedInput, { deleteBranch: true })
 
 			expect(result.success).toBe(true)
-			expect(isBranchMergedIntoMain).not.toHaveBeenCalled() // Key assertion
+			// With the safer approach, we run git branch -d from the target worktree
+			// and let git do its own verification - no need to call isBranchMergedIntoMain
+			expect(isBranchMergedIntoMain).not.toHaveBeenCalled()
 		})
 
 		// Scenario 4: Remote doesn't exist, but merged to main -> Fine
@@ -1037,11 +1222,15 @@ describe('ResourceCleanup', () => {
 				localAhead: false,
 				networkError: false
 			})
-			vi.mocked(isBranchMergedIntoMain).mockResolvedValueOnce(true) // IS merged
+			// isBranchMergedIntoMain is called during validation when remote doesn't exist
+			vi.mocked(isBranchMergedIntoMain).mockResolvedValueOnce(true) // IS merged (validation)
 			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
 			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			// getMergeTargetBranch returns 'main' by default from global mock
+			// findWorktreeForBranch finds the main worktree
+			vi.mocked(findWorktreeForBranch).mockResolvedValueOnce('/path/to/main-worktree')
 			vi.mocked(executeGitCommand)
 				.mockResolvedValueOnce('abc123') // branch existence check
 				.mockResolvedValueOnce('') // branch deletion
@@ -1168,6 +1357,9 @@ describe('ResourceCleanup', () => {
 			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
 			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
 			vi.mocked(findMainWorktreePathWithSettings).mockResolvedValueOnce('/path/to/main')
+			// getMergeTargetBranch returns 'main' by default from global mock
+			// findWorktreeForBranch finds the main worktree
+			vi.mocked(findWorktreeForBranch).mockResolvedValueOnce('/path/to/main-worktree')
 			vi.mocked(executeGitCommand)
 				.mockResolvedValueOnce('abc123') // branch existence check
 				.mockResolvedValueOnce('') // branch deletion
@@ -1184,7 +1376,10 @@ describe('ResourceCleanup', () => {
 			})
 
 			expect(result.success).toBe(true)
+			// Key assertion: checkRemoteBranchStatus should NOT be called (validation skipped)
 			expect(checkRemoteBranchStatus).not.toHaveBeenCalled()
+			// With the safer worktree approach, isBranchMergedIntoMain is not called when
+			// findWorktreeForBranch succeeds
 			expect(isBranchMergedIntoMain).not.toHaveBeenCalled()
 		})
 
@@ -1220,7 +1415,8 @@ describe('ResourceCleanup', () => {
 
 		// Use configured mainBranch from settings
 		it('should use configured mainBranch from settings for merge check', async () => {
-			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({ mainBranch: 'develop' })
+			// Mock getMergeTargetBranch to return 'develop' (simulating settings with custom mainBranch)
+			vi.mocked(getMergeTargetBranch).mockResolvedValueOnce('develop')
 
 			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
 			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
@@ -1246,7 +1442,7 @@ describe('ResourceCleanup', () => {
 				// Expected to throw
 			}
 
-			// Assert - should use 'develop' as the mainBranch
+			// Assert - should use 'develop' as the mainBranch (via getMergeTargetBranch)
 			expect(isBranchMergedIntoMain).toHaveBeenCalledWith(
 				'feat/issue-25',
 				'develop',

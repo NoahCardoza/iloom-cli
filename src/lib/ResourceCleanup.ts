@@ -6,7 +6,7 @@ import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager } from './MetadataManager.js'
 import { getLogger } from '../utils/logger-context.js'
-import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber, isBranchMergedIntoMain, checkRemoteBranchStatus, type RemoteBranchStatus } from '../utils/git.js'
+import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber, isBranchMergedIntoMain, checkRemoteBranchStatus, getMergeTargetBranch, findWorktreeForBranch, type RemoteBranchStatus } from '../utils/git.js'
 
 import type {
 	ResourceCleanupOptions,
@@ -182,6 +182,24 @@ export class ResourceCleanup {
 			}
 		}
 
+		// Step 3.6: Pre-fetch merge target branch before worktree deletion
+		// This is needed because deleteBranch() needs to know the merge target (parent branch for child looms)
+		// but the worktree metadata won't be readable after deletion in Step 4
+		let mergeTargetBranch: string | null = null
+		if (options.deleteBranch && worktree && !options.dryRun) {
+			try {
+				mergeTargetBranch = await getMergeTargetBranch(worktree.path, {
+					settingsManager: this.settingsManager,
+					metadataManager: this.metadataManager,
+				})
+				getLogger().debug(`Pre-fetched merge target branch: ${mergeTargetBranch}`)
+			} catch (error) {
+				getLogger().warn(
+					`Failed to pre-fetch merge target branch: ${error instanceof Error ? error.message : String(error)}`
+				)
+			}
+		}
+
 		// Step 4: Remove worktree
 		if (options.dryRun) {
 			operations.push({
@@ -233,7 +251,13 @@ export class ResourceCleanup {
 				})
 			} else {
 				try {
-					const branchOptions: BranchDeleteOptions = { dryRun: false }
+					const branchOptions: BranchDeleteOptions = {
+						dryRun: false,
+					}
+					// Pass pre-fetched merge target (fetched in Step 3.6 before worktree deletion)
+					if (mergeTargetBranch !== null) {
+						branchOptions.mergeTargetBranch = mergeTargetBranch
+					}
 					if (options.force !== undefined) {
 						branchOptions.force = options.force
 					}
@@ -492,10 +516,71 @@ export class ResourceCleanup {
 
 		// Execute git branch deletion
 		try {
-			// Use safe delete (-d) unless force is specified
-			const deleteFlag = options.force ? '-D' : '-d'
+			// Determine the correct delete flag and working directory
+			let deleteFlag = '-d'  // Default: safe delete
+			let deleteCwd = workingDir  // Default: main worktree
+
+			if (options.force) {
+				// User explicitly requested force delete
+				deleteFlag = '-D'
+			} else if (options.mergeTargetBranch) {
+				// Use pre-fetched merge target (from Step 3.6, fetched before worktree deletion)
+				// For child looms, git branch -d checks against HEAD, which may not be the correct target
+				// Instead of using -D (force), we run git branch -d from the worktree where the
+				// parent branch is checked out. This lets git do its own safety verification.
+				const mergeTarget = options.mergeTargetBranch
+
+				// Find the worktree where the merge target (parent branch) is checked out
+				try {
+					const targetWorktreePath = await findWorktreeForBranch(mergeTarget, workingDir)
+					// Run git branch -d from that worktree - HEAD will be the correct branch
+					// and git will correctly verify the merge itself
+					getLogger().debug(`Running branch delete from worktree where '${mergeTarget}' is checked out: ${targetWorktreePath}`)
+					deleteCwd = targetWorktreePath
+				} catch {
+					// If we can't find the worktree for the target branch, fall back to checking merge status
+					// and using -D if merged (the previous behavior)
+					getLogger().debug(`Could not find worktree for branch '${mergeTarget}', falling back to merge check`)
+					const isMerged = await isBranchMergedIntoMain(branchName, mergeTarget, workingDir)
+
+					if (isMerged) {
+						getLogger().debug(`Branch '${branchName}' verified merged into '${mergeTarget}', using force delete`)
+						deleteFlag = '-D'
+					}
+				}
+			} else if (options.worktreePath) {
+				// DEPRECATED: Fall back to reading from worktree path if mergeTargetBranch not provided
+				// This path should not be used when called from cleanupWorktree() since the worktree
+				// has already been deleted by the time deleteBranch() is called
+				getLogger().warn('deleteBranch called with worktreePath but no mergeTargetBranch - this may fail if worktree was deleted')
+				try {
+					const mergeTarget = await getMergeTargetBranch(options.worktreePath, {
+						settingsManager: this.settingsManager,
+						metadataManager: this.metadataManager,
+					})
+
+					// Find the worktree where the merge target (parent branch) is checked out
+					try {
+						const targetWorktreePath = await findWorktreeForBranch(mergeTarget, workingDir)
+						getLogger().debug(`Running branch delete from worktree where '${mergeTarget}' is checked out: ${targetWorktreePath}`)
+						deleteCwd = targetWorktreePath
+					} catch {
+						getLogger().debug(`Could not find worktree for branch '${mergeTarget}', falling back to merge check`)
+						const isMerged = await isBranchMergedIntoMain(branchName, mergeTarget, workingDir)
+
+						if (isMerged) {
+							getLogger().debug(`Branch '${branchName}' verified merged into '${mergeTarget}', using force delete`)
+							deleteFlag = '-D'
+						}
+					}
+				} catch (error) {
+					// If we can't read the merge target (e.g., worktree deleted), just use safe delete
+					getLogger().debug(`Could not read merge target from worktreePath: ${error instanceof Error ? error.message : String(error)}`)
+				}
+			}
+
 			await executeGitCommand(['branch', deleteFlag, branchName], {
-				cwd: workingDir
+				cwd: deleteCwd
 			})
 
 		getLogger().info(`Branch deleted: ${branchName}`)
@@ -661,8 +746,11 @@ export class ResourceCleanup {
 		// 4. No remote, merged to main -> OK (work is in main)
 		// 5. No remote, NOT merged to main -> BLOCK (unmerged work would be lost)
 		if ((checkBranchMerge || checkRemoteBranch) && worktree.branch) {
-			const settings = await this.settingsManager.loadSettings(worktree.path)
-			const mainBranch = settings.mainBranch ?? 'main'
+			// Use shared utility to get merge target (parent branch for child looms, main for others)
+			const mainBranch = await getMergeTargetBranch(worktree.path, {
+				settingsManager: this.settingsManager,
+				metadataManager: this.metadataManager,
+			})
 
 			// Check remote branch status
 			const remoteStatus: RemoteBranchStatus = await checkRemoteBranchStatus(worktree.branch, worktree.path)

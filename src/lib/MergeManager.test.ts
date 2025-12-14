@@ -1,13 +1,24 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MergeManager } from './MergeManager.js'
 import { SettingsManager } from './SettingsManager.js'
+import { MetadataManager } from './MetadataManager.js'
 import * as git from '../utils/git.js'
 import * as claude from '../utils/claude.js'
 
 // Mock dependencies
-vi.mock('../utils/git.js')
+vi.mock('../utils/git.js', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../utils/git.js')>()
+	return {
+		...actual,
+		executeGitCommand: vi.fn(),
+		findMainWorktreePathWithSettings: vi.fn(),
+		findWorktreeForBranch: vi.fn(),
+		getMergeTargetBranch: vi.fn(),
+	}
+})
 vi.mock('../utils/claude.js')
 vi.mock('./SettingsManager.js')
+vi.mock('./MetadataManager.js')
 vi.mock('../utils/logger.js', () => ({
 	logger: {
 		info: vi.fn(),
@@ -21,6 +32,7 @@ vi.mock('../utils/logger.js', () => ({
 describe('MergeManager', () => {
 	let manager: MergeManager
 	let mockSettingsManager: SettingsManager
+	let mockMetadataManager: MetadataManager
 
 	beforeEach(() => {
 		// Create a mock SettingsManager
@@ -28,7 +40,15 @@ describe('MergeManager', () => {
 			loadSettings: vi.fn().mockResolvedValue({}),
 		} as unknown as SettingsManager
 
-		manager = new MergeManager(mockSettingsManager)
+		// Create a mock MetadataManager
+		mockMetadataManager = {
+			readMetadata: vi.fn().mockResolvedValue(null),
+		} as unknown as MetadataManager
+
+		// Default mock for getMergeTargetBranch - returns 'main' by default
+		vi.mocked(git.getMergeTargetBranch).mockResolvedValue('main')
+
+		manager = new MergeManager(mockSettingsManager, mockMetadataManager)
 	})
 
 	afterEach(() => {
@@ -403,9 +423,9 @@ describe('MergeManager', () => {
 	})
 
 	describe('Fast-Forward Merge Execution', () => {
-		it('should switch to main branch before merging', async () => {
-			// Mock: successful merge flow
-			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
+		it('should find worktree for merge target branch', async () => {
+			// Mock: successful merge flow using findWorktreeForBranch
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // branch --show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -415,13 +435,13 @@ describe('MergeManager', () => {
 
 			await manager.performFastForwardMerge('feature-branch', '/test/worktree', { force: true })
 
-			// Verify: findMainWorktreePathWithSettings was called with worktreePath and settingsManager
-			expect(git.findMainWorktreePathWithSettings).toHaveBeenCalledWith('/test/worktree', mockSettingsManager)
+			// Verify: findWorktreeForBranch was called with merge target branch and worktreePath
+			expect(git.findWorktreeForBranch).toHaveBeenCalledWith('main', '/test/worktree')
 		})
 
 		it('should verify currently on main branch after checkout', async () => {
 			// Mock: successful flow
-			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -440,7 +460,7 @@ describe('MergeManager', () => {
 
 		it('should successfully perform fast-forward only merge', async () => {
 			// Mock: successful merge
-			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -459,7 +479,7 @@ describe('MergeManager', () => {
 
 		it('should show commits to be merged before confirmation', async () => {
 			// Mock: successful flow
-			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -478,7 +498,7 @@ describe('MergeManager', () => {
 
 		it('should skip confirmation when force flag is true', async () => {
 			// Mock: successful merge
-			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -494,7 +514,7 @@ describe('MergeManager', () => {
 
 		it('should handle merge failure gracefully', async () => {
 			// Mock: merge command fails
-			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -508,21 +528,28 @@ describe('MergeManager', () => {
 			).rejects.toThrow(/merge failed/i)
 		})
 
-		it('should fail if finding main worktree fails', async () => {
-			// Mock: findMainWorktreePath fails
-			vi.mocked(git.findMainWorktreePathWithSettings).mockRejectedValueOnce(
-				new Error('No worktree found with main branch checked out')
+		it('should fall back to findMainWorktreePathWithSettings if findWorktreeForBranch fails', async () => {
+			// Mock: findWorktreeForBranch fails, fallback to findMainWorktreePathWithSettings
+			vi.mocked(git.findWorktreeForBranch).mockRejectedValueOnce(
+				new Error('No worktree found with branch checked out')
 			)
+			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('main') // show-current
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('abc123') // rev-parse
+				.mockResolvedValueOnce('abc123 Commit') // log
+				.mockResolvedValueOnce('') // merge
 
-			// Expect: should throw clear error
-			await expect(
-				manager.performFastForwardMerge('feature-branch', '/test/worktree', { force: true })
-			).rejects.toThrow(/branch/i)
+			await manager.performFastForwardMerge('feature-branch', '/test/worktree', { force: true })
+
+			// Verify: fallback was used
+			expect(git.findMainWorktreePathWithSettings).toHaveBeenCalledWith('/test/worktree', mockSettingsManager)
 		})
 
 		it('should fail if branch verification shows not on main', async () => {
 			// Mock: main worktree found but verification shows wrong branch
-			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('feature-branch') // show-current: wrong branch!
 
@@ -534,7 +561,7 @@ describe('MergeManager', () => {
 
 		it('should handle case where branch is already merged', async () => {
 			// Mock: no commits to merge
-			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -570,7 +597,7 @@ describe('MergeManager', () => {
 
 		it('should preview merge without executing when dryRun=true', async () => {
 			// Mock: dry-run checks only (no checkout in dry-run)
-			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current (first call since checkout is skipped)
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -606,7 +633,7 @@ describe('MergeManager', () => {
 
 		it('should validate fast-forward possibility in dry-run', async () => {
 			// Mock: validation happens in dry-run (no checkout in dry-run)
-			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('main') // show-current (first call since checkout is skipped)
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -729,8 +756,8 @@ describe('MergeManager', () => {
 
 	describe('Custom Main Branch Configuration', () => {
 		it('should use custom main branch from settings in rebase', async () => {
-			// Mock: settings with custom main branch
-			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({ mainBranch: 'develop' })
+			// Mock: getMergeTargetBranch returns 'develop' (simulating settings with custom main branch)
+			vi.mocked(git.getMergeTargetBranch).mockResolvedValue('develop')
 			manager = new MergeManager(mockSettingsManager)
 
 			// Mock: successful rebase on develop
@@ -794,12 +821,12 @@ describe('MergeManager', () => {
 		})
 
 		it('should use custom main branch in fast-forward merge execution', async () => {
-			// Mock: settings with custom main branch
-			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({ mainBranch: 'master' })
+			// Mock: getMergeTargetBranch returns 'master' (simulating settings with custom main branch)
+			vi.mocked(git.getMergeTargetBranch).mockResolvedValue('master')
 			manager = new MergeManager(mockSettingsManager)
 
-			// Mock: successful merge flow
-			vi.mocked(git.findMainWorktreePathWithSettings).mockResolvedValueOnce('/test/repo')
+			// Mock: successful merge flow - findWorktreeForBranch finds the master worktree
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/repo')
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('master') // branch --show-current
 				.mockResolvedValueOnce('abc123') // merge-base
@@ -808,6 +835,9 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('') // merge --ff-only
 
 			await manager.performFastForwardMerge('feature-branch', '/test/worktree', { force: true })
+
+			// Verify: findWorktreeForBranch was called with 'master' (from getMergeTargetBranch)
+			expect(git.findWorktreeForBranch).toHaveBeenCalledWith('master', '/test/worktree')
 
 			// Verify: commands used 'master' instead of 'main'
 			expect(git.executeGitCommand).toHaveBeenCalledWith(
@@ -825,8 +855,8 @@ describe('MergeManager', () => {
 		})
 
 		it('should default to "main" when no mainBranch in settings', async () => {
-			// Mock: settings without mainBranch (should default to 'main')
-			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({})
+			// Mock: getMergeTargetBranch returns 'main' (default behavior)
+			vi.mocked(git.getMergeTargetBranch).mockResolvedValue('main')
 			manager = new MergeManager(mockSettingsManager)
 
 			// Mock: successful rebase
@@ -848,9 +878,9 @@ describe('MergeManager', () => {
 		})
 
 		it('should include custom branch name in error messages', async () => {
-			// Mock: settings with custom main branch
-			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({ mainBranch: 'production' })
-			manager = new MergeManager(mockSettingsManager)
+			// Mock: getMergeTargetBranch returns 'production' (simulating custom setting)
+			vi.mocked(git.getMergeTargetBranch).mockResolvedValue('production')
+			manager = new MergeManager(mockSettingsManager, mockMetadataManager)
 
 			// Mock: production branch doesn't exist
 			vi.mocked(git.executeGitCommand).mockRejectedValueOnce(
@@ -861,6 +891,138 @@ describe('MergeManager', () => {
 			await expect(
 				manager.rebaseOnMain('/test/worktree')
 			).rejects.toThrow(/production/)
+		})
+	})
+
+	describe('Parent Loom Merge Target (Child Loom Support)', () => {
+		it('should use parentLoom.branchName from metadata when present', async () => {
+			// Mock: getMergeTargetBranch returns parent branch (simulating metadata with parent loom)
+			vi.mocked(git.getMergeTargetBranch).mockResolvedValue('fix/issue-123__parent-feature')
+			manager = new MergeManager(mockSettingsManager, mockMetadataManager)
+
+			// Mock: successful rebase on parent branch
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref: parent branch exists
+				.mockResolvedValueOnce('') // status --porcelain: clean
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse parent branch
+				.mockResolvedValueOnce('abc123 Commit 1') // log: commits to rebase
+				.mockResolvedValueOnce('') // rebase parent: success
+
+			await manager.rebaseOnMain('/test/child-worktree', { force: true })
+
+			// Verify: commands used parent branch instead of 'main'
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['show-ref', '--verify', '--quiet', 'refs/heads/fix/issue-123__parent-feature'],
+				expect.objectContaining({ cwd: '/test/child-worktree' })
+			)
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['rebase', 'fix/issue-123__parent-feature'],
+				expect.objectContaining({ cwd: '/test/child-worktree' })
+			)
+		})
+
+		it('should fall back to configured mainBranch when no parent metadata', async () => {
+			// Mock: getMergeTargetBranch returns 'develop' (simulating fallback to settings)
+			vi.mocked(git.getMergeTargetBranch).mockResolvedValue('develop')
+			manager = new MergeManager(mockSettingsManager, mockMetadataManager)
+
+			// Mock: successful rebase
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // rebase
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: used configured mainBranch 'develop'
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['show-ref', '--verify', '--quiet', 'refs/heads/develop'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+		})
+
+		it('should fall back to "main" when no parent metadata and no settings', async () => {
+			// Mock: getMergeTargetBranch returns 'main' (default fallback)
+			vi.mocked(git.getMergeTargetBranch).mockResolvedValue('main')
+			manager = new MergeManager(mockSettingsManager, mockMetadataManager)
+
+			// Mock: successful rebase
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // rebase
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: defaults to 'main'
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['show-ref', '--verify', '--quiet', 'refs/heads/main'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+		})
+
+		it('should use parent branch in fast-forward merge for child loom', async () => {
+			// Mock: getMergeTargetBranch returns parent branch (simulating metadata with parent loom)
+			vi.mocked(git.getMergeTargetBranch).mockResolvedValue('feature/parent-pr')
+			manager = new MergeManager(mockSettingsManager, mockMetadataManager)
+
+			// Mock: successful merge flow - NOW uses findWorktreeForBranch to find parent worktree
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/test/parent')
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('feature/parent-pr') // branch --show-current (at parent worktree)
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('abc123') // rev-parse parent branch
+				.mockResolvedValueOnce('abc123 Commit 1') // log commits
+				.mockResolvedValueOnce('') // merge --ff-only
+
+			await manager.performFastForwardMerge('child-feature', '/test/child-worktree', { force: true })
+
+			// Verify: findWorktreeForBranch was called with the parent branch name (the merge target)
+			expect(git.findWorktreeForBranch).toHaveBeenCalledWith('feature/parent-pr', '/test/child-worktree')
+
+			// Verify: merge targets parent branch
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['merge-base', 'feature/parent-pr', 'child-feature'],
+				expect.objectContaining({ cwd: '/test/parent' })
+			)
+		})
+
+		it('should find worktree by merge target branch, not settings.mainBranch (bug fix)', async () => {
+			// This test verifies the fix for issue #328:
+			// When finishing a child loom, we must find the worktree where the PARENT BRANCH
+			// is checked out, not where settings.mainBranch is checked out.
+
+			// Mock: getMergeTargetBranch returns parent branch (the key behavior being tested)
+			vi.mocked(git.getMergeTargetBranch).mockResolvedValue('test/parent-branch')
+			manager = new MergeManager(mockSettingsManager, mockMetadataManager)
+
+			// Mock: findWorktreeForBranch finds the parent worktree
+			vi.mocked(git.findWorktreeForBranch).mockResolvedValueOnce('/Users/dev/parent-worktree')
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('test/parent-branch') // branch --show-current
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('abc123') // rev-parse
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // merge --ff-only
+
+			await manager.performFastForwardMerge('child-branch', '/Users/dev/child-worktree', { force: true })
+
+			// KEY ASSERTION: findWorktreeForBranch was called with the PARENT branch,
+			// not with settings.mainBranch ('main')
+			expect(git.findWorktreeForBranch).toHaveBeenCalledWith(
+				'test/parent-branch', // The merge target from getMergeTargetBranch
+				'/Users/dev/child-worktree' // The source worktree path
+			)
+
+			// findMainWorktreePathWithSettings should NOT have been called as primary lookup
+			// (it may be called as fallback, but not in this test scenario)
 		})
 	})
 

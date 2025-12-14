@@ -111,8 +111,7 @@ export class LoomManager {
     await this.copyEnvironmentFiles(worktreePath)
 
     // 7. Copy Loom settings (settings.local.json) - ALWAYS done regardless of capabilities
-    // Pass parent branch name if this is a child loom
-    await this.copyIloomSettings(worktreePath, input.parentLoom?.branchName)
+    await this.copyIloomSettings(worktreePath)
 
     // 7.5. Copy Claude settings (.claude/settings.local.json) - ALWAYS done regardless of capabilities
     await this.copyClaudeSettings(worktreePath)
@@ -634,9 +633,8 @@ export class LoomManager {
    * Copy iloom configuration (settings.local.json) from main repo to worktree
    * Always called regardless of project capabilities
    * @param worktreePath Path to the worktree
-   * @param parentBranchName Optional parent branch name for child looms (sets mainBranch)
    */
-  private async copyIloomSettings(worktreePath: string, parentBranchName?: string): Promise<void> {
+  private async copyIloomSettings(worktreePath: string): Promise<void> {
     const mainSettingsLocalPath = path.join(process.cwd(), '.iloom', 'settings.local.json')
 
     try {
@@ -652,26 +650,6 @@ export class LoomManager {
         getLogger().warn('settings.local.json already exists in worktree, skipping copy')
       } else {
         await this.environment.copyIfExists(mainSettingsLocalPath, worktreeSettingsLocalPath)
-      }
-
-      // If this is a child loom, update mainBranch setting
-      if (parentBranchName) {
-        let existingSettings = {}
-
-        try {
-          const content = await fs.readFile(worktreeSettingsLocalPath, 'utf8')
-          existingSettings = JSON.parse(content)
-        } catch {
-          // File doesn't exist or invalid, start fresh
-        }
-
-        const updatedSettings = {
-          ...existingSettings,
-          mainBranch: parentBranchName,
-        }
-
-        await fs.writeFile(worktreeSettingsLocalPath, JSON.stringify(updatedSettings, null, 2))
-        getLogger().info(`Set mainBranch to ${parentBranchName} for child loom`)
       }
     } catch (error) {
       getLogger().warn(`Warning: Failed to copy settings.local.json: ${error instanceof Error ? error.message : 'Unknown error'}`)

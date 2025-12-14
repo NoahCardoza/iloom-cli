@@ -1,7 +1,8 @@
-import { executeGitCommand, findMainWorktreePathWithSettings } from '../utils/git.js'
+import { executeGitCommand, findMainWorktreePathWithSettings, findWorktreeForBranch, getMergeTargetBranch } from '../utils/git.js'
 import { getLogger } from '../utils/logger-context.js'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { SettingsManager } from './SettingsManager.js'
+import { MetadataManager } from './MetadataManager.js'
 import type { MergeOptions } from '../types/index.js'
 
 /**
@@ -12,19 +13,25 @@ import type { MergeOptions } from '../types/index.js'
  */
 export class MergeManager {
 	private settingsManager: SettingsManager
+	private metadataManager: MetadataManager
 
-	constructor(settingsManager?: SettingsManager) {
+	constructor(settingsManager?: SettingsManager, metadataManager?: MetadataManager) {
 		this.settingsManager = settingsManager ?? new SettingsManager()
+		this.metadataManager = metadataManager ?? new MetadataManager()
 	}
 
 	/**
-	 * Get the main branch name from settings (defaults to 'main')
-	 * @param worktreePath - Optional path to load settings from (defaults to process.cwd())
+	 * Get the merge target branch for a loom
+	 * Priority: parent loom metadata > configured main branch > 'main'
+	 * @param worktreePath - Optional path to load settings/metadata from (defaults to process.cwd())
 	 * @private
 	 */
 	private async getMainBranch(worktreePath?: string): Promise<string> {
-		const settings = await this.settingsManager.loadSettings(worktreePath)
-		return settings.mainBranch ?? 'main'
+		// Delegate to shared utility function
+		return getMergeTargetBranch(worktreePath ?? process.cwd(), {
+			settingsManager: this.settingsManager,
+			metadataManager: this.metadataManager,
+		})
 	}
 
 	/**
@@ -217,19 +224,33 @@ export class MergeManager {
 
 		getLogger().info('Starting fast-forward merge...')
 
-		// Step 1: Find where main branch is checked out
-		// This copies the bash script approach: find main worktree, run commands from there
-		const mainWorktreePath = options.repoRoot ??
-			await findMainWorktreePathWithSettings(worktreePath, this.settingsManager)
-
-		// Load mainBranch from settings in the worktree being finished (not cwd)
-		// This ensures we use the correct settings when finishing a child loom from parent
+		// Step 1: Get the merge target branch FIRST
+		// For child looms, this will be the parent branch from metadata
+		// For regular looms, this falls back to settings.mainBranch or 'main'
 		const mainBranch = await this.getMainBranch(worktreePath)
 
-		// Step 3: No need to checkout main - it's already checked out in mainWorktreePath
+		// Step 2: Find where the merge target branch is checked out
+		// CRITICAL: We must find the worktree for the MERGE TARGET, not settings.mainBranch
+		// This fixes the child loom bug where we'd find the 'main' worktree instead of the parent branch worktree
+		let mainWorktreePath: string
+		if (options.repoRoot) {
+			mainWorktreePath = options.repoRoot
+		} else {
+			try {
+				// First try to find worktree with the exact merge target branch checked out
+				mainWorktreePath = await findWorktreeForBranch(mainBranch, worktreePath)
+			} catch {
+				// Fallback: if no worktree has the branch checked out, use settings-based lookup
+				// This handles edge cases like bare repos or detached HEAD states
+				getLogger().debug(`No worktree found for branch '${mainBranch}', falling back to settings-based lookup`)
+				mainWorktreePath = await findMainWorktreePathWithSettings(worktreePath, this.settingsManager)
+			}
+		}
+
+		// Step 3: No need to checkout - the merge target branch is already checked out in mainWorktreePath
 		getLogger().debug(`Using ${mainBranch} branch location: ${mainWorktreePath}`)
 
-		// Step 4: Verify on main branch
+		// Step 4: Verify we're on the correct branch
 		const currentBranch = await executeGitCommand(['branch', '--show-current'], {
 			cwd: mainWorktreePath,
 		})

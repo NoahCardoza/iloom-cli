@@ -76,6 +76,11 @@ export interface BranchDeleteOptions {
 	remote?: boolean
 	/** Preview without executing */
 	dryRun?: boolean
+	/** Path to the worktree being cleaned up (for merge target resolution) - DEPRECATED: use mergeTargetBranch instead */
+	worktreePath?: string
+	/** Pre-fetched merge target branch (parent branch for child looms, main branch for others).
+	 * This must be fetched BEFORE worktree deletion since metadata won't be readable after deletion. */
+	mergeTargetBranch?: string
 }
 
 /**

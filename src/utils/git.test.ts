@@ -7,6 +7,7 @@ import {
   isWorktreePath,
   generateWorktreePath,
   findMainWorktreePath,
+  findWorktreeForBranch,
   isEmptyRepository,
   ensureRepositoryHasCommits,
   isFileTrackedByGit,
@@ -14,6 +15,7 @@ import {
   isBranchMergedIntoMain,
   isRemoteBranchUpToDate,
   checkRemoteBranchStatus,
+  getMergeTargetBranch,
 } from './git.js'
 import { execa } from 'execa'
 
@@ -1441,6 +1443,231 @@ describe('Git Utility Regression Tests', () => {
       expect(result.networkError).toBe(true)
       expect(result.localAhead).toBe(false)
       expect(result.errorMessage).toContain('unable to access')
+    })
+  })
+
+  describe('findWorktreeForBranch', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    it('should find worktree with the specified branch checked out', async () => {
+      // Mock git worktree list output with multiple worktrees
+      const mockOutput = [
+        'worktree /Users/dev/main-repo',
+        'HEAD abc123',
+        'branch refs/heads/main',
+        '',
+        'worktree /Users/dev/parent-worktree',
+        'HEAD def456',
+        'branch refs/heads/test/parent-branch',
+        '',
+        'worktree /Users/dev/child-worktree',
+        'HEAD ghi789',
+        'branch refs/heads/test/child-branch',
+        '',
+      ].join('\n')
+
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: mockOutput,
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      const result = await findWorktreeForBranch('test/parent-branch', '/Users/dev/child-worktree')
+
+      expect(result).toBe('/Users/dev/parent-worktree')
+    })
+
+    it('should find worktree for main branch', async () => {
+      const mockOutput = [
+        'worktree /Users/dev/main-repo',
+        'HEAD abc123',
+        'branch refs/heads/main',
+        '',
+        'worktree /Users/dev/feature-worktree',
+        'HEAD def456',
+        'branch refs/heads/feature-1',
+        '',
+      ].join('\n')
+
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: mockOutput,
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      const result = await findWorktreeForBranch('main', '/Users/dev/feature-worktree')
+
+      expect(result).toBe('/Users/dev/main-repo')
+    })
+
+    it('should throw error when no worktree has the branch checked out', async () => {
+      const mockOutput = [
+        'worktree /Users/dev/main-repo',
+        'HEAD abc123',
+        'branch refs/heads/main',
+        '',
+        'worktree /Users/dev/feature-worktree',
+        'HEAD def456',
+        'branch refs/heads/feature-1',
+        '',
+      ].join('\n')
+
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: mockOutput,
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      await expect(
+        findWorktreeForBranch('nonexistent-branch', '/Users/dev/feature-worktree')
+      ).rejects.toThrow(/No worktree found with branch 'nonexistent-branch' checked out/)
+    })
+
+    it('should throw error when worktree list is empty', async () => {
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: '',
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      await expect(
+        findWorktreeForBranch('main', '/some/path')
+      ).rejects.toThrow(/No worktrees found in repository/)
+    })
+
+    it('should handle branches with slashes in name (child loom scenario)', async () => {
+      // This is the key scenario for issue #328:
+      // Child loom needs to find parent branch worktree for merge
+      const mockOutput = [
+        'worktree /Users/dev/main-repo',
+        'HEAD abc123',
+        'branch refs/heads/main',
+        '',
+        'worktree /Users/dev/parent-loom',
+        'HEAD def456',
+        'branch refs/heads/fix/issue-123__parent-feature',
+        '',
+        'worktree /Users/dev/child-loom',
+        'HEAD ghi789',
+        'branch refs/heads/fix/issue-456__child-feature',
+        '',
+      ].join('\n')
+
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: mockOutput,
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      // Child loom wants to find where parent branch is checked out
+      const result = await findWorktreeForBranch('fix/issue-123__parent-feature', '/Users/dev/child-loom')
+
+      expect(result).toBe('/Users/dev/parent-loom')
+    })
+
+    it('should include available worktrees in error message for debugging', async () => {
+      const mockOutput = [
+        'worktree /Users/dev/main-repo',
+        'HEAD abc123',
+        'branch refs/heads/main',
+        '',
+        'worktree /Users/dev/feature-worktree',
+        'HEAD def456',
+        'branch refs/heads/feature-1',
+        '',
+      ].join('\n')
+
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: mockOutput,
+        stderr: '',
+      } as ReturnType<typeof execa>)
+
+      await expect(
+        findWorktreeForBranch('missing-branch', '/some/path')
+      ).rejects.toThrow(/Available worktrees:.*main.*feature-1/)
+    })
+  })
+
+  describe('getMergeTargetBranch', () => {
+    it('should return parentLoom.branchName from metadata when present', async () => {
+      const mockMetadataManager = {
+        readMetadata: vi.fn().mockResolvedValue({
+          parentLoom: {
+            branchName: 'parent-feature-branch',
+            type: 'issue',
+            identifier: 123,
+          },
+        }),
+      }
+      const mockSettingsManager = {
+        loadSettings: vi.fn().mockResolvedValue({ mainBranch: 'main' }),
+      }
+
+      const result = await getMergeTargetBranch('/some/worktree', {
+        metadataManager: mockMetadataManager as never,
+        settingsManager: mockSettingsManager as never,
+      })
+
+      expect(result).toBe('parent-feature-branch')
+      expect(mockMetadataManager.readMetadata).toHaveBeenCalledWith('/some/worktree')
+      // Settings should not be called when parent metadata exists
+      expect(mockSettingsManager.loadSettings).not.toHaveBeenCalled()
+    })
+
+    it('should fall back to configured mainBranch when no parent metadata', async () => {
+      const mockMetadataManager = {
+        readMetadata: vi.fn().mockResolvedValue({
+          branchName: 'feature-branch',
+          // No parentLoom
+        }),
+      }
+      const mockSettingsManager = {
+        loadSettings: vi.fn().mockResolvedValue({ mainBranch: 'develop' }),
+      }
+
+      const result = await getMergeTargetBranch('/some/worktree', {
+        metadataManager: mockMetadataManager as never,
+        settingsManager: mockSettingsManager as never,
+      })
+
+      expect(result).toBe('develop')
+      expect(mockMetadataManager.readMetadata).toHaveBeenCalledWith('/some/worktree')
+      expect(mockSettingsManager.loadSettings).toHaveBeenCalledWith('/some/worktree')
+    })
+
+    it('should fall back to "main" when no parent metadata and no settings', async () => {
+      const mockMetadataManager = {
+        readMetadata: vi.fn().mockResolvedValue(null),
+      }
+      const mockSettingsManager = {
+        loadSettings: vi.fn().mockResolvedValue({}),
+      }
+
+      const result = await getMergeTargetBranch('/some/worktree', {
+        metadataManager: mockMetadataManager as never,
+        settingsManager: mockSettingsManager as never,
+      })
+
+      expect(result).toBe('main')
+    })
+
+    it('should handle child loom with slashed parent branch name', async () => {
+      const mockMetadataManager = {
+        readMetadata: vi.fn().mockResolvedValue({
+          parentLoom: {
+            branchName: 'feature/issue-123__parent-feature',
+            type: 'issue',
+            identifier: 123,
+          },
+        }),
+      }
+      const mockSettingsManager = {
+        loadSettings: vi.fn().mockResolvedValue({ mainBranch: 'main' }),
+      }
+
+      const result = await getMergeTargetBranch('/some/worktree', {
+        metadataManager: mockMetadataManager as never,
+        settingsManager: mockSettingsManager as never,
+      })
+
+      expect(result).toBe('feature/issue-123__parent-feature')
     })
   })
 })

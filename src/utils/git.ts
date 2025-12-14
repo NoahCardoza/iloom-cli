@@ -2,6 +2,7 @@ import path from 'path'
 import { execa, type ExecaError } from 'execa'
 import { type GitWorktree } from '../types/worktree.js'
 import { SettingsManager, type SettingsManager as SettingsManagerType } from '../lib/SettingsManager.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
 import { logger } from './logger.js'
 
 /**
@@ -450,6 +451,53 @@ export async function findMainWorktreePathWithSettings(
   const settings = await settingsManager.loadSettings(path)
   const findOptions = settings.mainBranch ? { mainBranch: settings.mainBranch } : undefined
   return findMainWorktreePath(path, findOptions)
+}
+
+/**
+ * Find the worktree path where a specific branch is checked out
+ *
+ * Used by MergeManager to find the correct worktree for child loom merges.
+ * When finishing a child loom, we need to find where the PARENT branch is
+ * checked out (the merge target), not where settings.mainBranch is checked out.
+ *
+ * @param branchName - The branch name to find
+ * @param path - Path to search from (defaults to process.cwd())
+ * @returns Path to worktree where the branch is checked out
+ * @throws Error if no worktree has the specified branch checked out
+ */
+export async function findWorktreeForBranch(
+  branchName: string,
+  path: string = process.cwd()
+): Promise<string> {
+  try {
+    const output = await executeGitCommand(['worktree', 'list', '--porcelain'], { cwd: path })
+    const worktrees = parseWorktreeList(output, branchName)
+
+    // Guard: empty worktree list
+    if (worktrees.length === 0) {
+      throw new Error('No worktrees found in repository')
+    }
+
+    // Find the worktree with the specified branch
+    const targetWorktree = worktrees.find(wt => wt.branch === branchName)
+    if (!targetWorktree?.path) {
+      throw new Error(
+        `No worktree found with branch '${branchName}' checked out. ` +
+        `Available worktrees: ${worktrees.map(wt => `${wt.path} (${wt.branch})`).join(', ')}`
+      )
+    }
+    return targetWorktree.path
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.includes('No worktree found with branch') ||
+        error.message.includes('No worktrees found'))
+    ) {
+      // Re-throw our specific errors
+      throw error
+    }
+    throw new Error(`Failed to find worktree for branch '${branchName}': ${error instanceof Error ? error.message : String(error)}`)
+  }
 }
 
 /**
@@ -960,4 +1008,41 @@ export async function checkRemoteBranchStatus(
       networkError: false
     }
   }
+}
+
+/**
+ * Get the merge target branch for a loom
+ * Priority: parent loom metadata (parentLoom.branchName) > configured main branch > 'main'
+ *
+ * This is the shared utility for determining where a branch should merge to.
+ * Child looms merge to their parent branch, standalone looms merge to main.
+ *
+ * @param worktreePath - Path to load metadata/settings from (defaults to process.cwd())
+ * @param options - Optional dependency injection for testing
+ * @returns The branch name to merge into
+ */
+export async function getMergeTargetBranch(
+  worktreePath: string = process.cwd(),
+  options?: {
+    settingsManager?: SettingsManagerType
+    metadataManager?: MetadataManager
+  }
+): Promise<string> {
+  const settingsManager = options?.settingsManager ?? new SettingsManager()
+  const metadataManager = options?.metadataManager ?? new MetadataManager()
+
+  // Check for parent loom metadata first (child looms merge to parent)
+  logger.debug(`Checking for parent loom metadata at: ${worktreePath}`)
+  const metadata = await metadataManager.readMetadata(worktreePath)
+  if (metadata?.parentLoom?.branchName) {
+    logger.debug(`Using parent branch as merge target: ${metadata.parentLoom.branchName}`)
+    return metadata.parentLoom.branchName
+  }
+  logger.debug('No parent loom metadata found, falling back to settings')
+
+  // Fall back to configured main branch
+  const settings = await settingsManager.loadSettings(worktreePath)
+  const mainBranch = settings.mainBranch ?? 'main'
+  logger.debug(`Using configured main branch as merge target: ${mainBranch}`)
+  return mainBranch
 }
