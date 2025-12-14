@@ -54,6 +54,9 @@ describe('CommitManager', () => {
     // Default VSCode mocks - not running in VSCode by default
     vi.mocked(vscode.isRunningInVSCode).mockReturnValue(false)
     vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(false)
+    // Default Cursor mocks - not running in Cursor by default
+    vi.mocked(vscode.isRunningInCursor).mockReturnValue(false)
+    vi.mocked(vscode.isCursorAvailable).mockResolvedValue(false)
   })
 
   afterEach(() => {
@@ -1216,6 +1219,141 @@ describe('CommitManager', () => {
         await manager.commitChanges(mockWorktreePath, { dryRun: false })
 
         expect(vscode.isVSCodeAvailable).not.toHaveBeenCalled()
+      })
+    })
+  })
+
+  describe('Cursor Editor Integration', () => {
+    // Import mocked modules for assertions
+    let fsPromises: typeof import('node:fs/promises')
+    let execaMock: typeof import('execa')
+
+    beforeEach(async () => {
+      fsPromises = await import('node:fs/promises')
+      execaMock = await import('execa')
+      vi.mocked(claude.detectClaudeCli).mockResolvedValue(false)
+      vi.mocked(prompt.promptCommitAction).mockResolvedValue('edit')
+      // Reset Cursor mocks - default to not running in Cursor
+      vi.mocked(vscode.isRunningInCursor).mockReturnValue(false)
+      vi.mocked(vscode.isCursorAvailable).mockResolvedValue(false)
+    })
+
+    describe('when running in Cursor terminal', () => {
+      beforeEach(() => {
+        vi.mocked(vscode.isRunningInCursor).mockReturnValue(true)
+      })
+
+      it('should use Cursor editor flow when Cursor CLI is available', async () => {
+        vi.mocked(vscode.isCursorAvailable).mockResolvedValue(true)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+        vi.mocked(fsPromises.readFile).mockResolvedValue('Edited commit message\n\n# comment')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // Should write initial commit message file
+        expect(fsPromises.writeFile).toHaveBeenCalled()
+        // Should invoke Cursor with --wait flag
+        expect(execaMock.execa).toHaveBeenCalledWith(
+          'cursor',
+          ['--wait', expect.stringContaining('.COMMIT_EDITMSG')],
+          expect.objectContaining({ cwd: mockWorktreePath, stdio: 'inherit' })
+        )
+        // Should commit with -F flag using the file
+        expect(git.executeGitCommand).toHaveBeenCalledWith(
+          ['commit', '-F', expect.stringContaining('.COMMIT_EDITMSG')],
+          { cwd: mockWorktreePath }
+        )
+        // Should clean up the file
+        expect(fsPromises.unlink).toHaveBeenCalled()
+      })
+
+      it('should take precedence over VSCode detection (Cursor may set TERM_PROGRAM=vscode)', async () => {
+        // Both Cursor and VSCode detection would return true
+        vi.mocked(vscode.isRunningInVSCode).mockReturnValue(true)
+        vi.mocked(vscode.isCursorAvailable).mockResolvedValue(true)
+        vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+        vi.mocked(fsPromises.readFile).mockResolvedValue('Test message')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // Should use Cursor, not VSCode
+        expect(execaMock.execa).toHaveBeenCalledWith(
+          'cursor',
+          expect.any(Array),
+          expect.any(Object)
+        )
+        // Should NOT have called VSCode
+        expect(execaMock.execa).not.toHaveBeenCalledWith(
+          'code',
+          expect.any(Array),
+          expect.any(Object)
+        )
+      })
+
+      it('should fall back to VSCode when Cursor CLI is unavailable but VSCode is available', async () => {
+        vi.mocked(vscode.isCursorAvailable).mockResolvedValue(false)
+        vi.mocked(vscode.isRunningInVSCode).mockReturnValue(true)
+        vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+        vi.mocked(fsPromises.readFile).mockResolvedValue('Test message')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // Should use VSCode instead
+        expect(execaMock.execa).toHaveBeenCalledWith(
+          'code',
+          expect.any(Array),
+          expect.any(Object)
+        )
+      })
+
+      it('should fall back to git editor when neither Cursor nor VSCode CLI is available', async () => {
+        vi.mocked(vscode.isCursorAvailable).mockResolvedValue(false)
+        vi.mocked(vscode.isRunningInVSCode).mockReturnValue(false)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+
+        // Should NOT use execa for editors
+        expect(execaMock.execa).not.toHaveBeenCalled()
+        // Should use standard git commit -e flow
+        expect(git.executeGitCommand).toHaveBeenCalledWith(
+          ['commit', '-e', '-m', 'WIP: Auto-commit uncommitted changes'],
+          { cwd: mockWorktreePath, stdio: 'inherit', timeout: 300000 }
+        )
+      })
+
+      it('should include --no-verify flag when skipVerify=true', async () => {
+        vi.mocked(vscode.isCursorAvailable).mockResolvedValue(true)
+        vi.mocked(git.executeGitCommand).mockResolvedValue('')
+        vi.mocked(fsPromises.readFile).mockResolvedValue('Test message')
+
+        await manager.commitChanges(mockWorktreePath, { skipVerify: true, dryRun: false })
+
+        expect(git.executeGitCommand).toHaveBeenCalledWith(
+          ['commit', '-F', expect.stringContaining('.COMMIT_EDITMSG'), '--no-verify'],
+          { cwd: mockWorktreePath }
+        )
+      })
+
+      it('should throw UserAbortedCommitError when message is empty after stripping comments', async () => {
+        vi.mocked(vscode.isCursorAvailable).mockResolvedValue(true)
+        vi.mocked(fsPromises.readFile).mockResolvedValue('# only comments\n# here')
+
+        await expect(manager.commitChanges(mockWorktreePath, { dryRun: false }))
+          .rejects.toThrow(UserAbortedCommitError)
+      })
+
+      it('should clean up commit message file even on error', async () => {
+        vi.mocked(vscode.isCursorAvailable).mockResolvedValue(true)
+        vi.mocked(fsPromises.readFile).mockResolvedValue('# only comments')
+
+        await expect(manager.commitChanges(mockWorktreePath, { dryRun: false }))
+          .rejects.toThrow()
+
+        // Should still clean up
+        expect(fsPromises.unlink).toHaveBeenCalled()
       })
     })
   })

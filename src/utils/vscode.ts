@@ -10,6 +10,15 @@ export function isRunningInVSCode(): boolean {
 }
 
 /**
+ * Check if running inside Cursor's integrated terminal
+ * Cursor sets CURSOR_TRACE_ID environment variable in its terminal
+ * Note: Cursor may also set TERM_PROGRAM=vscode, so this check should be done first
+ */
+export function isRunningInCursor(): boolean {
+	return !!process.env.CURSOR_TRACE_ID
+}
+
+/**
  * Check if VSCode command-line tool is available
  */
 export async function isVSCodeAvailable(): Promise<boolean> {
@@ -21,6 +30,22 @@ export async function isVSCodeAvailable(): Promise<boolean> {
 		return true
 	} catch (error) {
 		logger.debug('VSCode CLI not available', { error })
+		return false
+	}
+}
+
+/**
+ * Check if Cursor command-line tool is available
+ */
+export async function isCursorAvailable(): Promise<boolean> {
+	try {
+		await execa('command', ['-v', 'cursor'], {
+			shell: true,
+			timeout: 5000,
+		})
+		return true
+	} catch (error) {
+		logger.debug('Cursor CLI not available', { error })
 		return false
 	}
 }

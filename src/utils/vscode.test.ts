@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { isVSCodeAvailable, openVSCodeWindow, isRunningInVSCode } from './vscode.js'
+import { isVSCodeAvailable, openVSCodeWindow, isRunningInVSCode, isRunningInCursor, isCursorAvailable } from './vscode.js'
 import { execa } from 'execa'
 
 // Mock execa
@@ -39,6 +39,41 @@ describe('isRunningInVSCode', () => {
 	})
 })
 
+describe('isRunningInCursor', () => {
+	const originalEnv = process.env
+
+	beforeEach(() => {
+		// Create a fresh copy of process.env for each test
+		process.env = { ...originalEnv }
+	})
+
+	afterEach(() => {
+		// Restore original environment
+		process.env = originalEnv
+	})
+
+	it('should return true when CURSOR_TRACE_ID is set', () => {
+		process.env.CURSOR_TRACE_ID = 'some-trace-id'
+		expect(isRunningInCursor()).toBe(true)
+	})
+
+	it('should return false when CURSOR_TRACE_ID is not set', () => {
+		delete process.env.CURSOR_TRACE_ID
+		expect(isRunningInCursor()).toBe(false)
+	})
+
+	it('should return false when CURSOR_TRACE_ID is empty string', () => {
+		process.env.CURSOR_TRACE_ID = ''
+		expect(isRunningInCursor()).toBe(false)
+	})
+
+	it('should return true even when TERM_PROGRAM is vscode (Cursor may set both)', () => {
+		process.env.CURSOR_TRACE_ID = 'some-trace-id'
+		process.env.TERM_PROGRAM = 'vscode'
+		expect(isRunningInCursor()).toBe(true)
+	})
+})
+
 describe('isVSCodeAvailable', () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
@@ -68,6 +103,40 @@ describe('isVSCodeAvailable', () => {
 		vi.mocked(execa).mockRejectedValue(new Error('Unknown error'))
 
 		const result = await isVSCodeAvailable()
+
+		expect(result).toBe(false)
+	})
+})
+
+describe('isCursorAvailable', () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+	})
+
+	it('should return true when cursor command exists', async () => {
+		vi.mocked(execa).mockResolvedValue({} as unknown)
+
+		const result = await isCursorAvailable()
+
+		expect(result).toBe(true)
+		expect(execa).toHaveBeenCalledWith('command', ['-v', 'cursor'], {
+			shell: true,
+			timeout: 5000,
+		})
+	})
+
+	it('should return false when cursor command not found', async () => {
+		vi.mocked(execa).mockRejectedValue(new Error('Command not found'))
+
+		const result = await isCursorAvailable()
+
+		expect(result).toBe(false)
+	})
+
+	it('should handle command check errors gracefully', async () => {
+		vi.mocked(execa).mockRejectedValue(new Error('Unknown error'))
+
+		const result = await isCursorAvailable()
 
 		expect(result).toBe(false)
 	})
