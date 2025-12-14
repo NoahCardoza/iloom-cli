@@ -297,7 +297,8 @@ export async function launchClaude(
 					resumeArgs.push('--resume', conflictSessionId)
 
 					// Retry with full stdio inherit for proper interactive experience
-					await execa('claude', [...resumeArgs, '--', prompt], {
+					// Note: When using --resume, we omit the prompt since the session already has context
+					await execa('claude', resumeArgs, {
 						...(addDir && { cwd: addDir }),
 						stdio: 'inherit',
 						timeout: 0,
@@ -338,8 +339,8 @@ export async function launchClaude(
 			try {
 				if (headless) {
 					const isDebugMode = logger.isDebugEnabled()
+					// Note: When using --resume, we omit the prompt (input) since the session already has context
 					const execaOptions = {
-						input: prompt,
 						timeout: 0,
 						...(addDir && { cwd: addDir }),
 						verbose: isDebugMode,
@@ -392,7 +393,8 @@ export async function launchClaude(
 						return isJsonStreamFormat ? parseJsonStreamOutput(rawOutput) : rawOutput
 					}
 				} else {
-					await execa('claude', [...resumeArgs, '--', prompt], {
+					// Note: When using --resume, we omit the prompt since the session already has context
+					await execa('claude', resumeArgs, {
 						...(addDir && { cwd: addDir }),
 						stdio: 'inherit',
 						timeout: 0,

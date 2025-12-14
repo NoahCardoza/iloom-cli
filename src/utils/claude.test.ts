@@ -1397,20 +1397,21 @@ describe('claude utils', () => {
 				expect(result).toBe('resumed output')
 				expect(execa).toHaveBeenCalledTimes(2)
 
-				// Verify first call used --session-id
+				// Verify first call used --session-id with prompt as input
 				expect(execa).toHaveBeenNthCalledWith(
 					1,
 					'claude',
 					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp', '--session-id', sessionId],
-					expect.any(Object)
+					expect.objectContaining({ input: prompt })
 				)
 
 				// Verify retry used --resume instead of --session-id
+				// Note: prompt is omitted when using --resume since the session already has context
 				expect(execa).toHaveBeenNthCalledWith(
 					2,
 					'claude',
 					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp', '--resume', sessionId],
-					expect.any(Object)
+					expect.not.objectContaining({ input: prompt })
 				)
 			})
 
@@ -1446,10 +1447,11 @@ describe('claude utils', () => {
 				)
 
 				// Verify retry used --resume with full inherit for interactive experience
+				// Note: prompt is omitted when using --resume since the session already has context
 				expect(execa).toHaveBeenNthCalledWith(
 					2,
 					'claude',
-					['--add-dir', '/tmp', '--resume', sessionId, '--', prompt],
+					['--add-dir', '/tmp', '--resume', sessionId],
 					expect.objectContaining({ stdio: 'inherit' })
 				)
 			})
@@ -1526,7 +1528,7 @@ describe('claude utils', () => {
 				)
 			})
 
-			it('should preserve other args when retrying with --resume', async () => {
+			it('should preserve other args when retrying with --resume but omit prompt', async () => {
 				const prompt = 'Test prompt'
 				const sessionId = '01af28fe-8630-4778-ae85-39398ab84f54'
 
@@ -1548,6 +1550,7 @@ describe('claude utils', () => {
 				})
 
 				// Verify retry preserves model and addDir but replaces --session-id with --resume
+				// and omits the prompt since the session already has context
 				expect(execa).toHaveBeenNthCalledWith(
 					2,
 					'claude',
@@ -1561,7 +1564,7 @@ describe('claude utils', () => {
 						'--add-dir', '/tmp',
 						'--resume', sessionId,
 					],
-					expect.any(Object)
+					expect.not.objectContaining({ input: prompt })
 				)
 			})
 		})
