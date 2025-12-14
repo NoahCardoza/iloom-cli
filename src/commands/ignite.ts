@@ -13,6 +13,7 @@ import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
 import { extractIssueNumber } from '../utils/git.js'
 import { readFile } from 'fs/promises'
+import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
 
 /**
  * IgniteCommand: Auto-detect workspace context and launch Claude
@@ -32,6 +33,7 @@ export class IgniteCommand {
 	private agentManager: AgentManager
 	private settingsManager: SettingsManager
 	private firstRunManager: FirstRunManager
+	private hookManager: ClaudeHookManager
 	private settings?: import('../lib/SettingsManager.js').IloomSettings
 
 	constructor(
@@ -39,19 +41,25 @@ export class IgniteCommand {
 		gitWorktreeManager?: GitWorktreeManager,
 		agentManager?: AgentManager,
 		settingsManager?: SettingsManager,
-		firstRunManager?: FirstRunManager
+		firstRunManager?: FirstRunManager,
+		hookManager?: ClaudeHookManager
 	) {
 		this.templateManager = templateManager ?? new PromptTemplateManager()
 		this.gitWorktreeManager = gitWorktreeManager ?? new GitWorktreeManager()
 		this.agentManager = agentManager ?? new AgentManager()
 		this.settingsManager = settingsManager ?? new SettingsManager()
 		this.firstRunManager = firstRunManager ?? new FirstRunManager('spin')
+		this.hookManager = hookManager ?? new ClaudeHookManager()
 	}
 
 	/**
 	 * Main entry point for spin command
 	 */
 	async execute(oneShot: import('../types/index.js').OneShotMode = 'default'): Promise<void> {
+		// Set ILOOM=1 so hooks know this is an iloom session
+		// This is inherited by the Claude child process
+		process.env.ILOOM = '1'
+
 		try {
 			logger.info('🚀 Your loom is spinning up, please wait...')
 
@@ -60,6 +68,9 @@ export class IgniteCommand {
 			if (isFirstRun) {
 				logger.success('Welcome to iloom! Preparing first-time experience...')
 			}
+
+			// Step 0.6: Install Claude hooks for VSCode integration (idempotent, quick)
+			await this.hookManager.installHooks()
 
 			// Step 1: Auto-detect workspace context
 			const context = await this.detectWorkspaceContext()
