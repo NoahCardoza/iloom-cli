@@ -89,7 +89,7 @@ describe('MergeManager', () => {
 
 			// Verify: rebase command was called
 			expect(git.executeGitCommand).toHaveBeenCalledWith(
-				['rebase', 'main'],
+				['-c', 'core.hooksPath=/dev/null', 'rebase', 'main'],
 				expect.objectContaining({ cwd: '/test/worktree' })
 			)
 		})
@@ -228,7 +228,7 @@ describe('MergeManager', () => {
 			// Verify: WIP commit was created
 			expect(git.executeGitCommand).toHaveBeenCalledWith(['add', '-A'], expect.objectContaining({ cwd: '/test/worktree' }))
 			expect(git.executeGitCommand).toHaveBeenCalledWith(
-				['commit', '-m', 'WIP: Auto-stash for rebase'],
+				['commit', '--no-verify', '-m', 'WIP: Auto-stash for rebase'],
 				expect.objectContaining({ cwd: '/test/worktree' })
 			)
 
@@ -303,7 +303,7 @@ describe('MergeManager', () => {
 
 			// Verify: WIP commit was created and restored after Claude resolution
 			expect(git.executeGitCommand).toHaveBeenCalledWith(
-				['commit', '-m', 'WIP: Auto-stash for rebase'],
+				['commit', '--no-verify', '-m', 'WIP: Auto-stash for rebase'],
 				expect.objectContaining({ cwd: '/test/worktree' })
 			)
 			expect(git.executeGitCommand).toHaveBeenCalledWith(
@@ -590,7 +590,7 @@ describe('MergeManager', () => {
 
 			// Verify: rebase command was NOT called
 			expect(git.executeGitCommand).not.toHaveBeenCalledWith(
-				['rebase', 'main'],
+				['-c', 'core.hooksPath=/dev/null', 'rebase', 'main'],
 				expect.any(Object)
 			)
 		})
@@ -789,7 +789,7 @@ describe('MergeManager', () => {
 				expect.objectContaining({ cwd: '/test/worktree' })
 			)
 			expect(git.executeGitCommand).toHaveBeenCalledWith(
-				['rebase', 'develop'],
+				['-c', 'core.hooksPath=/dev/null', 'rebase', 'develop'],
 				expect.objectContaining({ cwd: '/test/worktree' })
 			)
 		})
@@ -917,7 +917,7 @@ describe('MergeManager', () => {
 				expect.objectContaining({ cwd: '/test/child-worktree' })
 			)
 			expect(git.executeGitCommand).toHaveBeenCalledWith(
-				['rebase', 'fix/issue-123__parent-feature'],
+				['-c', 'core.hooksPath=/dev/null', 'rebase', 'fix/issue-123__parent-feature'],
 				expect.objectContaining({ cwd: '/test/child-worktree' })
 			)
 		})

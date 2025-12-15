@@ -124,8 +124,10 @@ export class MergeManager {
 		}
 
 		// Execute rebase
+		// Use -c core.hooksPath=/dev/null to disable hooks during rebase
+		// This prevents pre-commit hooks from running when commits are re-applied
 		try {
-			await executeGitCommand(['rebase', mainBranch], { cwd: worktreePath })
+			await executeGitCommand(['-c', 'core.hooksPath=/dev/null', 'rebase', mainBranch], { cwd: worktreePath })
 			getLogger().success('Rebase completed successfully!')
 
 			// Restore WIP commit if created
@@ -338,6 +340,7 @@ export class MergeManager {
 	/**
 	 * Create a temporary WIP commit to preserve uncommitted changes during rebase
 	 * Stages all changes (tracked, untracked) using git add -A
+	 * Uses --no-verify to skip pre-commit hooks since this is a temporary internal commit
 	 * @param worktreePath - Path to the worktree
 	 * @returns The commit hash of the WIP commit
 	 * @private
@@ -347,7 +350,8 @@ export class MergeManager {
 		await executeGitCommand(['add', '-A'], { cwd: worktreePath })
 
 		// Create WIP commit with distinctive message
-		await executeGitCommand(['commit', '-m', 'WIP: Auto-stash for rebase'], { cwd: worktreePath })
+		// Use --no-verify to skip pre-commit hooks - this is a temporary internal commit
+		await executeGitCommand(['commit', '--no-verify', '-m', 'WIP: Auto-stash for rebase'], { cwd: worktreePath })
 
 		// Get and return the commit hash
 		const hash = await executeGitCommand(['rev-parse', 'HEAD'], { cwd: worktreePath })

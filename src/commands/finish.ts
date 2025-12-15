@@ -587,7 +587,7 @@ export class FinishCommand {
 
 	/**
 	 * Execute workflow for issues and branches (merge into main)
-	 * This is the traditional workflow: validate → commit → rebase → merge → cleanup
+	 * This is the workflow: rebase → validate → commit → merge → cleanup
 	 */
 	private async executeIssueWorkflow(
 		parsed: ParsedFinishInput,
@@ -595,7 +595,25 @@ export class FinishCommand {
 		worktree: GitWorktree,
 		result: FinishResult
 	): Promise<void> {
-		// Step 1: Run pre-merge validations FIRST (Sub-Issue #47)
+		// Step 1: Rebase branch on main FIRST (Issue #344)
+		// This ensures validation runs against the rebased code (with latest main changes)
+		getLogger().info('Rebasing branch on main...')
+
+		const mergeOptions: MergeOptions = {
+			dryRun: options.dryRun ?? false,
+			force: options.force ?? false,
+		}
+
+		await this.mergeManager.rebaseOnMain(worktree.path, mergeOptions)
+		getLogger().success('Branch rebased successfully')
+		result.operations.push({
+			type: 'rebase',
+			message: 'Branch rebased on main',
+			success: true,
+		})
+
+		// Step 2: Run pre-merge validations AFTER rebase (Issue #344)
+		// Validates code with latest main changes integrated
 		if (!options.dryRun) {
 			getLogger().info('Running pre-merge validations...')
 
@@ -617,10 +635,10 @@ export class FinishCommand {
 			})
 		}
 
-		// Step 2: Detect uncommitted changes AFTER validation passes
+		// Step 3: Detect uncommitted changes AFTER validation passes
 		const gitStatus = await this.commitManager.detectUncommittedChanges(worktree.path)
 
-		// Step 3: Commit changes only if validation passed AND changes exist
+		// Step 4: Commit changes only if validation passed AND changes exist
 		if (gitStatus.hasUncommittedChanges) {
 			if (options.dryRun) {
 				getLogger().info('[DRY RUN] Would auto-commit uncommitted changes (validation passed)')
@@ -671,7 +689,7 @@ export class FinishCommand {
 			getLogger().debug('No uncommitted changes found')
 		}
 
-		// Step 3.5: Check merge mode from settings and branch workflow
+		// Step 5: Check merge mode from settings and branch workflow
 		const settings = await this.settingsManager.loadSettings(worktree.path)
 		const mergeBehavior = settings.mergeBehavior ?? { mode: 'local' }
 
@@ -690,23 +708,7 @@ export class FinishCommand {
 			return
 		}
 
-		// Step 4: Rebase branch on main
-		getLogger().info('Rebasing branch on main...')
-
-		const mergeOptions: MergeOptions = {
-			dryRun: options.dryRun ?? false,
-			force: options.force ?? false,
-		}
-
-		await this.mergeManager.rebaseOnMain(worktree.path, mergeOptions)
-		getLogger().success('Branch rebased successfully')
-		result.operations.push({
-			type: 'rebase',
-			message: 'Branch rebased on main',
-			success: true,
-		})
-
-		// Step 5: Perform fast-forward merge
+		// Step 6: Perform fast-forward merge
 		getLogger().info('Performing fast-forward merge...')
 		await this.mergeManager.performFastForwardMerge(worktree.branch, worktree.path, mergeOptions)
 		getLogger().success('Fast-forward merge completed successfully')

@@ -439,8 +439,8 @@ describe('FinishCommand', () => {
 					options: {},
 				})
 
-				// Verify all steps executed in correct order
-				expect(executionOrder).toEqual(['validation', 'detectChanges', 'rebase', 'merge'])
+				// Verify all steps executed in correct order (Issue #344: rebase first)
+				expect(executionOrder).toEqual(['rebase', 'validation', 'detectChanges', 'merge'])
 			})
 
 			it('should run validation BEFORE detecting and committing changes', async () => {
@@ -3302,8 +3302,10 @@ describe('FinishCommand', () => {
 					})
 				).rejects.toThrow(/github-pr.*merge mode requires.*GitHub-compatible issue tracker/)
 
-				// Should not enter PR workflow
-				expect(mockMergeManager.rebaseOnMain).not.toHaveBeenCalled()
+				// Rebase runs BEFORE the merge mode check (Issue #344)
+				// The error is thrown when checking merge mode, after rebase completes
+				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalled()
+				// But should NOT perform the final merge
 				expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
 			})
 
