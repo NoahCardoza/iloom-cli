@@ -28,3 +28,6 @@ export type { DevServerCommandInput, DevServerResult } from './dev-server.js'
 
 export { SummaryCommand } from './summary.js'
 export type { SummaryCommandInput, SummaryOptions } from './summary.js'
+
+export { ShellCommand } from './shell.js'
+export type { ShellCommandInput } from './shell.js'

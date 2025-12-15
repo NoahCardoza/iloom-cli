@@ -14,6 +14,7 @@ Complete documentation for all iloom CLI commands, options, and flags.
   - [il spin](#il-spin)
   - [il open](#il-open)
   - [il summary](#il-summary)
+  - [il shell](#il-shell)
 - [Issue Management Commands](#issue-management-commands)
   - [il add-issue](#il-add-issue)
   - [il enhance](#il-enhance)
@@ -494,6 +495,75 @@ il summary 42 --with-comment --json
 - For branch-type looms, `--with-comment` is silently ignored (no issue to post to)
 - Summary generation uses the Claude haiku model for speed
 - Session summaries are also auto-generated during `il finish` (configurable via `generateSummary` setting)
+
+---
+
+### il shell
+
+Open an interactive shell with workspace environment variables loaded.
+
+**Alias:** `terminal`
+
+**Usage:**
+```bash
+il shell [identifier]
+```
+
+**Arguments:**
+- `[identifier]` - Optional issue number, PR number, or branch name
+- If omitted, auto-detects current loom from working directory
+
+**Behavior:**
+
+1. Resolves the target loom (from identifier or current directory)
+2. Detects appropriate shell for your platform
+3. If `sourceEnvOnStart` is enabled in settings, loads all dotenv-flow environment variables
+4. Opens interactive shell with environment ready
+5. Prints summary of workspace and loaded environment
+
+**Shell Detection (Cross-Platform):**
+
+The shell is selected in this order:
+1. `ILOOM_SHELL` environment variable (if set)
+2. `SHELL` environment variable (Unix/macOS)
+3. `COMSPEC` environment variable (Windows)
+4. Default: `/bin/bash` (Unix) or `cmd.exe` (Windows)
+
+**Environment Variables Loaded:**
+
+When `sourceEnvOnStart` is enabled, loads dotenv-flow pattern files:
+- `.env`
+- `.env.local`
+- `.env.{NODE_ENV}`
+- `.env.{NODE_ENV}.local`
+
+Additionally sets:
+- `ILOOM_LOOM` - The loom identifier (useful for PS1 customization)
+
+**Examples:**
+
+```bash
+# Open shell for current loom (auto-detected from cwd)
+il shell
+
+# Open shell for specific issue
+il shell 25
+
+# Open shell for specific PR
+il shell 42
+
+# Open shell for branch-based loom
+il shell feat/my-feature
+
+# Using the terminal alias
+il terminal 25
+```
+
+**Notes:**
+- Useful for running ad-hoc commands with proper environment
+- Great for debugging or using tools not covered by `il dev-server`
+- Environment persists for the entire shell session
+- Exit shell normally (Ctrl+D or `exit`) to return
 
 ---
 

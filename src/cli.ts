@@ -595,6 +595,22 @@ program
   })
 
 program
+  .command('shell')
+  .alias('terminal')
+  .description('Open interactive shell with workspace environment')
+  .argument('[identifier]', 'Issue number, PR number, or branch name (auto-detected if omitted)')
+  .action(async (identifier?: string) => {
+    try {
+      const { ShellCommand } = await import('./commands/shell.js')
+      const cmd = new ShellCommand()
+      await cmd.execute({ identifier })
+    } catch (error) {
+      logger.error(`Failed to open shell: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
   .command('cleanup')
   .alias('remove')
   .alias('clean')

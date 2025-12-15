@@ -21,6 +21,9 @@ vi.mock('../utils/color.js', () => ({
 		index: 0,
 	})),
 }))
+vi.mock('../utils/cli-overrides.js', () => ({
+	getExecutablePath: vi.fn(() => 'iloom'),
+}))
 vi.mock('node:fs', () => ({
 	existsSync: vi.fn(() => true), // Default to true
 }))
@@ -369,9 +372,8 @@ describe('LoomLauncher', () => {
 				})
 				expect(call[1]).toMatchObject({
 					title: 'Terminal - Issue #42',
+					command: 'iloom shell 42',
 				})
-				// Terminal tab should NOT have a command field
-				expect(call[1].command).toBeUndefined()
 				expect(call[2]).toMatchObject({
 					title: 'Claude - Issue #42',
 					command: 'iloom spin',
@@ -412,7 +414,7 @@ describe('LoomLauncher', () => {
 				)
 			})
 
-			it('should launch single terminal when only Terminal enabled', async () => {
+			it('should launch single terminal when only Terminal enabled with il shell command', async () => {
 				await launcher.launchLoom({
 					...baseOptions,
 					enableClaude: false,
@@ -421,9 +423,25 @@ describe('LoomLauncher', () => {
 					enableTerminal: true,
 				})
 
-				// Single terminal should use openTerminalWindow
+				// Single terminal should use openTerminalWindow with il shell command
 				expect(terminal.openTerminalWindow).toHaveBeenCalled()
 				expect(terminal.openMultipleTerminalWindows).not.toHaveBeenCalled()
+				const call = vi.mocked(terminal.openTerminalWindow).mock.calls[0][0]
+				expect(call.command).toBe('iloom shell 42')
+			})
+
+			it('should use custom executablePath in standalone terminal shell command', async () => {
+				await launcher.launchLoom({
+					...baseOptions,
+					enableClaude: false,
+					enableCode: false,
+					enableDevServer: false,
+					enableTerminal: true,
+					executablePath: '/custom/path/to/cli.js',
+				})
+
+				const call = vi.mocked(terminal.openTerminalWindow).mock.calls[0][0]
+				expect(call.command).toBe('/custom/path/to/cli.js shell 42')
 			})
 
 			it('should include PORT export for web projects in terminal tab', async () => {
@@ -548,19 +566,22 @@ describe('LoomLauncher', () => {
 			expect(call.includeEnvSetup).toBe(false)
 		})
 
-		it('should apply sourceEnvOnStart to standalone terminal', async () => {
+		it('should NOT apply sourceEnvOnStart to standalone terminal (il shell handles env loading)', async () => {
+			// Even with sourceEnvOnStart: true, standalone terminal should have includeEnvSetup: false
+			// because il shell handles env loading internally
 			await launcher.launchLoom({
 				...baseOptions,
 				enableClaude: false,
 				enableCode: false,
 				enableDevServer: false,
 				enableTerminal: true,
-				sourceEnvOnStart: false,
+				sourceEnvOnStart: true, // Set to true to verify it's still false
 			})
 
 			expect(terminal.openTerminalWindow).toHaveBeenCalled()
 			const call = vi.mocked(terminal.openTerminalWindow).mock.calls[0][0]
 			expect(call.includeEnvSetup).toBe(false)
+			expect(call.command).toBe('iloom shell 42')
 		})
 
 		it('should apply sourceEnvOnStart to Claude terminal in multi-terminal mode', async () => {

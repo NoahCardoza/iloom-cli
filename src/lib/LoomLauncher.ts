@@ -10,6 +10,7 @@ import { ClaudeContextManager } from './ClaudeContextManager.js'
 import type { SettingsManager } from './SettingsManager.js'
 import type { Capability } from '../types/loom.js'
 import { getDotenvFlowFiles } from '../utils/env.js'
+import { getExecutablePath } from '../utils/cli-overrides.js'
 
 export interface LaunchLoomOptions {
 	enableClaude: boolean
@@ -173,9 +174,14 @@ export class LoomLauncher {
 	}
 
 	/**
-	 * Launch standalone terminal (no command, just workspace with env vars)
+	 * Launch standalone terminal running `il shell <identifier>`
 	 */
 	private async launchStandaloneTerminal(options: LaunchLoomOptions): Promise<void> {
+		// Build shell command with identifier
+		const executable = options.executablePath ?? getExecutablePath()
+		const shellIdentifier = String(options.identifier)
+		const shellCommand = `${executable} shell ${shellIdentifier}`
+
 		// Only generate color if terminal coloring is enabled (default: true)
 		const backgroundColor = (options.colorTerminal ?? true)
 			? options.colorHex
@@ -185,8 +191,10 @@ export class LoomLauncher {
 
 		await openTerminalWindow({
 			workspacePath: options.worktreePath,
+			command: shellCommand,
 			...(backgroundColor && { backgroundColor }),
-			includeEnvSetup: (options.sourceEnvOnStart ?? false) && this.hasAnyEnvFiles(options.worktreePath),
+			// il shell handles env loading internally, so we don't need includeEnvSetup
+			includeEnvSetup: false,
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
 		})
@@ -263,13 +271,19 @@ export class LoomLauncher {
 	}
 
 	/**
-	 * Build terminal options for standalone terminal (no command)
+	 * Build terminal options for standalone terminal
+	 * Runs `il shell <identifier>` which handles env loading internally
 	 */
 	private buildStandaloneTerminalOptions(
 		options: LaunchLoomOptions
 	): TerminalWindowOptions {
-		const hasEnvFile = this.hasAnyEnvFiles(options.worktreePath)
 		const terminalTitle = `Terminal - ${this.formatIdentifier(options.workflowType, options.identifier)}`
+
+		// Build shell command with identifier
+		// Use the same executable path pattern as buildClaudeTerminalOptions
+		const executable = options.executablePath ?? getExecutablePath()
+		const shellIdentifier = String(options.identifier)
+		const shellCommand = `${executable} shell ${shellIdentifier}`
 
 		// Only generate color if terminal coloring is enabled (default: true)
 		const backgroundColor = (options.colorTerminal ?? true)
@@ -280,9 +294,11 @@ export class LoomLauncher {
 
 		return {
 			workspacePath: options.worktreePath,
+			command: shellCommand,
 			...(backgroundColor && { backgroundColor }),
 			title: terminalTitle,
-			includeEnvSetup: (options.sourceEnvOnStart ?? false) && hasEnvFile,
+			// il shell handles env loading internally, so we don't need includeEnvSetup
+			includeEnvSetup: false,
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
 		}
