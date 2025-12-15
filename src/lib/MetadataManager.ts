@@ -21,6 +21,8 @@ export interface MetadataFile {
   colorHex?: string // Stored hex color (e.g., "#dcebff") - robust against palette changes
   sessionId?: string // Claude Code session ID for resume support
   projectPath?: string // Main worktree path (project root) - enables project identification
+  issueUrls?: Record<string, string> // Map of issue ID to URL in the issue tracker
+  prUrls?: Record<string, string> // Map of PR number to URL in the issue tracker
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -46,6 +48,8 @@ export interface WriteMetadataInput {
   colorHex: string // Hex color (e.g., "#dcebff") - robust against palette changes
   sessionId: string // Claude Code session ID for resume support (required for new looms)
   projectPath: string // Main worktree path (project root) - required for new looms
+  issueUrls: Record<string, string> // Map of issue ID to URL in the issue tracker
+  prUrls: Record<string, string> // Map of PR number to URL in the issue tracker
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -70,6 +74,8 @@ export interface LoomMetadata {
   colorHex: string | null // Hex color (e.g., "#dcebff") - robust against palette changes
   sessionId: string | null // Claude Code session ID (null for legacy looms)
   projectPath: string | null // Main worktree path (null for legacy looms)
+  issueUrls: Record<string, string> // Map of issue ID to URL ({} for legacy looms)
+  prUrls: Record<string, string> // Map of PR number to URL ({} for legacy looms)
   parentLoom: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -157,6 +163,8 @@ export class MetadataManager {
         colorHex: input.colorHex,
         sessionId: input.sessionId,
         projectPath: input.projectPath,
+        issueUrls: input.issueUrls,
+        prUrls: input.prUrls,
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
 
@@ -208,6 +216,8 @@ export class MetadataManager {
         colorHex: data.colorHex ?? null,
         sessionId: data.sessionId ?? null,
         projectPath: data.projectPath ?? null,
+        issueUrls: data.issueUrls ?? {},
+        prUrls: data.prUrls ?? {},
         parentLoom: data.parentLoom ?? null,
       }
     } catch (error) {
@@ -267,6 +277,8 @@ export class MetadataManager {
             colorHex: data.colorHex ?? null,
             sessionId: data.sessionId ?? null,
             projectPath: data.projectPath ?? null,
+            issueUrls: data.issueUrls ?? {},
+            prUrls: data.prUrls ?? {},
             parentLoom: data.parentLoom ?? null,
           })
         } catch (error) {

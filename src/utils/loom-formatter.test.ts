@@ -675,6 +675,8 @@ describe('formatLoomsForJson', () => {
         issueTracker: null,
         colorHex: null,
         projectPath: null,
+        issueUrls: {},
+        prUrls: {},
       })
 
       // Issue worktree
@@ -691,6 +693,8 @@ describe('formatLoomsForJson', () => {
         issueTracker: null,
         colorHex: null,
         projectPath: null,
+        issueUrls: {},
+        prUrls: {},
       })
 
       // PR worktree
@@ -707,6 +711,8 @@ describe('formatLoomsForJson', () => {
         issueTracker: null,
         colorHex: null,
         projectPath: null,
+        issueUrls: {},
+        prUrls: {},
       })
 
       // Linear-style issue
@@ -723,6 +729,8 @@ describe('formatLoomsForJson', () => {
         issueTracker: null,
         colorHex: null,
         projectPath: null,
+        issueUrls: {},
+        prUrls: {},
       })
     })
 

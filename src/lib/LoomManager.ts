@@ -279,6 +279,14 @@ export class LoomManager {
     // Generate deterministic session ID for Claude Code resume support
     const sessionId = generateDeterministicSessionId(worktreePath)
 
+    // Build issueUrls/prUrls based on workflow type
+    const issueUrls: Record<string, string> = input.type === 'issue' && issueData?.url
+      ? { [String(input.identifier)]: issueData.url }
+      : {}
+    const prUrls: Record<string, string> = input.type === 'pr' && issueData?.url
+      ? { [String(input.identifier)]: issueData.url }
+      : {}
+
     const metadataInput: WriteMetadataInput = {
       description,
       branchName,
@@ -290,6 +298,8 @@ export class LoomManager {
       colorHex: colorData.hex,
       sessionId,
       projectPath: this.gitWorktree.workingDirectory,
+      issueUrls,
+      prUrls,
       ...(input.parentLoom && { parentLoom: input.parentLoom }),
     }
     await this.metadataManager.writeMetadata(worktreePath, metadataInput)
@@ -1040,6 +1050,14 @@ export class LoomManager {
       // Generate deterministic session ID for Claude Code resume support
       const sessionId = generateDeterministicSessionId(worktreePath)
 
+      // Build issueUrls/prUrls based on workflow type
+      const issueUrls: Record<string, string> = input.type === 'issue' && issueData?.url
+        ? { [String(input.identifier)]: issueData.url }
+        : {}
+      const prUrls: Record<string, string> = input.type === 'pr' && issueData?.url
+        ? { [String(input.identifier)]: issueData.url }
+        : {}
+
       const metadataInput: WriteMetadataInput = {
         description,
         branchName,
@@ -1051,6 +1069,8 @@ export class LoomManager {
         colorHex,
         sessionId,
         projectPath: this.gitWorktree.workingDirectory,
+        issueUrls,
+        prUrls,
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
       await this.metadataManager.writeMetadata(worktreePath, metadataInput)

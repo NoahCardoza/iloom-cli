@@ -85,6 +85,8 @@ describe('MetadataManager', () => {
       colorHex: '#dcebff',
       sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
       projectPath: '/Users/jane/dev/main-repo',
+      issueUrls: { '42': 'https://github.com/org/repo/issues/42' },
+      prUrls: {},
     }
 
     beforeEach(() => {
@@ -127,6 +129,8 @@ describe('MetadataManager', () => {
         colorHex: '#dcebff',
         sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
         projectPath: '/Users/jane/dev/main-repo',
+        issueUrls: { '42': 'https://github.com/org/repo/issues/42' },
+        prUrls: {},
       })
 
       vi.useRealTimers()
@@ -138,6 +142,15 @@ describe('MetadataManager', () => {
       const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
       const writtenContent = JSON.parse(writeCall?.[1] as string)
       expect(writtenContent.projectPath).toBe('/Users/jane/dev/main-repo')
+    })
+
+    it('should write issueUrls and prUrls to JSON file', async () => {
+      await manager.writeMetadata(worktreePath, metadataInput)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.issueUrls).toEqual({ '42': 'https://github.com/org/repo/issues/42' })
+      expect(writtenContent.prUrls).toEqual({})
     })
 
     it('should use correct filename from slugified worktree path', async () => {
@@ -222,6 +235,8 @@ describe('MetadataManager', () => {
         colorHex: '#f5dceb',
         sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
         projectPath: '/Users/jane/dev/main-repo',
+        issueUrls: { '42': 'https://github.com/org/repo/issues/42' },
+        prUrls: {},
       })
       vi.mocked(fs.pathExists).mockResolvedValue(true)
       vi.mocked(fs.readFile).mockResolvedValue(mockContent)
@@ -240,6 +255,8 @@ describe('MetadataManager', () => {
         colorHex: '#f5dceb',
         sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
         projectPath: '/Users/jane/dev/main-repo',
+        issueUrls: { '42': 'https://github.com/org/repo/issues/42' },
+        prUrls: {},
         parentLoom: null,
       })
     })
@@ -274,6 +291,39 @@ describe('MetadataManager', () => {
       expect(result?.projectPath).toBeNull()
     })
 
+    it('should return issueUrls/prUrls when present in metadata file', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Test loom',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        issueUrls: { '123': 'https://github.com/org/repo/issues/123' },
+        prUrls: { '456': 'https://github.com/org/repo/pull/456' },
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+      expect(result?.issueUrls).toEqual({ '123': 'https://github.com/org/repo/issues/123' })
+      expect(result?.prUrls).toEqual({ '456': 'https://github.com/org/repo/pull/456' })
+    })
+
+    it('should return empty issueUrls/prUrls for legacy looms', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Legacy loom without issueUrls/prUrls',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__legacy',
+        worktreePath: '/Users/jane/dev/repo',
+        // Note: no issueUrls/prUrls fields
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+      expect(result?.issueUrls).toEqual({})
+      expect(result?.prUrls).toEqual({})
+    })
+
     it('should return null values for missing optional fields (v1 file)', async () => {
       const mockContent = JSON.stringify({
         description: 'Fix authentication bug',
@@ -297,6 +347,8 @@ describe('MetadataManager', () => {
         colorHex: null,
         sessionId: null,
         projectPath: null,
+        issueUrls: {},
+        prUrls: {},
         parentLoom: null,
       })
     })
@@ -460,6 +512,8 @@ describe('MetadataManager', () => {
             colorHex: '#ff0000',
             sessionId: '11111111-1111-1111-1111-111111111111',
             projectPath: '/Users/alice/main-project',
+            issueUrls: { '1': 'https://github.com/org/repo/issues/1' },
+            prUrls: {},
           })
         }
         return JSON.stringify({
@@ -475,6 +529,8 @@ describe('MetadataManager', () => {
           colorHex: '#00ff00',
           sessionId: '22222222-2222-2222-2222-222222222222',
           projectPath: '/Users/bob/main-project',
+          issueUrls: { '2': 'https://github.com/org/repo/issues/2' },
+          prUrls: {},
         })
       })
 
@@ -493,6 +549,8 @@ describe('MetadataManager', () => {
         colorHex: '#ff0000',
         sessionId: '11111111-1111-1111-1111-111111111111',
         projectPath: '/Users/alice/main-project',
+        issueUrls: { '1': 'https://github.com/org/repo/issues/1' },
+        prUrls: {},
         parentLoom: null,
       })
       expect(result[1]).toEqual({
@@ -507,6 +565,8 @@ describe('MetadataManager', () => {
         colorHex: '#00ff00',
         sessionId: '22222222-2222-2222-2222-222222222222',
         projectPath: '/Users/bob/main-project',
+        issueUrls: { '2': 'https://github.com/org/repo/issues/2' },
+        prUrls: {},
         parentLoom: null,
       })
     })
@@ -605,6 +665,8 @@ describe('MetadataManager', () => {
         colorHex: null,
         sessionId: null,
         projectPath: null,
+        issueUrls: {},
+        prUrls: {},
         parentLoom: null,
       })
     })
