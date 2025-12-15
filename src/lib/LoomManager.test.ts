@@ -1017,6 +1017,34 @@ describe('LoomManager', () => {
       expect(result.cliSymlinks).toEqual(['cmd1-42', 'cmd2-42'])
       expect(result.binEntries).toEqual({ cmd1: './bin/cmd1.js', cmd2: './bin/cmd2.js' })
     })
+
+    it('should skip CLI isolation in branch mode even when CLI capability is detected', async () => {
+      const input: CreateLoomInput = {
+        type: 'branch',
+        identifier: 'feature-xyz',
+        originalInput: 'feature-xyz',
+      }
+
+      const expectedPath = '/test/worktree-feature-xyz'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3000)
+      vi.mocked(mockClaude.prepareContext).mockResolvedValue()
+
+      // Mock CLI capability detection - would normally trigger CLI isolation
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: ['cli'],
+        binEntries: { il: './dist/cli.js', iloom: './dist/cli.js' }
+      })
+
+      const result = await manager.createIloom(input)
+
+      // Verify CLI isolation was NOT attempted in branch mode
+      expect(mockCLIIsolation.setupCLIIsolation).not.toHaveBeenCalled()
+      expect(result.capabilities).toEqual(['cli'])
+      expect(result.binEntries).toEqual({ il: './dist/cli.js', iloom: './dist/cli.js' })
+      expect(result.cliSymlinks).toBeUndefined() // Not set because isolation was skipped
+    })
   })
 
   describe('opening modes integration', () => {

@@ -171,8 +171,9 @@ export class LoomManager {
     }
 
     // 10. Setup CLI isolation if project has CLI capability
+    // Skip in branch mode - branch mode workspaces don't have a built dist/cli.js
     let cliSymlinks: string[] | undefined = undefined
-    if (capabilities.includes('cli')) {
+    if (capabilities.includes('cli') && input.type !== 'branch') {
       try {
         cliSymlinks = await this.cliIsolation.setupCLIIsolation(
           worktreePath,
