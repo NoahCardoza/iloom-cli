@@ -18,5 +18,6 @@
   "colors": {
     "terminal": true,
     "vscode": true
-  }
+  },
+  "attribution": "on"
 }
