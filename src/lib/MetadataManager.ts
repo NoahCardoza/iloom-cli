@@ -20,6 +20,7 @@ export interface MetadataFile {
   issueTracker?: string
   colorHex?: string // Stored hex color (e.g., "#dcebff") - robust against palette changes
   sessionId?: string // Claude Code session ID for resume support
+  projectPath?: string // Main worktree path (project root) - enables project identification
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -44,6 +45,7 @@ export interface WriteMetadataInput {
   issueTracker: string
   colorHex: string // Hex color (e.g., "#dcebff") - robust against palette changes
   sessionId: string // Claude Code session ID for resume support (required for new looms)
+  projectPath: string // Main worktree path (project root) - required for new looms
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -67,6 +69,7 @@ export interface LoomMetadata {
   issueTracker: string | null
   colorHex: string | null // Hex color (e.g., "#dcebff") - robust against palette changes
   sessionId: string | null // Claude Code session ID (null for legacy looms)
+  projectPath: string | null // Main worktree path (null for legacy looms)
   parentLoom: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -153,6 +156,7 @@ export class MetadataManager {
         issueTracker: input.issueTracker,
         colorHex: input.colorHex,
         sessionId: input.sessionId,
+        projectPath: input.projectPath,
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
 
@@ -203,6 +207,7 @@ export class MetadataManager {
         issueTracker: data.issueTracker ?? null,
         colorHex: data.colorHex ?? null,
         sessionId: data.sessionId ?? null,
+        projectPath: data.projectPath ?? null,
         parentLoom: data.parentLoom ?? null,
       }
     } catch (error) {
@@ -261,6 +266,7 @@ export class MetadataManager {
             issueTracker: data.issueTracker ?? null,
             colorHex: data.colorHex ?? null,
             sessionId: data.sessionId ?? null,
+            projectPath: data.projectPath ?? null,
             parentLoom: data.parentLoom ?? null,
           })
         } catch (error) {

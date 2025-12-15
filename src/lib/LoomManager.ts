@@ -288,6 +288,7 @@ export class LoomManager {
       issueTracker: this.issueTracker.providerName,
       colorHex: colorData.hex,
       sessionId,
+      projectPath: this.gitWorktree.workingDirectory,
       ...(input.parentLoom && { parentLoom: input.parentLoom }),
     }
     await this.metadataManager.writeMetadata(worktreePath, metadataInput)
@@ -1044,6 +1045,7 @@ export class LoomManager {
         issueTracker: this.issueTracker.providerName,
         colorHex,
         sessionId,
+        projectPath: this.gitWorktree.workingDirectory,
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
       await this.metadataManager.writeMetadata(worktreePath, metadataInput)

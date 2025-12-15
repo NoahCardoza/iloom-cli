@@ -32,13 +32,20 @@ vi.mock('fs-extra', () => ({
 }))
 
 // Mock MetadataManager to prevent real file creation during tests
+// Shared mock functions for verification in tests
+const mockWriteMetadata = vi.fn().mockResolvedValue(undefined)
+const mockReadMetadata = vi.fn().mockResolvedValue(null)
+const mockDeleteMetadata = vi.fn().mockResolvedValue(undefined)
+const mockSlugifyPath = vi.fn((path: string) => path.replace(/\//g, '___') + '.json')
+const mockListAllMetadata = vi.fn().mockResolvedValue([])
+
 vi.mock('./MetadataManager.js', () => ({
   MetadataManager: vi.fn(() => ({
-    writeMetadata: vi.fn().mockResolvedValue(undefined),
-    readMetadata: vi.fn().mockResolvedValue(null),
-    deleteMetadata: vi.fn().mockResolvedValue(undefined),
-    slugifyPath: vi.fn((path: string) => path.replace(/\//g, '___') + '.json'),
-    listAllMetadata: vi.fn().mockResolvedValue([]),
+    writeMetadata: mockWriteMetadata,
+    readMetadata: mockReadMetadata,
+    deleteMetadata: mockDeleteMetadata,
+    slugifyPath: mockSlugifyPath,
+    listAllMetadata: mockListAllMetadata,
   })),
 }))
 
@@ -149,6 +156,12 @@ describe('LoomManager', () => {
     // Set IssueTracker interface properties
     mockGitHub.supportsPullRequests = true
     mockGitHub.providerName = 'github'
+
+    // Reset shared MetadataManager mock functions (they get reset by mockReset: true in vitest.config)
+    mockWriteMetadata.mockResolvedValue(undefined)
+    mockReadMetadata.mockResolvedValue(null)
+    mockDeleteMetadata.mockResolvedValue(undefined)
+    mockListAllMetadata.mockResolvedValue([])
 
     vi.clearAllMocks()
   })
@@ -2117,6 +2130,91 @@ describe('LoomManager', () => {
       expect(result).toBeDefined()
       expect(result.type).toBe('issue')
       expect(result.identifier).toBe(284)
+    })
+  })
+
+  describe('projectPath in metadata', () => {
+    const baseInput: CreateLoomInput = {
+      type: 'issue',
+      identifier: 456,
+      originalInput: '456',
+    }
+
+    beforeEach(() => {
+      // Mock GitHub data fetch
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 456,
+        title: 'Child Issue',
+        body: 'Test description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/456',
+      })
+
+      // Mock worktree creation
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/worktree-issue-456')
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/worktree-issue-456')
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3456)
+      vi.mocked(mockClaude.launchWithContext).mockResolvedValue()
+      vi.mocked(mockBranchNaming.generateBranchName).mockResolvedValue('feat/issue-456__child-issue')
+    })
+
+    it('should use main worktree path as projectPath, not parent loom path', async () => {
+      // SCENARIO: User is in a parent loom at /projects/myapp__issue-123
+      // and runs `il start 456` to create a child loom.
+      // The projectPath should be the MAIN worktree path (/projects/myapp),
+      // NOT the parent loom path.
+
+      // Set up: workingDirectory represents the main worktree path
+      // (this is what findMainWorktreePathWithSettings returns)
+      const mainWorktreePath = '/projects/myapp'
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => mainWorktreePath),
+        configurable: true
+      })
+
+      // Create a child loom (with parentLoom set)
+      const childLoomInput: CreateLoomInput = {
+        ...baseInput,
+        parentLoom: {
+          type: 'issue',
+          identifier: '123',
+          worktreePath: '/projects/myapp__issue-123',  // Parent loom path (should NOT be used for projectPath)
+          branchName: 'feat/issue-123__parent-feature',
+        },
+      }
+
+      await manager.createIloom(childLoomInput)
+
+      // Verify writeMetadata was called
+      expect(mockWriteMetadata).toHaveBeenCalled()
+
+      // Get the metadata input that was passed to writeMetadata
+      const writeMetadataCall = mockWriteMetadata.mock.calls[0]
+      const metadataInput = writeMetadataCall[1]
+
+      // CRITICAL ASSERTION: projectPath should be the main worktree path,
+      // NOT the parent loom's path
+      expect(metadataInput.projectPath).toBe(mainWorktreePath)
+      expect(metadataInput.projectPath).not.toBe('/projects/myapp__issue-123')
+    })
+
+    it('should include projectPath in metadata for regular looms', async () => {
+      const mainWorktreePath = '/projects/myapp'
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => mainWorktreePath),
+        configurable: true
+      })
+
+      await manager.createIloom(baseInput)
+
+      expect(mockWriteMetadata).toHaveBeenCalled()
+
+      const writeMetadataCall = mockWriteMetadata.mock.calls[0]
+      const metadataInput = writeMetadataCall[1]
+
+      expect(metadataInput.projectPath).toBe(mainWorktreePath)
     })
   })
 })

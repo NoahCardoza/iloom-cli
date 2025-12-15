@@ -84,6 +84,7 @@ describe('MetadataManager', () => {
       issueTracker: 'github',
       colorHex: '#dcebff',
       sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+      projectPath: '/Users/jane/dev/main-repo',
     }
 
     beforeEach(() => {
@@ -125,9 +126,18 @@ describe('MetadataManager', () => {
         issueTracker: 'github',
         colorHex: '#dcebff',
         sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+        projectPath: '/Users/jane/dev/main-repo',
       })
 
       vi.useRealTimers()
+    })
+
+    it('should write projectPath to JSON file', async () => {
+      await manager.writeMetadata(worktreePath, metadataInput)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.projectPath).toBe('/Users/jane/dev/main-repo')
     })
 
     it('should use correct filename from slugified worktree path', async () => {
@@ -211,6 +221,7 @@ describe('MetadataManager', () => {
         issueTracker: 'github',
         colorHex: '#f5dceb',
         sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+        projectPath: '/Users/jane/dev/main-repo',
       })
       vi.mocked(fs.pathExists).mockResolvedValue(true)
       vi.mocked(fs.readFile).mockResolvedValue(mockContent)
@@ -228,8 +239,39 @@ describe('MetadataManager', () => {
         issueTracker: 'github',
         colorHex: '#f5dceb',
         sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+        projectPath: '/Users/jane/dev/main-repo',
         parentLoom: null,
       })
+    })
+
+    it('should return projectPath when present in metadata file', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Test loom',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        projectPath: '/Users/jane/dev/main-repo',
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+      expect(result?.projectPath).toBe('/Users/jane/dev/main-repo')
+    })
+
+    it('should return null projectPath for legacy looms', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Legacy loom without projectPath',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__legacy',
+        worktreePath: '/Users/jane/dev/repo',
+        // Note: no projectPath field
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+      expect(result?.projectPath).toBeNull()
     })
 
     it('should return null values for missing optional fields (v1 file)', async () => {
@@ -254,6 +296,7 @@ describe('MetadataManager', () => {
         issueTracker: null,
         colorHex: null,
         sessionId: null,
+        projectPath: null,
         parentLoom: null,
       })
     })
@@ -416,6 +459,7 @@ describe('MetadataManager', () => {
             issueTracker: 'github',
             colorHex: '#ff0000',
             sessionId: '11111111-1111-1111-1111-111111111111',
+            projectPath: '/Users/alice/main-project',
           })
         }
         return JSON.stringify({
@@ -430,6 +474,7 @@ describe('MetadataManager', () => {
           issueTracker: 'github',
           colorHex: '#00ff00',
           sessionId: '22222222-2222-2222-2222-222222222222',
+          projectPath: '/Users/bob/main-project',
         })
       })
 
@@ -447,6 +492,7 @@ describe('MetadataManager', () => {
         issueTracker: 'github',
         colorHex: '#ff0000',
         sessionId: '11111111-1111-1111-1111-111111111111',
+        projectPath: '/Users/alice/main-project',
         parentLoom: null,
       })
       expect(result[1]).toEqual({
@@ -460,6 +506,7 @@ describe('MetadataManager', () => {
         issueTracker: 'github',
         colorHex: '#00ff00',
         sessionId: '22222222-2222-2222-2222-222222222222',
+        projectPath: '/Users/bob/main-project',
         parentLoom: null,
       })
     })
@@ -557,6 +604,7 @@ describe('MetadataManager', () => {
         issueTracker: null,
         colorHex: null,
         sessionId: null,
+        projectPath: null,
         parentLoom: null,
       })
     })

@@ -17,6 +17,7 @@ export interface LoomJsonOutput {
   created_at?: string | null
   issueTracker?: string | null
   colorHex?: string | null
+  projectPath?: string | null
 }
 
 /**
@@ -127,7 +128,8 @@ export function formatLoomForJson(
     description: metadata?.description ?? null,
     created_at: metadata?.created_at ?? null,
     issueTracker: metadata?.issueTracker ?? null,
-    colorHex: metadata?.colorHex ?? null
+    colorHex: metadata?.colorHex ?? null,
+    projectPath: metadata?.projectPath ?? null
   }
 }
 
