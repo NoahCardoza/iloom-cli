@@ -13,7 +13,7 @@ import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
 import { isFileGitignored } from '../utils/git.js'
 
 /**
- * Initialize iloom configuration and setup shell autocomplete
+ * Initialize iloom configuration
  * Implements the `il init` command requested in issue #94
  */
 export class InitCommand {
@@ -27,7 +27,6 @@ export class InitCommand {
 
   /**
    * Main entry point for the init command
-   * Prompts user for autocomplete setup and displays instructions
    * @param customInitialMessage Optional custom initial message to send to Claude (defaults to "Help me configure iloom settings.")
    */
   public async execute(customInitialMessage?: string): Promise<void> {
@@ -315,7 +314,7 @@ export class InitCommand {
       })
 
       // Detect shell and read config
-      logger.debug('Detecting user shell for autocomplete setup')
+      logger.debug('Detecting user shell')
       const shell = this.shellCompletion.detectShell()
       logger.debug('Shell detection result', { shell })
 

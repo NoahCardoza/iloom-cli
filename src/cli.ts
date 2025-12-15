@@ -731,7 +731,7 @@ program
 program
   .command('init')
   .alias('config')
-  .description('Initialize iloom configuration and setup shell autocomplete')
+  .description('Initialize iloom configuration')
   .argument('[prompt]', 'Custom initial message to send to Claude (defaults to "Help me configure iloom settings.")')
   .action(async (prompt?: string) => {
     try {
