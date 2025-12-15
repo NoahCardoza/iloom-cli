@@ -8,16 +8,18 @@ import { MergeManager } from '../../src/lib/MergeManager.js'
 import { IdentifierParser } from '../../src/utils/IdentifierParser.js'
 import { ResourceCleanup } from '../../src/lib/ResourceCleanup.js'
 import { BuildRunner } from '../../src/lib/BuildRunner.js'
+import { SettingsManager } from '../../src/lib/SettingsManager.js'
 import type { PullRequest, Issue, GitWorktree } from '../../src/types/index.js'
-import { pushBranchToRemote } from '../../src/utils/git.js'
+import { pushBranchToRemote, getMergeTargetBranch } from '../../src/utils/git.js'
 
-// Mock git utils module for pushBranchToRemote and findMainWorktreePathWithSettings
+// Mock git utils module for pushBranchToRemote, findMainWorktreePathWithSettings, and getMergeTargetBranch
 vi.mock('../../src/utils/git.js', async () => {
 	const actual = await vi.importActual<typeof import('../../src/utils/git.js')>('../../src/utils/git.js')
 	return {
 		...actual,
 		pushBranchToRemote: vi.fn().mockResolvedValue(undefined),
 		findMainWorktreePathWithSettings: vi.fn().mockResolvedValue('/test/main'),
+		getMergeTargetBranch: vi.fn().mockResolvedValue('main'),
 		// Prevent real git commands from running during tests
 		executeGitCommand: vi.fn().mockResolvedValue(''),
 	}
@@ -390,6 +392,130 @@ describe('FinishCommand - Open PR Workflow', () => {
 
 		// Verify validation was NOT called
 		expect(mockValidationRunner.runValidations).not.toHaveBeenCalled()
+	})
+})
+
+describe('FinishCommand - Child Loom GitHub PR Workflow', () => {
+	let finishCommand: FinishCommand
+	let mockGitHubService: GitHubService
+	let mockGitWorktreeManager: GitWorktreeManager
+	let mockValidationRunner: ValidationRunner
+	let mockCommitManager: CommitManager
+	let mockMergeManager: MergeManager
+	let mockIdentifierParser: IdentifierParser
+	let mockResourceCleanup: ResourceCleanup
+
+	const mockWorktree: GitWorktree = {
+		path: '/test/worktree/feat-issue-456',
+		branch: 'feat-issue-456',
+		commit: 'abc123',
+		bare: false,
+		detached: false,
+		locked: false,
+	}
+
+	const mockIssue: Issue = {
+		number: 456,
+		title: 'Child Issue',
+		body: 'Child issue body',
+		state: 'open',
+		url: 'https://github.com/test/repo/issues/456',
+	}
+
+	beforeEach(() => {
+		// Create mocks
+		mockGitHubService = {
+			fetchPR: vi.fn(),
+			fetchIssue: vi.fn().mockResolvedValue(mockIssue),
+			supportsPullRequests: true,
+			providerName: 'github',
+		} as unknown as GitHubService
+
+		mockGitWorktreeManager = {
+			findWorktreeForPR: vi.fn().mockResolvedValue(mockWorktree),
+			findWorktreeForIssue: vi.fn().mockResolvedValue(mockWorktree),
+			findWorktreeForBranch: vi.fn().mockResolvedValue(mockWorktree),
+		} as unknown as GitWorktreeManager
+
+		mockValidationRunner = {
+			runValidations: vi.fn().mockResolvedValue(undefined),
+		} as unknown as ValidationRunner
+
+		mockCommitManager = {
+			detectUncommittedChanges: vi.fn().mockResolvedValue({
+				hasUncommittedChanges: false,
+				files: [],
+			}),
+			commitChanges: vi.fn().mockResolvedValue(undefined),
+		} as unknown as CommitManager
+
+		mockMergeManager = {
+			rebaseOnMain: vi.fn().mockResolvedValue(undefined),
+			performFastForwardMerge: vi.fn().mockResolvedValue(undefined),
+		} as unknown as MergeManager
+
+		mockIdentifierParser = {
+			parseForPatternDetection: vi.fn().mockResolvedValue({
+				type: 'issue',
+				number: 456,
+				originalInput: '456',
+			}),
+		} as unknown as IdentifierParser
+
+		mockResourceCleanup = {
+			cleanupWorktree: vi.fn().mockResolvedValue({
+				identifier: '456',
+				success: true,
+				operations: [],
+				errors: [],
+				rollbackRequired: false,
+			}),
+		} as unknown as ResourceCleanup
+
+		// Create command with mocked dependencies
+		finishCommand = new FinishCommand(
+			mockGitHubService,
+			mockGitWorktreeManager,
+			mockValidationRunner,
+			mockCommitManager,
+			mockMergeManager,
+			mockIdentifierParser,
+			mockResourceCleanup
+		)
+	})
+
+	it('should use parent loom branch as PR base for child looms', async () => {
+		// Mock getMergeTargetBranch to return parent branch (simulating child loom metadata)
+		vi.mocked(getMergeTargetBranch).mockResolvedValue('feat/issue-123-parent-feature')
+
+		// Mock SettingsManager to return github-pr mode
+		const mockSettingsManager = {
+			loadSettings: vi.fn().mockResolvedValue({
+				mergeBehavior: { mode: 'github-pr' },
+			}),
+		}
+
+		// Replace settingsManager via constructor
+		finishCommand = new FinishCommand(
+			mockGitHubService,
+			mockGitWorktreeManager,
+			mockValidationRunner,
+			mockCommitManager,
+			mockMergeManager,
+			mockIdentifierParser,
+			mockResourceCleanup,
+			undefined, // buildRunner
+			mockSettingsManager as unknown as SettingsManager
+		)
+
+		// Execute in dry-run mode to avoid PRManager instantiation
+		await finishCommand.execute({
+			identifier: '456',
+			options: { dryRun: true },
+		})
+
+		// Verify getMergeTargetBranch was called with worktree path
+		expect(getMergeTargetBranch).toHaveBeenCalledWith(mockWorktree.path)
 	})
 })
 

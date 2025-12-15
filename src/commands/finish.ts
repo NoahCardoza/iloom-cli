@@ -17,7 +17,7 @@ import { LoomManager } from '../lib/LoomManager.js'
 import { ClaudeContextManager } from '../lib/ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { SessionSummaryService } from '../lib/SessionSummaryService.js'
-import { findMainWorktreePathWithSettings, pushBranchToRemote, extractIssueNumber } from '../utils/git.js'
+import { findMainWorktreePathWithSettings, pushBranchToRemote, extractIssueNumber, getMergeTargetBranch } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
@@ -887,18 +887,20 @@ export class FinishCommand {
 			}
 		}
 
-		// Step 4: Create or open PR
+		// Step 4: Get base branch (respects parent loom metadata for child looms)
+		const baseBranch = await getMergeTargetBranch(worktree.path)
+
+		// Step 5: Create or open PR
 		if (options.dryRun) {
 			getLogger().info('[DRY RUN] Would create GitHub PR')
 			getLogger().info(`  Title: ${prTitle}`)
-			getLogger().info(`  Base: ${settings.mainBranch ?? 'main'}`)
+			getLogger().info(`  Base: ${baseBranch}`)
 			finishResult.operations.push({
 				type: 'pr-creation',
 				message: 'Would create GitHub PR (dry-run)',
 				success: true,
 			})
 		} else {
-			const baseBranch = settings.mainBranch ?? 'main'
 			const openInBrowser = options.noBrowser !== true
 
 			const prResult = await prManager.createOrOpenPR(
