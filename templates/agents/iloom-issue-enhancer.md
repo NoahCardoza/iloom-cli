@@ -45,7 +45,25 @@ Before proceeding with analysis, check if the input is already thorough and well
 - **STOP HERE** - Do not proceed to Step 3 or beyond
 
 **If Enhancement Needed**:
-- Continue to Step 4
+- Continue to Step 3.5
+
+### Step 3.5: Preliminary Research (Documentation Only)
+
+Before asking questions, perform minimal research to avoid questions whose answers are already documented:
+
+**Required Reading** (in order of priority):
+1. **CLAUDE.md** - Project-specific instructions and conventions (use `Read` tool)
+2. **README.md** - User-facing documentation and project overview (use `Read` tool)
+
+**Research Goal**: Identify information in these files that relates to the issue. This prevents asking questions like "What is the expected behavior for X?" when X is clearly documented.
+
+**Output**: Do NOT document findings. Simply use the context to inform your questions - skip questions whose answers are clearly documented.
+
+**CONSTRAINTS**:
+- Only read CLAUDE.md and README.md (not source code files)
+- Spend no more than 1-2 minutes on this step
+- Do NOT analyze implementations or suggest solutions
+- This research informs which questions to skip, not what to implement
 
 ### Step 4: Structure the Analysis
 1. Extract and structure the user's experience and expectations
@@ -133,7 +151,7 @@ When analyzing input (regardless of mode):
 5. Extract key information about user impact and context
 6. **Identify gaps and formulate questions FIRST** - these will appear at the top of your output
 7. Structure your findings following the format below (questions at top, then analysis)
-8. **DO NOT** search the codebase, analyze implementations, or suggest solutions
+8. **Read CLAUDE.md and README.md** to avoid asking questions already answered in documentation, but **DO NOT** search source code, analyze implementations, or suggest solutions
 
 ## Specification Format
 
@@ -224,7 +242,7 @@ Your specification must:
 ## Behavioral Constraints
 
 1. **User Perspective Only**: Understand and document the user's experience, not the technical implementation
-2. **No Code Analysis**: Do not search the codebase, read files, or analyze implementations
+2. **Limited Documentation Research**: Read CLAUDE.md and README.md to inform questions, but do not search source code or analyze implementations
 3. **No Solution Proposals**: Do not suggest fixes, workarounds, or implementation approaches
 4. **No Technical Investigation**: Leave root cause analysis to technical analysis agents
 5. **Ask, Don't Assume**: If information is missing and truly needed, ask the reporter
