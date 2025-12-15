@@ -15,7 +15,7 @@ import { generateDeterministicSessionId } from '../utils/claude.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName, selectDistinctColor, hexToRgb, type ColorData } from '../utils/color.js'
 import { DatabaseManager } from './DatabaseManager.js'
-import { loadEnvIntoProcess, findEnvFileForDatabaseUrl } from '../utils/env.js'
+import { loadEnvIntoProcess, findEnvFileForDatabaseUrl, isNoEnvFilesFoundError } from '../utils/env.js'
 import type { Loom, CreateLoomInput } from '../types/loom.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { Issue, PullRequest } from '../types/index.js'
@@ -722,8 +722,12 @@ export class LoomManager {
     const result = loadEnvIntoProcess({ path: process.cwd() })
 
     if (result.error) {
-      // Handle gracefully if .env files don't exist
-      getLogger().warn(`Warning: Could not load .env files: ${result.error.message}`)
+      // Only log warning for actual errors, not for "no .env files found" which is harmless
+      if (isNoEnvFilesFoundError(result.error)) {
+        getLogger().debug('No .env files found (this is normal for projects without environment files)')
+      } else {
+        getLogger().warn(`Warning: Could not load .env files: ${result.error.message}`)
+      }
     } else {
       getLogger().info('Loaded environment variables using dotenv-flow')
       if (result.parsed && Object.keys(result.parsed).length > 0) {

@@ -10,6 +10,7 @@ import {
   getLocalEquivalent,
   findEnvFileForDatabaseUrl,
   buildEnvSourceCommands,
+  isNoEnvFilesFoundError,
 } from './env.js'
 
 describe('env utilities', () => {
@@ -440,6 +441,33 @@ describe('env utilities', () => {
         'source .env',
         'source .env.local'
       ])
+    })
+  })
+
+  describe('isNoEnvFilesFoundError', () => {
+    it('should return true for dotenv-flow "no files found" error', () => {
+      const error = new Error('no ".env*" files matching pattern ".env[.development][.local]" in "/some/path" dir')
+      expect(isNoEnvFilesFoundError(error)).toBe(true)
+    })
+
+    it('should return true for different path in error message', () => {
+      const error = new Error('no ".env*" files matching pattern ".env[.production][.local]" in "/another/workspace" dir')
+      expect(isNoEnvFilesFoundError(error)).toBe(true)
+    })
+
+    it('should return false for other errors', () => {
+      const error = new Error('Permission denied')
+      expect(isNoEnvFilesFoundError(error)).toBe(false)
+    })
+
+    it('should return false for empty error message', () => {
+      const error = new Error('')
+      expect(isNoEnvFilesFoundError(error)).toBe(false)
+    })
+
+    it('should return false for similar but different error messages', () => {
+      const error = new Error('Could not find .env files')
+      expect(isNoEnvFilesFoundError(error)).toBe(false)
     })
   })
 })

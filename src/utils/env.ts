@@ -195,6 +195,14 @@ export function loadEnvIntoProcess(options?: {
 }
 
 /**
+ * Check if an error from loadEnvIntoProcess indicates no .env files were found
+ * This is a harmless condition that shouldn't be logged as a warning
+ */
+export function isNoEnvFilesFoundError(error: Error): boolean {
+  return error.message.startsWith('no ".env*" files matching pattern')
+}
+
+/**
  * Load environment variables for a specific workspace
  * Automatically determines environment based on NODE_ENV or defaults to development
  */
