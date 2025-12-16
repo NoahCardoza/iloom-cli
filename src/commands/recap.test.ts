@@ -10,7 +10,25 @@ vi.mock('fs-extra', () => ({
 	},
 }))
 
+// Mock GitWorktreeManager
+vi.mock('../lib/GitWorktreeManager.js', () => ({
+	GitWorktreeManager: vi.fn().mockImplementation(() => ({
+		findWorktreeForIssue: vi.fn(),
+		findWorktreeForPR: vi.fn(),
+		findWorktreeForBranch: vi.fn(),
+	})),
+}))
+
+// Mock IdentifierParser
+vi.mock('../utils/IdentifierParser.js', () => ({
+	IdentifierParser: vi.fn().mockImplementation(() => ({
+		parseForPatternDetection: vi.fn(),
+	})),
+}))
+
 import fs from 'fs-extra'
+import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { IdentifierParser } from '../utils/IdentifierParser.js'
 
 describe('RecapCommand', () => {
 	let command: RecapCommand
@@ -173,6 +191,118 @@ describe('RecapCommand', () => {
 			expect(result.filePath).not.toContain('___path___to___dir___.json')
 
 			process.cwd = originalCwd
+		})
+	})
+
+	describe('execute with identifier parameter', () => {
+		it('should resolve numeric issue identifier to loom path', async () => {
+			const mockWorktreePath = '/Users/test/worktrees/feat-issue-42__test'
+			const mockGitWorktreeManager = {
+				findWorktreeForIssue: vi.fn().mockResolvedValue({ path: mockWorktreePath, branch: 'feat/issue-42__test' }),
+				findWorktreeForPR: vi.fn().mockResolvedValue(null),
+				findWorktreeForBranch: vi.fn(),
+			}
+			vi.mocked(GitWorktreeManager).mockImplementation(() => mockGitWorktreeManager as unknown as GitWorktreeManager)
+
+			const mockIdentifierParser = {
+				parseForPatternDetection: vi.fn().mockResolvedValue({
+					type: 'issue',
+					number: 42,
+					originalInput: '42',
+				}),
+			}
+			vi.mocked(IdentifierParser).mockImplementation(() => mockIdentifierParser as unknown as IdentifierParser)
+
+			vi.mocked(fs.pathExists).mockResolvedValue(false as never)
+
+			const input: RecapCommandInput = { identifier: '42', json: true }
+			const result = await command.execute(input) as RecapOutput
+
+			// Verify the path uses the worktree path, not cwd
+			// slugifyPath: / -> ___, special chars (except _ and -) -> -
+			expect(result.filePath).toContain('___Users___test___worktrees___feat-issue-42__test.json')
+		})
+
+		it('should resolve PR identifier (pr/123) to loom path', async () => {
+			const mockWorktreePath = '/Users/test/worktrees/feat-feature__pr_123'
+			const mockGitWorktreeManager = {
+				findWorktreeForIssue: vi.fn(),
+				findWorktreeForPR: vi.fn().mockResolvedValue({ path: mockWorktreePath, branch: 'feat/feature' }),
+				findWorktreeForBranch: vi.fn(),
+			}
+			vi.mocked(GitWorktreeManager).mockImplementation(() => mockGitWorktreeManager as unknown as GitWorktreeManager)
+
+			vi.mocked(fs.pathExists).mockResolvedValue(false as never)
+
+			const input: RecapCommandInput = { identifier: 'pr/123', json: true }
+			const result = await command.execute(input) as RecapOutput
+
+			// Verify the path uses the worktree path, not cwd
+			// slugifyPath: / -> ___, underscores stay as underscores
+			expect(result.filePath).toContain('___Users___test___worktrees___feat-feature__pr_123.json')
+		})
+
+		it('should fall back to cwd when no identifier provided', async () => {
+			vi.mocked(fs.pathExists).mockResolvedValue(false as never)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/Users/test/projects/my-repo')
+
+			const input: RecapCommandInput = { json: true }
+			const result = await command.execute(input) as RecapOutput
+
+			expect(result.filePath).toContain('___Users___test___projects___my-repo.json')
+
+			process.cwd = originalCwd
+		})
+
+		it('should fall back to cwd when identifier is empty string', async () => {
+			vi.mocked(fs.pathExists).mockResolvedValue(false as never)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/Users/test/projects/my-repo')
+
+			const input: RecapCommandInput = { identifier: '', json: true }
+			const result = await command.execute(input) as RecapOutput
+
+			expect(result.filePath).toContain('___Users___test___projects___my-repo.json')
+
+			process.cwd = originalCwd
+		})
+
+		it('should throw error when identifier has no matching worktree', async () => {
+			const mockGitWorktreeManager = {
+				findWorktreeForIssue: vi.fn().mockResolvedValue(null),
+				findWorktreeForPR: vi.fn().mockResolvedValue(null),
+				findWorktreeForBranch: vi.fn(),
+			}
+			vi.mocked(GitWorktreeManager).mockImplementation(() => mockGitWorktreeManager as unknown as GitWorktreeManager)
+
+			const mockIdentifierParser = {
+				parseForPatternDetection: vi.fn().mockRejectedValue(new Error('No worktree found for identifier: 999')),
+			}
+			vi.mocked(IdentifierParser).mockImplementation(() => mockIdentifierParser as unknown as IdentifierParser)
+
+			vi.mocked(fs.pathExists).mockResolvedValue(false as never)
+
+			const input: RecapCommandInput = { identifier: '999', json: true }
+
+			await expect(command.execute(input)).rejects.toThrow("Could not resolve identifier '999': No worktree found for identifier: 999")
+		})
+
+		it('should throw error when PR identifier has no matching worktree', async () => {
+			const mockGitWorktreeManager = {
+				findWorktreeForIssue: vi.fn(),
+				findWorktreeForPR: vi.fn().mockResolvedValue(null),
+				findWorktreeForBranch: vi.fn(),
+			}
+			vi.mocked(GitWorktreeManager).mockImplementation(() => mockGitWorktreeManager as unknown as GitWorktreeManager)
+
+			vi.mocked(fs.pathExists).mockResolvedValue(false as never)
+
+			const input: RecapCommandInput = { identifier: 'pr/456', json: true }
+
+			await expect(command.execute(input)).rejects.toThrow('No worktree found for PR #456')
 		})
 	})
 })

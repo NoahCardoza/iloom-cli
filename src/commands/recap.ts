@@ -9,6 +9,8 @@ import path from 'path'
 import os from 'os'
 import fs from 'fs-extra'
 import type { RecapFile, RecapOutput } from '../mcp/recap-types.js'
+import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import { IdentifierParser } from '../utils/IdentifierParser.js'
 
 const RECAPS_DIR = path.join(os.homedir(), '.config', 'iloom-ai', 'recaps')
 
@@ -29,7 +31,8 @@ function slugifyPath(loomPath: string): string {
 }
 
 export interface RecapCommandInput {
-	json?: boolean
+	identifier?: string | undefined // Optional identifier (issue number, PR number, branch name)
+	json?: boolean | undefined
 }
 
 export class RecapCommand {
@@ -38,8 +41,8 @@ export class RecapCommand {
 	 * Returns RecapOutput in JSON mode, void otherwise
 	 */
 	async execute(input: RecapCommandInput): Promise<RecapOutput | void> {
-		// Derive recap file path from current working directory
-		const loomPath = process.cwd()
+		// Resolve loom path from identifier or fall back to cwd
+		const loomPath = await this.resolveLoomPath(input.identifier)
 		const filePath = path.join(RECAPS_DIR, slugifyPath(loomPath))
 
 		// Read recap file (return empty object if not found)
@@ -74,5 +77,71 @@ export class RecapCommand {
 			// eslint-disable-next-line no-console
 			console.log(`  [${entry.type}] ${entry.content}`)
 		}
+	}
+
+	/**
+	 * Resolve identifier to loom path
+	 * Falls back to cwd when no identifier is provided (backward compatible)
+	 */
+	private async resolveLoomPath(identifier: string | undefined): Promise<string> {
+		// Default: use current working directory
+		if (!identifier?.trim()) {
+			return process.cwd()
+		}
+
+		const trimmedId = identifier.trim()
+		const gitWorktreeManager = new GitWorktreeManager()
+		const identifierParser = new IdentifierParser(gitWorktreeManager)
+
+		// Check for PR-specific formats: pr/123, PR-123, PR/123
+		const prPattern = /^(?:pr|PR)[/-](\d+)$/
+		const prMatch = trimmedId.match(prPattern)
+		if (prMatch?.[1]) {
+			const prNumber = parseInt(prMatch[1], 10)
+			const worktree = await gitWorktreeManager.findWorktreeForPR(prNumber, '')
+			if (worktree) {
+				return worktree.path
+			}
+			throw new Error(`No worktree found for PR #${prNumber}`)
+		}
+
+		// Use IdentifierParser for pattern-based detection
+		try {
+			const parsed = await identifierParser.parseForPatternDetection(trimmedId)
+
+			// Find worktree based on parsed type
+			if (parsed.type === 'pr' && typeof parsed.number === 'number') {
+				const worktree = await gitWorktreeManager.findWorktreeForPR(parsed.number, '')
+				if (worktree) {
+					return worktree.path
+				}
+				throw new Error(`No worktree found for PR #${parsed.number}`)
+			}
+
+			if (parsed.type === 'issue' && parsed.number !== undefined) {
+				const worktree = await gitWorktreeManager.findWorktreeForIssue(parsed.number)
+				if (worktree) {
+					return worktree.path
+				}
+				throw new Error(`No worktree found for issue #${parsed.number}`)
+			}
+
+			if (parsed.type === 'branch' && parsed.branchName) {
+				const worktree = await gitWorktreeManager.findWorktreeForBranch(parsed.branchName)
+				if (worktree) {
+					return worktree.path
+				}
+				throw new Error(`No worktree found for branch: ${parsed.branchName}`)
+			}
+		} catch (error) {
+			// Re-throw IdentifierParser errors with context
+			if (error instanceof Error) {
+				throw new Error(`Could not resolve identifier '${identifier}': ${error.message}`)
+			}
+			throw error
+		}
+
+		// Should not reach here, but provide a fallback error
+		throw new Error(`Could not resolve identifier: ${identifier}`)
 	}
 }

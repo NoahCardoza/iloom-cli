@@ -1169,14 +1169,15 @@ program
 // Command for loom recap (session context)
 program
   .command('recap')
-  .description('Get recap for current loom (goal, decisions, insights, risks, assumptions)')
+  .description('Get recap for a loom (defaults to current directory)')
+  .argument('[identifier]', 'Issue number, PR number (pr/123), or branch name (auto-detected if omitted)')
   .option('--json', 'Output as JSON with filePath for file watching')
-  .action(async (options: { json?: boolean }) => {
+  .action(async (identifier: string | undefined, options: { json?: boolean }) => {
     const executeAction = async (): Promise<void> => {
       try {
         const { RecapCommand } = await import('./commands/recap.js')
         const command = new RecapCommand()
-        const result = await command.execute(options.json ? { json: true } : {})
+        const result = await command.execute({ identifier, json: options.json })
 
         if (options.json && result) {
           // JSON mode: output structured result and exit
