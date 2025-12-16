@@ -775,12 +775,12 @@ describe('IgniteCommand', () => {
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('allowedTools')
+				// For issue workflows, set_goal is excluded (issue title provides context)
 				expect(launchClaudeCall[1].allowedTools).toEqual([
 					'mcp__issue_management__get_issue',
 					'mcp__issue_management__get_comment',
 					'mcp__issue_management__create_comment',
 					'mcp__issue_management__update_comment',
-					'mcp__recap__set_goal',
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
 				])
@@ -829,14 +829,15 @@ describe('IgniteCommand', () => {
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('allowedTools')
+				// For PR workflows, set_goal is included at the end (user's purpose unclear)
 				expect(launchClaudeCall[1].allowedTools).toEqual([
 					'mcp__issue_management__get_issue',
 					'mcp__issue_management__get_comment',
 					'mcp__issue_management__create_comment',
 					'mcp__issue_management__update_comment',
-					'mcp__recap__set_goal',
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
+					'mcp__recap__set_goal',
 				])
 			} finally {
 				process.cwd = originalCwd
@@ -868,7 +869,7 @@ describe('IgniteCommand', () => {
 			}
 		})
 
-		it('should NOT pass tool filtering for regular workflows', async () => {
+		it('should pass recap tools for regular workflows', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
@@ -882,7 +883,12 @@ describe('IgniteCommand', () => {
 				await command.execute()
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
-				expect(launchClaudeCall[1].allowedTools).toBeUndefined()
+				// Regular workflows should allow recap tools (including set_goal since no issue/PR context)
+				expect(launchClaudeCall[1].allowedTools).toEqual([
+					'mcp__recap__set_goal',
+					'mcp__recap__add_entry',
+					'mcp__recap__get_recap',
+				])
 				expect(launchClaudeCall[1].disallowedTools).toBeUndefined()
 			} finally {
 				process.cwd = originalCwd
@@ -909,12 +915,12 @@ describe('IgniteCommand', () => {
 				expect(launchClaudeCall[1]).toHaveProperty('allowedTools')
 				expect(launchClaudeCall[1]).toHaveProperty('disallowedTools')
 				expect(launchClaudeCall[1].mcpConfig).toBeInstanceOf(Array)
+				// For issue workflows, set_goal is excluded (issue title provides context)
 				expect(launchClaudeCall[1].allowedTools).toEqual([
 					'mcp__issue_management__get_issue',
 					'mcp__issue_management__get_comment',
 					'mcp__issue_management__create_comment',
 					'mcp__issue_management__update_comment',
-					'mcp__recap__set_goal',
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
 				])

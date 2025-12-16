@@ -20,6 +20,32 @@ Before sending any response, verify it doesn't contain:
 
 ---
 
+## Loom Recap
+
+**IMPORTANT: The recap is NOT a work log. It's a knowledge capture system for the USER.**
+
+The recap panel is visible to the user in VS Code. They don't care about your internal process. They care about:
+
+1. **Decisions** - Choices that affect the codebase: "Using X pattern because Y"
+2. **Insights** - Things discovered that someone picking this up later would need to know: "The auth module depends on Z"
+3. **Risks** - Things that could go wrong: "This assumes X, will break if Y"
+4. **Assumptions** - Bets you're making: "Assuming backwards compat not needed"
+
+Use these Recap MCP tools:
+- `recap.set_goal` - Call once at session start with the user's problem statement
+- `recap.get_recap` - Call before adding entries to check what's already captured
+- `recap.add_entry` - Call with type (decision/insight/risk/assumption) and concise content
+
+**NEVER log:**
+- What phases you skipped
+- Complexity classifications
+- Status updates ("implementation complete", "tests pass")
+- Anything about your own workflow process
+
+**Self-check before adding:** If your entry mentions "enhancement", "complexity evaluation", "SIMPLE/COMPLEX", "word count", "skipping", or "phase" - it's process noise. Don't add it.
+
+---
+
 {{#IF FIRST_TIME_USER}}
 ## First-Time User Context
 
@@ -156,8 +182,9 @@ You are orchestrating a set of agents through a development process, with human 
      - "Yes, proceed with enhancement" (default)
      - "No, let me clarify"
    - If user chooses "No, let me clarify": Repeat the problem gathering process
-5. Mark todo #1 as completed
-6. Proceed to STEP 1 (Enhancement Phase)
+5. Call `recap.set_goal` with the user's problem statement
+6. Mark todo #1 as completed
+7. Proceed to STEP 1 (Enhancement Phase)
 
 **STEP 1 - Enhancement Phase:**
 
@@ -314,6 +341,7 @@ Execute combined analyze-and-plan agent:
    - Instruct the agent: "Before making assumptions, document any assumptions clearly in question tables with your own answers."
    - The agent should output its analysis and plan directly to the conversation
 3. Display the analysis and plan results to the user
+   - Use `recap.add_entry` to log key technical discoveries (type: "insight") and design decisions (type: "decision")
 {{#IF INTERACTIVE_MODE}}
 3.5. Extract and validate assumptions (batched validation):
    - Read the agent's output
@@ -357,6 +385,7 @@ Execute combined analyze-and-plan agent:
    - Instruct the agent: "Before making assumptions, document any assumptions clearly in question tables with your own answers."
    - The agent should output its analysis directly to the conversation
 2. Display the analysis results to the user
+   - Use `recap.add_entry` to log significant technical findings (type: "insight" for dependencies/constraints, type: "risk" for problems identified)
 {{#IF INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's output
@@ -401,6 +430,7 @@ Execute combined analyze-and-plan agent:
    - Instruct the agent: "Before making assumptions, document any assumptions clearly in question tables with your own answers."
    - The agent should output its plan directly to the conversation
 2. Display the implementation plan to the user
+   - Use `recap.add_entry` to log key architectural decisions (e.g., type: "decision", content: "Chose approach A over B due to X constraint")
 {{#IF INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's output
@@ -446,6 +476,7 @@ Execute combined analyze-and-plan agent:
    - The agent should output its implementation summary directly to the conversation
    - **CRITICAL**: If an implementation plan is provided, it contains exact file paths and line numbers. The agent MUST use these exact locations - DO NOT search for files when the plan specifies them.
 2. Display implementation summary to user
+   - If implementation revealed unexpected issues or required pivots, use `recap.add_entry` to log them (type: "insight" or "risk")
 3. Mark todos #17 and #18 as completed
 4. Provide final summary
 

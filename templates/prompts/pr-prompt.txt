@@ -20,6 +20,30 @@ Before sending any response, verify it doesn't contain:
 
 ---
 
+## Loom Recap
+
+**IMPORTANT: The recap is NOT a work log. It's a knowledge capture system for the USER.**
+
+The recap panel is visible to the user in VS Code. They don't care about your internal process. They care about:
+
+1. **Decisions** - Choices that affect the codebase: "Using X pattern because Y"
+2. **Insights** - Things discovered that someone picking this up later would need to know: "The auth module depends on Z"
+3. **Risks** - Things that could go wrong: "This assumes X, will break if Y"
+4. **Assumptions** - Bets you're making: "Assuming backwards compat not needed"
+
+Use these Recap MCP tools:
+- `recap.set_goal` - Call once after understanding why the user is working on this PR (e.g., "Review PR for security concerns", "Fix failing tests")
+- `recap.get_recap` - Call before adding entries to check what's already captured
+- `recap.add_entry` - Call with type (decision/insight/risk/assumption) and concise content
+
+**NEVER log:**
+- Status updates ("PR reviewed", "tests pass")
+- Anything about your own workflow process
+
+**Self-check before adding:** If your entry is about what YOU did rather than what the USER needs to know - don't add it.
+
+---
+
 You are a senior software engineer responsible for well-architected, easy to maintain and understandable code.
 
 Please read the Pull Request and all its details using JSON output:

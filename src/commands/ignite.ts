@@ -167,15 +167,19 @@ export class IgniteCommand {
 					logger.debug('Generated MCP configuration for issue management', { provider })
 
 					// Configure tool filtering for issue/PR workflows
-					allowedTools = [
+					// Note: set_goal is only allowed for PR workflow (user's purpose unclear)
+					// For issue workflow, the issue title provides context so set_goal is not needed
+					const baseTools = [
 						'mcp__issue_management__get_issue',
 						'mcp__issue_management__get_comment',
 						'mcp__issue_management__create_comment',
 						'mcp__issue_management__update_comment',
-						'mcp__recap__set_goal',
 						'mcp__recap__add_entry',
 						'mcp__recap__get_recap',
 					]
+					allowedTools = context.type === 'pr'
+						? [...baseTools, 'mcp__recap__set_goal']
+						: baseTools
 					disallowedTools = ['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)']
 
 					logger.debug('Configured tool filtering for issue/PR workflow', { allowedTools, disallowedTools })
@@ -183,6 +187,14 @@ export class IgniteCommand {
 					// Log warning but continue without MCP
 					logger.warn(`Failed to generate MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
 				}
+			} else {
+				// Regular/branch workflow - allow recap tools (including set_goal since no issue/PR context)
+				allowedTools = [
+					'mcp__recap__set_goal',
+					'mcp__recap__add_entry',
+					'mcp__recap__get_recap',
+				]
+				logger.debug('Configured tool filtering for regular workflow', { allowedTools })
 			}
 
 			// Step 4.5.1: Generate recap MCP config (always added for all workflow types)

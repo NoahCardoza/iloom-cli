@@ -20,6 +20,31 @@ Before sending any response, verify it doesn't contain:
 
 ---
 
+## Loom Recap
+
+**IMPORTANT: The recap is NOT a work log. It's a knowledge capture system for the USER.**
+
+The recap panel is visible to the user in VS Code. They don't care about your internal process. They care about:
+
+1. **Decisions** - Choices that affect the codebase: "Using X pattern because Y"
+2. **Insights** - Things discovered that someone picking this up later would need to know: "The auth module depends on Z"
+3. **Risks** - Things that could go wrong: "This assumes X, will break if Y"
+4. **Assumptions** - Bets you're making: "Assuming backwards compat not needed"
+
+Use these Recap MCP tools:
+- `recap.get_recap` - Call before adding entries to check what's already captured
+- `recap.add_entry` - Call with type (decision/insight/risk/assumption) and concise content
+
+**NEVER log:**
+- What phases you skipped
+- Complexity classifications
+- Status updates ("implementation complete", "tests pass")
+- Anything about your own workflow process
+
+**Self-check before adding:** If your entry mentions "enhancement", "complexity evaluation", "SIMPLE/COMPLEX", "word count", "skipping", or "phase" - it's process noise. Don't add it.
+
+---
+
 {{#IF FIRST_TIME_USER}}
 ## First-Time User Context
 
@@ -322,6 +347,7 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
 1. Execute: @agent-iloom-issue-analyzer ISSUE_NUMBER with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers. Document any assumptions clearly in question tables with your own answers.
 2. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
+   - Use `recap.add_entry` to log significant technical findings (type: "insight" for dependencies/constraints, type: "risk" for problems identified)
 {{#IF INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's issue comment output
@@ -394,6 +420,7 @@ Execute combined analyze-and-plan agent:
 2. Execute: @agent-iloom-issue-analyze-and-plan ISSUE_NUMBER with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers. Document any assumptions clearly in question tables with your own answers.
 3. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
+   - Use `recap.add_entry` to log key technical discoveries (type: "insight") and design decisions (type: "decision")
 {{#IF INTERACTIVE_MODE}}
 3.5. Extract and validate assumptions (batched validation):
    - Read the agent's issue comment output
@@ -433,6 +460,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
 1. Execute: @agent-iloom-issue-planner ISSUE_NUMBER with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers. Document any assumptions clearly in question tables with your own answers.
 2. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
+   - Use `recap.add_entry` to log key architectural decisions (e.g., type: "decision", content: "Chose approach A over B due to X constraint")
 {{#IF INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's issue comment output
@@ -481,6 +509,7 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
    - **CRITICAL**: The implementation plan in the issue comments contains exact file paths and line numbers. You MUST use these exact locations - DO NOT search for files when the plan specifies them. Extract file locations from the plan in Step 1.5 before implementing.
    - The implementation plan is located in comment ID [COMMENT_ID] (if planning phase was executed). Read this comment first in Step 1.5 to extract file specifications.
 3. Upon completion: Mark todo #16 as completed
+   - If implementation revealed unexpected issues or required pivots, use `recap.add_entry` to log them (type: "insight" or "risk")
 4. Provide summary and links to any issue comments created - do not open them. All links MUST include comment-id which can be obtained from agent output.
 5. Mark todo #17 as completed
 
