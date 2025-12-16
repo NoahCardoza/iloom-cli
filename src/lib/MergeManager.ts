@@ -87,6 +87,10 @@ export class MergeManager {
 		// If merge-base matches main HEAD, branch is already up to date
 		if (mergeBaseTrimmed === mainHeadTrimmed) {
 			getLogger().success(`Branch is already up to date with ${mainBranch}. No rebase needed.`)
+			// Restore WIP commit if created (soft reset to remove temporary commit)
+			if (wipCommitHash) {
+				await this.restoreWipCommit(worktreePath, wipCommitHash)
+			}
 			return
 		}
 

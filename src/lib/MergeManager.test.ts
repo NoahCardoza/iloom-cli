@@ -271,11 +271,46 @@ describe('MergeManager', () => {
 				.mockResolvedValueOnce('wipcommithash') // rev-parse HEAD
 				.mockResolvedValueOnce('abc123') // merge-base
 				.mockResolvedValueOnce('abc123') // rev-parse main (already up to date)
+				.mockResolvedValueOnce('') // reset --soft HEAD~1 (restore WIP)
+				.mockResolvedValueOnce('') // reset HEAD (unstage)
 
 			await manager.rebaseOnMain('/test/worktree', { force: true })
 
 			// Verify: git add -A was called (includes untracked files)
 			expect(git.executeGitCommand).toHaveBeenCalledWith(['add', '-A'], expect.objectContaining({ cwd: '/test/worktree' }))
+		})
+
+		it('should restore WIP commit when branch is already up to date (no-op rebase)', async () => {
+			// Mock: uncommitted changes exist, branch already up-to-date with main
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref: main exists
+				.mockResolvedValueOnce('M src/file.ts') // status: uncommitted changes exist
+				.mockResolvedValueOnce('') // git add -A
+				.mockResolvedValueOnce('') // git commit -m WIP
+				.mockResolvedValueOnce('abc123wipcommit') // rev-parse HEAD (WIP commit hash)
+				.mockResolvedValueOnce('def456') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main (SAME = no rebase needed)
+				.mockResolvedValueOnce('') // reset --soft HEAD~1 (restore WIP)
+				.mockResolvedValueOnce('') // reset HEAD (unstage)
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: WIP commit was created
+			expect(git.executeGitCommand).toHaveBeenCalledWith(['add', '-A'], expect.objectContaining({ cwd: '/test/worktree' }))
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['commit', '--no-verify', '-m', 'WIP: Auto-stash for rebase'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+
+			// Verify: WIP commit was restored (soft reset) despite no rebase occurring
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['reset', '--soft', 'HEAD~1'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['reset', 'HEAD'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
 		})
 
 		it('should handle conflicts with Claude assistance when WIP commit present', async () => {
