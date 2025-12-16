@@ -1,7 +1,9 @@
 import path from 'path'
+import os from 'os'
 import { getRepoInfo } from './github.js'
 import { logger } from './logger.js'
 import type { IloomSettings } from '../lib/SettingsManager.js'
+import type { LoomMetadata } from '../lib/MetadataManager.js'
 
 /**
  * Generate MCP configuration for issue management
@@ -87,4 +89,70 @@ export async function generateIssueManagementMcpConfig(
 	}
 
 	return [mcpServerConfig]
+}
+
+/**
+ * Reuse MetadataManager.slugifyPath() algorithm for recap file naming
+ *
+ * Algorithm:
+ * 1. Trim trailing slashes
+ * 2. Replace all path separators (/ or \) with ___ (triple underscore)
+ * 3. Replace any other non-alphanumeric characters (except _ and -) with -
+ * 4. Append .json
+ */
+function slugifyPath(loomPath: string): string {
+	let slug = loomPath.replace(/[/\\]+$/, '')
+	slug = slug.replace(/[/\\]/g, '___')
+	slug = slug.replace(/[^a-zA-Z0-9_-]/g, '-')
+	return `${slug}.json`
+}
+
+/**
+ * Generate MCP configuration for recap server
+ *
+ * The recap server captures session context (goal, decisions, insights, risks, assumptions)
+ * for the VS Code Loom Context Panel.
+ *
+ * @param loomPath - Absolute path to the loom workspace
+ * @param loomMetadata - The loom metadata object (will be stringified as JSON)
+ */
+export function generateRecapMcpConfig(
+	loomPath: string,
+	loomMetadata: LoomMetadata
+): Record<string, unknown>[] {
+	// Compute recap file path using slugifyPath algorithm (same as MetadataManager)
+	const recapsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'recaps')
+	const recapFilePath = path.join(recapsDir, slugifyPath(loomPath))
+
+	// Pass both env vars:
+	// - RECAP_FILE_PATH: where to read/write recap data
+	// - LOOM_METADATA_JSON: stringified loom metadata (parsed by MCP using LoomMetadata type)
+	const envVars = {
+		RECAP_FILE_PATH: recapFilePath,
+		LOOM_METADATA_JSON: JSON.stringify(loomMetadata),
+	}
+
+	logger.debug('Generated MCP config for recap server', {
+		loomPath,
+		recapFilePath,
+		loomMetadataDescription: loomMetadata.description,
+	})
+
+	return [
+		{
+			mcpServers: {
+				recap: {
+					transport: 'stdio',
+					command: 'node',
+					args: [
+						path.join(
+							path.dirname(new globalThis.URL(import.meta.url).pathname),
+							'../dist/mcp/recap-server.js'
+						),
+					],
+					env: envVars,
+				},
+			},
+		},
+	]
 }

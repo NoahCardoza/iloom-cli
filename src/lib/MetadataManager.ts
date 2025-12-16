@@ -139,6 +139,15 @@ export class MetadataManager {
   }
 
   /**
+   * Get the full path to the metadata file for a worktree (public API)
+   * Used by other services that need to reference the metadata file location
+   * (e.g., MCP servers that need to read loom context)
+   */
+  getMetadataFilePath(worktreePath: string): string {
+    return this.getFilePath(worktreePath)
+  }
+
+  /**
    * Write metadata for a worktree (spec section 3.1)
    *
    * @param worktreePath - Absolute path to the worktree (used for file naming)

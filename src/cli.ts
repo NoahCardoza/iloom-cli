@@ -1166,6 +1166,46 @@ program
     }
   })
 
+// Command for loom recap (session context)
+program
+  .command('recap')
+  .description('Get recap for current loom (goal, decisions, insights, risks, assumptions)')
+  .option('--json', 'Output as JSON with filePath for file watching')
+  .action(async (options: { json?: boolean }) => {
+    const executeAction = async (): Promise<void> => {
+      try {
+        const { RecapCommand } = await import('./commands/recap.js')
+        const command = new RecapCommand()
+        const result = await command.execute(options.json ? { json: true } : {})
+
+        if (options.json && result) {
+          // JSON mode: output structured result and exit
+          console.log(JSON.stringify(result, null, 2))
+        }
+        process.exit(0)
+      } catch (error) {
+        if (options.json) {
+          // JSON mode: output error as JSON
+          console.log(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
+        } else {
+          logger.error(`Recap failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+          if (error instanceof Error && error.stack) {
+            logger.debug(error.stack)
+          }
+        }
+        process.exit(1)
+      }
+    }
+
+    // Wrap execution in logger context for JSON mode
+    if (options.json) {
+      const jsonLogger = createStderrLogger()
+      await withLogger(jsonLogger, executeAction)
+    } else {
+      await executeAction()
+    }
+  })
+
 // Test command for Neon integration
 program
   .command('test-neon')

@@ -5,6 +5,23 @@ import type { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import * as claudeUtils from '../utils/claude.js'
 import * as githubUtils from '../utils/github.js'
 
+// Mock MetadataManager to return proper metadata for recap MCP tests
+vi.mock('../lib/MetadataManager.js', () => ({
+	MetadataManager: vi.fn(() => ({
+		readMetadata: vi.fn().mockResolvedValue({
+			description: 'Test loom',
+			created_at: '2025-01-01T00:00:00Z',
+			branchName: 'feat/test-branch',
+			worktreePath: '/path/to/workspace',
+			issueType: 'issue',
+			issue_numbers: ['123'],
+			databaseBranchName: null,
+			parentLoomBranch: null,
+		}),
+		getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+	})),
+}))
+
 describe('IgniteCommand', () => {
 	let command: IgniteCommand
 	let mockTemplateManager: PromptTemplateManager
@@ -659,7 +676,7 @@ describe('IgniteCommand', () => {
 			}
 		})
 
-		it('should NOT generate MCP config for regular workflows', async () => {
+		it('should generate recap MCP config for regular workflows (not issue_management)', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const originalCwd = process.cwd
@@ -672,9 +689,14 @@ describe('IgniteCommand', () => {
 			try {
 				await command.execute()
 
-				// Verify launchClaude was NOT called with mcpConfig
+				// Verify launchClaude was called with recap MCP config (but not issue_management)
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
-				expect(launchClaudeCall[1].mcpConfig).toBeUndefined()
+				expect(launchClaudeCall[1].mcpConfig).toBeInstanceOf(Array)
+				expect(launchClaudeCall[1].mcpConfig).toHaveLength(1)
+				// Recap MCP should be present
+				expect(launchClaudeCall[1].mcpConfig[0].mcpServers).toHaveProperty('recap')
+				// Issue management MCP should NOT be present for regular workflows
+				expect(launchClaudeCall[1].mcpConfig[0].mcpServers).not.toHaveProperty('issue_management')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -758,6 +780,9 @@ describe('IgniteCommand', () => {
 					'mcp__issue_management__get_comment',
 					'mcp__issue_management__create_comment',
 					'mcp__issue_management__update_comment',
+					'mcp__recap__set_goal',
+					'mcp__recap__add_entry',
+					'mcp__recap__get_recap',
 				])
 			} finally {
 				process.cwd = originalCwd
@@ -809,6 +834,9 @@ describe('IgniteCommand', () => {
 					'mcp__issue_management__get_comment',
 					'mcp__issue_management__create_comment',
 					'mcp__issue_management__update_comment',
+					'mcp__recap__set_goal',
+					'mcp__recap__add_entry',
+					'mcp__recap__get_recap',
 				])
 			} finally {
 				process.cwd = originalCwd
@@ -886,6 +914,9 @@ describe('IgniteCommand', () => {
 					'mcp__issue_management__get_comment',
 					'mcp__issue_management__create_comment',
 					'mcp__issue_management__update_comment',
+					'mcp__recap__set_goal',
+					'mcp__recap__add_entry',
+					'mcp__recap__get_recap',
 				])
 				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)'])
 			} finally {

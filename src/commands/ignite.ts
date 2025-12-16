@@ -4,7 +4,7 @@ import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions, generateDeterministicSessionId } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables } from '../lib/PromptTemplateManager.js'
-import { generateIssueManagementMcpConfig } from '../utils/mcp.js'
+import { generateIssueManagementMcpConfig, generateRecapMcpConfig } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
@@ -172,6 +172,9 @@ export class IgniteCommand {
 						'mcp__issue_management__get_comment',
 						'mcp__issue_management__create_comment',
 						'mcp__issue_management__update_comment',
+						'mcp__recap__set_goal',
+						'mcp__recap__add_entry',
+						'mcp__recap__get_recap',
 					]
 					disallowedTools = ['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)']
 
@@ -180,6 +183,24 @@ export class IgniteCommand {
 					// Log warning but continue without MCP
 					logger.warn(`Failed to generate MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
 				}
+			}
+
+			// Step 4.5.1: Generate recap MCP config (always added for all workflow types)
+			try {
+				const loomMetadata = await metadataManager.readMetadata(context.workspacePath)
+				if (!loomMetadata) {
+					throw new Error('No loom metadata found for this workspace')
+				}
+				const recapMcpConfig = generateRecapMcpConfig(context.workspacePath, loomMetadata)
+				if (mcpConfig) {
+					mcpConfig.push(...recapMcpConfig)
+				} else {
+					mcpConfig = recapMcpConfig
+				}
+				logger.debug('Generated MCP configuration for recap server')
+			} catch (error) {
+				// Log warning but continue without recap MCP
+				logger.warn(`Failed to generate recap MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
 			}
 
 			// Step 4.6: Load agent configurations using cached settings

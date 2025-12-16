@@ -23,7 +23,7 @@ export default defineConfig([
   },
   // MCP Server build configuration
   {
-    entry: ['src/mcp/issue-management-server.ts'],
+    entry: ['src/mcp/issue-management-server.ts', 'src/mcp/recap-server.ts'],
     format: ['esm'],
     target: 'node16',
     outDir: 'dist/mcp',
