@@ -16,6 +16,7 @@ import { MetadataManager } from './MetadataManager.js'
 import { SettingsManager, type IloomSettings } from './SettingsManager.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import type { IssueProvider } from '../mcp/types.js'
+import { hasMultipleRemotes } from '../utils/remote.js'
 
 /**
  * Input for generating and posting a session summary
@@ -122,7 +123,7 @@ export class SessionSummaryService {
 			}
 
 			// 8. Post summary to issue
-			await this.postSummaryToIssue(input.issueNumber, summary, settings)
+			await this.postSummaryToIssue(input.issueNumber, summary, settings, input.worktreePath)
 
 			logger.success('Session summary posted to issue')
 		} catch (error) {
@@ -218,7 +219,7 @@ export class SessionSummaryService {
 		worktreePath?: string
 	): Promise<void> {
 		const settings = await this.settingsManager.loadSettings(worktreePath)
-		await this.postSummaryToIssue(issueNumber, summary, settings)
+		await this.postSummaryToIssue(issueNumber, summary, settings, worktreePath ?? process.cwd())
 		logger.success('Session summary posted to issue')
 	}
 
@@ -249,21 +250,76 @@ export class SessionSummaryService {
 	}
 
 	/**
+	 * Apply attribution footer to summary based on settings
+	 *
+	 * @param summary - The summary text
+	 * @param worktreePath - Path to worktree for loading settings and detecting remotes
+	 * @returns Summary with attribution footer if applicable
+	 */
+	async applyAttribution(summary: string, worktreePath: string): Promise<string> {
+		const settings = await this.settingsManager.loadSettings(worktreePath)
+		return this.applyAttributionWithSettings(summary, settings, worktreePath)
+	}
+
+	/**
+	 * Apply attribution footer to summary based on provided settings
+	 *
+	 * @param summary - The summary text
+	 * @param settings - The loaded iloom settings
+	 * @param worktreePath - Path to worktree for detecting remotes
+	 * @returns Summary with attribution footer if applicable
+	 */
+	async applyAttributionWithSettings(
+		summary: string,
+		settings: IloomSettings,
+		worktreePath: string
+	): Promise<string> {
+		const attributionSetting = settings.attribution ?? 'upstreamOnly'
+		logger.debug(`Attribution setting from config: ${settings.attribution}`)
+		logger.debug(`Attribution setting (with default): ${attributionSetting}`)
+
+		let shouldShowAttribution = false
+		if (attributionSetting === 'on') {
+			shouldShowAttribution = true
+			logger.debug('Attribution: always on')
+		} else if (attributionSetting === 'upstreamOnly') {
+			// Only show attribution when contributing to external repos (multiple remotes)
+			shouldShowAttribution = await hasMultipleRemotes(worktreePath)
+			logger.debug(`Attribution: upstreamOnly, hasMultipleRemotes=${shouldShowAttribution}`)
+		} else {
+			logger.debug('Attribution: off')
+		}
+		// 'off' keeps shouldShowAttribution = false
+
+		logger.debug(`Should show attribution: ${shouldShowAttribution}`)
+		if (shouldShowAttribution) {
+			logger.debug('Attribution footer appended to summary')
+			return `${summary}\n\n---\n*Generated with 🤖❤️ by [iloom.ai](https://iloom.ai)*`
+		}
+
+		return summary
+	}
+
+	/**
 	 * Post the summary as a comment to the issue
 	 */
 	private async postSummaryToIssue(
 		issueNumber: string | number,
 		summary: string,
-		settings: IloomSettings
+		settings: IloomSettings,
+		worktreePath: string
 	): Promise<void> {
 		// Get the issue management provider from settings
 		const providerType = (settings.issueManagement?.provider ?? 'github') as IssueProvider
 		const provider = IssueManagementProviderFactory.create(providerType)
 
+		// Apply attribution if configured
+		const finalSummary = await this.applyAttributionWithSettings(summary, settings, worktreePath)
+
 		// Create the comment
 		await provider.createComment({
 			number: String(issueNumber),
-			body: summary,
+			body: finalSummary,
 			type: 'issue',
 		})
 	}

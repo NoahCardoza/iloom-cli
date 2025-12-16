@@ -49,8 +49,8 @@ describe('SettingsManager', () => {
 			.mockRejectedValueOnce(error) // settings.local.json (doesn't exist)
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			// sourceEnvOnStart defaults to false, so it will be added
-			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false })
+			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
+			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly' })
 		})
 
 		it('should return empty object when settings file does not exist', async () => {
@@ -65,8 +65,8 @@ describe('SettingsManager', () => {
 			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			// sourceEnvOnStart defaults to false
-			expect(result).toEqual({ sourceEnvOnStart: false })
+			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
+			expect(result).toEqual({ sourceEnvOnStart: false, attribution: 'upstreamOnly' })
 		})
 
 		it('should return empty object when .iloom directory does not exist', async () => {
@@ -81,8 +81,8 @@ describe('SettingsManager', () => {
 			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			// sourceEnvOnStart defaults to false
-			expect(result).toEqual({ sourceEnvOnStart: false })
+			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
+			expect(result).toEqual({ sourceEnvOnStart: false, attribution: 'upstreamOnly' })
 		})
 
 		it('should throw error for malformed JSON in settings file', async () => {
@@ -135,8 +135,8 @@ describe('SettingsManager', () => {
 			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			// sourceEnvOnStart defaults to false
-			expect(result).toEqual({ ...emptyAgentsSettings, sourceEnvOnStart: false })
+			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
+			expect(result).toEqual({ ...emptyAgentsSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly' })
 		})
 
 		it('should handle settings file with null agents value', async () => {
@@ -155,8 +155,8 @@ describe('SettingsManager', () => {
 			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			// sourceEnvOnStart defaults to false
-			expect(result).toEqual({ ...nullAgentsSettings, sourceEnvOnStart: false })
+			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
+			expect(result).toEqual({ ...nullAgentsSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly' })
 		})
 
 		it('should use process.cwd() when projectRoot not provided', async () => {
@@ -178,8 +178,8 @@ describe('SettingsManager', () => {
 			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings()
-			// sourceEnvOnStart defaults to false
-			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false })
+			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
+			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly' })
 		})
 
 		it('should load settings with mainBranch field', async () => {
@@ -1521,8 +1521,8 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 
-			// sourceEnvOnStart defaults to false
-			expect(result).toEqual({ sourceEnvOnStart: false })
+			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
+			expect(result).toEqual({ sourceEnvOnStart: false, attribution: 'upstreamOnly' })
 		})
 
 		it('should deep merge workflows with partial overrides', async () => {

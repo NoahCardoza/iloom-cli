@@ -69,10 +69,19 @@ export class SummaryCommand {
 			parsed.issueNumber
 		)
 
-		// 4. In JSON mode, return the structured result
+		// 4. Apply attribution if --with-comment is used (so output matches what will be posted)
+		let displaySummary = result.summary
+		if (input.options.withComment && parsed.loomType !== 'branch') {
+			displaySummary = await this.sessionSummaryService.applyAttribution(
+				result.summary,
+				parsed.worktree.path
+			)
+		}
+
+		// 5. In JSON mode, return the structured result
 		if (input.options.json) {
 			const jsonResult: SummaryResult = {
-				summary: result.summary,
+				summary: displaySummary,
 				sessionId: result.sessionId,
 				branchName: parsed.worktree.branch,
 				loomType: parsed.loomType,
@@ -84,11 +93,11 @@ export class SummaryCommand {
 			return jsonResult
 		}
 
-		// 5. Print the summary to stdout (intentionally using console.log for piping/redirection)
+		// 6. Print the summary to stdout (intentionally using console.log for piping/redirection)
 		// eslint-disable-next-line no-console
-		console.log(result.summary)
+		console.log(displaySummary)
 
-		// 6. Optionally post the summary as a comment
+		// 7. Optionally post the summary as a comment
 		if (input.options.withComment) {
 			// Skip posting for branch type looms (no issue to comment on)
 			if (parsed.loomType === 'branch') {

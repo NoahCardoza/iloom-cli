@@ -73,6 +73,7 @@ describe('SummaryCommand', () => {
 		mockSessionSummaryService = {
 			generateSummary: vi.fn().mockResolvedValue(defaultSummaryResult),
 			postSummary: vi.fn().mockResolvedValue(undefined),
+			applyAttribution: vi.fn().mockImplementation((summary: string) => Promise.resolve(summary)),
 		} as unknown as SessionSummaryService
 
 		command = new SummaryCommand(

@@ -365,6 +365,15 @@ export const IloomSettingsSchema = z.object({
 		})
 		.optional()
 		.describe('Color synchronization settings for workspace identification'),
+	attribution: z
+		.enum(['off', 'upstreamOnly', 'on'])
+		.default('upstreamOnly')
+		.describe(
+			'Controls when iloom attribution appears in session summaries. ' +
+				'"off" - never show attribution. ' +
+				'"upstreamOnly" - only show for contributions to external repositories (e.g., open source). ' +
+				'"on" - always show attribution.'
+		),
 })
 
 /**
@@ -526,6 +535,15 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		})
 		.optional()
 		.describe('Color synchronization settings for workspace identification'),
+	attribution: z
+		.enum(['off', 'upstreamOnly', 'on'])
+		.optional()
+		.describe(
+			'Controls when iloom attribution appears in session summaries. ' +
+				'"off" - never show attribution. ' +
+				'"upstreamOnly" - only show for contributions to external repositories (e.g., open source). ' +
+				'"on" - always show attribution.'
+		),
 })
 
 /**

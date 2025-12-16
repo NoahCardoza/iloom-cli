@@ -22,10 +22,16 @@ vi.mock('../mcp/IssueManagementProviderFactory.js', () => ({
 	},
 }))
 
+// Mock the remote utility for fork detection
+vi.mock('../utils/remote.js', () => ({
+	hasMultipleRemotes: vi.fn(),
+}))
+
 // Import mocked modules
 import { launchClaude } from '../utils/claude.js'
 import { readSessionContext } from '../utils/claude-transcript.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
+import { hasMultipleRemotes } from '../utils/remote.js'
 
 describe('SessionSummaryService', () => {
 	// Mock dependencies
@@ -111,6 +117,9 @@ describe('SessionSummaryService', () => {
 
 		// Setup transcript mock - returns null by default (no compact summaries)
 		vi.mocked(readSessionContext).mockResolvedValue(null)
+
+		// Setup remote mock - defaults to single remote (no fork mode)
+		vi.mocked(hasMultipleRemotes).mockResolvedValue(false)
 
 		// Create service with mocks
 		service = new SessionSummaryService(
@@ -379,6 +388,98 @@ describe('SessionSummaryService', () => {
 			}
 
 			expect(service.shouldGenerateSummary('issue', settings)).toBe(true)
+		})
+	})
+
+	describe('attribution setting', () => {
+		it('should append attribution when setting is "on" (always)', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				...defaultSettings,
+				attribution: 'on',
+			})
+			vi.mocked(hasMultipleRemotes).mockResolvedValue(false) // Single remote
+
+			await service.generateAndPostSummary(defaultInput)
+
+			// Should not check remotes when attribution is always on
+			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
+				number: '123',
+				body: expect.stringContaining('\n\n---\n*Generated with 🤖❤️ by [iloom.ai](https://iloom.ai)*'),
+				type: 'issue',
+			})
+		})
+
+		it('should not append attribution when setting is "off" (never)', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				...defaultSettings,
+				attribution: 'off',
+			})
+			vi.mocked(hasMultipleRemotes).mockResolvedValue(true) // Fork mode
+
+			await service.generateAndPostSummary(defaultInput)
+
+			// Should not show attribution even in fork mode
+			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
+				number: '123',
+				body: expect.not.stringContaining('iloom.ai'),
+				type: 'issue',
+			})
+		})
+
+		it('should append attribution when setting is "upstreamOnly" and in fork mode', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				...defaultSettings,
+				attribution: 'upstreamOnly',
+			})
+			vi.mocked(hasMultipleRemotes).mockResolvedValue(true)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			expect(hasMultipleRemotes).toHaveBeenCalledWith(defaultInput.worktreePath)
+			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
+				number: '123',
+				body: expect.stringContaining('\n\n---\n*Generated with 🤖❤️ by [iloom.ai](https://iloom.ai)*'),
+				type: 'issue',
+			})
+		})
+
+		it('should not append attribution when setting is "upstreamOnly" and single remote', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				...defaultSettings,
+				attribution: 'upstreamOnly',
+			})
+			vi.mocked(hasMultipleRemotes).mockResolvedValue(false)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			expect(hasMultipleRemotes).toHaveBeenCalledWith(defaultInput.worktreePath)
+			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
+				number: '123',
+				body: expect.not.stringContaining('iloom.ai'),
+				type: 'issue',
+			})
+		})
+
+		it('should default to "upstreamOnly" when attribution setting is undefined', async () => {
+			// defaultSettings has no attribution field
+			vi.mocked(hasMultipleRemotes).mockResolvedValue(true)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			// Should behave like upstreamOnly - check remotes and show attribution
+			expect(hasMultipleRemotes).toHaveBeenCalledWith(defaultInput.worktreePath)
+			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
+				number: '123',
+				body: expect.stringContaining('\n\n---\n*Generated with 🤖❤️ by [iloom.ai](https://iloom.ai)*'),
+				type: 'issue',
+			})
+		})
+
+		it('should handle hasMultipleRemotes errors gracefully', async () => {
+			vi.mocked(hasMultipleRemotes).mockRejectedValue(new Error('Git error'))
+
+			// Should not throw - non-blocking
+			await expect(service.generateAndPostSummary(defaultInput)).resolves.not.toThrow()
 		})
 	})
 })
