@@ -168,7 +168,8 @@ export class DevServerManager {
 		worktreePath: string,
 		port: number,
 		redirectToStderr = false,
-		onProcessStarted?: (pid?: number) => void
+		onProcessStarted?: (pid?: number) => void,
+		envOverrides?: Record<string, string>
 	): Promise<{ pid?: number }> {
 		// Build dev server command
 		const devCommand = await buildDevServerCommand(worktreePath)
@@ -182,7 +183,8 @@ export class DevServerManager {
 			cwd: worktreePath,
 			env: {
 				...process.env,
-				PORT: port.toString(),
+				...envOverrides,
+				PORT: port.toString(), // PORT always wins (explicit parameter)
 			},
 			// Configure stdio based on whether we want to redirect output
 			stdio,

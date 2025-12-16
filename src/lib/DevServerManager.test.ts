@@ -306,6 +306,136 @@ describe('DevServerManager', () => {
 		})
 	})
 
+	describe('runServerForeground', () => {
+		it('should merge envOverrides with process.env when provided', async () => {
+			const port = 3087
+
+			vi.mocked(devServerUtils.buildDevServerCommand).mockResolvedValue('pnpm dev')
+
+			const mockProcess = {
+				pid: 12345,
+				then: (resolve: (value: unknown) => void) => {
+					resolve(undefined)
+					return mockProcess
+				},
+			} as unknown as ExecaChildProcess
+			vi.mocked(execa).mockReturnValue(mockProcess)
+
+			await manager.runServerForeground(
+				mockWorktreePath,
+				port,
+				false,
+				undefined,
+				{ DATABASE_URL: 'postgres://test', CUSTOM_VAR: 'value' }
+			)
+
+			expect(execa).toHaveBeenCalledWith(
+				'sh',
+				['-c', 'pnpm dev'],
+				expect.objectContaining({
+					env: expect.objectContaining({
+						DATABASE_URL: 'postgres://test',
+						CUSTOM_VAR: 'value',
+						PORT: '3087',
+					}),
+				})
+			)
+		})
+
+		it('should let PORT parameter override envOverrides.PORT', async () => {
+			const port = 3087
+
+			vi.mocked(devServerUtils.buildDevServerCommand).mockResolvedValue('pnpm dev')
+
+			const mockProcess = {
+				pid: 12345,
+				then: (resolve: (value: unknown) => void) => {
+					resolve(undefined)
+					return mockProcess
+				},
+			} as unknown as ExecaChildProcess
+			vi.mocked(execa).mockReturnValue(mockProcess)
+
+			await manager.runServerForeground(
+				mockWorktreePath,
+				port,
+				false,
+				undefined,
+				{ PORT: '9999' } // Should be overridden
+			)
+
+			expect(execa).toHaveBeenCalledWith(
+				'sh',
+				['-c', 'pnpm dev'],
+				expect.objectContaining({
+					env: expect.objectContaining({
+						PORT: '3087', // Function param wins
+					}),
+				})
+			)
+		})
+
+		it('should work with empty envOverrides', async () => {
+			const port = 3087
+
+			vi.mocked(devServerUtils.buildDevServerCommand).mockResolvedValue('pnpm dev')
+
+			const mockProcess = {
+				pid: 12345,
+				then: (resolve: (value: unknown) => void) => {
+					resolve(undefined)
+					return mockProcess
+				},
+			} as unknown as ExecaChildProcess
+			vi.mocked(execa).mockReturnValue(mockProcess)
+
+			await manager.runServerForeground(
+				mockWorktreePath,
+				port,
+				false,
+				undefined,
+				{}
+			)
+
+			expect(execa).toHaveBeenCalledWith(
+				'sh',
+				['-c', 'pnpm dev'],
+				expect.objectContaining({
+					env: expect.objectContaining({
+						PORT: '3087',
+					}),
+				})
+			)
+		})
+
+		it('should work without envOverrides (undefined)', async () => {
+			const port = 3087
+
+			vi.mocked(devServerUtils.buildDevServerCommand).mockResolvedValue('pnpm dev')
+
+			const mockProcess = {
+				pid: 12345,
+				then: (resolve: (value: unknown) => void) => {
+					resolve(undefined)
+					return mockProcess
+				},
+			} as unknown as ExecaChildProcess
+			vi.mocked(execa).mockReturnValue(mockProcess)
+
+			await manager.runServerForeground(mockWorktreePath, port, false, undefined)
+
+			expect(execa).toHaveBeenCalledWith(
+				'sh',
+				['-c', 'pnpm dev'],
+				expect.objectContaining({
+					env: expect.objectContaining({
+						PORT: '3087',
+					}),
+				})
+			)
+		})
+	})
+
 	describe('cleanup', () => {
 		it('should kill all running server processes', async () => {
 			const port = 3087

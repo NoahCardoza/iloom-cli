@@ -3,7 +3,9 @@ import { DevServerCommand } from './dev-server.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { DevServerManager } from '../lib/DevServerManager.js'
+import { SettingsManager } from '../lib/SettingsManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
+import { loadWorkspaceEnv, isNoEnvFilesFoundError } from '../utils/env.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { ProjectCapabilities } from '../types/loom.js'
 import fs from 'fs-extra'
@@ -14,13 +16,13 @@ vi.mock('../lib/ProjectCapabilityDetector.js')
 vi.mock('../lib/DevServerManager.js')
 vi.mock('../utils/IdentifierParser.js')
 vi.mock('fs-extra')
-vi.mock('../lib/SettingsManager.js', () => {
+vi.mock('../lib/SettingsManager.js')
+vi.mock('../utils/env.js', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../utils/env.js')>()
 	return {
-		SettingsManager: class MockSettingsManager {
-			async loadSettings() {
-				return {}
-			}
-		},
+		...actual,
+		loadWorkspaceEnv: vi.fn(() => ({ parsed: {} })),
+		isNoEnvFilesFoundError: vi.fn(() => false),
 	}
 })
 
@@ -41,6 +43,7 @@ describe('DevServerCommand', () => {
 	let mockCapabilityDetector: ProjectCapabilityDetector
 	let mockDevServerManager: DevServerManager
 	let mockIdentifierParser: IdentifierParser
+	let mockSettingsManager: SettingsManager
 
 	const mockWorktree: GitWorktree = {
 		path: '/test/worktrees/issue-87',
@@ -54,6 +57,7 @@ describe('DevServerCommand', () => {
 		mockCapabilityDetector = new ProjectCapabilityDetector()
 		mockDevServerManager = new DevServerManager()
 		mockIdentifierParser = new IdentifierParser(mockGitWorktreeManager)
+		mockSettingsManager = new SettingsManager()
 
 		// Mock DevServerManager methods
 		vi.mocked(mockDevServerManager.isServerRunning).mockResolvedValue(false)
@@ -67,11 +71,19 @@ describe('DevServerCommand', () => {
 			}
 		)
 
+		// Mock SettingsManager - default to sourceEnvOnStart: false
+		vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({})
+
+		// Reset env loading mocks
+		vi.mocked(loadWorkspaceEnv).mockReturnValue({ parsed: {} })
+		vi.mocked(isNoEnvFilesFoundError).mockReturnValue(false)
+
 		command = new DevServerCommand(
 			mockGitWorktreeManager,
 			mockCapabilityDetector,
 			mockIdentifierParser,
-			mockDevServerManager
+			mockDevServerManager,
+			mockSettingsManager
 		)
 	})
 
@@ -196,7 +208,8 @@ describe('DevServerCommand', () => {
 				mockWorktree.path,
 				3087,
 				false,
-				expect.any(Function)
+				expect.any(Function),
+				expect.any(Object)
 			)
 		})
 
@@ -279,7 +292,8 @@ describe('DevServerCommand', () => {
 				mockWorktree.path,
 				4500,
 				false,
-				expect.any(Function)
+				expect.any(Function),
+				expect.any(Object)
 			)
 		})
 
@@ -300,7 +314,8 @@ describe('DevServerCommand', () => {
 				mockWorktree.path,
 				3087,
 				false,
-				expect.any(Function)
+				expect.any(Function),
+				expect.any(Object)
 			)
 		})
 	})
@@ -386,7 +401,8 @@ describe('DevServerCommand', () => {
 				mockWorktree.path,
 				3087,
 				false,
-				expect.any(Function)
+				expect.any(Function),
+				expect.any(Object)
 			)
 		})
 
@@ -400,8 +416,121 @@ describe('DevServerCommand', () => {
 				mockWorktree.path,
 				3087,
 				true,
-				expect.any(Function)
+				expect.any(Function),
+				expect.any(Object)
 			)
+		})
+	})
+
+	describe('environment variable loading', () => {
+		beforeEach(() => {
+			vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+				type: 'issue',
+				number: 87,
+				originalInput: '87',
+			})
+
+			vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+			const mockCapabilities: ProjectCapabilities = {
+				capabilities: ['web'],
+				binEntries: {},
+			}
+			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(mockCapabilities)
+
+			vi.mocked(fs.pathExists).mockResolvedValue(true)
+			vi.mocked(fs.readFile).mockResolvedValue('PORT=3087\n')
+		})
+
+		it('should load env vars when sourceEnvOnStart is true', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				sourceEnvOnStart: true,
+			})
+			vi.mocked(loadWorkspaceEnv).mockReturnValue({
+				parsed: { DATABASE_URL: 'postgres://test', API_KEY: 'secret' },
+			})
+
+			await command.execute({ identifier: '87' })
+
+			expect(loadWorkspaceEnv).toHaveBeenCalledWith(mockWorktree.path)
+			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+				mockWorktree.path,
+				3087,
+				false,
+				expect.any(Function),
+				{ DATABASE_URL: 'postgres://test', API_KEY: 'secret' }
+			)
+		})
+
+		it('should NOT load env vars when sourceEnvOnStart is false (default)', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				sourceEnvOnStart: false,
+			})
+
+			await command.execute({ identifier: '87' })
+
+			expect(loadWorkspaceEnv).not.toHaveBeenCalled()
+			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+				mockWorktree.path,
+				3087,
+				false,
+				expect.any(Function),
+				{}
+			)
+		})
+
+		it('should NOT load env vars when sourceEnvOnStart is undefined', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({})
+
+			await command.execute({ identifier: '87' })
+
+			expect(loadWorkspaceEnv).not.toHaveBeenCalled()
+			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+				mockWorktree.path,
+				3087,
+				false,
+				expect.any(Function),
+				{}
+			)
+		})
+
+		it('should handle loadWorkspaceEnv returning error gracefully', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				sourceEnvOnStart: true,
+			})
+			const error = new Error('Failed to read .env')
+			vi.mocked(loadWorkspaceEnv).mockReturnValue({
+				error,
+			})
+			vi.mocked(isNoEnvFilesFoundError).mockReturnValue(false)
+
+			// Should not throw - server should still start
+			const result = await command.execute({ identifier: '87' })
+
+			expect(result.status).toBe('started')
+			expect(mockDevServerManager.runServerForeground).toHaveBeenCalledWith(
+				mockWorktree.path,
+				3087,
+				false,
+				expect.any(Function),
+				{}
+			)
+		})
+
+		it('should not warn when loadWorkspaceEnv returns "no env files found" error', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				sourceEnvOnStart: true,
+			})
+			const error = new Error('no ".env*" files matching pattern')
+			vi.mocked(loadWorkspaceEnv).mockReturnValue({
+				error,
+			})
+			vi.mocked(isNoEnvFilesFoundError).mockReturnValue(true)
+
+			await command.execute({ identifier: '87' })
+
+			// Should proceed without warning since "no env files" is harmless
+			expect(mockDevServerManager.runServerForeground).toHaveBeenCalled()
 		})
 	})
 })

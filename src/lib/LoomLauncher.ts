@@ -3,7 +3,6 @@ import { join } from 'node:path'
 import { openTerminalWindow, openMultipleTerminalWindows } from '../utils/terminal.js'
 import type { TerminalWindowOptions } from '../utils/terminal.js'
 import { openIdeWindow } from '../utils/ide.js'
-import { getDevServerLaunchCommand } from '../utils/dev-server.js'
 import { generateColorFromBranchName, hexToRgb } from '../utils/color.js'
 import { getLogger } from '../utils/logger-context.js'
 import { ClaudeContextManager } from './ClaudeContextManager.js'
@@ -71,7 +70,7 @@ export class LoomLauncher {
 		if (enableDevServer) {
 			terminalsToLaunch.push({
 				type: 'devServer',
-				options: await this.buildDevServerTerminalOptions(options),
+				options: this.buildDevServerTerminalOptions(options),
 			})
 		}
 
@@ -147,13 +146,13 @@ export class LoomLauncher {
 
 	/**
 	 * Launch dev server terminal
+	 * Runs `il dev-server [identifier]` which handles env loading internally
 	 */
 	private async launchDevServerTerminal(options: LaunchLoomOptions): Promise<void> {
-		const devServerCommand = await getDevServerLaunchCommand(
-			options.worktreePath,
-			options.port,
-			options.capabilities
-		)
+		// Build dev-server command with identifier
+		const executable = options.executablePath ?? getExecutablePath()
+		const devServerIdentifier = String(options.identifier)
+		const devServerCommand = `${executable} dev-server ${devServerIdentifier}`
 
 		// Only generate color if terminal coloring is enabled (default: true)
 		const backgroundColor = (options.colorTerminal ?? true)
@@ -166,7 +165,8 @@ export class LoomLauncher {
 			workspacePath: options.worktreePath,
 			command: devServerCommand,
 			...(backgroundColor && { backgroundColor }),
-			includeEnvSetup: (options.sourceEnvOnStart ?? false) && this.hasAnyEnvFiles(options.worktreePath),
+			// il dev-server handles env loading internally, so no includeEnvSetup
+			includeEnvSetup: false,
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
 		})
@@ -240,16 +240,16 @@ export class LoomLauncher {
 
 	/**
 	 * Build terminal options for dev server
+	 * Uses `il dev-server [identifier]` which handles env loading internally
 	 */
-	private async buildDevServerTerminalOptions(
+	private buildDevServerTerminalOptions(
 		options: LaunchLoomOptions
-	): Promise<TerminalWindowOptions> {
-		const devServerCommand = await getDevServerLaunchCommand(
-			options.worktreePath,
-			options.port,
-			options.capabilities
-		)
-		const hasEnvFile = this.hasAnyEnvFiles(options.worktreePath)
+	): TerminalWindowOptions {
+		// Build dev-server command with identifier
+		const executable = options.executablePath ?? getExecutablePath()
+		const devServerIdentifier = String(options.identifier)
+		const devServerCommand = `${executable} dev-server ${devServerIdentifier}`
+
 		const devServerTitle = `Dev Server - ${this.formatIdentifier(options.workflowType, options.identifier)}`
 
 		// Only generate color if terminal coloring is enabled (default: true)
@@ -264,7 +264,8 @@ export class LoomLauncher {
 			command: devServerCommand,
 			...(backgroundColor && { backgroundColor }),
 			title: devServerTitle,
-			includeEnvSetup: (options.sourceEnvOnStart ?? false) && hasEnvFile,
+			// il dev-server handles env loading internally
+			includeEnvSetup: false,
 			includePortExport: options.capabilities.includes('web'),
 			...(options.port !== undefined && { port: options.port }),
 		}

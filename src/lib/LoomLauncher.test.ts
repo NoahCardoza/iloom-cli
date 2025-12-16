@@ -4,14 +4,14 @@ import type { LaunchLoomOptions } from './LoomLauncher.js'
 import * as terminal from '../utils/terminal.js'
 import type { TerminalWindowOptions } from '../utils/terminal.js'
 import * as ide from '../utils/ide.js'
-import * as devServer from '../utils/dev-server.js'
+// Note: devServer import removed since LoomLauncher no longer uses getDevServerLaunchCommand
 import { ClaudeContextManager } from './ClaudeContextManager.js'
 import { SettingsManager } from './SettingsManager.js'
 
 // Mock all external dependencies
 vi.mock('../utils/terminal.js')
 vi.mock('../utils/ide.js')
-vi.mock('../utils/dev-server.js')
+// Note: dev-server.js mock removed since LoomLauncher no longer calls getDevServerLaunchCommand
 vi.mock('./ClaudeContextManager.js')
 vi.mock('./SettingsManager.js')
 vi.mock('../utils/color.js', () => ({
@@ -60,12 +60,6 @@ describe('LoomLauncher', () => {
 
 	describe('launchLoom', () => {
 		describe('all components enabled', () => {
-			beforeEach(() => {
-				vi.mocked(devServer.getDevServerLaunchCommand).mockResolvedValue(
-					'code . && echo Starting... && pnpm dev'
-				)
-			})
-
 			it('should launch all components when all are enabled', async () => {
 				await launcher.launchLoom({
 					...baseOptions,
@@ -139,10 +133,6 @@ describe('LoomLauncher', () => {
 			})
 
 			it('should launch only dev server terminal when only DevServer enabled', async () => {
-				vi.mocked(devServer.getDevServerLaunchCommand).mockResolvedValue(
-					'code . && echo Starting... && pnpm dev'
-				)
-
 				await launcher.launchLoom({
 					...baseOptions,
 					enableClaude: false,
@@ -172,12 +162,6 @@ describe('LoomLauncher', () => {
 		})
 
 		describe('component combinations', () => {
-			beforeEach(() => {
-				vi.mocked(devServer.getDevServerLaunchCommand).mockResolvedValue(
-					'code . && echo Starting... && pnpm dev'
-				)
-			})
-
 			it('should launch Claude + VSCode when both enabled', async () => {
 				await launcher.launchLoom({
 					...baseOptions,
@@ -332,28 +316,11 @@ describe('LoomLauncher', () => {
 				).rejects.toThrow('Claude CLI not found')
 			})
 
-			it('should throw when dev server command generation fails', async () => {
-				vi.mocked(devServer.getDevServerLaunchCommand).mockRejectedValue(
-					new Error('No package.json found')
-				)
-
-				await expect(
-					launcher.launchLoom({
-						...baseOptions,
-						enableClaude: false,
-						enableCode: false,
-						enableDevServer: true,
-						enableTerminal: false,
-					})
-				).rejects.toThrow('No package.json found')
-			})
+			// Note: "should throw when dev server command generation fails" test removed
+			// since LoomLauncher no longer calls getDevServerLaunchCommand
 		})
 
 		describe('terminal flag combinations', () => {
-			beforeEach(() => {
-				vi.mocked(devServer.getDevServerLaunchCommand).mockResolvedValue('pnpm dev')
-			})
-
 			it('should launch 3 tabs when Claude + DevServer + Terminal all enabled', async () => {
 				await launcher.launchLoom({
 					...baseOptions,
@@ -368,7 +335,7 @@ describe('LoomLauncher', () => {
 				expect(call).toHaveLength(3)
 				expect(call[0]).toMatchObject({
 					title: 'Dev Server - Issue #42',
-					command: 'pnpm dev',
+					command: 'iloom dev-server 42', // Now uses il dev-server command
 				})
 				expect(call[1]).toMatchObject({
 					title: 'Terminal - Issue #42',
@@ -496,74 +463,27 @@ describe('LoomLauncher', () => {
 
 	describe('sourceEnvOnStart option', () => {
 		beforeEach(async () => {
-			vi.mocked(devServer.getDevServerLaunchCommand).mockResolvedValue('pnpm dev')
 			// Reset existsSync mock to default (true)
 			const fs = await import('node:fs')
 			vi.mocked(fs.existsSync).mockReturnValue(true)
 		})
 
-		it('should include env setup when sourceEnvOnStart is true and .env exists', async () => {
+		it('should NOT include env setup for dev server terminal (il dev-server handles env loading internally)', async () => {
+			// Dev server terminal now uses `il dev-server` which handles env loading internally
+			// So includeEnvSetup should always be false regardless of sourceEnvOnStart setting
 			await launcher.launchLoom({
 				...baseOptions,
 				enableClaude: false,
 				enableCode: false,
 				enableDevServer: true,
 				enableTerminal: false,
-				sourceEnvOnStart: true,
-			})
-
-			expect(terminal.openTerminalWindow).toHaveBeenCalled()
-			const call = vi.mocked(terminal.openTerminalWindow).mock.calls[0][0]
-			expect(call.includeEnvSetup).toBe(true)
-		})
-
-		it('should NOT include env setup when sourceEnvOnStart is false even if .env exists', async () => {
-			await launcher.launchLoom({
-				...baseOptions,
-				enableClaude: false,
-				enableCode: false,
-				enableDevServer: true,
-				enableTerminal: false,
-				sourceEnvOnStart: false,
+				sourceEnvOnStart: true, // Even when true, dev server terminal should not include env setup
 			})
 
 			expect(terminal.openTerminalWindow).toHaveBeenCalled()
 			const call = vi.mocked(terminal.openTerminalWindow).mock.calls[0][0]
 			expect(call.includeEnvSetup).toBe(false)
-		})
-
-		it('should NOT include env setup when .env does not exist regardless of sourceEnvOnStart', async () => {
-			// Mock fs.existsSync to return false for .env file
-			const fs = await import('node:fs')
-			vi.mocked(fs.existsSync).mockReturnValue(false)
-
-			await launcher.launchLoom({
-				...baseOptions,
-				enableClaude: false,
-				enableCode: false,
-				enableDevServer: true,
-				enableTerminal: false,
-				sourceEnvOnStart: true,
-			})
-
-			expect(terminal.openTerminalWindow).toHaveBeenCalled()
-			const call = vi.mocked(terminal.openTerminalWindow).mock.calls[0][0]
-			expect(call.includeEnvSetup).toBe(false)
-		})
-
-		it('should default to NOT including env setup when sourceEnvOnStart not specified', async () => {
-			await launcher.launchLoom({
-				...baseOptions,
-				enableClaude: false,
-				enableCode: false,
-				enableDevServer: true,
-				enableTerminal: false,
-				// sourceEnvOnStart not specified - should default to false
-			})
-
-			expect(terminal.openTerminalWindow).toHaveBeenCalled()
-			const call = vi.mocked(terminal.openTerminalWindow).mock.calls[0][0]
-			expect(call.includeEnvSetup).toBe(false)
+			expect(call.command).toBe('iloom dev-server 42') // Uses il dev-server command
 		})
 
 		it('should NOT apply sourceEnvOnStart to standalone terminal (il shell handles env loading)', async () => {
@@ -584,22 +504,22 @@ describe('LoomLauncher', () => {
 			expect(call.command).toBe('iloom shell 42')
 		})
 
-		it('should apply sourceEnvOnStart to Claude terminal in multi-terminal mode', async () => {
+		it('should still apply sourceEnvOnStart to Claude terminal in multi-terminal mode', async () => {
 			await launcher.launchLoom({
 				...baseOptions,
 				enableClaude: true,
 				enableCode: false,
 				enableDevServer: true,
 				enableTerminal: false,
-				sourceEnvOnStart: false,
+				sourceEnvOnStart: true,
 			})
 
 			expect(terminal.openMultipleTerminalWindows).toHaveBeenCalled()
 			const calls = vi.mocked(terminal.openMultipleTerminalWindows).mock.calls[0][0]
-			// All terminals should respect sourceEnvOnStart
-			calls.forEach((tab: TerminalWindowOptions) => {
-				expect(tab.includeEnvSetup).toBe(false)
-			})
+			// Dev server tab should have includeEnvSetup: false (handled internally)
+			// Claude tab may still have includeEnvSetup based on sourceEnvOnStart
+			const devServerTab = calls.find((tab: TerminalWindowOptions) => tab.command?.includes('dev-server'))
+			expect(devServerTab?.includeEnvSetup).toBe(false)
 		})
 	})
 

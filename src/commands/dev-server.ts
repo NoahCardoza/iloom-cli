@@ -5,7 +5,7 @@ import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { DevServerManager } from '../lib/DevServerManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
-import { parseEnvFile, extractPort, findEnvFileContainingVariable } from '../utils/env.js'
+import { parseEnvFile, extractPort, findEnvFileContainingVariable, loadWorkspaceEnv, isNoEnvFilesFoundError } from '../utils/env.js'
 import { calculatePortForBranch } from '../utils/port.js'
 import { extractIssueNumber } from '../utils/git.js'
 import { logger } from '../utils/logger.js'
@@ -66,7 +66,24 @@ export class DevServerCommand {
 
 		logger.debug(`Found worktree at: ${worktree.path}`)
 
-		// 3. Detect project capabilities
+		// 3. Load settings to check sourceEnvOnStart
+		const settings = await this.settingsManager.loadSettings()
+		const shouldLoadEnv = settings.sourceEnvOnStart ?? false
+
+		// Build environment variables
+		let envOverrides: Record<string, string> = {}
+
+		if (shouldLoadEnv) {
+			const envResult = loadWorkspaceEnv(worktree.path)
+			if (envResult.parsed) {
+				envOverrides = envResult.parsed
+			}
+			if (envResult.error && !isNoEnvFilesFoundError(envResult.error)) {
+				logger.warn(`Failed to load env files: ${envResult.error.message}`)
+			}
+		}
+
+		// 4. Detect project capabilities
 		const { capabilities } =
 			await this.capabilityDetector.detectCapabilities(worktree.path)
 
@@ -141,7 +158,8 @@ export class DevServerCommand {
 					finalResult.pid = pid
 					this.outputJson(finalResult)
 				}
-			}
+			},
+			envOverrides
 		)
 
 		if (processInfo.pid) {
