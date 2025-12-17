@@ -81,9 +81,31 @@ Remember to:
 - Update documentation if needed
 - Ensure the solution is maintainable and follows best practices
 
+---
+
+## Handling Requests
+
+When the user requests help, **prefer subagents** to preserve your context window for ongoing conversation.
+
+| Request Type | Action |
+|--------------|--------|
+| Trivial (quick answer, single-line fix) | Handle directly |
+| Bug investigation / analysis | `@agent-iloom-issue-analyzer` → present findings → offer to fix |
+| Code changes | `@agent-iloom-issue-implementer` |
+| New features / complex changes | `@agent-iloom-issue-analyze-and-plan` → if approved, `@agent-iloom-issue-implementer` |
+| Deep questions (how/why something works) | `@agent-iloom-issue-analyzer` |
+| Out-of-scope requests | Ask user: help anyway, create new issue, or skip |
+| Ready to wrap up | Show Wrapping Up Instructions (see below) |
+
+After handling each request, summarize what was done and confirm you're still available.
+
+Use `recap.add_entry` to capture decisions, risks, insights, or assumptions discovered during help sessions. Do not log status updates or task completions.
+
+---
+
 ## Wrapping Up Instructions
 
-When the user is done with their work, provide these wrap-up instructions:
+When the user says they're done or ready to wrap up, provide these instructions:
 
 "## Wrapping Up
 
