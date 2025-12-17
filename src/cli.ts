@@ -97,8 +97,11 @@ async function validateSettingsForCommand(command: Command): Promise<void> {
     return
   }
 
-  // Tier 2: All other commands require FULL validation (settings + multi-remote)
-  // Commands: start, add-issue, enhance, finish, list, cleanup, open, run, etc.
+  // Tier 2: Commands that warn on settings errors but continue
+  const warnOnlyCommands = ['list', 'projects']
+
+  // Tier 3: All other commands require FULL validation (settings + multi-remote)
+  // Commands: start, add-issue, enhance, finish, cleanup, open, run, etc.
   try {
     const settingsManager = new SettingsManager()
 
@@ -116,6 +119,11 @@ async function validateSettingsForCommand(command: Command): Promise<void> {
       return // Settings now configured, let preAction complete
     }
   } catch (error) {
+    if (warnOnlyCommands.includes(commandName)) {
+      // For warn-only commands, log warning and continue
+      logger.warn(`Configuration warning: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      return
+    }
     logger.error(`Configuration error: ${error instanceof Error ? error.message : 'Unknown error'}`)
     logger.info('Please fix your .iloom/settings.json file and try again.')
     process.exit(1)
@@ -676,7 +684,13 @@ program
       }
 
       if (options.json) {
-        const mainWorktreePath = await findMainWorktreePathWithSettings()
+        let mainWorktreePath: string | undefined
+        try {
+          mainWorktreePath = await findMainWorktreePathWithSettings()
+        } catch {
+          // Settings validation failed - continue without main worktree path
+          // (warning already logged by preAction hook)
+        }
         console.log(JSON.stringify(formatLoomsForJson(worktrees, mainWorktreePath, metadata), null, 2))
         return
       }

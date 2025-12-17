@@ -175,7 +175,8 @@ describe('Settings validation on CLI startup', () => {
     // Create invalid JSON settings file
     writeFileSync(settingsPath, '{ invalid json, }')
 
-    const { stderr, code } = await runCLI(['list'], testDir)
+    // Use cleanup command - list only warns on settings errors
+    const { stderr, code } = await runCLI(['cleanup'], testDir)
     expect(code).toBe(1)
     expect(stderr).toContain('Configuration error')
     expect(stderr).toContain('Failed to parse settings file')
@@ -192,7 +193,8 @@ describe('Settings validation on CLI startup', () => {
     }
     writeFileSync(settingsPath, JSON.stringify(invalidSettings))
 
-    const { stderr, code } = await runCLI(['list'], testDir)
+    // Use cleanup command - list only warns on settings errors
+    const { stderr, code } = await runCLI(['cleanup'], testDir)
     expect(code).toBe(1)
     expect(stderr).toContain('Configuration error')
     expect(stderr).toContain('Settings validation failed')
@@ -205,7 +207,8 @@ describe('Settings validation on CLI startup', () => {
     }
     writeFileSync(settingsPath, JSON.stringify(invalidSettings))
 
-    const { stderr, code } = await runCLI(['list'], testDir)
+    // Use cleanup command - list only warns on settings errors
+    const { stderr, code } = await runCLI(['cleanup'], testDir)
     expect(code).toBe(1)
     expect(stderr).toContain('Configuration error')
     expect(stderr).toContain('mainBranch')
@@ -269,7 +272,7 @@ describe('Settings validation on CLI startup', () => {
     expect(stdout).toContain('Initialize iloom configuration')
   })
 
-  it('should validate settings for all commands except help', async () => {
+  it('should validate settings for all commands except help and list/projects', async () => {
     // Create invalid settings
     const invalidSettings = {
       workflows: {
@@ -282,7 +285,8 @@ describe('Settings validation on CLI startup', () => {
 
     // Test a few representative commands - they should all fail
     // Note: --help flag doesn't trigger validation as it shows help without running the command
-    const commands = ['list']
+    // Note: list and projects only warn on settings errors, they don't fail
+    const commands = ['cleanup']
 
     for (const cmd of commands) {
       const { code } = await runCLI(cmd.split(' '), testDir)
@@ -298,10 +302,45 @@ describe('Settings validation on CLI startup', () => {
     // Create invalid JSON
     writeFileSync(settingsPath, '{ invalid }')
 
-    const { stderr, code } = await runCLI(['list'], testDir)
+    // Use cleanup command - list only warns on settings errors
+    const { stderr, code } = await runCLI(['cleanup'], testDir)
     expect(code).toBe(1)
     expect(stderr).toContain('Configuration error')
     expect(stderr).toContain('settings.json')
+  })
+
+  it('should warn but continue for list command with invalid settings', async () => {
+    // Create invalid settings
+    const invalidSettings = {
+      workflows: {
+        issue: {
+          permissionMode: 'invalidMode'
+        }
+      }
+    }
+    writeFileSync(settingsPath, JSON.stringify(invalidSettings))
+
+    // list should warn but not fail
+    const { stderr, code } = await runCLI(['list'], testDir)
+    expect(code).toBe(0)
+    expect(stderr).toContain('Configuration warning')
+  })
+
+  it('should warn but continue for projects command with invalid settings', async () => {
+    // Create invalid settings
+    const invalidSettings = {
+      workflows: {
+        issue: {
+          permissionMode: 'invalidMode'
+        }
+      }
+    }
+    writeFileSync(settingsPath, JSON.stringify(invalidSettings))
+
+    // projects should warn but not fail
+    const { stderr, code } = await runCLI(['projects'], testDir)
+    expect(code).toBe(0)
+    expect(stderr).toContain('Configuration warning')
   })
 })
 
