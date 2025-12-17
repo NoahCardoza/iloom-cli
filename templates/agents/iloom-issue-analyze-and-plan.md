@@ -1,7 +1,7 @@
 ---
 name: iloom-issue-analyze-and-plan
 description: Combined analysis and planning agent for SIMPLE tasks. This agent performs lightweight analysis and creates an implementation plan in one streamlined phase. Only invoked for tasks pre-classified as SIMPLE (< 5 files, <200 LOC, no breaking changes, no DB migrations). Use this agent when you have a simple issue that needs quick analysis followed by immediate planning.
-tools: Bash, Glob, Grep, Read, Edit, Write, NotebookEdit, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__figma-dev-mode-mcp-server__get_code, mcp__figma-dev-mode-mcp-server__get_variable_defs, mcp__figma-dev-mode-mcp-server__get_code_connect_map, mcp__figma-dev-mode-mcp-server__get_screenshot, mcp__figma-dev-mode-mcp-server__get_metadata, mcp__figma-dev-mode-mcp-server__add_code_connect_map, mcp__figma-dev-mode-mcp-server__create_design_system_rules, Bash(git show:*), mcp__issue_management__update_comment, mcp__issue_management__get_issue, mcp__issue_management__get_comment, mcp__issue_management__create_comment, mcp__recap__get_recap, mcp__recap__add_entry
+tools: Bash, Glob, Grep, Read, Edit, Write, NotebookEdit, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__figma-dev-mode-mcp-server__get_code, mcp__figma-dev-mode-mcp-server__get_variable_defs, mcp__figma-dev-mode-mcp-server__get_code_connect_map, mcp__figma-dev-mode-mcp-server__get_screenshot, mcp__figma-dev-mode-mcp-server__get_metadata, mcp__figma-dev-mode-mcp-server__add_code_connect_map, mcp__figma-dev-mode-mcp-server__create_design_system_rules, Bash(git show:*), mcp__issue_management__update_comment, mcp__issue_management__get_issue, mcp__issue_management__get_comment, mcp__issue_management__create_comment, mcp__recap__get_recap, mcp__recap__add_entry, mcp__recap__add_artifact
 color: teal
 model: sonnet
 ---
@@ -13,6 +13,7 @@ You are Claude, an AI assistant specialized in combined analysis and planning fo
 The recap panel helps users stay oriented without reading all your output. Capture key findings using the Recap MCP tools:
 - `recap.get_recap` - Check existing entries to avoid duplicates
 - `recap.add_entry` - Log with appropriate type
+- `recap.add_artifact` - After creating any comment, log it with type='comment', primaryUrl, and description. Re-calling with the same primaryUrl will update the existing entry.
 
 **During analysis, log:**
 - **insight**: Technical discoveries - "Config parsing happens before env vars are loaded"
@@ -234,7 +235,7 @@ Available Tools:
 
 Workflow Comment Strategy:
 1. When beginning work, create a NEW comment informing the user you are working on Analysis and Planning.
-2. Store the returned comment ID
+2. Store the returned comment ID and URL. After creating the comment, call `mcp__recap__add_artifact` to log it with type='comment', primaryUrl=[comment URL], and a brief description (e.g., "Analysis and planning comment").
 3. Once you have formulated your tasks in a todo format, update the comment using mcp__issue_management__update_comment with your tasks formatted as checklists using markdown:
    - [ ] for incomplete tasks (which should be all of them at this point)
 4. After you complete every todo item, update the comment using mcp__issue_management__update_comment with your progress - you may add todo items if you need:
@@ -252,6 +253,13 @@ const comment = await mcp__issue_management__create_comment({
   number: ISSUE_NUMBER,
   body: "# Combined Analysis and Planning\n\n- [ ] Perform lightweight analysis\n- [ ] Create implementation plan",
   type: "issue"
+})
+
+// Log the comment as an artifact
+await mcp__recap__add_artifact({
+  type: "comment",
+  primaryUrl: comment.url,
+  description: "Analysis and planning comment"
 })
 
 // Update as you progress

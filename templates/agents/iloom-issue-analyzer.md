@@ -1,7 +1,7 @@
 ---
 name: iloom-issue-analyzer
 description: Use this agent when you need to analyze and research issues, bugs, or enhancement requests. The agent will investigate the codebase, recent commits, and third-party dependencies to identify root causes WITHOUT proposing solutions. Ideal for initial issue triage, regression analysis, and documenting technical findings for team discussion.\n\nExamples:\n<example>\nContext: User wants to analyze a newly reported bug in issue #42\nuser: "Please analyze issue #42 - users are reporting that the login button doesn't work on mobile"\nassistant: "I'll use the issue-analyzer agent to investigate this issue and document my findings."\n<commentary>\nSince this is a request to analyze an issue, use the Task tool to launch the issue-analyzer agent to research the problem.\n</commentary>\n</example>\n<example>\nContext: User needs to understand a regression that appeared after recent changes\nuser: "Can you look into issue #78? It seems like something broke after yesterday's deployment"\nassistant: "Let me launch the issue-analyzer agent to research this regression and identify what changed."\n<commentary>\nThe user is asking for issue analysis and potential regression investigation, so use the issue-analyzer agent.\n</commentary>\n</example>
-tools: Bash, Glob, Grep, Read, Edit, Write, NotebookEdit, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__figma-dev-mode-mcp-server__get_code, mcp__figma-dev-mode-mcp-server__get_variable_defs, mcp__figma-dev-mode-mcp-server__get_code_connect_map, mcp__figma-dev-mode-mcp-server__get_screenshot, mcp__figma-dev-mode-mcp-server__get_metadata, mcp__figma-dev-mode-mcp-server__add_code_connect_map, mcp__figma-dev-mode-mcp-server__create_design_system_rules, Bash(git show:*), mcp__issue_management__update_comment, mcp__issue_management__get_issue, mcp__issue_management__get_comment, mcp__issue_management__create_comment, mcp__recap__get_recap, mcp__recap__add_entry
+tools: Bash, Glob, Grep, Read, Edit, Write, NotebookEdit, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__figma-dev-mode-mcp-server__get_code, mcp__figma-dev-mode-mcp-server__get_variable_defs, mcp__figma-dev-mode-mcp-server__get_code_connect_map, mcp__figma-dev-mode-mcp-server__get_screenshot, mcp__figma-dev-mode-mcp-server__get_metadata, mcp__figma-dev-mode-mcp-server__add_code_connect_map, mcp__figma-dev-mode-mcp-server__create_design_system_rules, Bash(git show:*), mcp__issue_management__update_comment, mcp__issue_management__get_issue, mcp__issue_management__get_comment, mcp__issue_management__create_comment, mcp__recap__get_recap, mcp__recap__add_entry, mcp__recap__add_artifact
 color: pink
 model: sonnet
 ---
@@ -15,6 +15,7 @@ You are Claude, an elite issue analyst specializing in deep technical investigat
 The recap panel helps users stay oriented without reading all your output. Capture key discoveries using the Recap MCP tools:
 - `recap.get_recap` - Check existing entries to avoid duplicates
 - `recap.add_entry` - Log with type: `insight` or `risk`
+- `recap.add_artifact` - After creating any comment, log it with type='comment', primaryUrl, and description. Re-calling with the same primaryUrl will update the existing entry.
 
 **Log these:**
 - **insight**: Technical discoveries - "Auth module depends on session middleware being initialized first"
@@ -307,13 +308,13 @@ Available Tools:
 
 Workflow Comment Strategy:
 1. When beginning analysis/research, create a NEW comment informing the user you are working on analyzing the issue.
-2. Store the returned comment ID
+2. Store the returned comment ID and URL. After creating the comment, call `mcp__recap__add_artifact` to log it with type='comment', primaryUrl=[comment URL], and a brief description (e.g., "Analysis progress comment").
 3. Once you have formulated your tasks in a todo format, update the comment using mcp__issue_management__update_comment with your tasks formatted as checklists using markdown:
    - [ ] for incomplete tasks (which should be all of them at this point)
 4. After you complete every todo item, update the comment using mcp__issue_management__update_comment with your progress - you may add todo items if you need:
    - [ ] for incomplete tasks
    - [x] for completed tasks
- 
+
    * Include relevant context (current step, progress, blockers) and a **very aggressive** estimated time to completion of this step and the whole task in each update after the comment's todo list
 5. When you have finished your task, update the same comment as before - MAKE SURE YOU DO NOT ERASE THE "details" section, then let the calling process know the full web URL of the issue comment, including the comment ID. NEVER ATTEMPT CONCURRENT UPDATES OF THE COMMENT. DATA WILL BE LOST.
 6. CONSTRAINT: After you create the initial comment, you may not create another comment. You must always update the initial comment instead.
@@ -325,6 +326,13 @@ const comment = await mcp__issue_management__create_comment({
   number: ISSUE_NUMBER,
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
   type: "issue"
+})
+
+// Log the comment as an artifact
+await mcp__recap__add_artifact({
+  type: "comment",
+  primaryUrl: comment.url,
+  description: "Analysis progress comment"
 })
 
 // Update as you progress

@@ -9,6 +9,19 @@
 /** Entry types for recap entries */
 export type RecapEntryType = 'decision' | 'insight' | 'risk' | 'assumption' | 'other'
 
+/** Artifact types for tracking created items */
+export type RecapArtifactType = 'comment' | 'issue' | 'pr'
+
+/** Single artifact entry */
+export interface RecapArtifact {
+	id: string
+	type: RecapArtifactType
+	primaryUrl: string
+	urls: Record<string, string>
+	description: string
+	timestamp: string
+}
+
 /** Single recap entry */
 export interface RecapEntry {
 	id: string
@@ -21,6 +34,7 @@ export interface RecapEntry {
 export interface RecapFile {
 	goal?: string | null
 	entries?: RecapEntry[]
+	artifacts?: RecapArtifact[]
 }
 
 /** Output for get_recap tool and CLI --json (includes filePath for file watching) */
@@ -28,6 +42,7 @@ export interface RecapOutput {
 	filePath: string
 	goal: string | null
 	entries: RecapEntry[]
+	artifacts: RecapArtifact[]
 }
 
 /** Input for set_goal tool */
@@ -50,4 +65,20 @@ export interface AddEntryOutput {
 /** Output for set_goal tool */
 export interface SetGoalOutput {
 	success: true
+}
+
+/** Input for add_artifact tool */
+export interface AddArtifactInput {
+	type: RecapArtifactType
+	primaryUrl: string
+	description: string
+	id?: string
+	urls?: Record<string, string>
+}
+
+/** Output for add_artifact tool */
+export interface AddArtifactOutput {
+	id: string
+	timestamp: string
+	replaced: boolean
 }

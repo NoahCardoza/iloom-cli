@@ -38,12 +38,22 @@ describe('RecapCommand', () => {
 	})
 
 	describe('execute with JSON mode', () => {
-		it('should return RecapOutput with filePath, goal, and entries when recap file exists', async () => {
+		it('should return RecapOutput with filePath, goal, entries, and artifacts when recap file exists', async () => {
 			const mockRecap = {
 				goal: 'Implement feature X',
 				entries: [
 					{ id: 'uuid-1', timestamp: '2025-01-01T00:00:00Z', type: 'decision', content: 'Use TypeScript' },
 					{ id: 'uuid-2', timestamp: '2025-01-01T00:01:00Z', type: 'insight', content: 'Found helper function' },
+				],
+				artifacts: [
+					{
+						id: 'artifact-1',
+						type: 'comment',
+						primaryUrl: 'https://github.com/org/repo/issues/123#issuecomment-456',
+						urls: {},
+						description: 'Progress update',
+						timestamp: '2025-01-01T00:02:00Z',
+					},
 				],
 			}
 
@@ -51,13 +61,16 @@ describe('RecapCommand', () => {
 			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockRecap) as never)
 
 			const input: RecapCommandInput = { json: true }
-			const result = await command.execute(input) as RecapOutput
+			const result = (await command.execute(input)) as RecapOutput
 
 			expect(result).toBeDefined()
 			expect(result.goal).toBe('Implement feature X')
 			expect(result.entries).toHaveLength(2)
 			expect(result.entries[0].type).toBe('decision')
 			expect(result.entries[1].type).toBe('insight')
+			expect(result.artifacts).toHaveLength(1)
+			expect(result.artifacts[0].type).toBe('comment')
+			expect(result.artifacts[0].primaryUrl).toBe('https://github.com/org/repo/issues/123#issuecomment-456')
 			expect(result.filePath).toContain('.config/iloom-ai/recaps/')
 			expect(result.filePath).toMatch(/\.json$/)
 		})
@@ -66,11 +79,12 @@ describe('RecapCommand', () => {
 			vi.mocked(fs.pathExists).mockResolvedValue(false as never)
 
 			const input: RecapCommandInput = { json: true }
-			const result = await command.execute(input) as RecapOutput
+			const result = (await command.execute(input)) as RecapOutput
 
 			expect(result).toBeDefined()
 			expect(result.goal).toBeNull()
 			expect(result.entries).toHaveLength(0)
+			expect(result.artifacts).toHaveLength(0)
 			expect(result.filePath).toContain('.config/iloom-ai/recaps/')
 		})
 
@@ -79,11 +93,29 @@ describe('RecapCommand', () => {
 			vi.mocked(fs.readFile).mockResolvedValue('invalid json {{{' as never)
 
 			const input: RecapCommandInput = { json: true }
-			const result = await command.execute(input) as RecapOutput
+			const result = (await command.execute(input)) as RecapOutput
 
 			expect(result).toBeDefined()
 			expect(result.goal).toBeNull()
 			expect(result.entries).toHaveLength(0)
+			expect(result.artifacts).toHaveLength(0)
+		})
+
+		it('should return empty artifacts array when recap file has no artifacts field', async () => {
+			const mockRecap = {
+				goal: 'Test goal',
+				entries: [],
+				// No artifacts field
+			}
+
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockRecap) as never)
+
+			const input: RecapCommandInput = { json: true }
+			const result = (await command.execute(input)) as RecapOutput
+
+			expect(result).toBeDefined()
+			expect(result.artifacts).toHaveLength(0)
 		})
 
 		it('should derive filePath from current working directory using slugifyPath algorithm', async () => {
@@ -104,13 +136,23 @@ describe('RecapCommand', () => {
 	})
 
 	describe('execute without JSON mode', () => {
-		it('should print human-readable output to console', async () => {
+		it('should print human-readable output to console including artifacts', async () => {
 			const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
 			const mockRecap = {
 				goal: 'Test goal',
 				entries: [
 					{ id: 'uuid-1', timestamp: '2025-01-01T00:00:00Z', type: 'decision', content: 'Test decision' },
+				],
+				artifacts: [
+					{
+						id: 'artifact-1',
+						type: 'comment',
+						primaryUrl: 'https://github.com/org/repo/issues/123#issuecomment-456',
+						urls: {},
+						description: 'Progress update',
+						timestamp: '2025-01-01T00:02:00Z',
+					},
 				],
 			}
 
@@ -125,11 +167,15 @@ describe('RecapCommand', () => {
 			expect(consoleSpy).toHaveBeenCalledWith('Goal: Test goal')
 			expect(consoleSpy).toHaveBeenCalledWith('Entries: 1')
 			expect(consoleSpy).toHaveBeenCalledWith('  [decision] Test decision')
+			expect(consoleSpy).toHaveBeenCalledWith('Artifacts: 1')
+			expect(consoleSpy).toHaveBeenCalledWith(
+				'  [comment] Progress update - https://github.com/org/repo/issues/123#issuecomment-456'
+			)
 
 			consoleSpy.mockRestore()
 		})
 
-		it('should print (not set) when goal is null', async () => {
+		it('should print (not set) when goal is null and show zero artifacts', async () => {
 			const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
 			vi.mocked(fs.pathExists).mockResolvedValue(false as never)
@@ -139,6 +185,7 @@ describe('RecapCommand', () => {
 
 			expect(consoleSpy).toHaveBeenCalledWith('Goal: (not set)')
 			expect(consoleSpy).toHaveBeenCalledWith('Entries: 0')
+			expect(consoleSpy).toHaveBeenCalledWith('Artifacts: 0')
 
 			consoleSpy.mockRestore()
 		})

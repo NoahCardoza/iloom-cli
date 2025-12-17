@@ -34,6 +34,7 @@ The recap panel is visible to the user in VS Code. They don't care about your in
 Use these Recap MCP tools:
 - `recap.get_recap` - Call before adding entries to check what's already captured
 - `recap.add_entry` - Call with type (decision/insight/risk/assumption) and concise content
+- `recap.add_artifact` - After creating/updating comments, issues, or PRs, log them with type, primaryUrl, and description. Duplicates with the same primaryUrl will be replaced.
 
 **NEVER log:**
 - What phases you skipped

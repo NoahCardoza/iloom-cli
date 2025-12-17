@@ -14,7 +14,7 @@ import { z } from 'zod'
 import path from 'path'
 import fs from 'fs-extra'
 import { randomUUID } from 'crypto'
-import type { RecapFile, RecapEntry, RecapOutput } from './recap-types.js'
+import type { RecapFile, RecapEntry, RecapOutput, RecapArtifact } from './recap-types.js'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
 
 interface EnvConfig {
@@ -171,6 +171,65 @@ server.registerTool(
 	}
 )
 
+// Register add_artifact tool
+server.registerTool(
+	'add_artifact',
+	{
+		title: 'Add Artifact',
+		description:
+			'Track an artifact (comment, issue, PR) created during the session. If an artifact with the same primaryUrl already exists, it will be replaced.',
+		inputSchema: {
+			type: z.enum(['comment', 'issue', 'pr']).describe('Artifact type'),
+			primaryUrl: z.string().url().describe('Main URL for the artifact'),
+			description: z.string().describe('Brief description of the artifact'),
+			id: z.string().optional().describe('Optional artifact ID (e.g., comment ID, issue number)'),
+			urls: z.record(z.string()).optional().describe('Optional additional URLs (e.g., { api: "..." })'),
+		},
+		outputSchema: {
+			id: z.string(),
+			timestamp: z.string(),
+			replaced: z.boolean(),
+		},
+	},
+	async ({ type, primaryUrl, description, id, urls }) => {
+		const filePath = getRecapFilePath()
+		const recap = await readRecapFile(filePath)
+
+		const artifact: RecapArtifact = {
+			id: id ?? randomUUID(),
+			type,
+			primaryUrl,
+			urls: urls ?? {},
+			description,
+			timestamp: new Date().toISOString(),
+		}
+
+		recap.artifacts ??= []
+
+		// Deduplication: replace existing artifact with same primaryUrl
+		const existingIndex = recap.artifacts.findIndex((a) => a.primaryUrl === primaryUrl)
+		const replaced = existingIndex !== -1
+
+		if (replaced) {
+			// Preserve the original id if not explicitly provided
+			const existingArtifact = recap.artifacts[existingIndex]
+			if (existingArtifact) {
+				artifact.id = id ?? existingArtifact.id
+				recap.artifacts[existingIndex] = artifact
+			}
+		} else {
+			recap.artifacts.push(artifact)
+		}
+
+		await writeRecapFile(filePath, recap)
+		const result = { id: artifact.id, timestamp: artifact.timestamp, replaced }
+		return {
+			content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+			structuredContent: result,
+		}
+	}
+)
+
 // Register get_recap tool
 server.registerTool(
 	'get_recap',
@@ -189,6 +248,16 @@ server.registerTool(
 					content: z.string(),
 				})
 			),
+			artifacts: z.array(
+				z.object({
+					id: z.string(),
+					type: z.enum(['comment', 'issue', 'pr']),
+					primaryUrl: z.string(),
+					urls: z.record(z.string()),
+					description: z.string(),
+					timestamp: z.string(),
+				})
+			),
 		},
 	},
 	async () => {
@@ -200,6 +269,7 @@ server.registerTool(
 			filePath,
 			goal: recap.goal ?? defaultGoal,
 			entries: recap.entries ?? [],
+			artifacts: recap.artifacts ?? [],
 		}
 		return {
 			content: [{ type: 'text' as const, text: JSON.stringify(result) }],

@@ -60,7 +60,8 @@ export class RecapCommand {
 		// Build output with filePath for file watching (provide defaults for optional fields)
 		const goal = recap.goal ?? null
 		const entries = recap.entries ?? []
-		const result: RecapOutput = { filePath, goal, entries }
+		const artifacts = recap.artifacts ?? []
+		const result: RecapOutput = { filePath, goal, entries, artifacts }
 
 		if (input.json) {
 			return result
@@ -76,6 +77,12 @@ export class RecapCommand {
 		for (const entry of entries) {
 			// eslint-disable-next-line no-console
 			console.log(`  [${entry.type}] ${entry.content}`)
+		}
+		// eslint-disable-next-line no-console
+		console.log(`Artifacts: ${artifacts.length}`)
+		for (const artifact of artifacts) {
+			// eslint-disable-next-line no-console
+			console.log(`  [${artifact.type}] ${artifact.description} - ${artifact.primaryUrl}`)
 		}
 	}
 
