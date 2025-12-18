@@ -82,8 +82,13 @@ export class IgniteCommand {
 
 			logger.info('📝 Loading prompt template and preparing Claude...')
 
-			// Step 2: Get prompt template with variable substitution
-			const variables = this.buildTemplateVariables(context, oneShot)
+			// Step 2: Read metadata early to get draftPrNumber for templates and MCP config
+			const metadataManager = new MetadataManager()
+			const metadata = await metadataManager.readMetadata(context.workspacePath)
+			const draftPrNumber = metadata?.draftPrNumber ?? undefined
+
+			// Step 2.1: Get prompt template with variable substitution
+			const variables = this.buildTemplateVariables(context, oneShot, draftPrNumber)
 
 			// Step 2.5: Add first-time user context if needed
 			if (isFirstRun) {
@@ -122,10 +127,8 @@ export class IgniteCommand {
 			}
 
 			// Step 4: Build Claude CLI options
-			// Read session ID from metadata if available, otherwise generate deterministically
+			// Use session ID from metadata if available, otherwise generate deterministically
 			let sessionId: string
-			const metadataManager = new MetadataManager()
-			const metadata = await metadataManager.readMetadata(context.workspacePath)
 			if (metadata?.sessionId) {
 				sessionId = metadata.sessionId
 				logger.debug('Using session ID from metadata', { sessionId })
@@ -163,8 +166,9 @@ export class IgniteCommand {
 			if (context.type === 'issue' || context.type === 'pr') {
 				try {
 					const provider = this.settings ? IssueTrackerFactory.getProviderName(this.settings) : 'github'
-					mcpConfig = await generateIssueManagementMcpConfig(context.type, undefined, provider, this.settings)
-					logger.debug('Generated MCP configuration for issue management', { provider })
+					// Pass draftPrNumber to route comments to PR when in github-draft-pr mode
+					mcpConfig = await generateIssueManagementMcpConfig(context.type, undefined, provider, this.settings, draftPrNumber)
+					logger.debug('Generated MCP configuration for issue management', { provider, draftPrNumber })
 
 					// Configure tool filtering for issue/PR workflows
 					// Note: set_goal is only allowed for PR workflow (user's purpose unclear)
@@ -176,6 +180,7 @@ export class IgniteCommand {
 						'mcp__issue_management__update_comment',
 						'mcp__recap__add_entry',
 						'mcp__recap__get_recap',
+						'mcp__recap__add_artifact'
 					]
 					allowedTools = context.type === 'pr'
 						? [...baseTools, 'mcp__recap__set_goal']
@@ -198,12 +203,12 @@ export class IgniteCommand {
 			}
 
 			// Step 4.5.1: Generate recap MCP config (always added for all workflow types)
+			// Reuses metadata already read in Step 2
 			try {
-				const loomMetadata = await metadataManager.readMetadata(context.workspacePath)
-				if (!loomMetadata) {
+				if (!metadata) {
 					throw new Error('No loom metadata found for this workspace')
 				}
-				const recapMcpConfig = generateRecapMcpConfig(context.workspacePath, loomMetadata)
+				const recapMcpConfig = generateRecapMcpConfig(context.workspacePath, metadata)
 				if (mcpConfig) {
 					mcpConfig.push(...recapMcpConfig)
 				} else {
@@ -225,8 +230,8 @@ export class IgniteCommand {
 					})
 				}
 
-				// Load agents with settings overrides
-				const loadedAgents = await this.agentManager.loadAgents(this.settings)
+				// Load agents with settings overrides and template variables for substitution
+				const loadedAgents = await this.agentManager.loadAgents(this.settings, variables)
 				agents = this.agentManager.formatForCli(loadedAgents)
 				logger.debug('Loaded agent configurations', {
 					agentCount: Object.keys(agents).length,
@@ -292,7 +297,11 @@ export class IgniteCommand {
 	/**
 	 * Build template variables from context
 	 */
-	private buildTemplateVariables(context: ClaudeWorkflowOptions, oneShot: import('../types/index.js').OneShotMode): TemplateVariables {
+	private buildTemplateVariables(
+		context: ClaudeWorkflowOptions,
+		oneShot: import('../types/index.js').OneShotMode,
+		draftPrNumber?: number
+	): TemplateVariables {
 		const variables: TemplateVariables = {
 			WORKSPACE_PATH: context.workspacePath,
 		}
@@ -322,6 +331,15 @@ export class IgniteCommand {
 			variables.ONE_SHOT_MODE = true
 		} else {
 			variables.INTERACTIVE_MODE = true
+		}
+
+		// Set draft PR mode flags (mutually exclusive)
+		// When draftPrNumber is set, we're in github-draft-pr mode
+		if (draftPrNumber !== undefined) {
+			variables.DRAFT_PR_MODE = true
+			variables.DRAFT_PR_NUMBER = draftPrNumber
+		} else {
+			variables.STANDARD_ISSUE_MODE = true
 		}
 
 		return variables

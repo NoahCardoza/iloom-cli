@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { MarkdownAgentParser } from '../utils/MarkdownAgentParser.js'
 import { logger } from '../utils/logger.js'
 import type { IloomSettings } from './SettingsManager.js'
+import { PromptTemplateManager, TemplateVariables } from './PromptTemplateManager.js'
 
 // Agent schema interface
 export interface AgentConfig {
@@ -22,8 +23,10 @@ export interface AgentConfigs {
 
 export class AgentManager {
 	private agentDir: string
+	private templateManager: PromptTemplateManager
 
-	constructor(agentDir?: string) {
+	constructor(agentDir?: string, templateManager?: PromptTemplateManager) {
+		this.templateManager = templateManager ?? new PromptTemplateManager()
 		if (agentDir) {
 			this.agentDir = agentDir
 		} else {
@@ -56,11 +59,12 @@ export class AgentManager {
 
 	/**
 	 * Load all agent configuration files from markdown (.md) format
-	 * Optionally apply model overrides from settings
+	 * Optionally apply model overrides from settings and template variable substitution
 	 * Throws error if agents directory doesn't exist or files are malformed
 	 * @param settings - Optional project settings with per-agent model overrides
+	 * @param templateVariables - Optional variables for template substitution in agent prompts
 	 */
-	async loadAgents(settings?: IloomSettings): Promise<AgentConfigs> {
+	async loadAgents(settings?: IloomSettings, templateVariables?: TemplateVariables): Promise<AgentConfigs> {
 		// Load all .md files from the agents directory
 		const { readdir } = await import('fs/promises')
 		const files = await readdir(this.agentDir)
@@ -89,6 +93,17 @@ export class AgentManager {
 				throw new Error(
 					`Failed to load agent from ${filename}: ${error instanceof Error ? error.message : 'Unknown error'}`,
 				)
+			}
+		}
+
+		// Apply template variable substitution to agent prompts if variables provided
+		if (templateVariables) {
+			for (const [agentName, agentConfig] of Object.entries(agents)) {
+				agents[agentName] = {
+					...agentConfig,
+					prompt: this.templateManager.substituteVariables(agentConfig.prompt, templateVariables),
+				}
+				logger.debug(`Applied template substitution to agent: ${agentName}`)
 			}
 		}
 

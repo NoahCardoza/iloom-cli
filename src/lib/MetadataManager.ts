@@ -23,6 +23,7 @@ export interface MetadataFile {
   projectPath?: string // Main worktree path (project root) - enables project identification
   issueUrls?: Record<string, string> // Map of issue ID to URL in the issue tracker
   prUrls?: Record<string, string> // Map of PR number to URL in the issue tracker
+  draftPrNumber?: number // Draft PR number if github-draft-pr mode was used
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -50,6 +51,7 @@ export interface WriteMetadataInput {
   projectPath: string // Main worktree path (project root) - required for new looms
   issueUrls: Record<string, string> // Map of issue ID to URL in the issue tracker
   prUrls: Record<string, string> // Map of PR number to URL in the issue tracker
+  draftPrNumber?: number // Draft PR number for github-draft-pr mode
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -76,6 +78,7 @@ export interface LoomMetadata {
   projectPath: string | null // Main worktree path (null for legacy looms)
   issueUrls: Record<string, string> // Map of issue ID to URL ({} for legacy looms)
   prUrls: Record<string, string> // Map of PR number to URL ({} for legacy looms)
+  draftPrNumber: number | null // Draft PR number (null if not draft mode)
   parentLoom: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -174,6 +177,7 @@ export class MetadataManager {
         projectPath: input.projectPath,
         issueUrls: input.issueUrls,
         prUrls: input.prUrls,
+        ...(input.draftPrNumber && { draftPrNumber: input.draftPrNumber }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
 
@@ -227,6 +231,7 @@ export class MetadataManager {
         projectPath: data.projectPath ?? null,
         issueUrls: data.issueUrls ?? {},
         prUrls: data.prUrls ?? {},
+        draftPrNumber: data.draftPrNumber ?? null,
         parentLoom: data.parentLoom ?? null,
       }
     } catch (error) {
@@ -288,6 +293,7 @@ export class MetadataManager {
             projectPath: data.projectPath ?? null,
             issueUrls: data.issueUrls ?? {},
             prUrls: data.prUrls ?? {},
+            draftPrNumber: data.draftPrNumber ?? null,
             parentLoom: data.parentLoom ?? null,
           })
         } catch (error) {

@@ -46,6 +46,43 @@ Use these Recap MCP tools:
 
 ---
 
+{{#IF DRAFT_PR_MODE}}
+## Comment Routing: Draft PR Mode
+
+**IMPORTANT: This loom is using draft PR mode.**
+
+- **Read issue details** from Issue #ISSUE_NUMBER using `mcp__issue_management__get_issue`
+- **Write ALL workflow comments** to PR #DRAFT_PR_NUMBER using `type: "pr"`
+
+When calling `mcp__issue_management__create_comment`:
+```
+{
+  number: "DRAFT_PR_NUMBER",
+  body: "your comment content",
+  type: "pr"
+}
+```
+
+This keeps all AI workflow comments on the draft PR, not the original issue.
+{{/IF DRAFT_PR_MODE}}
+{{#IF STANDARD_ISSUE_MODE}}
+## Comment Routing: Standard Issue Mode
+
+- **Read issue details** from Issue #ISSUE_NUMBER using `mcp__issue_management__get_issue`
+- **Write ALL workflow comments** to Issue #ISSUE_NUMBER using `type: "issue"`
+
+When calling `mcp__issue_management__create_comment`:
+```
+{
+  number: "ISSUE_NUMBER",
+  body: "your comment content",
+  type: "issue"
+}
+```
+{{/IF STANDARD_ISSUE_MODE}}
+
+---
+
 {{#IF FIRST_TIME_USER}}
 ## First-Time User Context
 

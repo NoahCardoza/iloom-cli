@@ -326,11 +326,11 @@ export const IloomSettingsSchema = z.object({
 		.describe('Issue management configuration'),
 	mergeBehavior: z
 		.object({
-			mode: z.enum(['local', 'github-pr']).default('local'),
+			mode: z.enum(['local', 'github-pr', 'github-draft-pr']).default('local'),
 			remote: z.string().optional(),
 		})
 		.optional()
-		.describe('Merge behavior configuration: local (merge locally) or github-pr (create PR)'),
+		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), or github-draft-pr (create draft PR at start, mark ready on finish)'),
 	ide: z
 		.object({
 			type: z
@@ -497,11 +497,11 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.describe('Issue management configuration'),
 	mergeBehavior: z
 		.object({
-			mode: z.enum(['local', 'github-pr']).optional(),
+			mode: z.enum(['local', 'github-pr', 'github-draft-pr']).optional(),
 			remote: z.string().optional(),
 		})
 		.optional()
-		.describe('Merge behavior configuration: local (merge locally) or github-pr (create PR)'),
+		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), or github-draft-pr (create draft PR at start, mark ready on finish)'),
 	ide: z
 		.object({
 			type: z

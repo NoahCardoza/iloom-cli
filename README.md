@@ -232,6 +232,30 @@ This example shows how to configure a project-wide default (e.g., GitHub remote)
 }
 ```
 
+### Merge Behavior
+
+Control how `il finish` handles your work. Configure in `.iloom/settings.json`:
+
+```json
+{
+  "mergeBehavior": {
+    "mode": "local"  // "local", "github-pr", or "github-draft-pr"
+  }
+}
+```
+
+| **Mode** | **Description** |
+|----------|-----------------|
+| `local` | (Default) Merge directly into main branch locally. Fast-forward merge, no PR created. |
+| `github-pr` | Push branch and create a GitHub PR on `il finish`. Worktree cleanup is optional. |
+| `github-draft-pr` | Create a draft PR immediately on `il start`. On `il finish`, the PR is marked ready for review. **Recommended for contributions to forked repos.** |
+
+**When to use `github-draft-pr`:**
+- **Contributing to forks:** When you don't are contributing to a forked repo use this mode to create the PR from your fork immediately, allowing iloom's agents to post workflow comments directly to the PR instead of writing to the upstream repo's issues (which may not be appreciated by the repo owners).
+- CI runs on your branch during development (draft PRs trigger CI on most repos)
+- Your team requires PRs for all changes (no direct merges to main)
+- You want reviewers to see progress before the work is complete
+
 Integrations
 ------------
 

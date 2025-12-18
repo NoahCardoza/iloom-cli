@@ -707,10 +707,11 @@ export async function pushBranchToRemote(
     // Provide helpful error message based on common push failures
     const errorMessage = error instanceof Error ? error.message : String(error)
 
-    // Check for common error patterns
+    // Check for common error patterns and provide context, but ALWAYS include original error
     if (errorMessage.includes('failed to push') || errorMessage.includes('rejected')) {
       throw new Error(
         `Failed to push changes to origin/${branchName}\n\n` +
+        `   Git error: ${errorMessage}\n\n` +
         `   Possible causes:\n` +
         `   • Remote branch was deleted\n` +
         `   • Push was rejected (non-fast-forward)\n` +
@@ -723,6 +724,7 @@ export async function pushBranchToRemote(
     if (errorMessage.includes('Could not resolve host') || errorMessage.includes('network')) {
       throw new Error(
         `Failed to push changes to origin/${branchName}: Network connectivity issues\n\n` +
+        `   Git error: ${errorMessage}\n\n` +
         `   Check your internet connection and try again.`
       )
     }
@@ -730,6 +732,7 @@ export async function pushBranchToRemote(
     if (errorMessage.includes('No such remote')) {
       throw new Error(
         `Failed to push changes: Remote 'origin' not found\n\n` +
+        `   Git error: ${errorMessage}\n\n` +
         `   Configure remote: git remote add origin <url>`
       )
     }
@@ -1045,4 +1048,98 @@ export async function getMergeTargetBranch(
   const mainBranch = settings.mainBranch ?? 'main'
   logger.debug(`Using configured main branch as merge target: ${mainBranch}`)
   return mainBranch
+}
+
+/**
+ * Placeholder commit prefix used by github-draft-pr mode.
+ * Created during il start to enable draft PR creation (GitHub requires at least one commit ahead of base).
+ * Removed during il finish before the final push to maintain clean commit history.
+ */
+export const PLACEHOLDER_COMMIT_PREFIX = '[iloom-temp]'
+
+/**
+ * Check if HEAD commit is a placeholder commit
+ * @param cwd - Working directory (defaults to process.cwd())
+ * @returns true if HEAD is a placeholder commit
+ */
+export async function isPlaceholderCommit(cwd: string = process.cwd()): Promise<boolean> {
+  try {
+    const subject = await executeGitCommand(['log', '-1', '--format=%s', 'HEAD'], { cwd })
+    return subject.trim().startsWith(PLACEHOLDER_COMMIT_PREFIX)
+  } catch {
+    // No HEAD (empty repo) or other error - not a placeholder
+    return false
+  }
+}
+
+/**
+ * Find placeholder commit SHA in history using git log --grep
+ * @param worktreePath - Working directory
+ * @returns SHA of placeholder commit if found, null otherwise
+ */
+export async function findPlaceholderCommitSha(worktreePath: string): Promise<string | null> {
+  try {
+    // Search commit history for placeholder prefix
+    // Use --fixed-strings to treat the pattern literally (brackets are regex special chars)
+    const log = await executeGitCommand(
+      ['log', '--format=%H', '--fixed-strings', '--grep', PLACEHOLDER_COMMIT_PREFIX, '-n', '1'],
+      { cwd: worktreePath }
+    )
+    const sha = log.trim()
+    if (sha.length === 0) {
+      return null
+    }
+
+    // Verify the found commit actually has the placeholder prefix in its subject
+    // This guards against git grep matching in commit body instead of subject
+    const subject = await executeGitCommand(
+      ['log', '-1', '--format=%s', sha],
+      { cwd: worktreePath }
+    )
+    if (!subject.trim().startsWith(PLACEHOLDER_COMMIT_PREFIX)) {
+      return null
+    }
+
+    return sha
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Remove placeholder commit when it's HEAD
+ * Uses soft reset to preserve any staged changes
+ * @param worktreePath - Working directory
+ * @returns true if placeholder was removed
+ */
+export async function removePlaceholderCommitFromHead(worktreePath: string): Promise<boolean> {
+  if (!await isPlaceholderCommit(worktreePath)) {
+    return false
+  }
+  await executeGitCommand(['reset', '--soft', 'HEAD~1'], { cwd: worktreePath })
+  return true
+}
+
+/**
+ * Remove placeholder commit from history using rebase
+ * Used when user has made commits on top of placeholder
+ * @param worktreePath - Working directory
+ * @param placeholderSha - SHA of the placeholder commit to remove
+ * @throws Error if rebase fails
+ */
+export async function removePlaceholderCommitFromHistory(
+  worktreePath: string,
+  placeholderSha: string
+): Promise<void> {
+  // Get parent of placeholder commit
+  const parentSha = await executeGitCommand(
+    ['rev-parse', `${placeholderSha}^`],
+    { cwd: worktreePath }
+  )
+
+  // Rebase to drop the placeholder: rebase --onto parent^ placeholder
+  await executeGitCommand(
+    ['rebase', '--onto', parentSha.trim(), placeholderSha],
+    { cwd: worktreePath }
+  )
 }

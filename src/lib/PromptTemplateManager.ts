@@ -35,6 +35,10 @@ export interface TemplateVariables {
 	BRANCH_NAME?: string      // Branch being finished
 	LOOM_TYPE?: string        // 'issue' or 'pr'
 	COMPACT_SUMMARIES?: string  // Extracted compact summaries from session transcript
+	// Draft PR mode variables - mutually exclusive with standard issue mode
+	DRAFT_PR_NUMBER?: number  // PR number for draft PR workflow
+	DRAFT_PR_MODE?: boolean   // True when using github-draft-pr merge mode
+	STANDARD_ISSUE_MODE?: boolean  // True when using standard issue commenting (not draft PR)
 }
 
 export class PromptTemplateManager {
@@ -211,6 +215,11 @@ export class PromptTemplateManager {
 			result = result.replace(/COMPACT_SUMMARIES/g, variables.COMPACT_SUMMARIES)
 		}
 
+		// Draft PR mode variable substitution
+		if (variables.DRAFT_PR_NUMBER !== undefined) {
+			result = result.replace(/DRAFT_PR_NUMBER/g, String(variables.DRAFT_PR_NUMBER))
+		}
+
 		return result
 	}
 
@@ -331,6 +340,28 @@ export class PromptTemplateManager {
 		} else {
 			// Remove the entire conditional block
 			result = result.replace(compactSummariesRegex, '')
+		}
+
+		// Process DRAFT_PR_MODE conditionals
+		const draftPrModeRegex = /\{\{#IF DRAFT_PR_MODE\}\}(.*?)\{\{\/IF DRAFT_PR_MODE\}\}/gs
+
+		if (variables.DRAFT_PR_MODE === true) {
+			// Include the content, remove the conditional markers
+			result = result.replace(draftPrModeRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(draftPrModeRegex, '')
+		}
+
+		// Process STANDARD_ISSUE_MODE conditionals
+		const standardIssueModeRegex = /\{\{#IF STANDARD_ISSUE_MODE\}\}(.*?)\{\{\/IF STANDARD_ISSUE_MODE\}\}/gs
+
+		if (variables.STANDARD_ISSUE_MODE === true) {
+			// Include the content, remove the conditional markers
+			result = result.replace(standardIssueModeRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(standardIssueModeRegex, '')
 		}
 
 		return result

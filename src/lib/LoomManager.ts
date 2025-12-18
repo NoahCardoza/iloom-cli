@@ -189,6 +189,67 @@ export class LoomManager {
       }
     }
 
+    // 10.5. Handle github-draft-pr mode - push branch and create draft PR
+    let draftPrNumber: number | undefined = undefined
+    let draftPrUrl: string | undefined = undefined
+
+    const mergeBehavior = settingsData.mergeBehavior ?? { mode: 'local' }
+
+    if (mergeBehavior.mode === 'github-draft-pr' && input.type === 'issue') {
+      // Validate provider supports PRs
+      if (!this.issueTracker.supportsPullRequests) {
+        throw new Error(
+          `The 'github-draft-pr' merge mode requires a GitHub-compatible issue tracker. ` +
+          `Your provider (${this.issueTracker.providerName}) does not support pull requests.`
+        )
+      }
+
+      // Create placeholder commit to enable draft PR creation
+      // GitHub requires at least one commit ahead of base branch
+      getLogger().info('Creating placeholder commit for draft PR...')
+      const { executeGitCommand, PLACEHOLDER_COMMIT_PREFIX, pushBranchToRemote } = await import('../utils/git.js')
+      await executeGitCommand(
+        [
+          'commit',
+          '--allow-empty',
+          '--no-verify',
+          '-m',
+          `${PLACEHOLDER_COMMIT_PREFIX} Temporary commit for draft PR (will be removed on finish) - issue #${input.identifier}`
+        ],
+        { cwd: worktreePath }
+      )
+      getLogger().debug('Placeholder commit created')
+
+      // Push branch to remote first (required for draft PR creation)
+      getLogger().info('Pushing branch to remote for draft PR...')
+      await pushBranchToRemote(branchName, worktreePath, { dryRun: false })
+
+      // Import PRManager dynamically to avoid circular deps
+      const { PRManager } = await import('./PRManager.js')
+      const prManager = new PRManager(settingsData)
+
+      // Generate PR title and body
+      const prTitle = issueData?.title ?? `Work on ${branchName}`
+      const prBody = `Draft PR for issue #${input.identifier}\n\nThis PR was created automatically by iloom.`
+
+      // Get base branch
+      const mainBranch = settingsData.mainBranch ?? 'main'
+
+      // Create draft PR
+      getLogger().info('Creating draft PR...')
+      const prResult = await prManager.createDraftPR(
+        branchName,
+        prTitle,
+        prBody,
+        mainBranch,
+        worktreePath
+      )
+
+      draftPrNumber = prResult.number
+      draftPrUrl = prResult.url
+      getLogger().success(`Draft PR created: ${prResult.url}`)
+    }
+
     // 11. Select color with collision avoidance
     // Get hex colors in use from ALL stored looms across all projects (global collision detection)
     // This prevents color reuse across different repositories for the same user
@@ -283,9 +344,12 @@ export class LoomManager {
     const issueUrls: Record<string, string> = input.type === 'issue' && issueData?.url
       ? { [String(input.identifier)]: issueData.url }
       : {}
-    const prUrls: Record<string, string> = input.type === 'pr' && issueData?.url
-      ? { [String(input.identifier)]: issueData.url }
-      : {}
+    // Include draft PR URL in prUrls if created
+    const prUrls: Record<string, string> = draftPrNumber && draftPrUrl
+      ? { [String(draftPrNumber)]: draftPrUrl }
+      : input.type === 'pr' && issueData?.url
+        ? { [String(input.identifier)]: issueData.url }
+        : {}
 
     const metadataInput: WriteMetadataInput = {
       description,
@@ -300,6 +364,7 @@ export class LoomManager {
       projectPath: this.gitWorktree.workingDirectory,
       issueUrls,
       prUrls,
+      ...(draftPrNumber && { draftPrNumber }),
       ...(input.parentLoom && { parentLoom: input.parentLoom }),
     }
     await this.metadataManager.writeMetadata(worktreePath, metadataInput)

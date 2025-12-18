@@ -17,7 +17,7 @@ import { LoomManager } from '../lib/LoomManager.js'
 import { ClaudeContextManager } from '../lib/ClaudeContextManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { SessionSummaryService } from '../lib/SessionSummaryService.js'
-import { findMainWorktreePathWithSettings, pushBranchToRemote, extractIssueNumber, getMergeTargetBranch } from '../utils/git.js'
+import { findMainWorktreePathWithSettings, pushBranchToRemote, extractIssueNumber, getMergeTargetBranch, isPlaceholderCommit, findPlaceholderCommitSha, removePlaceholderCommitFromHead, removePlaceholderCommitFromHistory, executeGitCommand } from '../utils/git.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
@@ -705,6 +705,130 @@ export class FinishCommand {
 
 			// Execute github-pr workflow instead of local merge
 			await this.executeGitHubPRWorkflow(parsed, options, worktree, settings, result)
+			return
+		}
+
+		if (mergeBehavior.mode === 'github-draft-pr') {
+			// Validate that issue tracker supports pull requests
+			if (!this.issueTracker.supportsPullRequests) {
+				throw new Error(
+					`The 'github-draft-pr' merge mode requires a GitHub-compatible issue tracker. ` +
+					`Your provider (${this.issueTracker.providerName}) does not support pull requests.`
+				)
+			}
+
+			// Read metadata to get draft PR number
+			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			const metadataManager = new MetadataManager()
+			const metadata = await metadataManager.readMetadata(worktree.path)
+
+			getLogger().debug(`Draft PR mode: worktree=${worktree.path}, draftPrNumber=${metadata?.draftPrNumber ?? 'none'}`)
+
+			if (!metadata?.draftPrNumber) {
+				// Fallback: no draft PR exists, treat like github-pr mode
+				getLogger().warn('No draft PR found in metadata, creating new PR...')
+				await this.executeGitHubPRWorkflow(parsed, options, worktree, settings, result)
+				return
+			}
+
+			// Check for and remove placeholder commit before push
+			// The placeholder was created during `il start` to enable draft PR creation
+			const isHeadPlaceholder = await isPlaceholderCommit(worktree.path)
+			const placeholderSha = await findPlaceholderCommitSha(worktree.path)
+
+			getLogger().debug(`Placeholder detection: isHead=${isHeadPlaceholder}, sha=${placeholderSha ?? 'none'}`)
+
+			if (isHeadPlaceholder) {
+				// Case 1: Placeholder is HEAD (no user commits made)
+				// Check if there are any other commits
+				const commitCount = await executeGitCommand(
+					['rev-list', '--count', 'HEAD'],
+					{ cwd: worktree.path }
+				)
+
+				if (parseInt(commitCount.trim(), 10) <= 1) {
+					throw new Error(
+						'Cannot finish draft PR: no changes have been committed.\n' +
+						'Please make at least one commit before finishing.'
+					)
+				}
+
+				// Reset to remove placeholder (user commits exist behind it - unusual case)
+				if (!options.dryRun) {
+					getLogger().info('Removing placeholder commit from HEAD...')
+					await removePlaceholderCommitFromHead(worktree.path)
+				} else {
+					getLogger().info('[DRY RUN] Would remove placeholder commit from HEAD')
+				}
+			} else if (placeholderSha) {
+				// Case 2: Placeholder is in history (user made commits on top)
+				// Verify there are actually commits AFTER the placeholder before rebasing
+				const commitsAfterPlaceholder = await executeGitCommand(
+					['rev-list', '--count', `${placeholderSha}..HEAD`],
+					{ cwd: worktree.path }
+				)
+
+				if (parseInt(commitsAfterPlaceholder.trim(), 10) === 0) {
+					// No commits after placeholder - something is wrong
+					// Either placeholder IS HEAD (isPlaceholderCommit check failed) or history is corrupt
+					throw new Error(
+						'Cannot finish draft PR: no changes have been committed after the placeholder.\n' +
+						'Please make at least one commit before finishing.'
+					)
+				}
+
+				if (!options.dryRun) {
+					getLogger().info('Removing placeholder commit from history...')
+					await removePlaceholderCommitFromHistory(worktree.path, placeholderSha)
+				} else {
+					getLogger().info('[DRY RUN] Would remove placeholder commit from history')
+				}
+			}
+
+			// Push final commits (use force-with-lease if we rewrote history)
+			const needsForceWithLease = isHeadPlaceholder || placeholderSha
+			if (!options.dryRun) {
+				getLogger().info('Pushing final commits to remote...')
+				if (needsForceWithLease) {
+					// Force push required after history rewrite
+					await executeGitCommand(['push', '--force-with-lease', 'origin', worktree.branch], { cwd: worktree.path })
+				} else {
+					await pushBranchToRemote(worktree.branch, worktree.path, { dryRun: false })
+				}
+			} else {
+				if (needsForceWithLease) {
+					getLogger().info('[DRY RUN] Would force push final commits to remote (history rewritten)')
+				} else {
+					getLogger().info('[DRY RUN] Would push final commits to remote')
+				}
+			}
+
+			// Mark draft PR as ready
+			const prManager = new PRManager(settings)
+			if (!options.dryRun) {
+				await prManager.markPRReady(metadata.draftPrNumber, worktree.path)
+				getLogger().success(`PR #${metadata.draftPrNumber} marked as ready for review`)
+			} else {
+				getLogger().info(`[DRY RUN] Would mark PR #${metadata.draftPrNumber} as ready for review`)
+			}
+
+			// Set PR URL in result
+			const prUrl = metadata.prUrls?.[String(metadata.draftPrNumber)]
+			if (prUrl) {
+				result.prUrl = prUrl
+			}
+
+			result.operations.push({
+				type: 'pr-ready',
+				message: `PR #${metadata.draftPrNumber} marked as ready for review`,
+				success: true,
+			})
+
+			// Generate session summary if configured
+			await this.generateSessionSummaryIfConfigured(parsed, worktree, options)
+
+			// Handle cleanup prompt (reuse existing logic)
+			await this.handlePRCleanupPrompt(parsed, options, worktree, result)
 			return
 		}
 

@@ -225,8 +225,9 @@ Available Tools:
   Parameters: { commentId: string, number: string }
   Returns: { id, body, author, created_at, ... }
 
-- mcp__issue_management__create_comment: Create a new comment on issue ISSUE_NUMBER
-  Parameters: { number: string, body: "markdown content", type: "issue" }
+{{#IF DRAFT_PR_MODE}}- mcp__issue_management__create_comment: Create a new comment on PR DRAFT_PR_NUMBER
+  Parameters: { number: string, body: "markdown content", type: "pr" }{{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}- mcp__issue_management__create_comment: Create a new comment on issue ISSUE_NUMBER
+  Parameters: { number: string, body: "markdown content", type: "issue" }{{/IF STANDARD_ISSUE_MODE}}
   Returns: { id: string, url: string, created_at: string }
 
 - mcp__issue_management__update_comment: Update an existing comment
@@ -249,11 +250,15 @@ Workflow Comment Strategy:
 Example Usage:
 ```
 // Start
-const comment = await mcp__issue_management__create_comment({
+{{#IF DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
+  number: DRAFT_PR_NUMBER,
+  body: "# Combined Analysis and Planning\n\n- [ ] Perform lightweight analysis\n- [ ] Create implementation plan",
+  type: "pr"
+}){{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}const comment = await mcp__issue_management__create_comment({
   number: ISSUE_NUMBER,
   body: "# Combined Analysis and Planning\n\n- [ ] Perform lightweight analysis\n- [ ] Create implementation plan",
   type: "issue"
-})
+}){{/IF STANDARD_ISSUE_MODE}}
 
 // Log the comment as an artifact
 await mcp__recap__add_artifact({
@@ -263,10 +268,15 @@ await mcp__recap__add_artifact({
 })
 
 // Update as you progress
-await mcp__issue_management__update_comment({
+{{#IF DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
+  number: DRAFT_PR_NUMBER,
   body: "# Combined Analysis and Planning\n\n- [x] Perform lightweight analysis\n- [ ] Create implementation plan"
-})
+}){{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}await mcp__issue_management__update_comment({
+  commentId: comment.id,
+  number: ISSUE_NUMBER,
+  body: "# Combined Analysis and Planning\n\n- [x] Perform lightweight analysis\n- [ ] Create implementation plan"
+}){{/IF STANDARD_ISSUE_MODE}}
 ```
 </comment_tool_info>
 

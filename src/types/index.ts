@@ -240,7 +240,7 @@ export interface FinishResult {
   /** Whether this was a dry-run operation */
   dryRun?: boolean
   operations: Array<{
-    type: 'validation' | 'commit' | 'rebase' | 'merge' | 'cleanup' | 'pr-creation' | 'build'
+    type: 'validation' | 'commit' | 'rebase' | 'merge' | 'cleanup' | 'pr-creation' | 'pr-ready' | 'build'
     message: string
     success: boolean
     error?: string

@@ -257,6 +257,7 @@ describe('MetadataManager', () => {
         projectPath: '/Users/jane/dev/main-repo',
         issueUrls: { '42': 'https://github.com/org/repo/issues/42' },
         prUrls: {},
+        draftPrNumber: null,
         parentLoom: null,
       })
     })
@@ -349,6 +350,7 @@ describe('MetadataManager', () => {
         projectPath: null,
         issueUrls: {},
         prUrls: {},
+        draftPrNumber: null,
         parentLoom: null,
       })
     })
@@ -551,6 +553,7 @@ describe('MetadataManager', () => {
         projectPath: '/Users/alice/main-project',
         issueUrls: { '1': 'https://github.com/org/repo/issues/1' },
         prUrls: {},
+        draftPrNumber: null,
         parentLoom: null,
       })
       expect(result[1]).toEqual({
@@ -567,6 +570,7 @@ describe('MetadataManager', () => {
         projectPath: '/Users/bob/main-project',
         issueUrls: { '2': 'https://github.com/org/repo/issues/2' },
         prUrls: {},
+        draftPrNumber: null,
         parentLoom: null,
       })
     })
@@ -667,6 +671,7 @@ describe('MetadataManager', () => {
         projectPath: null,
         issueUrls: {},
         prUrls: {},
+        draftPrNumber: null,
         parentLoom: null,
       })
     })

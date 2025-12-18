@@ -783,6 +783,7 @@ describe('IgniteCommand', () => {
 					'mcp__issue_management__update_comment',
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
+					'mcp__recap__add_artifact',
 				])
 			} finally {
 				process.cwd = originalCwd
@@ -837,6 +838,7 @@ describe('IgniteCommand', () => {
 					'mcp__issue_management__update_comment',
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
+					'mcp__recap__add_artifact',
 					'mcp__recap__set_goal',
 				])
 			} finally {
@@ -923,6 +925,7 @@ describe('IgniteCommand', () => {
 					'mcp__issue_management__update_comment',
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
+					'mcp__recap__add_artifact',
 				])
 				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)'])
 			} finally {
@@ -1207,8 +1210,14 @@ describe('IgniteCommand', () => {
 				// Verify settings were loaded
 				expect(mockSettingsManager.loadSettings).toHaveBeenCalled()
 
-				// Verify settings were passed to loadAgents
-				expect(mockAgentManager.loadAgents).toHaveBeenCalledWith(mockSettings)
+				// Verify settings and template variables were passed to loadAgents
+				expect(mockAgentManager.loadAgents).toHaveBeenCalledWith(
+					mockSettings,
+					expect.objectContaining({
+						ISSUE_NUMBER: '123',
+						WORKSPACE_PATH: '/path/to/feat/issue-123__test',
+					})
+				)
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -1255,7 +1264,14 @@ describe('IgniteCommand', () => {
 
 				// Should still execute successfully
 				expect(mockSettingsManager.loadSettings).toHaveBeenCalled()
-				expect(mockAgentManager.loadAgents).toHaveBeenCalledWith({})
+				// loadAgents receives empty settings and template variables
+				expect(mockAgentManager.loadAgents).toHaveBeenCalledWith(
+					{},
+					expect.objectContaining({
+						ISSUE_NUMBER: '123',
+						WORKSPACE_PATH: '/path/to/feat/issue-123__test',
+					})
+				)
 				expect(launchClaudeSpy).toHaveBeenCalled()
 			} finally {
 				process.cwd = originalCwd

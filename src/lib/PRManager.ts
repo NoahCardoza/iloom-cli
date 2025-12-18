@@ -351,4 +351,93 @@ Start your response immediately with the PR body text.
 		}
 		throw new Error(`Could not extract PR number from URL: ${url}`)
 	}
+
+	/**
+	 * Create a draft PR for the branch
+	 * Used by github-draft-pr mode during il start
+	 * @param branchName - Branch to create PR from (used as --head)
+	 * @param title - PR title
+	 * @param body - PR body
+	 * @param baseBranch - Base branch to target (usually main/master)
+	 * @param cwd - Working directory
+	 * @returns PR URL and number
+	 */
+	async createDraftPR(
+		branchName: string,
+		title: string,
+		body: string,
+		baseBranch: string,
+		cwd?: string
+	): Promise<{ url: string; number: number }> {
+		try {
+			// Get the target remote for the PR
+			const targetRemote = await getEffectivePRTargetRemote(this.settings, cwd)
+
+			// Determine the correct --head value
+			// For fork workflows (target != origin), we need "username:branch" format
+			let headValue = branchName
+
+			if (targetRemote !== 'origin') {
+				// Fork workflow: need to specify the head as "owner:branch"
+				const remotes = await parseGitRemotes(cwd)
+				const originRemote = remotes.find(r => r.name === 'origin')
+
+				if (originRemote) {
+					headValue = `${originRemote.owner}:${branchName}`
+					getLogger().debug(`Fork workflow detected, using head: ${headValue}`)
+				}
+			}
+
+			// Build gh pr create command with --draft flag
+			const args = ['pr', 'create', '--head', headValue, '--title', title, '--body', body, '--base', baseBranch, '--draft']
+
+			// If target remote is not 'origin', we need to specify the repo
+			if (targetRemote !== 'origin') {
+				const repo = await getConfiguredRepoFromSettings(this.settings, cwd)
+				args.push('--repo', repo)
+			}
+
+			// gh pr create returns the PR URL as plain text (not JSON)
+			const result = await executeGhCommand<string>(args, cwd ? { cwd } : undefined)
+
+			// Result is a string URL like "https://github.com/owner/repo/pull/123"
+			const url = typeof result === 'string' ? result.trim() : String(result).trim()
+
+			if (!url.includes('github.com') || !url.includes('/pull/')) {
+				throw new Error(`Unexpected response from gh pr create --draft: ${url}`)
+			}
+
+			const number = this.extractPRNumberFromUrl(url)
+
+			return { url, number }
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error)
+
+			// Provide helpful error message for common errors
+			if (errorMessage.includes("Head sha can't be blank") || errorMessage.includes("No commits between")) {
+				throw new Error(
+					`Failed to create draft pull request: ${errorMessage}\n\n` +
+					`This error typically occurs when:\n` +
+					`  - The branch was not fully pushed to the remote\n` +
+					`  - The branch has no commits ahead of the base branch\n\n` +
+					`Try running: git push -u origin ${branchName}\n` +
+					`Then retry: il start`
+				)
+			}
+
+			throw new Error(`Failed to create draft pull request: ${errorMessage}`)
+		}
+	}
+
+	/**
+	 * Mark a draft PR as ready for review
+	 * Used by github-draft-pr mode during il finish
+	 * @param prNumber - PR number to mark ready
+	 * @param cwd - Working directory
+	 */
+	async markPRReady(prNumber: number, cwd?: string): Promise<void> {
+		const args = ['pr', 'ready', String(prNumber)]
+		await executeGhCommand(args, cwd ? { cwd } : undefined)
+		getLogger().info(`Marked PR #${prNumber} as ready for review`)
+	}
 }

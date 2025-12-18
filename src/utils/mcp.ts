@@ -13,16 +13,27 @@ import type { LoomMetadata } from '../lib/MetadataManager.js'
  * @param repo - Optional repo in "owner/repo" format. If not provided, will auto-detect from git.
  * @param provider - Issue management provider (default: 'github')
  * @param settings - Optional settings to extract Linear API token from
+ * @param draftPrNumber - Optional draft PR number for github-draft-pr mode (routes comments to PR)
  */
 export async function generateIssueManagementMcpConfig(
 	contextType?: 'issue' | 'pr',
 	repo?: string,
 	provider: 'github' | 'linear' = 'github',
-	settings?: IloomSettings
+	settings?: IloomSettings,
+	draftPrNumber?: number
 ): Promise<Record<string, unknown>[]> {
+	// When draftPrNumber is provided (github-draft-pr mode), force contextType to 'pr'
+	// This ensures agents route comments to the draft PR instead of the issue
+	const effectiveContextType = draftPrNumber ? 'pr' : contextType
+
 	// Build provider-specific environment variables
 	let envVars: Record<string, string> = {
 		ISSUE_PROVIDER: provider,
+	}
+
+	// Add draft PR number to env vars if provided
+	if (draftPrNumber) {
+		envVars.DRAFT_PR_NUMBER = String(draftPrNumber)
 	}
 
 	if (provider === 'github') {
@@ -44,7 +55,8 @@ export async function generateIssueManagementMcpConfig(
 		}
 
 		// Map logical types to GitHub's webhook event names (handle GitHub's naming quirk here)
-		const githubEventName = contextType === 'issue' ? 'issues' : contextType === 'pr' ? 'pull_request' : undefined
+		// Use effectiveContextType which may be overridden by draftPrNumber
+		const githubEventName = effectiveContextType === 'issue' ? 'issues' : effectiveContextType === 'pr' ? 'pull_request' : undefined
 
 		envVars = {
 			...envVars,
@@ -58,8 +70,9 @@ export async function generateIssueManagementMcpConfig(
 			provider,
 			repoOwner: owner,
 			repoName: name,
-			contextType: contextType ?? 'auto-detect',
-			githubEventName: githubEventName ?? 'auto-detect'
+			contextType: effectiveContextType ?? 'auto-detect',
+			githubEventName: githubEventName ?? 'auto-detect',
+			draftPrNumber: draftPrNumber ?? undefined,
 		})
 	} else {
 		// Linear needs API token passed through
