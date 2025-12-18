@@ -334,16 +334,31 @@ export class LoomManager {
     const description = issueData?.title ?? branchName
 
     // Build issue/pr numbers arrays based on type
-    const issue_numbers: string[] = input.type === 'issue' ? [String(input.identifier)] : []
+    // For PR workflows, extract issue number from branch name if present
+    let issue_numbers: string[] = []
+    let extractedIssueNum: string | null = null
+    if (input.type === 'issue') {
+      issue_numbers = [String(input.identifier)]
+    } else if (input.type === 'pr') {
+      extractedIssueNum = extractIssueNumber(branchName)
+      if (extractedIssueNum) {
+        issue_numbers = [extractedIssueNum]
+      }
+    }
     const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []
 
     // Generate deterministic session ID for Claude Code resume support
     const sessionId = generateDeterministicSessionId(worktreePath)
 
     // Build issueUrls/prUrls based on workflow type
-    const issueUrls: Record<string, string> = input.type === 'issue' && issueData?.url
-      ? { [String(input.identifier)]: issueData.url }
-      : {}
+    // For PR workflows, construct issue URL by replacing /pull/N with /issues/M
+    let issueUrls: Record<string, string> = {}
+    if (input.type === 'issue' && issueData?.url) {
+      issueUrls = { [String(input.identifier)]: issueData.url }
+    } else if (input.type === 'pr' && extractedIssueNum && issueData?.url) {
+      const issueUrl = issueData.url.replace(`/pull/${input.identifier}`, `/issues/${extractedIssueNum}`)
+      issueUrls = { [extractedIssueNum]: issueUrl }
+    }
     // Include draft PR URL in prUrls if created
     const prUrls: Record<string, string> = draftPrNumber && draftPrUrl
       ? { [String(draftPrNumber)]: draftPrUrl }
@@ -1109,16 +1124,31 @@ export class LoomManager {
     const description = existingMetadata?.description ?? issueData?.title ?? branchName
     if (!existingMetadata) {
       // Build issue/pr numbers arrays based on type
-      const issue_numbers: string[] = input.type === 'issue' ? [String(input.identifier)] : []
+      // For PR workflows, extract issue number from branch name if present
+      let issue_numbers: string[] = []
+      let extractedIssueNum: string | null = null
+      if (input.type === 'issue') {
+        issue_numbers = [String(input.identifier)]
+      } else if (input.type === 'pr') {
+        extractedIssueNum = extractIssueNumber(branchName)
+        if (extractedIssueNum) {
+          issue_numbers = [extractedIssueNum]
+        }
+      }
       const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []
 
       // Generate deterministic session ID for Claude Code resume support
       const sessionId = generateDeterministicSessionId(worktreePath)
 
       // Build issueUrls/prUrls based on workflow type
-      const issueUrls: Record<string, string> = input.type === 'issue' && issueData?.url
-        ? { [String(input.identifier)]: issueData.url }
-        : {}
+      // For PR workflows, construct issue URL by replacing /pull/N with /issues/M
+      let issueUrls: Record<string, string> = {}
+      if (input.type === 'issue' && issueData?.url) {
+        issueUrls = { [String(input.identifier)]: issueData.url }
+      } else if (input.type === 'pr' && extractedIssueNum && issueData?.url) {
+        const issueUrl = issueData.url.replace(`/pull/${input.identifier}`, `/issues/${extractedIssueNum}`)
+        issueUrls = { [extractedIssueNum]: issueUrl }
+      }
       const prUrls: Record<string, string> = input.type === 'pr' && issueData?.url
         ? { [String(input.identifier)]: issueData.url }
         : {}

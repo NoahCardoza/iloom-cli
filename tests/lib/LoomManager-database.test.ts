@@ -40,6 +40,14 @@ vi.mock('../../src/utils/git.js', () => ({
   ensureRepositoryHasCommits: vi.fn().mockResolvedValue(undefined),
   isEmptyRepository: vi.fn().mockResolvedValue(false),
   isFileTrackedByGit: vi.fn().mockResolvedValue(false),
+  extractIssueNumber: vi.fn((branchName: string) => {
+    // Match the real implementation logic for test compatibility
+    const newFormatMatch = branchName.match(/issue-([^_]+)__/i)
+    if (newFormatMatch?.[1]) return newFormatMatch[1]
+    const oldFormatMatch = branchName.match(/issue-(\d+)(?:-|$)/i)
+    if (oldFormatMatch?.[1]) return oldFormatMatch[1]
+    return null
+  }),
 }))
 
 // Mock package-manager utilities

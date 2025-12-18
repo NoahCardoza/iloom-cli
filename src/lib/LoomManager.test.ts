@@ -251,6 +251,48 @@ describe('LoomManager', () => {
       expect(installDependencies).toHaveBeenCalledWith(expectedPath, true, true)
     })
 
+    it('should populate both issueUrls and prUrls for PR with issue branch', async () => {
+      const prInput: CreateLoomInput = {
+        type: 'pr',
+        identifier: 456,
+        originalInput: 'pr/456',
+      }
+
+      // Mock GitHub PR fetch with branch containing issue number
+      vi.mocked(mockGitHub.fetchPR).mockResolvedValue({
+        number: 456,
+        title: 'Test PR',
+        body: 'Test PR description',
+        state: 'open',
+        branch: 'issue-42__feature-branch', // Branch contains issue-42
+        baseBranch: 'main',
+        url: 'https://github.com/owner/repo/pull/456',
+        isDraft: false,
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-issue-42__feature-branch'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+
+      // Mock environment setup
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3456)
+
+      // Mock Claude launch with context
+      vi.mocked(mockClaude.launchWithContext).mockResolvedValue()
+
+      await manager.createIloom(prInput)
+
+      // Verify writeMetadata was called with both URLs populated
+      expect(mockWriteMetadata).toHaveBeenCalled()
+      const metadataInput = mockWriteMetadata.mock.calls[0][1]
+
+      expect(metadataInput.issueUrls).toEqual({ '42': 'https://github.com/owner/repo/issues/42' })
+      expect(metadataInput.prUrls).toEqual({ '456': 'https://github.com/owner/repo/pull/456' })
+      expect(metadataInput.issue_numbers).toEqual(['42'])
+      expect(metadataInput.pr_numbers).toEqual(['456'])
+    })
+
     it('should create loom for branch successfully', async () => {
       const branchInput: CreateLoomInput = {
         type: 'branch',
