@@ -33,6 +33,7 @@ The recap panel is visible to the user in VS Code. They don't care about your in
 
 Use these Recap MCP tools:
 - `recap.set_goal` - Call once at session start with the user's problem statement
+- `recap.set_complexity` - Call when complexity is confirmed at ROUTING DECISION POINT (trivial/simple/complex)
 - `recap.get_recap` - Call before adding entries to check what's already captured
 - `recap.add_entry` - Call with type (decision/insight/risk/assumption) and concise content
 - `recap.add_artifact` - After creating/updating comments, issues, or PRs, log them with type, primaryUrl, and description. Duplicates with the same primaryUrl will be replaced.
@@ -309,22 +310,27 @@ After STEP 2 (Complexity Evaluation) completes and complexity is confirmed, dete
 **Check the confirmed complexity:**
 
 **IF TRIVIAL complexity confirmed:**
-1. Display to user: "Using TRIVIAL workflow: Skipping analysis and planning, proceeding directly to implementation"
-2. Mark todos #9, #10, #11, #12, #13, #14, #15, and #16 as completed (analysis and planning steps that will not execute)
-3. Skip directly to **STEP 5** (Implementation Phase)
-4. Note: TRIVIAL tasks are straightforward enough that they don't need analysis or planning
+1. Call `recap.set_complexity({ complexity: 'trivial', reason: '[brief reason from evaluator]' })`
+2. Display to user: "Using TRIVIAL workflow: Skipping analysis and planning, proceeding directly to implementation"
+3. Mark todos #9, #10, #11, #12, #13, #14, #15, and #16 as completed (analysis and planning steps that will not execute)
+4. Skip directly to **STEP 5** (Implementation Phase)
+5. Note: TRIVIAL tasks are straightforward enough that they don't need analysis or planning
 
 **IF SIMPLE complexity confirmed:**
-1. Display to user: "Using SIMPLE workflow: Combined analysis and planning via @agent-iloom-issue-analyze-and-plan, then implementation"
-2. Mark todos #9, #11, #12, #13, #14, #15, and #16 as completed (TRIVIAL and COMPLEX workflow steps that will not execute)
-3. Skip to **STEP 3-SIMPLE** (Combined Analysis and Planning Phase)
-4. Note: After STEP 3-SIMPLE completes, skip separate analysis and planning phases, go directly to implementation
+1. Call `recap.set_complexity({ complexity: 'simple', reason: '[brief reason from evaluator]' })`
+2. Display to user: "Using SIMPLE workflow: Combined analysis and planning via @agent-iloom-issue-analyze-and-plan, then implementation"
+3. Mark todos #9, #11, #12, #13, #14, #15, and #16 as completed (TRIVIAL and COMPLEX workflow steps that will not execute)
+4. Skip to **STEP 3-SIMPLE** (Combined Analysis and Planning Phase)
+5. Note: After STEP 3-SIMPLE completes, skip separate analysis and planning phases, go directly to implementation
 
 **IF COMPLEX complexity confirmed:**
-1. Display to user: "Using COMPLEX workflow: Separate analysis, planning, and implementation phases"
-2. Mark todos #9 and #10 as completed (TRIVIAL and SIMPLE workflow steps that will not execute)
-3. Continue to **STEP 3** (Analysis Phase)
-4. Follow normal workflow through STEP 3, STEP 4, and STEP 5
+1. Call `recap.set_complexity({ complexity: 'complex', reason: '[brief reason from evaluator]' })`
+2. Display to user: "Using COMPLEX workflow: Separate analysis, planning, and implementation phases"
+3. Mark todos #9 and #10 as completed (TRIVIAL and SIMPLE workflow steps that will not execute)
+4. Continue to **STEP 3** (Analysis Phase)
+5. Follow normal workflow through STEP 3, STEP 4, and STEP 5
+
+**Note:** If the user reclassifies complexity (changes from evaluator's assessment), call `set_complexity` with the user's confirmed classification.
 
 ---
 

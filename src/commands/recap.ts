@@ -59,9 +59,10 @@ export class RecapCommand {
 
 		// Build output with filePath for file watching (provide defaults for optional fields)
 		const goal = recap.goal ?? null
+		const complexity = recap.complexity ?? null
 		const entries = recap.entries ?? []
 		const artifacts = recap.artifacts ?? []
-		const result: RecapOutput = { filePath, goal, entries, artifacts }
+		const result: RecapOutput = { filePath, goal, complexity, entries, artifacts }
 
 		if (input.json) {
 			return result
@@ -72,6 +73,8 @@ export class RecapCommand {
 		console.log(`Recap file: ${filePath}`)
 		// eslint-disable-next-line no-console
 		console.log(`Goal: ${goal ?? '(not set)'}`)
+		// eslint-disable-next-line no-console
+		console.log(`Complexity: ${complexity ? `${complexity.level}${complexity.reason ? ` - ${complexity.reason}` : ''}` : '(not set)'}`)
 		// eslint-disable-next-line no-console
 		console.log(`Entries: ${entries.length}`)
 		for (const entry of entries) {

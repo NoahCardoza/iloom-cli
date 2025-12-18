@@ -134,6 +134,35 @@ server.registerTool(
 	}
 )
 
+// Register set_complexity tool
+server.registerTool(
+	'set_complexity',
+	{
+		title: 'Set Complexity',
+		description: 'Set the assessed complexity of the current task',
+		inputSchema: {
+			complexity: z.enum(['trivial', 'simple', 'complex']).describe('Task complexity level'),
+			reason: z.string().optional().describe('Brief explanation for the assessment'),
+		},
+		outputSchema: {
+			success: z.literal(true),
+			timestamp: z.string(),
+		},
+	},
+	async ({ complexity, reason }) => {
+		const filePath = getRecapFilePath()
+		const recap = await readRecapFile(filePath)
+		const timestamp = new Date().toISOString()
+		recap.complexity = reason !== undefined ? { level: complexity, reason, timestamp } : { level: complexity, timestamp }
+		await writeRecapFile(filePath, recap)
+		const result = { success: true as const, timestamp }
+		return {
+			content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+			structuredContent: result,
+		}
+	}
+)
+
 // Register add_entry tool
 server.registerTool(
 	'add_entry',
@@ -240,6 +269,13 @@ server.registerTool(
 		outputSchema: {
 			filePath: z.string(),
 			goal: z.string().nullable(),
+			complexity: z
+				.object({
+					level: z.enum(['trivial', 'simple', 'complex']),
+					reason: z.string().optional(),
+					timestamp: z.string(),
+				})
+				.nullable(),
 			entries: z.array(
 				z.object({
 					id: z.string(),
@@ -268,6 +304,7 @@ server.registerTool(
 		const result: RecapOutput = {
 			filePath,
 			goal: recap.goal ?? defaultGoal,
+			complexity: recap.complexity ?? null,
 			entries: recap.entries ?? [],
 			artifacts: recap.artifacts ?? [],
 		}

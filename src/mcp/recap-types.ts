@@ -12,6 +12,9 @@ export type RecapEntryType = 'decision' | 'insight' | 'risk' | 'assumption' | 'o
 /** Artifact types for tracking created items */
 export type RecapArtifactType = 'comment' | 'issue' | 'pr'
 
+/** Complexity levels for task assessment */
+export type RecapComplexityLevel = 'trivial' | 'simple' | 'complex'
+
 /** Single artifact entry */
 export interface RecapArtifact {
 	id: string
@@ -30,9 +33,17 @@ export interface RecapEntry {
 	content: string
 }
 
+/** Complexity assessment for the current task */
+export interface RecapComplexity {
+	level: RecapComplexityLevel
+	reason?: string
+	timestamp: string
+}
+
 /** Recap file schema stored in ~/.config/iloom-ai/recaps/ */
 export interface RecapFile {
 	goal?: string | null
+	complexity?: RecapComplexity | null
 	entries?: RecapEntry[]
 	artifacts?: RecapArtifact[]
 }
@@ -41,6 +52,7 @@ export interface RecapFile {
 export interface RecapOutput {
 	filePath: string
 	goal: string | null
+	complexity: RecapComplexity | null
 	entries: RecapEntry[]
 	artifacts: RecapArtifact[]
 }
@@ -81,4 +93,16 @@ export interface AddArtifactOutput {
 	id: string
 	timestamp: string
 	replaced: boolean
+}
+
+/** Input for set_complexity tool */
+export interface SetComplexityInput {
+	complexity: RecapComplexityLevel
+	reason?: string
+}
+
+/** Output for set_complexity tool */
+export interface SetComplexityOutput {
+	success: true
+	timestamp: string
 }

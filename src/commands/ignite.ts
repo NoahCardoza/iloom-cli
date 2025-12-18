@@ -180,7 +180,8 @@ export class IgniteCommand {
 						'mcp__issue_management__update_comment',
 						'mcp__recap__add_entry',
 						'mcp__recap__get_recap',
-						'mcp__recap__add_artifact'
+						'mcp__recap__add_artifact',
+						'mcp__recap__set_complexity'
 					]
 					allowedTools = context.type === 'pr'
 						? [...baseTools, 'mcp__recap__set_goal']
@@ -198,6 +199,7 @@ export class IgniteCommand {
 					'mcp__recap__set_goal',
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
+					'mcp__recap__set_complexity',
 				]
 				logger.debug('Configured tool filtering for regular workflow', { allowedTools })
 			}
