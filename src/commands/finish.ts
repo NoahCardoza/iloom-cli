@@ -824,8 +824,8 @@ export class FinishCommand {
 				success: true,
 			})
 
-			// Generate session summary if configured
-			await this.generateSessionSummaryIfConfigured(parsed, worktree, options)
+			// Generate session summary if configured - post to PR, not issue
+			await this.generateSessionSummaryIfConfigured(parsed, worktree, options, metadata.draftPrNumber)
 
 			// Handle cleanup prompt (reuse existing logic)
 			await this.handlePRCleanupPrompt(parsed, options, worktree, result)
@@ -1058,7 +1058,8 @@ export class FinishCommand {
 			finishResult.prUrl = prResult.url
 
 			// Step 4.5: Generate session summary (non-blocking, preview-only in dry-run)
-			await this.generateSessionSummaryIfConfigured(parsed, worktree, options)
+			// Post to the PR instead of the original issue
+			await this.generateSessionSummaryIfConfigured(parsed, worktree, options, prResult.number)
 
 			// Step 5: Interactive cleanup prompt (unless flags override)
 			await this.handlePRCleanupPrompt(parsed, options, worktree, finishResult)
@@ -1093,7 +1094,7 @@ export class FinishCommand {
 
 			const shouldCleanup = await promptConfirmation(
 				'Clean up worktree now?',
-				false // Default to keeping worktree (safer option)
+				true // Default to keeping worktree - won't delete if unmerged changes
 			)
 
 			if (shouldCleanup) {
@@ -1268,11 +1269,17 @@ export class FinishCommand {
 	 * This ensures the finish workflow continues even if summary generation fails
 	 *
 	 * In dry-run mode: generates summary and shows preview, but doesn't post
+	 *
+	 * @param parsed - The parsed input identifying the issue/PR being finished
+	 * @param worktree - The worktree being finished
+	 * @param options - Finish options (including dryRun flag)
+	 * @param prNumber - Optional PR number - when provided, summary is posted to the PR instead of the issue
 	 */
 	private async generateSessionSummaryIfConfigured(
 		parsed: ParsedFinishInput,
 		worktree: GitWorktree,
-		options: FinishOptions
+		options: FinishOptions,
+		prNumber?: number
 	): Promise<void> {
 		// Skip for branch type (no issue to comment on)
 		if (parsed.type === 'branch') {
@@ -1305,11 +1312,13 @@ export class FinishCommand {
 		}
 
 		// Generate and post summary (non-blocking)
+		// When prNumber is provided, summary is posted to the PR instead of the issue
 		await this.sessionSummaryService.generateAndPostSummary({
 			worktreePath: worktree.path,
 			issueNumber: parsed.number ?? 0,
 			branchName: worktree.branch,
 			loomType: parsed.type,
+			...(prNumber !== undefined && { prNumber }),
 		})
 	}
 

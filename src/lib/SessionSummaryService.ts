@@ -26,6 +26,8 @@ export interface SessionSummaryInput {
 	issueNumber: string | number
 	branchName: string
 	loomType: 'issue' | 'pr' | 'branch'
+	/** Optional PR number - when provided, summary is posted to the PR instead of the issue */
+	prNumber?: number
 }
 
 /**
@@ -122,10 +124,11 @@ export class SessionSummaryService {
 				return
 			}
 
-			// 8. Post summary to issue
-			await this.postSummaryToIssue(input.issueNumber, summary, settings, input.worktreePath)
+			// 8. Post summary to issue or PR (PR takes priority when prNumber is provided)
+			await this.postSummaryToIssue(input.issueNumber, summary, settings, input.worktreePath, input.prNumber)
 
-			logger.success('Session summary posted to issue')
+			const targetDescription = input.prNumber ? `PR #${input.prNumber}` : 'issue'
+			logger.success(`Session summary posted to ${targetDescription}`)
 		} catch (error) {
 			// Non-blocking: Log warning but don't throw
 			const errorMessage = error instanceof Error ? error.message : String(error)
@@ -301,13 +304,20 @@ export class SessionSummaryService {
 	}
 
 	/**
-	 * Post the summary as a comment to the issue
+	 * Post the summary as a comment to the issue or PR
+	 *
+	 * @param issueNumber - The issue number (used when prNumber is not provided)
+	 * @param summary - The summary text to post
+	 * @param settings - The loaded iloom settings
+	 * @param worktreePath - Path to worktree for attribution detection
+	 * @param prNumber - Optional PR number - when provided, posts to the PR instead
 	 */
 	private async postSummaryToIssue(
 		issueNumber: string | number,
 		summary: string,
 		settings: IloomSettings,
-		worktreePath: string
+		worktreePath: string,
+		prNumber?: number
 	): Promise<void> {
 		// Get the issue management provider from settings
 		const providerType = (settings.issueManagement?.provider ?? 'github') as IssueProvider
@@ -316,11 +326,15 @@ export class SessionSummaryService {
 		// Apply attribution if configured
 		const finalSummary = await this.applyAttributionWithSettings(summary, settings, worktreePath)
 
+		// When prNumber is provided, post to the PR instead of the issue
+		const targetNumber = prNumber ?? issueNumber
+		const targetType = prNumber !== undefined ? 'pr' : 'issue'
+
 		// Create the comment
 		await provider.createComment({
-			number: String(issueNumber),
+			number: String(targetNumber),
 			body: finalSummary,
-			type: 'issue',
+			type: targetType,
 		})
 	}
 }

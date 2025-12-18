@@ -323,6 +323,33 @@ describe('SessionSummaryService', () => {
 			// Should not throw - non-blocking
 			await expect(service.generateAndPostSummary(defaultInput)).resolves.not.toThrow()
 		})
+
+		it('should post to PR when prNumber is provided', async () => {
+			const inputWithPrNumber: SessionSummaryInput = {
+				...defaultInput,
+				prNumber: 456,
+			}
+
+			await service.generateAndPostSummary(inputWithPrNumber)
+
+			// Verify comment was posted to PR with type: 'pr'
+			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
+				number: '456',
+				body: expect.any(String),
+				type: 'pr',
+			})
+		})
+
+		it('should post to issue when prNumber is not provided', async () => {
+			await service.generateAndPostSummary(defaultInput)
+
+			// Verify comment was posted to issue with type: 'issue'
+			expect(mockIssueProvider.createComment).toHaveBeenCalledWith({
+				number: '123',
+				body: expect.any(String),
+				type: 'issue',
+			})
+		})
 	})
 
 	describe('shouldGenerateSummary', () => {
