@@ -40,7 +40,7 @@ program
   .option('--completion', 'Output shell completion script for current shell')
   .option('--set <key=value>', 'Override any setting using dot notation (repeatable, e.g., --set workflows.issue.startIde=false)')
   .allowUnknownOption() // Allow --set to be used multiple times
-  .hook('preAction', async (thisCommand) => {
+  .hook('preAction', async (thisCommand, actionCommand) => {
     // Set debug mode based on flag or environment variable
     const options = thisCommand.opts()
     // Default to environment variable value, then false if not set
@@ -80,15 +80,15 @@ program
     }
 
     // Validate settings for all commands
-    await validateSettingsForCommand(thisCommand)
+    await validateSettingsForCommand(actionCommand)
 
     // Validate GitHub CLI availability for commands that need it
-    await validateGhCliForCommand(thisCommand)
+    await validateGhCliForCommand(actionCommand)
   })
 
 // Helper function to validate settings at startup
 async function validateSettingsForCommand(command: Command): Promise<void> {
-  const commandName = command.args[0] ?? ''
+  const commandName = command.name()
 
   // Tier 1: Commands that bypass ALL validation
   const bypassCommands = ['help', 'init', 'update', 'contribute']
@@ -133,7 +133,7 @@ async function validateSettingsForCommand(command: Command): Promise<void> {
 // Helper function to validate GitHub CLI availability
 // Exported for testing
 export async function validateGhCliForCommand(command: Command): Promise<void> {
-  const commandName = command.args[0] ?? ''
+  const commandName = command.name()
 
   // Commands that ALWAYS require gh CLI regardless of configuration
   const alwaysRequireGh = ['feedback', 'contribute']
