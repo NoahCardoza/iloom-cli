@@ -47,7 +47,12 @@ export class FeedbackCommand {
 		const body = input.options.body ? capitalizeFirstLetter(input.options.body) : undefined
 
 		// Step 1: Validate description format
-		if (!description || !this.enhancementService.validateDescription(description)) {
+		// When --body is provided, only require non-empty description (skip strict validation)
+		const hasBody = !!body
+		if (!description || !this.enhancementService.validateDescription(description, hasBody)) {
+			if (hasBody) {
+				throw new Error('Description is required and cannot be empty')
+			}
 			throw new Error('Description is required and must be more than 30 characters with at least 3 words')
 		}
 

@@ -464,13 +464,13 @@ describe('AddIssueCommand', () => {
 				)
 			})
 
-			it('should still validate description when body is provided', async () => {
+			it('should validate description with hasBody=true when body is provided', async () => {
 				await command.execute({
 					description: validDescription,
 					options: { body: preFormattedBody }
 				})
 
-				expect(mockEnhancementService.validateDescription).toHaveBeenCalledWith(validDescription)
+				expect(mockEnhancementService.validateDescription).toHaveBeenCalledWith(validDescription, true)
 			})
 
 			it('should call createEnhancedIssue with description as title and body as body', async () => {
@@ -524,6 +524,55 @@ describe('AddIssueCommand', () => {
 
 				// Note: 'enhance' should NOT be in the calls
 				expect(calls).toEqual(['validate', 'create', 'review'])
+			})
+
+			it('should accept short descriptions when body is provided', async () => {
+				// Short description that would fail standard validation
+				const shortDescription = 'Fix bug'
+
+				await command.execute({
+					description: shortDescription,
+					options: { body: preFormattedBody }
+				})
+
+				// Should call validateDescription with hasBody=true
+				expect(mockEnhancementService.validateDescription).toHaveBeenCalledWith(
+					expect.stringMatching(/^Fix bug$/i),
+					true
+				)
+			})
+
+			it('should throw error for empty description even with body provided', async () => {
+				vi.mocked(mockEnhancementService.validateDescription).mockReturnValue(false)
+
+				await expect(
+					command.execute({
+						description: '',
+						options: { body: preFormattedBody }
+					})
+				).rejects.toThrow('Description is required and cannot be empty')
+			})
+
+			it('should throw different error message when validation fails with body', async () => {
+				vi.mocked(mockEnhancementService.validateDescription).mockReturnValue(false)
+
+				await expect(
+					command.execute({
+						description: '',
+						options: { body: preFormattedBody }
+					})
+				).rejects.toThrow('Description is required and cannot be empty')
+			})
+
+			it('should throw standard error message when validation fails without body', async () => {
+				vi.mocked(mockEnhancementService.validateDescription).mockReturnValue(false)
+
+				await expect(
+					command.execute({
+						description: 'short',
+						options: {}
+					})
+				).rejects.toThrow('Description is required and must be more than 30 characters with at least 3 words')
 			})
 		})
 	})

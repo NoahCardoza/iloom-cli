@@ -307,5 +307,63 @@ describe('FeedbackCommand', () => {
 				).resolves.toBe(123)
 			})
 		})
+
+		describe('--body flag behavior', () => {
+			const preFormattedBody = '## Details\n- Some additional context about the feedback'
+
+			beforeEach(() => {
+				vi.mocked(mockEnhancementService.validateDescription).mockReturnValue(true)
+				vi.mocked(mockEnhancementService.createEnhancedIssue).mockResolvedValue({
+					number: 123,
+					url: 'https://github.com/iloom-ai/iloom-cli/issues/123',
+				})
+				vi.mocked(mockEnhancementService.waitForReviewAndOpen).mockResolvedValue(undefined)
+			})
+
+			it('should validate description with hasBody=true when body is provided', async () => {
+				await command.execute({
+					description: validDescription,
+					options: { body: preFormattedBody }
+				})
+
+				expect(mockEnhancementService.validateDescription).toHaveBeenCalledWith(validDescription, true)
+			})
+
+			it('should accept short descriptions when body is provided', async () => {
+				const shortDescription = 'Bug fix'
+
+				await command.execute({
+					description: shortDescription,
+					options: { body: preFormattedBody }
+				})
+
+				expect(mockEnhancementService.validateDescription).toHaveBeenCalledWith(
+					expect.stringMatching(/^Bug fix$/i),
+					true
+				)
+			})
+
+			it('should throw error for empty description even with body provided', async () => {
+				vi.mocked(mockEnhancementService.validateDescription).mockReturnValue(false)
+
+				await expect(
+					command.execute({
+						description: '',
+						options: { body: preFormattedBody }
+					})
+				).rejects.toThrow('Description is required and cannot be empty')
+			})
+
+			it('should throw standard error message when validation fails without body', async () => {
+				vi.mocked(mockEnhancementService.validateDescription).mockReturnValue(false)
+
+				await expect(
+					command.execute({
+						description: 'short',
+						options: {}
+					})
+				).rejects.toThrow('Description is required and must be more than 30 characters with at least 3 words')
+			})
+		})
 	})
 })

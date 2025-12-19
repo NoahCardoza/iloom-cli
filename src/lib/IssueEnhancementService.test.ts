@@ -56,29 +56,59 @@ describe('IssueEnhancementService', () => {
 
 
 	describe('validateDescription', () => {
-		it('should return true for valid descriptions (>50 chars AND >2 spaces)', () => {
-			const validDescription = 'This is a valid description that has more than fifty characters and multiple spaces'
-			expect(service.validateDescription(validDescription)).toBe(true)
+		describe('without hasBody (standard validation)', () => {
+			it('should return true for valid descriptions (>30 chars AND >2 spaces)', () => {
+				const validDescription = 'This is a valid description that has more than fifty characters and multiple spaces'
+				expect(service.validateDescription(validDescription)).toBe(true)
+			})
+
+			it('should return false for short descriptions (<30 chars)', () => {
+				const shortDescription = 'Short description with spaces'
+				expect(service.validateDescription(shortDescription)).toBe(false)
+			})
+
+			it('should return false for descriptions with <=2 spaces', () => {
+				const noSpaces = 'Thisisareallylongdescriptionwithoutanyspacesatallbutmorethanfiftycharacters'
+				const oneSpace = 'This hasonespaceonlybutmorethanfiftycharactersintotaltocountwithvalidation'
+				const twoSpaces = 'This has twospacesbutmorethanfiftycharactersintotaltocountwithvalidation'
+
+				expect(service.validateDescription(noSpaces)).toBe(false)
+				expect(service.validateDescription(oneSpace)).toBe(false)
+				expect(service.validateDescription(twoSpaces)).toBe(false)
+			})
+
+			it('should trim description before validation', () => {
+				const validWithWhitespace = '   This is a valid description that has more than fifty characters and multiple spaces   '
+				expect(service.validateDescription(validWithWhitespace)).toBe(true)
+			})
 		})
 
-		it('should return false for short descriptions (<50 chars)', () => {
-			const shortDescription = 'Short description with spaces'
-			expect(service.validateDescription(shortDescription)).toBe(false)
-		})
+		describe('with hasBody=true (relaxed validation)', () => {
+			it('should return true for any non-empty description', () => {
+				expect(service.validateDescription('fix', true)).toBe(true)
+				expect(service.validateDescription('x', true)).toBe(true)
+				expect(service.validateDescription('short', true)).toBe(true)
+				expect(service.validateDescription('a single word', true)).toBe(true)
+			})
 
-		it('should return false for descriptions with <=2 spaces', () => {
-			const noSpaces = 'Thisisareallylongdescriptionwithoutanyspacesatallbutmorethanfiftycharacters'
-			const oneSpace = 'This hasonespaceonlybutmorethanfiftycharactersintotaltocountwithvalidation'
-			const twoSpaces = 'This has twospacesbutmorethanfiftycharactersintotaltocountwithvalidation'
+			it('should return false for empty descriptions', () => {
+				expect(service.validateDescription('', true)).toBe(false)
+			})
 
-			expect(service.validateDescription(noSpaces)).toBe(false)
-			expect(service.validateDescription(oneSpace)).toBe(false)
-			expect(service.validateDescription(twoSpaces)).toBe(false)
-		})
+			it('should return false for whitespace-only descriptions', () => {
+				expect(service.validateDescription('   ', true)).toBe(false)
+				expect(service.validateDescription('\t\n', true)).toBe(false)
+			})
 
-		it('should trim description before validation', () => {
-			const validWithWhitespace = '   This is a valid description that has more than fifty characters and multiple spaces   '
-			expect(service.validateDescription(validWithWhitespace)).toBe(true)
+			it('should accept short descriptions that would fail standard validation', () => {
+				// These fail without hasBody
+				expect(service.validateDescription('short')).toBe(false)
+				expect(service.validateDescription('no spaces here')).toBe(false)
+
+				// Same descriptions pass with hasBody=true
+				expect(service.validateDescription('short', true)).toBe(true)
+				expect(service.validateDescription('no spaces here', true)).toBe(true)
+			})
 		})
 	})
 

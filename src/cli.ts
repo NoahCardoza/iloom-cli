@@ -403,7 +403,7 @@ program
   .command('add-issue')
   .alias('a')
   .description('Create and enhance GitHub issue without starting workspace')
-  .argument('<description>', 'Natural language description of the issue (>50 chars, >2 spaces)')
+  .argument('<description>', 'Issue title (>30 chars, >2 spaces; or any non-empty text when --body provided)')
   .option('--body <text>', 'Body text for issue (skips AI enhancement)')
   .option('--json', 'Output result as JSON')
   .action(async (description: string, options: { body?: string; json?: boolean }) => {
@@ -450,7 +450,7 @@ program
   .command('feedback')
   .alias('f')
   .description('Submit feedback/bug report to iloom-cli repository')
-  .argument('<description>', 'Natural language description of feedback (>50 chars, >2 spaces)')
+  .argument('<description>', 'Feedback title (>30 chars, >2 spaces; or any non-empty text when --body provided)')
   .option('--body <text>', 'Body text for feedback (added after diagnostics)')
   .action(async (description: string, options: { body?: string }) => {
     try {

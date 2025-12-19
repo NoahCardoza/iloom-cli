@@ -28,12 +28,23 @@ export class IssueEnhancementService {
 
 	/**
 	 * Validates that a description meets minimum requirements.
-	 * Requirements: >30 characters AND >2 spaces
+	 *
+	 * When hasBody is false (default): Strict validation - >30 characters AND >2 spaces
+	 * When hasBody is true: Relaxed validation - only requires non-empty description
+	 *
+	 * @param description - The description text to validate
+	 * @param hasBody - If true, skip strict validation (only require non-empty)
 	 */
-	public validateDescription(description: string): boolean {
+	public validateDescription(description: string, hasBody = false): boolean {
 		const trimmedDescription = description.trim()
-		const spaceCount = (trimmedDescription.match(/ /g) ?? []).length
 
+		// When --body is provided, only require non-empty description
+		if (hasBody) {
+			return trimmedDescription.length > 0
+		}
+
+		// Standard validation: >30 chars AND >2 spaces
+		const spaceCount = (trimmedDescription.match(/ /g) ?? []).length
 		return trimmedDescription.length > 30 && spaceCount > 2
 	}
 
