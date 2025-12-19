@@ -10,9 +10,10 @@ import { spawn } from 'child_process'
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { validateGhCliForCommand } from './cli.js'
+import { validateGhCliForCommand, validateIdeForStartCommand } from './cli.js'
 import { GitHubService } from './lib/GitHubService.js'
 import { SettingsManager } from './lib/SettingsManager.js'
+import * as ide from './utils/ide.js'
 
 // Helper function to run CLI command and capture output
 function runCLI(args: string[], cwd?: string): Promise<{ stdout: string; stderr: string; code: number | null }> {
@@ -540,6 +541,160 @@ describe('GitHub CLI validation', () => {
 
         // Should exit because default provider is 'github' and gh CLI is missing
         expect(mockExit).toHaveBeenCalledWith(1)
+      })
+    })
+  })
+})
+
+// Unit tests for IDE validation
+describe('IDE validation', () => {
+  describe('validateIdeForStartCommand', () => {
+    let mockCommand: { args: string[]; opts: () => Record<string, unknown> }
+    let mockExit: ReturnType<typeof vi.spyOn<typeof process, 'exit'>>
+    let mockIsIdeAvailable: ReturnType<typeof vi.spyOn<typeof ide, 'isIdeAvailable'>>
+    let mockLoadSettings: ReturnType<typeof vi.spyOn<SettingsManager, 'loadSettings'>>
+
+    beforeEach(() => {
+      // Mock process.exit
+      mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+
+      // Create mock command with args and opts
+      mockCommand = {
+        args: [] as string[],
+        opts: () => ({})
+      }
+
+      // Mock isIdeAvailable
+      mockIsIdeAvailable = vi.spyOn(ide, 'isIdeAvailable')
+
+      // Mock SettingsManager
+      mockLoadSettings = vi.spyOn(SettingsManager.prototype, 'loadSettings')
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    describe('command filtering', () => {
+      it('should skip validation for non-start commands', async () => {
+        mockCommand.args = ['finish']
+
+        await validateIdeForStartCommand(mockCommand)
+
+        expect(mockExit).not.toHaveBeenCalled()
+        expect(mockIsIdeAvailable).not.toHaveBeenCalled()
+      })
+
+      it('should skip validation for list command', async () => {
+        mockCommand.args = ['list']
+
+        await validateIdeForStartCommand(mockCommand)
+
+        expect(mockExit).not.toHaveBeenCalled()
+        expect(mockIsIdeAvailable).not.toHaveBeenCalled()
+      })
+    })
+
+    describe('--no-code flag handling', () => {
+      it('should skip validation when --no-code flag is used', async () => {
+        mockCommand.args = ['start']
+        mockCommand.opts = () => ({ code: false })
+
+        await validateIdeForStartCommand(mockCommand)
+
+        expect(mockExit).not.toHaveBeenCalled()
+        expect(mockIsIdeAvailable).not.toHaveBeenCalled()
+      })
+    })
+
+    describe('startIde setting handling', () => {
+      it('should skip validation when startIde is false in settings', async () => {
+        mockCommand.args = ['start']
+        mockCommand.opts = () => ({})
+        mockLoadSettings.mockResolvedValue({
+          workflows: { issue: { startIde: false } }
+        })
+
+        await validateIdeForStartCommand(mockCommand)
+
+        expect(mockExit).not.toHaveBeenCalled()
+        expect(mockIsIdeAvailable).not.toHaveBeenCalled()
+      })
+
+      it('should validate when --code flag overrides startIde=false', async () => {
+        mockCommand.args = ['start']
+        mockCommand.opts = () => ({ code: true })
+        mockLoadSettings.mockResolvedValue({
+          workflows: { issue: { startIde: false } }
+        })
+        mockIsIdeAvailable.mockResolvedValue(true)
+
+        await validateIdeForStartCommand(mockCommand)
+
+        expect(mockIsIdeAvailable).toHaveBeenCalled()
+        expect(mockExit).not.toHaveBeenCalled()
+      })
+    })
+
+    describe('IDE availability checking', () => {
+      it('should exit with error when configured IDE command is not found', async () => {
+        mockCommand.args = ['start']
+        mockCommand.opts = () => ({})
+        mockLoadSettings.mockResolvedValue({})
+        mockIsIdeAvailable.mockResolvedValue(false)
+
+        await validateIdeForStartCommand(mockCommand)
+
+        expect(mockExit).toHaveBeenCalledWith(1)
+      })
+
+      it('should pass when configured IDE is available', async () => {
+        mockCommand.args = ['start']
+        mockCommand.opts = () => ({})
+        mockLoadSettings.mockResolvedValue({})
+        mockIsIdeAvailable.mockResolvedValue(true)
+
+        await validateIdeForStartCommand(mockCommand)
+
+        expect(mockExit).not.toHaveBeenCalled()
+      })
+
+      it('should check correct IDE command based on settings', async () => {
+        mockCommand.args = ['start']
+        mockCommand.opts = () => ({})
+        mockLoadSettings.mockResolvedValue({
+          ide: { type: 'cursor' }
+        })
+        mockIsIdeAvailable.mockResolvedValue(true)
+
+        await validateIdeForStartCommand(mockCommand)
+
+        expect(mockIsIdeAvailable).toHaveBeenCalledWith('cursor')
+      })
+
+      it('should default to vscode when IDE type not configured', async () => {
+        mockCommand.args = ['start']
+        mockCommand.opts = () => ({})
+        mockLoadSettings.mockResolvedValue({})
+        mockIsIdeAvailable.mockResolvedValue(true)
+
+        await validateIdeForStartCommand(mockCommand)
+
+        expect(mockIsIdeAvailable).toHaveBeenCalledWith('code')
+      })
+    })
+
+    describe('settings loading error handling', () => {
+      it('should skip validation when settings cannot be loaded', async () => {
+        mockCommand.args = ['start']
+        mockCommand.opts = () => ({})
+        mockLoadSettings.mockRejectedValue(new Error('Settings file not found'))
+
+        await validateIdeForStartCommand(mockCommand)
+
+        // Should not exit - let settings validation handle the error
+        expect(mockExit).not.toHaveBeenCalled()
+        expect(mockIsIdeAvailable).not.toHaveBeenCalled()
       })
     })
   })

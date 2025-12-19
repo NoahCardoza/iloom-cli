@@ -16,6 +16,7 @@ import { FinishCommand } from './commands/finish.js'
 import type { StartOptions, CleanupOptions, FinishOptions } from './types/index.js'
 import { getPackageInfo } from './utils/package-info.js'
 import { hasMultipleRemotes } from './utils/remote.js'
+import { getIdeConfig, isIdeAvailable, getInstallHint } from './utils/ide.js'
 import { fileURLToPath } from 'url'
 import { realpathSync } from 'fs'
 import { formatLoomsForJson } from './utils/loom-formatter.js'
@@ -84,6 +85,9 @@ program
 
     // Validate GitHub CLI availability for commands that need it
     await validateGhCliForCommand(actionCommand)
+
+    // Validate IDE availability for start command
+    await validateIdeForStartCommand(thisCommand)
   })
 
 // Helper function to validate settings at startup
@@ -210,6 +214,55 @@ export async function validateGhCliForCommand(command: Command): Promise<void> {
         // Silently skip warning if we can't load settings
       }
     }
+  }
+}
+
+// Helper function to validate IDE availability for start command
+// Exported for testing
+export async function validateIdeForStartCommand(command: Command): Promise<void> {
+  const commandName = command.args[0] ?? ''
+
+  // Only validate for start command (and its aliases are resolved to 'start')
+  if (commandName !== 'start') {
+    return
+  }
+
+  // Check if --no-code flag was passed (Commander stores negated option as 'code' = false)
+  const codeOption = command.opts()['code']
+  if (codeOption === false) {
+    return // User explicitly disabled IDE launch
+  }
+
+  // Load settings to check IDE configuration and startIde default
+  const settingsManager = new SettingsManager()
+  let settings
+  try {
+    settings = await settingsManager.loadSettings()
+  } catch {
+    // If settings can't be loaded, skip IDE validation (settings validation handles errors)
+    return
+  }
+
+  // If startIde is explicitly false in workflow config and --code flag wasn't used, skip validation
+  const workflowConfig = settings.workflows?.issue
+  if (workflowConfig?.startIde === false && codeOption !== true) {
+    return
+  }
+
+  // Get configured IDE (defaults to vscode)
+  const ideConfig = getIdeConfig(settings.ide)
+  const available = await isIdeAvailable(ideConfig.command)
+
+  if (!available) {
+    const hint = getInstallHint(settings.ide?.type ?? 'vscode')
+    logger.error(
+      `${ideConfig.name} is configured as your IDE but "${ideConfig.command}" command was not found.`
+    )
+    logger.info('')
+    logger.info(hint)
+    logger.info('')
+    logger.info('Alternatively, use --no-code to skip IDE launch or configure a different IDE in settings.')
+    process.exit(1)
   }
 }
 

@@ -43,7 +43,7 @@ export async function isIdeAvailable(command: string): Promise<boolean> {
 }
 
 // Get installation hint for IDE
-function getInstallHint(type: string): string {
+export function getInstallHint(type: string): string {
 	const hints: Record<string, string> = {
 		vscode:
 			'Install command-line tools: Open VSCode > Command Palette > "Shell Command: Install \'code\' command in PATH"',
