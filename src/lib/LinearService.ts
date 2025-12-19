@@ -23,6 +23,8 @@ export interface LinearServiceConfig {
   teamId?: string
   /** Branch naming template (e.g., "feat/{{key}}__{{title}}") */
   branchFormat?: string
+  /** Linear API token (lin_api_...). If provided, sets process.env.LINEAR_API_TOKEN */
+  apiToken?: string
 }
 
 /**
@@ -42,6 +44,11 @@ export class LinearService implements IssueTracker {
   ) {
     this.config = config ?? {}
     this.prompter = options?.prompter ?? promptConfirmation
+
+    // Set API token from config if provided (follows mcp.ts pattern)
+    if (this.config.apiToken) {
+      process.env.LINEAR_API_TOKEN = this.config.apiToken
+    }
   }
 
   /**

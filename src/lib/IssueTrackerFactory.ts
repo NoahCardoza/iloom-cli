@@ -46,6 +46,9 @@ export class IssueTrackerFactory {
 				if (linearSettings?.branchFormat) {
 					linearConfig.branchFormat = linearSettings.branchFormat
 				}
+				if (linearSettings?.apiToken) {
+					linearConfig.apiToken = linearSettings.apiToken
+				}
 
 				getLogger().debug(`IssueTrackerFactory: Creating LinearService with config:`, JSON.stringify(linearConfig, null, 2))
 				return new LinearService(linearConfig)
