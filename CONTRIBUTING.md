@@ -4,6 +4,8 @@ Thank you for your interest in contributing to iloom! This guide will help you g
 
 We welcome all types of contributions and are committed to making the contribution process as smooth and transparent as possible. By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
+> **Important:** All pull requests should be created with iloom or include detailed context about the changes. When you run `iloom contribute` (or use the manual setup below), iloom is configured to create a draft PR as soon as you start work on an issue. As you work, iloom posts the AI's analysis, implementation plan, and progress directly to that draft PR as comments—giving reviewers full context before the code is even ready for review. If you're not using iloom, please provide equivalent detail about your changes and the reasoning behind them.
+
 ## Quick Start with `iloom contribute`
 
 The fastest way to get started as a contributor is using the automated setup command:
@@ -16,7 +18,7 @@ This command automates the entire contributor onboarding process:
 - Creates a fork of the iloom-cli repository (if you don't have one)
 - Clones your fork to your local machine
 - Configures the upstream remote to track the main repository
-- Sets up contributor-specific settings (github-pr mode for pull request workflow)
+- Sets up contributor-specific settings (github-draft-pr mode for pull request workflow)
 
 **Next steps after running `iloom contribute`:**
 1. `cd` into the cloned directory
@@ -63,7 +65,12 @@ If you prefer manual setup or already have a fork:
    ```bash
    pnpm install
    ```
-5. **Configure iloom settings** by creating `.iloom/settings.local.json`:
+5. **Configure iloom settings** using the interactive wizard:
+   ```bash
+   il init "configure for contributing with upstream remote and github-draft-pr mode"
+   ```
+
+   Or manually create `.iloom/settings.local.json`:
    ```json
    {
      "issueManagement": {
@@ -72,7 +79,7 @@ If you prefer manual setup or already have a fork:
        }
      },
      "mergeBehavior": {
-       "mode": "github-pr"
+       "mode": "github-draft-pr"
      }
    }
    ```
@@ -182,11 +189,11 @@ iloom finish
 This command:
 - Validates your changes (typecheck, lint, test)
 - Offers AI-assisted error fixing if validation fails
-- Creates a pull request automatically (in `github-pr` mode)
+- Creates a pull request automatically (in `github-draft-pr` mode)
 - Runs the complete merge workflow
 - Cleans up the workspace when done
 
-For contributors, the `github-pr` mode (configured by `iloom contribute`) will create a pull request to the upstream repository rather than attempting a direct merge.
+For contributors, the `github-draft-pr` mode (configured by `iloom contribute`) creates a draft pull request immediately when starting work, which becomes ready for review when you run `iloom finish`. Throughout the iloom workflow, detailed comments are automatically added to the draft PR documenting the analysis, implementation plan, and progress—providing reviewers with rich context about the changes.
 
 ## Pull Request Process
 
@@ -196,13 +203,15 @@ If using `iloom finish`, the PR is created automatically with:
 - Issue reference in title
 - Implementation summary in description
 - Link to related issue
+- Detailed workflow comments (analysis, planning, implementation notes)
 
-If creating manually, ensure your PR:
+If creating manually, you'll need to provide the context that iloom would normally generate. Ensure your PR:
 - Has a clear, descriptive title
 - References the issue number (e.g., "Fixes #123")
-- Includes a summary of changes
+- Includes a detailed summary of changes and the reasoning behind them
 - Describes any breaking changes
 - Documents testing performed
+- Explains the implementation approach (why this solution vs. alternatives)
 
 ### Review Process
 

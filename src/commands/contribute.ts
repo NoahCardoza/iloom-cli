@@ -320,7 +320,7 @@ export class ContributeCommand {
 				},
 			},
 			mergeBehavior: {
-				mode: 'github-pr',
+				mode: 'github-draft-pr',
 			},
 		}
 
