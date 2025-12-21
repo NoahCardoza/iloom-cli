@@ -35,6 +35,7 @@ export interface TemplateVariables {
 	BRANCH_NAME?: string      // Branch being finished
 	LOOM_TYPE?: string        // 'issue' or 'pr'
 	COMPACT_SUMMARIES?: string  // Extracted compact summaries from session transcript
+	RECAP_DATA?: string  // Formatted recap data (goal, complexity, entries, artifacts)
 	// Draft PR mode variables - mutually exclusive with standard issue mode
 	DRAFT_PR_NUMBER?: number  // PR number for draft PR workflow
 	DRAFT_PR_MODE?: boolean   // True when using github-draft-pr merge mode

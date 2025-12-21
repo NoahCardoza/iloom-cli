@@ -8,6 +8,9 @@
  * 4. Posting the summary as a comment to the issue/PR
  */
 
+import path from 'path'
+import os from 'os'
+import fs from 'fs-extra'
 import { logger } from '../utils/logger.js'
 import { launchClaude, generateDeterministicSessionId } from '../utils/claude.js'
 import { readSessionContext } from '../utils/claude-transcript.js'
@@ -17,6 +20,64 @@ import { SettingsManager, type IloomSettings } from './SettingsManager.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import type { IssueProvider } from '../mcp/types.js'
 import { hasMultipleRemotes } from '../utils/remote.js'
+import type { RecapFile, RecapOutput } from '../mcp/recap-types.js'
+import { formatRecapMarkdown } from '../utils/recap-formatter.js'
+
+const RECAPS_DIR = path.join(os.homedir(), '.config', 'iloom-ai', 'recaps')
+
+/**
+ * Slugify path to recap filename (matches MetadataManager/RecapCommand algorithm)
+ *
+ * Algorithm:
+ * 1. Trim trailing slashes
+ * 2. Replace all path separators (/ or \) with ___ (triple underscore)
+ * 3. Replace any other non-alphanumeric characters (except _ and -) with -
+ * 4. Append .json
+ */
+function slugifyPath(loomPath: string): string {
+	let slug = loomPath.replace(/[/\\]+$/, '')
+	slug = slug.replace(/[/\\]/g, '___')
+	slug = slug.replace(/[^a-zA-Z0-9_-]/g, '-')
+	return `${slug}.json`
+}
+
+/**
+ * Read recap file for a worktree path with graceful degradation
+ * Returns formatted recap string or null if not found/error
+ */
+async function readRecapFile(worktreePath: string): Promise<string | null> {
+	try {
+		const filePath = path.join(RECAPS_DIR, slugifyPath(worktreePath))
+		if (await fs.pathExists(filePath)) {
+			const content = await fs.readFile(filePath, 'utf8')
+			const recap = JSON.parse(content) as RecapFile
+
+			// Check if recap has any meaningful content
+			const hasGoal = recap.goal !== null && recap.goal !== undefined
+			const hasComplexity = recap.complexity !== null && recap.complexity !== undefined
+			const hasEntries = Array.isArray(recap.entries) && recap.entries.length > 0
+			const hasArtifacts = Array.isArray(recap.artifacts) && recap.artifacts.length > 0
+			const hasContent = hasGoal || hasComplexity || hasEntries || hasArtifacts
+
+			if (hasContent) {
+				// Convert RecapFile (optional fields) to RecapOutput (required fields)
+				// Same pattern as RecapCommand.ts:61-66
+				const recapOutput: RecapOutput = {
+					filePath,
+					goal: recap.goal ?? null,
+					complexity: recap.complexity ?? null,
+					entries: recap.entries ?? [],
+					artifacts: recap.artifacts ?? [],
+				}
+				return formatRecapMarkdown(recapOutput)
+			}
+		}
+		return null
+	} catch {
+		// Graceful degradation - return null on any error
+		return null
+	}
+}
 
 /**
  * Input for generating and posting a session summary
@@ -92,17 +153,26 @@ export class SessionSummaryService {
 				logger.debug('No compact summaries found in session transcript')
 			}
 
-			// 5. Load and process the session-summary template
+			// 5. Try to read recap data for high-signal context
+			const recapData = await readRecapFile(input.worktreePath)
+			if (recapData) {
+				logger.debug(`Found recap data (${recapData.length} chars)`)
+			} else {
+				logger.debug('No recap data found')
+			}
+
+			// 6. Load and process the session-summary template
 			const prompt = await this.templateManager.getPrompt('session-summary', {
 				ISSUE_NUMBER: String(input.issueNumber),
 				BRANCH_NAME: input.branchName,
 				LOOM_TYPE: input.loomType,
 				COMPACT_SUMMARIES: compactSummaries ?? '',
+				RECAP_DATA: recapData ?? '',
 			})
 
 			logger.debug('Session summary prompt:\n' + prompt)
 
-			// 6. Invoke Claude headless to generate summary
+			// 7. Invoke Claude headless to generate summary
 			// Use --resume with session ID so Claude knows which conversation to summarize
 			const summaryModel = this.settingsManager.getSummaryModel(settings)
 			const summaryResult = await launchClaude(prompt, {
@@ -118,13 +188,13 @@ export class SessionSummaryService {
 
 			const summary = summaryResult.trim()
 
-			// 7. Skip posting if summary is too short (likely failed generation)
+			// 8. Skip posting if summary is too short (likely failed generation)
 			if (summary.length < 100) {
 				logger.warn('Session summary too short, skipping post')
 				return
 			}
 
-			// 8. Post summary to issue or PR (PR takes priority when prNumber is provided)
+			// 9. Post summary to issue or PR (PR takes priority when prNumber is provided)
 			await this.postSummaryToIssue(input.issueNumber, summary, settings, input.worktreePath, input.prNumber)
 
 			const targetDescription = input.prNumber ? `PR #${input.prNumber}` : 'issue'
@@ -174,17 +244,26 @@ export class SessionSummaryService {
 			logger.debug('No compact summaries found in session transcript')
 		}
 
-		// 4. Load and process the session-summary template
+		// 4. Try to read recap data for high-signal context
+		const recapData = await readRecapFile(worktreePath)
+		if (recapData) {
+			logger.debug(`Found recap data (${recapData.length} chars)`)
+		} else {
+			logger.debug('No recap data found')
+		}
+
+		// 5. Load and process the session-summary template
 		const prompt = await this.templateManager.getPrompt('session-summary', {
 			ISSUE_NUMBER: issueNumber !== undefined ? String(issueNumber) : '',
 			BRANCH_NAME: branchName,
 			LOOM_TYPE: loomType,
 			COMPACT_SUMMARIES: compactSummaries ?? '',
+			RECAP_DATA: recapData ?? '',
 		})
 
 		logger.debug('Session summary prompt:\n' + prompt)
 
-		// 5. Invoke Claude headless to generate summary
+		// 6. Invoke Claude headless to generate summary
 		const summaryModel = this.settingsManager.getSummaryModel(settings)
 		const summaryResult = await launchClaude(prompt, {
 			headless: true,
@@ -198,7 +277,7 @@ export class SessionSummaryService {
 
 		const summary = summaryResult.trim()
 
-		// 6. Check if summary is too short (likely failed generation)
+		// 7. Check if summary is too short (likely failed generation)
 		if (summary.length < 100) {
 			throw new Error('Session summary too short - generation may have failed')
 		}

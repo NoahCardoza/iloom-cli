@@ -14,7 +14,7 @@ You are generating a summary of THIS conversation - the development session you 
 - Avoid contradicting or repeating earlier decisions
 - FAILURE TO USE THE "Previous Conversation Context" SECTION REPRESENTS A FAILURE OF YOUR TASK
 
-## Previous Conversation Context - THIS SECTION CONTAINS CRITICAL INFO 
+## Previous Conversation Context - THIS SECTION CONTAINS CRITICAL INFO
 ------- BEGIN PREVIOUS CONTEXT ------
 
 COMPACT_SUMMARIES
@@ -22,14 +22,64 @@ COMPACT_SUMMARIES
 ------- END PREVIOUS CONTEXT ------
 {{/IF COMPACT_SUMMARIES}}
 
+{{#IF RECAP_DATA}}
+
+## Session Recap - Key Context
+
+**CRITICAL: The recap below contains high-signal context captured during this session.** Unlike the conversation transcript which includes all dialog, the recap contains only substantive information that was deliberately logged:
+
+- **Decisions**: Choices that affect the codebase with rationale
+- **Insights**: Discoveries that future developers need to know
+- **Risks**: Things that could go wrong
+- **Assumptions**: Bets being made about the implementation
+
+When there are conflicts between the recap and conversation transcript, give weight to the most recent timestamp.
+
+------- BEGIN SESSION RECAP ------
+
+RECAP_DATA
+
+------- END SESSION RECAP ------
+{{/IF RECAP_DATA}}
+
 ## Your Task
 
-Reflect on THIS conversation (the one you're currently in){{#IF COMPACT_SUMMARIES}} AND the previous context above (THIS IS VERY IMPORTANT){{/IF COMPACT_SUMMARIES}}, and generate a concise summary focused on:
+Reflect on THIS conversation (the one you're currently in){{#IF COMPACT_SUMMARIES}} AND the previous context above{{/IF COMPACT_SUMMARIES}}{{#IF RECAP_DATA}} AND the session recap above{{/IF RECAP_DATA}}, and generate a concise summary focused on:
 
 1. **Key Insights**: What important learnings emerged during implementation{{#IF COMPACT_SUMMARIES}} INCLUDING the previous context above (THIS IS VERY IMPORTANT){{/IF COMPACT_SUMMARIES}}?
 2. **Decisions Made**: What significant technical decisions were made and why?
 3. **Challenges Encountered**: What obstacles were faced and how were they resolved?
 4. **Mistakes and Corrections**: What mistakes were made and what was learned from them?
+
+## Content Quality Guidelines
+
+**CRITICAL: This summary is NOT a work log. It's knowledge capture for future developers and AI agents.**
+
+The reader doesn't care about your internal process. They care about:
+
+1. **Technical discoveries** - "The auth module depends on session middleware being initialized first"
+2. **Design rationale** - "Chose retry pattern over circuit breaker because failure rate is low"
+3. **Gotchas and edge cases** - "Empty arrays must be handled specially in the validator"
+4. **Codebase knowledge** - "The legacy endpoint can't be removed until v3 migration completes"
+
+**NEVER include in your summary:**
+- Workflow phases you executed or skipped (enhancement, analysis, planning, implementation)
+- Complexity classifications (TRIVIAL, SIMPLE, COMPLEX)
+- Status updates ("tests pass", "build succeeded", "implementation complete")
+- Git operations (commits made, branches created, rebases performed)
+- Process reflection ("could have planned better", "spent time on X")
+- Tool usage ("used grep to find", "ran the linter")
+
+**Self-check before including content:** If it mentions "phase", "workflow", "SIMPLE/COMPLEX", "commit", "tests pass", "build", "lint", or describes what YOU did rather than what was LEARNED - it's process noise. Don't include it.
+
+**Good vs Bad Examples:**
+
+| BAD (process noise) | GOOD (technical insight) |
+|---------------------|--------------------------|
+| "Ran tests and they passed after fixing" | "The validator silently accepts null, causing downstream errors" |
+| "Used the SIMPLE workflow since only 2 files changed" | "Config changes require server restart, no hot-reload support" |
+| "Committed changes in 3 separate commits" | "Database constraints prevent orphaned records, no cleanup needed" |
+| "Could have skipped the analysis phase" | "The caching layer assumes immutable data; TTL won't help for this use case" |
 
 ## Output Format
 
@@ -64,10 +114,12 @@ Structure it with key themes visible at the top, then detailed sections wrapped 
 - [Decision and rationale]
 
 ### Challenges Resolved
-- [Challenge and resolution]
+- [Technical challenge and the insight gained, NOT "ran X command" or "tried Y approach"]
 
 ### Lessons Learned
-- [What could be done better next time]
+- [Technical patterns discovered, codebase gotchas, design principles, reusable approaches]
+- GOOD: "The ORM's lazy loading causes N+1 queries when iterating collections"
+- BAD: "Should have run tests earlier" / "The build command is pnpm build"
 
 </details>
 ```
@@ -79,4 +131,6 @@ Keep the visible themes section brief (3-5 bullet points, one sentence each). Th
 ## VALIDATION CHECKLIST - FAILING THIS LIST MEANS FAILING THE TASK:
 * Did you ouput ONLY the markdown with no commentary before or after?
 {{#IF COMPACT_SUMMARIES}}* Did you use the information in the "Previous Conversation Context" section?{{/IF COMPACT_SUMMARIES}}
+{{#IF RECAP_DATA}}* Did you incorporate the decisions, insights, risks, and assumptions from the "Session Recap" section?{{/IF RECAP_DATA}}
+* Did you avoid process noise? (No mentions of: workflow phases, complexity classifications, git commands, test/build results, or descriptions of what you DID vs what was LEARNED)
 

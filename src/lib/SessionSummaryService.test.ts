@@ -27,11 +27,20 @@ vi.mock('../utils/remote.js', () => ({
 	hasMultipleRemotes: vi.fn(),
 }))
 
+// Mock fs-extra for recap file reading
+vi.mock('fs-extra', () => ({
+	default: {
+		pathExists: vi.fn(),
+		readFile: vi.fn(),
+	},
+}))
+
 // Import mocked modules
 import { launchClaude } from '../utils/claude.js'
 import { readSessionContext } from '../utils/claude-transcript.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { hasMultipleRemotes } from '../utils/remote.js'
+import fs from 'fs-extra'
 
 describe('SessionSummaryService', () => {
 	// Mock dependencies
@@ -121,6 +130,10 @@ describe('SessionSummaryService', () => {
 		// Setup remote mock - defaults to single remote (no fork mode)
 		vi.mocked(hasMultipleRemotes).mockResolvedValue(false)
 
+		// Setup fs mock - no recap file by default
+		vi.mocked(fs.pathExists).mockResolvedValue(false as never)
+		vi.mocked(fs.readFile).mockResolvedValue('{}' as never)
+
 		// Create service with mocks
 		service = new SessionSummaryService(
 			mockTemplateManager,
@@ -139,12 +152,13 @@ describe('SessionSummaryService', () => {
 			// Verify settings were loaded
 			expect(mockSettingsManager.loadSettings).toHaveBeenCalledWith(defaultInput.worktreePath)
 
-			// Verify template was loaded with correct variables (COMPACT_SUMMARIES is empty when no transcript)
+			// Verify template was loaded with correct variables (COMPACT_SUMMARIES and RECAP_DATA are empty when no transcript/recap)
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', {
 				ISSUE_NUMBER: '123',
 				BRANCH_NAME: 'feat/issue-123__test-feature',
 				LOOM_TYPE: 'issue',
 				COMPACT_SUMMARIES: '',
+				RECAP_DATA: '',
 			})
 
 			// Verify Claude was called
@@ -282,6 +296,7 @@ describe('SessionSummaryService', () => {
 			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
 				LOOM_TYPE: 'pr',
 				COMPACT_SUMMARIES: '',
+				RECAP_DATA: '',
 			}))
 			expect(mockIssueProvider.createComment).toHaveBeenCalled()
 		})
@@ -304,6 +319,7 @@ describe('SessionSummaryService', () => {
 				BRANCH_NAME: 'feat/issue-123__test-feature',
 				LOOM_TYPE: 'issue',
 				COMPACT_SUMMARIES: compactSummary,
+				RECAP_DATA: '',
 			})
 		})
 
@@ -507,6 +523,125 @@ describe('SessionSummaryService', () => {
 
 			// Should not throw - non-blocking
 			await expect(service.generateAndPostSummary(defaultInput)).resolves.not.toThrow()
+		})
+	})
+
+	describe('recap integration', () => {
+		const mockRecapFile = {
+			goal: 'Fix the authentication bug',
+			complexity: { level: 'simple', reason: 'Straightforward fix', timestamp: '2024-01-01T00:00:00Z' },
+			entries: [
+				{ id: '1', timestamp: '2024-01-01T00:00:00Z', type: 'decision', content: 'Use OAuth2 instead of basic auth' },
+				{ id: '2', timestamp: '2024-01-01T00:01:00Z', type: 'insight', content: 'The token was expiring too early' },
+			],
+			artifacts: [
+				{ id: 'c1', type: 'comment', primaryUrl: 'https://github.com/org/repo/issues/123#issuecomment-1', urls: {}, description: 'Progress update', timestamp: '2024-01-01T00:00:00Z' },
+			],
+		}
+
+		it('should include recap data in prompt when recap file exists', async () => {
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockRecapFile) as never)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			// Verify recap data was included in template variables
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
+				RECAP_DATA: expect.stringContaining('Fix the authentication bug'),
+			}))
+		})
+
+		it('should format recap entries with type prefixes', async () => {
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockRecapFile) as never)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
+				RECAP_DATA: expect.stringContaining('**[decision]** Use OAuth2 instead of basic auth'),
+			}))
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
+				RECAP_DATA: expect.stringContaining('**[insight]** The token was expiring too early'),
+			}))
+		})
+
+		it('should format recap artifacts with type and URL', async () => {
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockRecapFile) as never)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
+				RECAP_DATA: expect.stringContaining('**[comment](https://github.com/org/repo/issues/123#issuecomment-1)** Progress update'),
+			}))
+		})
+
+		it('should include goal and complexity in formatted output', async () => {
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(mockRecapFile) as never)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
+				RECAP_DATA: expect.stringContaining('## Goal'),
+			}))
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
+				RECAP_DATA: expect.stringContaining('Fix the authentication bug'),
+			}))
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
+				RECAP_DATA: expect.stringContaining('**simple** - Straightforward fix'),
+			}))
+		})
+
+		it('should work without recap file (graceful degradation)', async () => {
+			vi.mocked(fs.pathExists).mockResolvedValue(false as never)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			// Should still call Claude and post comment with empty RECAP_DATA
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
+				RECAP_DATA: '',
+			}))
+			expect(launchClaude).toHaveBeenCalled()
+			expect(mockIssueProvider.createComment).toHaveBeenCalled()
+		})
+
+		it('should handle empty recap file gracefully', async () => {
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({}) as never)
+
+			await service.generateAndPostSummary(defaultInput)
+
+			// Empty recap should result in empty RECAP_DATA
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
+				RECAP_DATA: '',
+			}))
+		})
+
+		it('should handle recap file read errors gracefully', async () => {
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+			vi.mocked(fs.readFile).mockRejectedValue(new Error('Permission denied'))
+
+			// Should not throw - graceful degradation
+			await expect(service.generateAndPostSummary(defaultInput)).resolves.not.toThrow()
+
+			// Should continue with empty RECAP_DATA
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
+				RECAP_DATA: '',
+			}))
+		})
+
+		it('should handle invalid JSON in recap file gracefully', async () => {
+			vi.mocked(fs.pathExists).mockResolvedValue(true as never)
+			vi.mocked(fs.readFile).mockResolvedValue('not valid json' as never)
+
+			// Should not throw - graceful degradation
+			await expect(service.generateAndPostSummary(defaultInput)).resolves.not.toThrow()
+
+			// Should continue with empty RECAP_DATA
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('session-summary', expect.objectContaining({
+				RECAP_DATA: '',
+			}))
 		})
 	})
 })
