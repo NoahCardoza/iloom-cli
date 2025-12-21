@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { detectPlatform, openTerminalWindow, openDualTerminalWindow } from './terminal.js'
+import { detectPlatform, detectDarkMode, openTerminalWindow, openDualTerminalWindow } from './terminal.js'
 import { execa } from 'execa'
 import { existsSync } from 'node:fs'
 
@@ -51,6 +51,78 @@ describe('detectPlatform', () => {
 			writable: true,
 		})
 		expect(detectPlatform()).toBe('unsupported')
+	})
+})
+
+describe('detectDarkMode', () => {
+	const originalPlatform = process.platform
+
+	beforeEach(() => {
+		vi.clearAllMocks()
+	})
+
+	afterEach(() => {
+		Object.defineProperty(process, 'platform', {
+			value: originalPlatform,
+			writable: true,
+		})
+	})
+
+	it('should return "dark" when defaults indicates dark mode', async () => {
+		Object.defineProperty(process, 'platform', {
+			value: 'darwin',
+			writable: true,
+		})
+		vi.mocked(execa).mockResolvedValue({ stdout: 'Dark' } as unknown)
+
+		const result = await detectDarkMode()
+		expect(result).toBe('dark')
+		expect(execa).toHaveBeenCalledWith('defaults', ['read', '-g', 'AppleInterfaceStyle'])
+	})
+
+	it('should return "light" when defaults indicates light mode', async () => {
+		Object.defineProperty(process, 'platform', {
+			value: 'darwin',
+			writable: true,
+		})
+		vi.mocked(execa).mockResolvedValue({ stdout: 'Light' } as unknown)
+
+		const result = await detectDarkMode()
+		expect(result).toBe('light')
+	})
+
+	it('should return "light" on non-macOS platforms', async () => {
+		Object.defineProperty(process, 'platform', {
+			value: 'linux',
+			writable: true,
+		})
+
+		const result = await detectDarkMode()
+		expect(result).toBe('light')
+		// Should not call defaults on non-macOS
+		expect(execa).not.toHaveBeenCalled()
+	})
+
+	it('should return "light" when defaults command fails (light mode)', async () => {
+		Object.defineProperty(process, 'platform', {
+			value: 'darwin',
+			writable: true,
+		})
+		vi.mocked(execa).mockRejectedValue(new Error('AppleScript error'))
+
+		const result = await detectDarkMode()
+		expect(result).toBe('light')
+	})
+
+	it('should handle whitespace in defaults output', async () => {
+		Object.defineProperty(process, 'platform', {
+			value: 'darwin',
+			writable: true,
+		})
+		vi.mocked(execa).mockResolvedValue({ stdout: '  Dark  \n' } as unknown)
+
+		const result = await detectDarkMode()
+		expect(result).toBe('dark')
 	})
 })
 

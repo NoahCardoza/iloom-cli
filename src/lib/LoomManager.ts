@@ -14,6 +14,7 @@ import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIss
 import { generateDeterministicSessionId } from '../utils/claude.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName, selectDistinctColor, hexToRgb, type ColorData } from '../utils/color.js'
+import { detectDarkMode } from '../utils/terminal.js'
 import { DatabaseManager } from './DatabaseManager.js'
 import { loadEnvIntoProcess, findEnvFileForDatabaseUrl, isNoEnvFilesFoundError } from '../utils/env.js'
 import type { Loom, CreateLoomInput } from '../types/loom.js'
@@ -258,8 +259,11 @@ export class LoomManager {
       .filter((metadata) => metadata.colorHex !== null)
       .map((metadata) => metadata.colorHex as string)
 
+    // Detect dark mode and select appropriate color palette
+    const themeMode = await detectDarkMode()
+
     // Select distinct color using hex-based comparison
-    const colorData = selectDistinctColor(branchName, usedHexColors)
+    const colorData = selectDistinctColor(branchName, usedHexColors, themeMode)
     getLogger().debug(`Selected color ${colorData.hex} for branch ${branchName} (${usedHexColors.length} colors in use globally)`)
 
     // Apply color synchronization (terminal and VSCode) based on settings
@@ -1045,10 +1049,11 @@ export class LoomManager {
       colorHex = existingMetadata.colorHex
       getLogger().debug(`Reusing stored color ${colorHex} for branch ${branchName}`)
     } else {
-      // No metadata - fall back to hash-based
-      const colorData = generateColorFromBranchName(branchName)
+      // No metadata - fall back to hash-based with dark mode detection
+      const themeMode = await detectDarkMode()
+      const colorData = generateColorFromBranchName(branchName, themeMode)
       colorHex = colorData.hex
-      getLogger().debug(`No stored color, using hash-based color ${colorHex} for branch ${branchName}`)
+      getLogger().debug(`No stored color, using hash-based color ${colorHex} for branch ${branchName} (${themeMode} mode)`)
     }
 
     // Apply color synchronization (VSCode colors for reused looms)

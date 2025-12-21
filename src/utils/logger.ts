@@ -1,5 +1,6 @@
 // Lines 1-5: Imports
 import chalk, { Chalk } from 'chalk'
+import { detectDarkMode, type ThemeMode } from './terminal.js'
 
 // Lines 7-17: Type definitions
 export interface LoggerOptions {
@@ -25,6 +26,49 @@ export interface Logger {
 const stdoutChalk = new Chalk({ level: chalk.level })
 const stderrChalk = new Chalk({ level: chalk.level })
 
+// Lines 31-60: Theme-aware color selection
+let currentThemeMode: ThemeMode = 'light'
+
+/**
+ * Initialize theme mode detection
+ * This is called automatically on module load
+ */
+async function initializeThemeMode(): Promise<void> {
+  try {
+    currentThemeMode = await detectDarkMode()
+  } catch {
+    // Default to light mode on error
+    currentThemeMode = 'light'
+  }
+}
+
+// Initialize theme mode on module load (non-blocking)
+void initializeThemeMode()
+
+/**
+ * Get color function based on current theme mode
+ * Light mode uses standard colors, dark mode uses brighter/more saturated variants
+ */
+function getInfoColor(chalkInstance: InstanceType<typeof Chalk>): (str: string) => string {
+  return currentThemeMode === 'dark' ? chalkInstance.cyan : chalkInstance.blue
+}
+
+function getSuccessColor(chalkInstance: InstanceType<typeof Chalk>): (str: string) => string {
+  return currentThemeMode === 'dark' ? chalkInstance.greenBright : chalkInstance.green
+}
+
+function getWarnColor(chalkInstance: InstanceType<typeof Chalk>): (str: string) => string {
+  return currentThemeMode === 'dark' ? chalkInstance.yellowBright : chalkInstance.yellow
+}
+
+function getErrorColor(chalkInstance: InstanceType<typeof Chalk>): (str: string) => string {
+  return currentThemeMode === 'dark' ? chalkInstance.redBright : chalkInstance.red
+}
+
+function getDebugColor(chalkInstance: InstanceType<typeof Chalk>): (str: string) => string {
+  return currentThemeMode === 'dark' ? chalkInstance.gray : chalkInstance.gray
+}
+
 // Lines 31-45: Helper functions
 function formatMessage(message: string, ...args: unknown[]): string {
   // Convert args to strings and append to message
@@ -49,32 +93,32 @@ let globalDebugEnabled = false
 export const logger: Logger = {
   info: (message: string, ...args: unknown[]): void => {
     const formatted = formatMessage(message, ...args)
-    const output = formatWithEmoji(formatted, '🗂️ ', stdoutChalk.blue)
+    const output = formatWithEmoji(formatted, '🗂️ ', getInfoColor(stdoutChalk))
     console.log(output)
   },
 
   success: (message: string, ...args: unknown[]): void => {
     const formatted = formatMessage(message, ...args)
-    const output = formatWithEmoji(formatted, '✅', stdoutChalk.green)
+    const output = formatWithEmoji(formatted, '✅', getSuccessColor(stdoutChalk))
     console.log(output)
   },
 
   warn: (message: string, ...args: unknown[]): void => {
     const formatted = formatMessage(message, ...args)
-    const output = formatWithEmoji(formatted, '⚠️ ', stderrChalk.yellow)
+    const output = formatWithEmoji(formatted, '⚠️ ', getWarnColor(stderrChalk))
     console.error(output)
   },
 
   error: (message: string, ...args: unknown[]): void => {
     const formatted = formatMessage(message, ...args)
-    const output = formatWithEmoji(formatted, '❌', stderrChalk.red)
+    const output = formatWithEmoji(formatted, '❌', getErrorColor(stderrChalk))
     console.error(output)
   },
 
   debug: (message: string, ...args: unknown[]): void => {
     if (globalDebugEnabled) {
       const formatted = formatMessage(message, ...args)
-      const output = formatWithEmoji(formatted, '🔍', stdoutChalk.gray)
+      const output = formatWithEmoji(formatted, '🔍', getDebugColor(stdoutChalk))
       console.log(output)
     }
   },
@@ -130,32 +174,32 @@ export function createLogger(options: LoggerOptions = {}): Logger {
     info: (message: string, ...args: unknown[]): void => {
       const formatted = formatMessage(message, ...args)
       const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
-      const output = formatWithEmoji(fullMessage, '🗂️ ', customStdoutChalk.blue)
+      const output = formatWithEmoji(fullMessage, '🗂️ ', getInfoColor(customStdoutChalk))
       console.log(output)
     },
     success: (message: string, ...args: unknown[]): void => {
       const formatted = formatMessage(message, ...args)
       const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
-      const output = formatWithEmoji(fullMessage, '✅', customStdoutChalk.green)
+      const output = formatWithEmoji(fullMessage, '✅', getSuccessColor(customStdoutChalk))
       console.log(output)
     },
     warn: (message: string, ...args: unknown[]): void => {
       const formatted = formatMessage(message, ...args)
       const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
-      const output = formatWithEmoji(fullMessage, '⚠️ ', customStderrChalk.yellow)
+      const output = formatWithEmoji(fullMessage, '⚠️ ', getWarnColor(customStderrChalk))
       console.error(output)
     },
     error: (message: string, ...args: unknown[]): void => {
       const formatted = formatMessage(message, ...args)
       const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
-      const output = formatWithEmoji(fullMessage, '❌', customStderrChalk.red)
+      const output = formatWithEmoji(fullMessage, '❌', getErrorColor(customStderrChalk))
       console.error(output)
     },
     debug: (message: string, ...args: unknown[]): void => {
       if (localDebugEnabled) {
         const formatted = formatMessage(message, ...args)
         const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
-        const output = formatWithEmoji(fullMessage, '🔍', customStdoutChalk.gray)
+        const output = formatWithEmoji(fullMessage, '🔍', getDebugColor(customStdoutChalk))
         console.log(output)
       }
     },
@@ -194,32 +238,32 @@ export function createStderrLogger(options: LoggerOptions = {}): Logger {
     info: (message: string, ...args: unknown[]): void => {
       const formatted = formatMessage(message, ...args)
       const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
-      const output = formatWithEmoji(fullMessage, '🗂️ ', customChalk.blue)
+      const output = formatWithEmoji(fullMessage, '🗂️ ', getInfoColor(customChalk))
       console.error(output)  // Redirect to stderr
     },
     success: (message: string, ...args: unknown[]): void => {
       const formatted = formatMessage(message, ...args)
       const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
-      const output = formatWithEmoji(fullMessage, '✅', customChalk.green)
+      const output = formatWithEmoji(fullMessage, '✅', getSuccessColor(customChalk))
       console.error(output)  // Redirect to stderr
     },
     warn: (message: string, ...args: unknown[]): void => {
       const formatted = formatMessage(message, ...args)
       const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
-      const output = formatWithEmoji(fullMessage, '⚠️ ', customChalk.yellow)
+      const output = formatWithEmoji(fullMessage, '⚠️ ', getWarnColor(customChalk))
       console.error(output)
     },
     error: (message: string, ...args: unknown[]): void => {
       const formatted = formatMessage(message, ...args)
       const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
-      const output = formatWithEmoji(fullMessage, '❌', customChalk.red)
+      const output = formatWithEmoji(fullMessage, '❌', getErrorColor(customChalk))
       console.error(output)
     },
     debug: (message: string, ...args: unknown[]): void => {
       if (localDebugEnabled) {
         const formatted = formatMessage(message, ...args)
         const fullMessage = `${getTimestamp()}${prefixStr}${formatted}`
-        const output = formatWithEmoji(fullMessage, '🔍', customChalk.gray)
+        const output = formatWithEmoji(fullMessage, '🔍', getDebugColor(customChalk))
         console.error(output)  // Redirect to stderr
       }
     },
@@ -231,6 +275,25 @@ export function createStderrLogger(options: LoggerOptions = {}): Logger {
     },
     stdout: process.stderr  // Use stderr for progress output in JSON mode
   }
+}
+
+/**
+ * Set the theme mode for logger colors
+ * This is useful for testing or overriding auto-detection
+ *
+ * @param mode - Theme mode to use ('light' or 'dark')
+ */
+export function setThemeMode(mode: ThemeMode): void {
+  currentThemeMode = mode
+}
+
+/**
+ * Get the current theme mode
+ *
+ * @returns Current theme mode
+ */
+export function getThemeMode(): ThemeMode {
+  return currentThemeMode
 }
 
 // Default export

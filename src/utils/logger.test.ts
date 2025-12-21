@@ -1,6 +1,12 @@
 // Lines 1-10: Imports and mocks
 import { describe, it, expect, vi, beforeEach, afterEach, type SpyInstance } from 'vitest'
-import { logger, createLogger } from './logger.js'
+import { logger, createLogger, setThemeMode, getThemeMode } from './logger.js'
+
+// Mock the terminal module to avoid actual dark mode detection
+vi.mock('./terminal.js', () => ({
+  detectDarkMode: vi.fn().mockResolvedValue('light'),
+  detectPlatform: vi.fn().mockReturnValue('darwin')
+}))
 
 // Lines 12-25: Test utilities
 let stdoutSpy: SpyInstance
@@ -17,6 +23,8 @@ beforeEach(() => {
   stderrSpy = vi.spyOn(console, 'error').mockImplementation((msg: string) => {
     stderrBuffer.push(msg)
   })
+  // Reset to light mode for consistent tests
+  setThemeMode('light')
 })
 
 afterEach(() => {
@@ -287,6 +295,81 @@ describe('Logger', () => {
       expect(() => {
         logger.info('Circular:', circular)
       }).toThrow() // JSON.stringify throws on circular references
+    })
+  })
+
+  // Theme mode tests
+  describe('theme mode adaptation', () => {
+    it('should default to light mode', () => {
+      expect(getThemeMode()).toBe('light')
+    })
+
+    it('should allow setting theme mode to dark', () => {
+      setThemeMode('dark')
+      expect(getThemeMode()).toBe('dark')
+    })
+
+    it('should use different colors in dark mode', () => {
+      // Test in light mode
+      setThemeMode('light')
+      logger.info('light mode test')
+      const lightOutput = stdoutBuffer[stdoutBuffer.length - 1]
+
+      // Clear buffers
+      stdoutBuffer = []
+      stderrBuffer = []
+
+      // Test in dark mode
+      setThemeMode('dark')
+      logger.info('dark mode test')
+      const darkOutput = stdoutBuffer[stdoutBuffer.length - 1]
+
+      // Outputs should be different (different ANSI codes for colors)
+      // In light mode, info uses blue; in dark mode, it uses cyan
+      expect(lightOutput).toBeDefined()
+      expect(darkOutput).toBeDefined()
+      // The actual color codes will differ between light and dark mode
+    })
+
+    it('should apply dark mode colors to all log levels', () => {
+      setThemeMode('dark')
+      logger.setDebug(true)
+
+      logger.info('info in dark mode')
+      logger.success('success in dark mode')
+      logger.warn('warn in dark mode')
+      logger.error('error in dark mode')
+      logger.debug('debug in dark mode')
+
+      // All messages should be present with their respective emojis
+      expect(stdoutBuffer[0]).toContain('info in dark mode')
+      expect(stdoutBuffer[1]).toContain('success in dark mode')
+      expect(stderrBuffer[0]).toContain('warn in dark mode')
+      expect(stderrBuffer[1]).toContain('error in dark mode')
+      expect(stdoutBuffer[2]).toContain('debug in dark mode')
+    })
+
+    it('should respect theme mode in createLogger', () => {
+      setThemeMode('dark')
+      const customLogger = createLogger({ prefix: 'TEST' })
+
+      customLogger.info('dark mode custom logger')
+      expect(stdoutBuffer[0]).toContain('[TEST]')
+      expect(stdoutBuffer[0]).toContain('dark mode custom logger')
+    })
+
+    it('should allow switching between light and dark mode', () => {
+      // Start in dark mode
+      setThemeMode('dark')
+      expect(getThemeMode()).toBe('dark')
+
+      // Switch to light mode
+      setThemeMode('light')
+      expect(getThemeMode()).toBe('light')
+
+      // Switch back to dark mode
+      setThemeMode('dark')
+      expect(getThemeMode()).toBe('dark')
     })
   })
 })

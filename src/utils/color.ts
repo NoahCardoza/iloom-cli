@@ -1,5 +1,6 @@
 import { createHash } from 'crypto'
 import logger from './logger'
+import type { ThemeMode } from './terminal.js'
 
 /**
  * RGB color representation
@@ -44,6 +45,37 @@ export function getColorPalette(): RgbColor[] {
 		{ r: 235, g: 220, b: 255 }, // 13: Soft violet
 		{ r: 220, g: 255, b: 245 }, // 14: Soft sea green
 		{ r: 255, g: 235, b: 220 }, // 15: Soft salmon
+	]
+}
+
+/**
+ * Get the dark mode color palette (16 visually distinct colors)
+ * These are dark, muted colors that provide good contrast
+ * with light terminal text on dark backgrounds
+ *
+ * RGB values are in the ~25-85 range for subtle dark backgrounds
+ * with enough variation for visual distinctness
+ *
+ * @returns Array of 16 RGB colors optimized for dark terminal themes
+ */
+export function getDarkColorPalette(): RgbColor[] {
+	return [
+		{ r: 30, g: 45, b: 85 }, // 0: Dark blue
+		{ r: 85, g: 30, b: 50 }, // 1: Dark rose
+		{ r: 30, g: 75, b: 40 }, // 2: Dark green
+		{ r: 75, g: 65, b: 30 }, // 3: Dark olive
+		{ r: 60, g: 35, b: 85 }, // 4: Dark lavender
+		{ r: 30, g: 65, b: 75 }, // 5: Dark cyan
+		{ r: 55, g: 55, b: 55 }, // 6: Dark grey
+		{ r: 85, g: 40, b: 40 }, // 7: Dark coral
+		{ r: 35, g: 80, b: 50 }, // 8: Dark mint
+		{ r: 70, g: 50, b: 30 }, // 9: Dark brown
+		{ r: 30, g: 75, b: 75 }, // 10: Dark aqua
+		{ r: 75, g: 30, b: 75 }, // 11: Dark magenta
+		{ r: 75, g: 75, b: 30 }, // 12: Dark yellow
+		{ r: 50, g: 35, b: 85 }, // 13: Dark violet
+		{ r: 30, g: 80, b: 65 }, // 14: Dark sea green
+		{ r: 85, g: 40, b: 30 }, // 15: Dark rust
 	]
 }
 
@@ -99,16 +131,20 @@ export function hexToRgb(hex: string): RgbColor {
  * Matches the bash implementation in bash/new-branch-workflow.sh
  *
  * @param branchName - Branch name to generate color from
+ * @param themeMode - Theme mode for palette selection ('light' or 'dark')
  * @returns ColorData with RGB, hex, and palette index
  */
-export function generateColorFromBranchName(branchName: string): ColorData {
+export function generateColorFromBranchName(
+	branchName: string,
+	themeMode: ThemeMode = 'light'
+): ColorData {
 	// Generate SHA256 hash of branch name
 	const hash = createHash('sha256').update(branchName).digest('hex')
 
 	// Take first 8 hex characters and convert to index (0-39)
 	// Matches bash: local index=$(( 0x$hash % ${#colors[@]} ))
 	const hashPrefix = hash.slice(0, 8)
-	const palette = getColorPalette()
+	const palette = themeMode === 'dark' ? getDarkColorPalette() : getColorPalette()
 	const hashAsInt = parseInt(hashPrefix, 16)
 	const index = hashAsInt % palette.length
 	logger.debug(`[generateColorFromBranchName] Branch name: ${branchName}, Hash: ${hash}, Hash prefix: ${hashPrefix}, Hash as int: ${hashAsInt}, Index: ${index}`)
@@ -158,11 +194,16 @@ export const MIN_COLOR_DISTANCE = 20
  *
  * @param branchName - Branch name to generate base color from
  * @param usedHexColors - Array of hex colors (e.g., "#dcebff") already in use by active looms
+ * @param themeMode - Theme mode for palette selection ('light' for light pastels, 'dark' for darker colors)
  * @returns ColorData with the selected color
  */
-export function selectDistinctColor(branchName: string, usedHexColors: string[]): ColorData {
-	const palette = getColorPalette()
-	const hashBasedColor = generateColorFromBranchName(branchName)
+export function selectDistinctColor(
+	branchName: string,
+	usedHexColors: string[],
+	themeMode: ThemeMode = 'light'
+): ColorData {
+	const palette = themeMode === 'dark' ? getDarkColorPalette() : getColorPalette()
+	const hashBasedColor = generateColorFromBranchName(branchName, themeMode)
 
 	// If no colors in use, return hash-based selection
 	if (usedHexColors.length === 0) {

@@ -25,6 +25,34 @@ export function detectPlatform(): Platform {
 }
 
 /**
+ * Theme mode for color palette selection
+ */
+export type ThemeMode = 'light' | 'dark'
+
+/**
+ * Detect macOS dark mode using defaults command
+ * Returns 'light' as default for non-macOS platforms or detection failures
+ *
+ * Uses `defaults read -g AppleInterfaceStyle` which returns "Dark" in dark mode
+ * and errors (exit code 1) in light mode. This approach doesn't require
+ * System Events permission unlike AppleScript.
+ */
+export async function detectDarkMode(): Promise<ThemeMode> {
+	const platform = detectPlatform()
+	if (platform !== 'darwin') {
+		return 'light'
+	}
+
+	try {
+		const result = await execa('defaults', ['read', '-g', 'AppleInterfaceStyle'])
+		return result.stdout.trim().toLowerCase() === 'dark' ? 'dark' : 'light'
+	} catch {
+		// defaults command errors when AppleInterfaceStyle is not set (light mode)
+		return 'light'
+	}
+}
+
+/**
  * Detect if iTerm2 is installed on macOS
  * Returns false on non-macOS platforms
  */

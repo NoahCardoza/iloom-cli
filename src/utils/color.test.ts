@@ -5,6 +5,7 @@ import {
 	rgbToHex,
 	hexToRgb,
 	getColorPalette,
+	getDarkColorPalette,
 	lightenColor,
 	saturateColor,
 	calculateForegroundColor,
@@ -61,6 +62,59 @@ describe('Color utilities', () => {
 				expect(color.g).toBeLessThanOrEqual(255)
 				expect(color.b).toBeGreaterThanOrEqual(0)
 				expect(color.b).toBeLessThanOrEqual(255)
+			})
+		})
+	})
+
+	describe('getDarkColorPalette', () => {
+		it('should return exactly 16 colors', () => {
+			const palette = getDarkColorPalette()
+			expect(palette).toHaveLength(16)
+		})
+
+		it('should return darker colors (RGB values in 25-85 range)', () => {
+			const palette = getDarkColorPalette()
+			palette.forEach((color) => {
+				// All channels should be in the dark range for muted colors
+				const minChannel = Math.min(color.r, color.g, color.b)
+				const maxChannel = Math.max(color.r, color.g, color.b)
+				expect(minChannel).toBeGreaterThanOrEqual(25)
+				expect(maxChannel).toBeLessThanOrEqual(85)
+			})
+		})
+
+		it('should return valid RGB values (0-255 range)', () => {
+			const palette = getDarkColorPalette()
+			palette.forEach((color) => {
+				expect(color.r).toBeGreaterThanOrEqual(0)
+				expect(color.r).toBeLessThanOrEqual(255)
+				expect(color.g).toBeGreaterThanOrEqual(0)
+				expect(color.g).toBeLessThanOrEqual(255)
+				expect(color.b).toBeGreaterThanOrEqual(0)
+				expect(color.b).toBeLessThanOrEqual(255)
+			})
+		})
+
+		it('should have visually distinct colors (minimum distance > 10)', () => {
+			const palette = getDarkColorPalette()
+			let minDistance = Infinity
+			for (let i = 0; i < palette.length; i++) {
+				for (let j = i + 1; j < palette.length; j++) {
+					const distance = colorDistance(palette[i], palette[j])
+					if (distance < minDistance) {
+						minDistance = distance
+					}
+				}
+			}
+			expect(minDistance).toBeGreaterThanOrEqual(10)
+		})
+
+		it('should provide good contrast with white text', () => {
+			const palette = getDarkColorPalette()
+			palette.forEach((color) => {
+				// Dark colors should have calculateForegroundColor return white
+				const foreground = calculateForegroundColor(color)
+				expect(foreground).toBe('#ffffff')
 			})
 		})
 	})
@@ -231,6 +285,31 @@ describe('Color utilities', () => {
 			expect(color.rgb).toHaveProperty('r')
 			expect(color.rgb).toHaveProperty('g')
 			expect(color.rgb).toHaveProperty('b')
+		})
+
+		it('should use light palette by default', () => {
+			const color = generateColorFromBranchName('feature/test')
+			const lightPalette = getColorPalette()
+			expect(color.rgb).toEqual(lightPalette[color.index])
+		})
+
+		it('should use dark palette when themeMode is "dark"', () => {
+			const color = generateColorFromBranchName('feature/test', 'dark')
+			const darkPalette = getDarkColorPalette()
+			expect(color.rgb).toEqual(darkPalette[color.index])
+		})
+
+		it('should use light palette when themeMode is "light"', () => {
+			const color = generateColorFromBranchName('feature/test', 'light')
+			const lightPalette = getColorPalette()
+			expect(color.rgb).toEqual(lightPalette[color.index])
+		})
+
+		it('should produce same index for same branch name regardless of theme', () => {
+			const lightColor = generateColorFromBranchName('feature/test', 'light')
+			const darkColor = generateColorFromBranchName('feature/test', 'dark')
+			// Same branch should produce same index (deterministic hash)
+			expect(lightColor.index).toBe(darkColor.index)
 		})
 	})
 
@@ -409,6 +488,40 @@ describe('Color utilities', () => {
 			const result = selectDistinctColor('feature/test', customHexColors)
 			// Should return a valid color regardless of what hex colors are passed
 			expect(result.hex).toMatch(/^#[0-9a-f]{6}$/)
+		})
+
+		it('should use light palette when themeMode is "light"', () => {
+			const result = selectDistinctColor('feature/test', [], 'light')
+			const lightPalette = getColorPalette()
+			const lightHexColors = lightPalette.map(c => rgbToHex(c.r, c.g, c.b))
+			// Result should be from light palette
+			expect(lightHexColors).toContain(result.hex)
+		})
+
+		it('should use dark palette when themeMode is "dark"', () => {
+			const result = selectDistinctColor('feature/test', [], 'dark')
+			const darkPalette = getDarkColorPalette()
+			const darkHexColors = darkPalette.map(c => rgbToHex(c.r, c.g, c.b))
+			// Result should be from dark palette
+			expect(darkHexColors).toContain(result.hex)
+		})
+
+		it('should default to light palette when themeMode is undefined', () => {
+			const resultDefault = selectDistinctColor('feature/test', [])
+			const resultLight = selectDistinctColor('feature/test', [], 'light')
+			// Both should return the same result
+			expect(resultDefault.hex).toBe(resultLight.hex)
+		})
+
+		it('should avoid collisions in dark mode correctly', () => {
+			const darkPalette = getDarkColorPalette()
+			// Use first dark palette color as already in use
+			const usedDarkHex = rgbToHex(darkPalette[0].r, darkPalette[0].g, darkPalette[0].b)
+			const result = selectDistinctColor('feature/test', [usedDarkHex], 'dark')
+			// Result should be from dark palette but different from used color
+			expect(result.hex).not.toBe(usedDarkHex)
+			const darkHexColors = darkPalette.map(c => rgbToHex(c.r, c.g, c.b))
+			expect(darkHexColors).toContain(result.hex)
 		})
 	})
 
