@@ -136,7 +136,7 @@ describe('RecapCommand', () => {
 	})
 
 	describe('execute without JSON mode', () => {
-		it('should print human-readable output to console including artifacts', async () => {
+		it('should print markdown-formatted output to console including artifacts', async () => {
 			const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
 			const mockRecap = {
@@ -163,19 +163,22 @@ describe('RecapCommand', () => {
 			const result = await command.execute(input)
 
 			expect(result).toBeUndefined()
-			expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Recap file:'))
-			expect(consoleSpy).toHaveBeenCalledWith('Goal: Test goal')
-			expect(consoleSpy).toHaveBeenCalledWith('Entries: 1')
-			expect(consoleSpy).toHaveBeenCalledWith('  [decision] Test decision')
-			expect(consoleSpy).toHaveBeenCalledWith('Artifacts: 1')
-			expect(consoleSpy).toHaveBeenCalledWith(
-				'  [comment] Progress update - https://github.com/org/repo/issues/123#issuecomment-456'
-			)
+			// Single console.log call with formatted markdown
+			expect(consoleSpy).toHaveBeenCalledTimes(1)
+			const output = consoleSpy.mock.calls[0][0] as string
+			expect(output).toContain('# Loom Recap')
+			expect(output).toContain('**File:**')
+			expect(output).toContain('## Goal')
+			expect(output).toContain('Test goal')
+			expect(output).toContain('## Entries (1)')
+			expect(output).toContain('- **[decision]** Test decision')
+			expect(output).toContain('## Artifacts (1)')
+			expect(output).toContain('- **[comment](https://github.com/org/repo/issues/123#issuecomment-456)** Progress update')
 
 			consoleSpy.mockRestore()
 		})
 
-		it('should print (not set) when goal is null and show zero artifacts', async () => {
+		it('should print (not set) when goal is null and show zero entries/artifacts', async () => {
 			const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
 			vi.mocked(fs.pathExists).mockResolvedValue(false as never)
@@ -183,9 +186,15 @@ describe('RecapCommand', () => {
 			const input: RecapCommandInput = { json: false }
 			await command.execute(input)
 
-			expect(consoleSpy).toHaveBeenCalledWith('Goal: (not set)')
-			expect(consoleSpy).toHaveBeenCalledWith('Entries: 0')
-			expect(consoleSpy).toHaveBeenCalledWith('Artifacts: 0')
+			// Single console.log call with formatted markdown
+			expect(consoleSpy).toHaveBeenCalledTimes(1)
+			const output = consoleSpy.mock.calls[0][0] as string
+			expect(output).toContain('# Loom Recap')
+			expect(output).toContain('## Goal')
+			expect(output).toContain('(not set)')
+			expect(output).toContain('## Complexity')
+			expect(output).toContain('## Entries (0)')
+			expect(output).toContain('## Artifacts (0)')
 
 			consoleSpy.mockRestore()
 		})

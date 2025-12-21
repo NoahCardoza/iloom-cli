@@ -11,6 +11,7 @@ import fs from 'fs-extra'
 import type { RecapFile, RecapOutput } from '../mcp/recap-types.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
+import { formatRecapMarkdown } from '../utils/recap-formatter.js'
 
 const RECAPS_DIR = path.join(os.homedir(), '.config', 'iloom-ai', 'recaps')
 
@@ -68,25 +69,9 @@ export class RecapCommand {
 			return result
 		}
 
-		// Non-JSON mode: print human-readable format (intentionally using console.log for piping/redirection)
+		// Non-JSON mode: print markdown format (intentionally using console.log for piping/redirection)
 		// eslint-disable-next-line no-console
-		console.log(`Recap file: ${filePath}`)
-		// eslint-disable-next-line no-console
-		console.log(`Goal: ${goal ?? '(not set)'}`)
-		// eslint-disable-next-line no-console
-		console.log(`Complexity: ${complexity ? `${complexity.level}${complexity.reason ? ` - ${complexity.reason}` : ''}` : '(not set)'}`)
-		// eslint-disable-next-line no-console
-		console.log(`Entries: ${entries.length}`)
-		for (const entry of entries) {
-			// eslint-disable-next-line no-console
-			console.log(`  [${entry.type}] ${entry.content}`)
-		}
-		// eslint-disable-next-line no-console
-		console.log(`Artifacts: ${artifacts.length}`)
-		for (const artifact of artifacts) {
-			// eslint-disable-next-line no-console
-			console.log(`  [${artifact.type}] ${artifact.description} - ${artifact.primaryUrl}`)
-		}
+		console.log(formatRecapMarkdown(result))
 	}
 
 	/**
