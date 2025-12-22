@@ -13,6 +13,7 @@ import { StartCommand } from './commands/start.js'
 import { AddIssueCommand } from './commands/add-issue.js'
 import { EnhanceCommand } from './commands/enhance.js'
 import { FinishCommand } from './commands/finish.js'
+import { UserAbortedCommitError } from './types/index.js'
 import type { StartOptions, CleanupOptions, FinishOptions } from './types/index.js'
 import { getPackageInfo } from './utils/package-info.js'
 import { hasMultipleRemotes } from './utils/remote.js'
@@ -548,6 +549,11 @@ program
           console.log(JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
         } else {
           logger.error(`Failed to finish workspace: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+
+        // Exit 130 for user cancellation (Unix convention: 128 + SIGINT)
+        if (error instanceof UserAbortedCommitError) {
+          process.exit(130)
         }
         process.exit(1)
       }

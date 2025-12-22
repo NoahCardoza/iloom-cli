@@ -13,6 +13,7 @@ import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { NeonProvider } from '../lib/providers/NeonProvider.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import type { Issue, PullRequest } from '../types/index.js'
+import { UserAbortedCommitError } from '../types/index.js'
 import type { GitWorktree } from '../types/worktree.js'
 import { GitHubError, GitHubErrorCode } from '../types/github.js'
 import { findMainWorktreePathWithSettings, pushBranchToRemote } from '../utils/git.js'
@@ -2496,6 +2497,57 @@ describe('FinishCommand', () => {
 
 				// Error logging is done in cli.ts (the catch site), not in finish.ts (the throw site)
 				// This ensures errors are logged exactly once
+			})
+
+			it('should throw UserAbortedCommitError when user aborts commit (Issue #398)', async () => {
+				const mockIssue: Issue = {
+					number: 123,
+					title: 'Test Issue',
+					body: 'Test',
+					state: 'open',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/owner/repo/issues/123',
+				}
+
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree',
+					branch: 'feat/issue-123',
+					commit: 'abc123',
+					isPR: false,
+					issueNumber: 123,
+					prunable: 'no',
+					bare: false,
+					detached: false,
+				}
+
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					originalInput: '123',
+				})
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+				vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
+					hasUncommittedChanges: true,
+					unstagedFiles: ['file.ts'],
+					stagedFiles: [],
+					currentBranch: 'feat/issue-123',
+					isAheadOfRemote: false,
+					isBehindRemote: false,
+				})
+				// User aborts the commit
+				vi.mocked(mockCommitManager.commitChanges).mockRejectedValue(
+					new UserAbortedCommitError()
+				)
+
+				// Execute and verify the error is thrown, not swallowed
+				await expect(
+					command.execute({
+						identifier: '123',
+						options: {},
+					})
+				).rejects.toThrow(UserAbortedCommitError)
 			})
 		})
 

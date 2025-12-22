@@ -680,7 +680,7 @@ export class FinishCommand {
 							message: 'Commit aborted by user',
 							success: false,
 						})
-						return  // Exit workflow gracefully
+						throw error  // Propagate to CLI for non-zero exit
 					}
 					throw error  // Re-throw other errors
 				}
@@ -948,7 +948,7 @@ export class FinishCommand {
 								message: 'Commit aborted by user',
 								success: false,
 							})
-							return  // Exit workflow gracefully
+							throw error  // Propagate to CLI for non-zero exit
 						}
 						throw error  // Re-throw other errors
 					}
