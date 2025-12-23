@@ -369,7 +369,13 @@ export async function getRepoRoot(path: string = process.cwd()): Promise<string 
 
     return repoRoot
   } catch(error) {
-    logger.warn(`Failed to determine repo root from git-common-dir: ${path}`, error instanceof Error ? error.message : String(error))
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    // "not a git repository" is expected when running outside a git repo - use debug level
+    if (errorMessage.includes('not a git repository')) {
+      logger.info(`Note: No git repository detected: ${path}`)
+    } else {
+      logger.warn(`Failed to determine repo root from git-common-dir: ${path}`, errorMessage)
+    }
     return null
   }
 }

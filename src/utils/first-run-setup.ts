@@ -92,14 +92,8 @@ export async function launchFirstRunSetup(): Promise<void> {
 	await initCommand.execute(
 		'Help me configure iloom settings for this project. This is my first time using iloom here. Note: Your iloom command will execute once we are done with configuration changes.'
 	)
-
-	// Mark project as configured to prevent wizard from re-triggering
-	// Use the same project root resolution as needsFirstRunSetup() for consistency
-	const projectRoot = await getProjectRoot()
-	logger.debug(`Marking project as configured at root: ${projectRoot}`)
-	const firstRunManager = new FirstRunManager()
-	await firstRunManager.markProjectAsConfigured(projectRoot)
-	logger.debug(`Project marked as configured at root: ${projectRoot}`)
+	// Note: InitCommand.execute() now handles markProjectAsConfigured() internally
+	// when the guided init completes successfully
 
 	logger.info('Configuration complete! Continuing with your original command...')
 }

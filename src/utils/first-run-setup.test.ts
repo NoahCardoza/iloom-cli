@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { FirstRunManager } from './FirstRunManager.js'
 import { getRepoRoot } from './git.js'
+import { InitCommand } from '../commands/init.js'
 
 // Mock fs modules
 vi.mock('fs')
@@ -231,29 +232,14 @@ describe('first-run-setup', () => {
 			)
 		})
 
-		it('should mark project as configured after wizard completes', async () => {
+		it('should delegate project marking to InitCommand.execute()', async () => {
+			// Note: markProjectAsConfigured is now called internally by InitCommand.execute()
+			// when the guided init completes successfully, not directly by launchFirstRunSetup()
 			await launchFirstRunSetup()
 
-			expect(mockMarkProjectAsConfigured).toHaveBeenCalled()
-		})
-
-		it('should use git repo root when marking project as configured', async () => {
-			await launchFirstRunSetup()
-
-			// Verify getRepoRoot was called
-			expect(getRepoRoot).toHaveBeenCalled()
-			// Verify markProjectAsConfigured was called with repo root
-			expect(mockMarkProjectAsConfigured).toHaveBeenCalledWith(mockRepoRoot)
-		})
-
-		it('should fall back to process.cwd() when not in a git repo', async () => {
-			vi.mocked(getRepoRoot).mockResolvedValue(null)
-			const originalCwd = process.cwd()
-
-			await launchFirstRunSetup()
-
-			// Verify markProjectAsConfigured was called with cwd
-			expect(mockMarkProjectAsConfigured).toHaveBeenCalledWith(originalCwd)
+			// Verify InitCommand.execute() was called, which handles marking internally
+			const mockInstance = vi.mocked(InitCommand).mock.results[0].value
+			expect(mockInstance.execute).toHaveBeenCalled()
 		})
 	})
 })

@@ -10,7 +10,8 @@ import { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import { fileURLToPath } from 'url'
 import { GitRemote, parseGitRemotes } from '../utils/remote.js'
 import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
-import { isFileGitignored } from '../utils/git.js'
+import { isFileGitignored, getRepoRoot } from '../utils/git.js'
+import { FirstRunManager } from '../utils/FirstRunManager.js'
 
 /**
  * Initialize iloom configuration
@@ -45,7 +46,23 @@ export class InitCommand {
       await this.setupProjectConfiguration()
 
       // Launch guided Claude configuration if available
-      await this.launchGuidedInit(customInitialMessage)
+      const guidedInitSucceeded = await this.launchGuidedInit(customInitialMessage)
+
+      // Only mark project as configured if guided init succeeded and not already marked
+      // This enables VSCode extension detection and ensures project appears in `il projects` list
+      if (guidedInitSucceeded) {
+        const projectRoot = await getRepoRoot() ?? process.cwd()
+        const firstRunManager = new FirstRunManager()
+        const alreadyConfigured = await firstRunManager.isProjectConfigured(projectRoot)
+        if (!alreadyConfigured) {
+          await firstRunManager.markProjectAsConfigured(projectRoot)
+          logger.debug('Project marked as configured', { projectRoot })
+        } else {
+          logger.debug('Project already marked as configured, skipping', { projectRoot })
+        }
+      } else {
+        logger.debug('Skipping project marker - guided init did not complete successfully')
+      }
 
       logger.info(chalk.green('Setup complete! Enjoy using iloom CLI.'))
     } catch (error) {
@@ -157,8 +174,9 @@ export class InitCommand {
   /**
    * Launch interactive Claude-guided configuration
    * @param customInitialMessage Optional custom initial message to send to Claude
+   * @returns true if Claude session completed successfully, false otherwise
    */
-  private async launchGuidedInit(customInitialMessage?: string): Promise<void> {
+  private async launchGuidedInit(customInitialMessage?: string): Promise<boolean> {
     logger.debug('launchGuidedInit() starting', { hasCustomInitialMessage: !!customInitialMessage })
     logger.info(chalk.bold('Starting interactive Claude-guided configuration...'))
 
@@ -171,7 +189,7 @@ export class InitCommand {
       logger.warn('Claude Code not detected. Skipping guided configuration.')
       logger.info('iloom won\'t be able to help you much without Claude Code, so please install it: npm install -g @anthropic-ai/claude-code')
       logger.debug('Exiting launchGuidedInit() due to missing Claude CLI')
-      return
+      return false
     }
 
     try {
@@ -443,16 +461,16 @@ export class InitCommand {
       // Launch Claude in interactive mode with custom initial message if provided
       const initialMessage = customInitialMessage ?? 'Help me configure iloom settings.'
       await launchClaude(initialMessage, claudeOptions)
-      logger.debug('Claude session completed')
+      logger.debug('Claude session completed successfully')
+      return true
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       logger.warn(`Guided configuration failed: ${message}`)
       logger.debug('launchGuidedInit() error details', error instanceof Error ? error.stack : {error})
       logger.info('You can manually edit .iloom/settings.json to configure iloom.')
+      return false
     }
-
-    logger.debug('launchGuidedInit() completed')
   }
 
   /**

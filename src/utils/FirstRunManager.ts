@@ -156,11 +156,19 @@ export class FirstRunManager {
 	/**
 	 * Mark a project as configured
 	 * Creates a marker file with project metadata
+	 * Idempotent - skips if already configured
 	 */
 	async markProjectAsConfigured(projectPath?: string): Promise<void> {
 		const inputPath = projectPath ?? process.cwd()
 		const resolvedPath = await this.resolveProjectPath(inputPath)
 		const markerPath = this.getProjectMarkerPath(resolvedPath)
+
+		// Idempotency check - skip if already configured
+		if (await this.isProjectConfigured(resolvedPath)) {
+			logger.debug('markProjectAsConfigured: Project already configured, skipping', { markerPath })
+			return
+		}
+
 		logger.debug('markProjectAsConfigured: Creating marker file', { markerPath })
 		try {
 			await fs.ensureDir(this.getProjectsDir())
