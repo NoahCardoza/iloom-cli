@@ -143,6 +143,9 @@ describe('ProjectsCommand', () => {
         const pathStr = p.toString()
         if (pathStr === projectsDir) return true
         if (pathStr === '/Users/adam/Documents/Projects/project-a') return true
+        // Worktrees are valid git worktrees (.git exists)
+        if (pathStr === '/Users/adam/Documents/Projects/project-a-looms/issue-1/.git') return true
+        if (pathStr === '/Users/adam/Documents/Projects/project-a-looms/issue-2/.git') return true
         return false
       })
 
@@ -189,6 +192,63 @@ describe('ProjectsCommand', () => {
 
       expect(result).toHaveLength(1)
       expect(result[0].activeLooms).toBe(2)
+    })
+
+    it('excludes looms where worktree is not a valid git worktree', async () => {
+      vi.mocked(fs.pathExists).mockImplementation(async (p) => {
+        const pathStr = p.toString()
+        if (pathStr === projectsDir) return true
+        if (pathStr === '/Users/adam/Documents/Projects/project-a') return true
+        // First worktree is valid (.git exists), second is stale (no .git)
+        if (pathStr === '/Users/adam/Documents/Projects/project-a-looms/issue-1/.git') return true
+        if (pathStr === '/Users/adam/Documents/Projects/project-a-looms/issue-2/.git') return false
+        return false
+      })
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readdir).mockResolvedValue(['project-a-marker'] as any)
+
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify({
+          configuredAt: '2025-12-05T22:59:58.488Z',
+          projectPath: '/Users/adam/Documents/Projects/project-a',
+          projectName: 'project-a',
+        })
+      )
+
+      const mockMetadata: LoomMetadata[] = [
+        {
+          description: 'Issue #1 work',
+          created_at: '2025-12-05T22:59:58.488Z',
+          branchName: 'issue-1',
+          worktreePath: '/Users/adam/Documents/Projects/project-a-looms/issue-1',
+          issueType: 'issue',
+          issue_numbers: ['1'],
+          pr_numbers: [],
+          issueTracker: 'github',
+          colorHex: '#dcebff',
+          sessionId: 'session-1',
+        },
+        {
+          description: 'Issue #2 work (stale)',
+          created_at: '2025-12-05T22:59:58.488Z',
+          branchName: 'issue-2',
+          worktreePath: '/Users/adam/Documents/Projects/project-a-looms/issue-2',
+          issueType: 'issue',
+          issue_numbers: ['2'],
+          pr_numbers: [],
+          issueTracker: 'github',
+          colorHex: '#dcebff',
+          sessionId: 'session-2',
+        },
+      ]
+
+      const command = new ProjectsCommand(createMockMetadataManager(mockMetadata) as unknown as MetadataManager)
+      const result = await command.execute()
+
+      expect(result).toHaveLength(1)
+      // Only 1 active loom since issue-2 is stale (no .git)
+      expect(result[0].activeLooms).toBe(1)
     })
 
     it('handles read errors gracefully', async () => {

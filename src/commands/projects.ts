@@ -77,7 +77,7 @@ export class ProjectsCommand {
           if (!(await fs.pathExists(marker.projectPath))) continue
 
           // Count active looms for this project
-          const activeLooms = this.countActiveLooms(marker.projectPath, allMetadata)
+          const activeLooms = await this.countActiveLooms(marker.projectPath, allMetadata)
 
           results.push({
             configuredAt: marker.configuredAt,
@@ -102,15 +102,22 @@ export class ProjectsCommand {
    * Count active looms for a project
    * Looms are counted if their worktreePath is in the project's -looms directory
    * or if they share the same parent directory as the project.
+   * Only counts looms where the worktree is a valid git worktree (.git exists).
    */
-  private countActiveLooms(projectPath: string, allMetadata: LoomMetadata[]): number {
-    return allMetadata.filter((meta) => {
-      if (!meta.worktreePath) return false
+  private async countActiveLooms(projectPath: string, allMetadata: LoomMetadata[]): Promise<number> {
+    let count = 0
+    for (const meta of allMetadata) {
+      if (!meta.worktreePath) continue
       const parentDir = path.dirname(meta.worktreePath)
-      return (
+      const isProjectLoom =
         parentDir === path.dirname(projectPath) ||
         parentDir.startsWith(projectPath + '-looms')
-      )
-    }).length
+      // Check for .git (file for worktrees, directory for main repo) to verify it's a valid git worktree
+      const isValidWorktree = await fs.pathExists(path.join(meta.worktreePath, '.git'))
+      if (isProjectLoom && isValidWorktree) {
+        count++
+      }
+    }
+    return count
   }
 }
