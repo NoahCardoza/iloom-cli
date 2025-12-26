@@ -232,6 +232,47 @@ This example shows how to configure a project-wide default (e.g., GitHub remote)
 }
 ```
 
+### Copying Gitignored Files to Looms
+
+By default, looms only contain files tracked by Git. If you have local files that are gitignored (like SQLite databases, test data, or sensitive configuration), they won't be available in your looms.
+
+**Automatically copied:** Some gitignored files are always copied to looms without configuration:
+- dotenv-flow files: `.env`, `.env.local`, `.env.development`, `.env.development.local`
+- `.iloom/settings.local.json`
+- `.claude/settings.local.json`
+
+For other gitignored files, use `copyGitIgnoredPatterns` to specify glob patterns for files that should be copied from your main repo to each loom.
+
+**When to use:**
+- **Local databases:** SQLite files (`*.db`, `*.sqlite`) for local development
+- **Test data:** Large test fixtures that are too big to commit to git
+- **Sensitive files:** Configuration files with credentials that shouldn't be in version control
+
+**.iloom/settings.json**
+
+```json
+{
+  "copyGitIgnoredPatterns": [
+    "*.db",
+    "*.sqlite",
+    "data/**/*.json",
+    "{data,fixtures}/*.sql"
+  ]
+}
+```
+
+**Supported patterns:**
+- `*.db` - Match files with .db extension in root
+- `**/*.db` - Recursively match all .db files in any directory
+- `data/**/*.sqlite` - Match .sqlite files anywhere under data/
+- `{data,backup}/*.db` - Match .db files in either data/ or backup/
+- `*.{db,sqlite}` - Match files with either .db or .sqlite extension
+
+**Notes:**
+- Files are copied from your main workspace to each loom during `il start`
+- Files are NOT copied back during `il finish` (one-way copy only)
+- The patterns use [fast-glob](https://github.com/mrmlnc/fast-glob) syntax
+
 ### Merge Behavior
 
 Control how `il finish` handles your work. Configure in `.iloom/settings.json`:

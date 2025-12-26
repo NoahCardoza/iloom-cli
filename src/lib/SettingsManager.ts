@@ -271,6 +271,10 @@ export const IloomSettingsSchema = z.object({
 		.array(z.string().min(1, 'Protected branch name cannot be empty'))
 		.optional()
 		.describe('List of branches that cannot be deleted (defaults to [mainBranch, "main", "master", "develop"])'),
+	copyGitIgnoredPatterns: z
+		.array(z.string().min(1, 'Pattern cannot be empty'))
+		.optional()
+		.describe('Glob patterns for gitignored files to copy to looms (e.g., ["*.db", "data/*.sqlite"]). Great for local dbs and large test data files that are too big to commit to git. Note: .env (dotenv-flow) files, iloom\'s and claude\'s local settings are automatically copied and do not need to be specified here.'),
 	workflows: WorkflowsSettingsSchema.describe('Per-workflow-type permission configurations'),
 	agents: z
 		.record(z.string(), AgentSettingsSchema)
@@ -436,6 +440,10 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.array(z.string().min(1, 'Protected branch name cannot be empty'))
 		.optional()
 		.describe('List of branches that cannot be deleted (defaults to [mainBranch, "main", "master", "develop"])'),
+	copyGitIgnoredPatterns: z
+		.array(z.string().min(1, 'Pattern cannot be empty'))
+		.optional()
+		.describe('Glob patterns for gitignored files to copy to looms (e.g., ["*.db", "data/*.sqlite"]). Great for local dbs and large test data files that are too big to commit to git. Note: .env (dotenv-flow) files, iloom\'s and claude\'s local settings are automatically copied and do not need to be specified here.'),
 	workflows: WorkflowsSettingsSchemaNoDefaults.describe('Per-workflow-type permission configurations'),
 	agents: z
 		.record(z.string(), AgentSettingsSchema)

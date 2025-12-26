@@ -12,6 +12,7 @@ import type { CreateLoomInput } from '../types/loom.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { branchExists, ensureRepositoryHasCommits, isFileTrackedByGit } from '../utils/git.js'
 import fs from 'fs-extra'
+import fg from 'fast-glob'
 
 // Mock all dependencies
 vi.mock('./GitWorktreeManager.js')
@@ -28,6 +29,13 @@ vi.mock('fs-extra', () => ({
   default: {
     ensureDir: vi.fn().mockResolvedValue(undefined),
     pathExists: vi.fn().mockResolvedValue(false),
+  },
+}))
+
+// Mock fast-glob
+vi.mock('fast-glob', () => ({
+  default: {
+    glob: vi.fn().mockResolvedValue([]),
   },
 }))
 
@@ -2285,6 +2293,287 @@ describe('LoomManager', () => {
       const metadataInput = writeMetadataCall[1]
 
       expect(metadataInput.projectPath).toBe(mainWorktreePath)
+    })
+  })
+
+  describe('copyGitIgnoredFiles', () => {
+    const baseInput: CreateLoomInput = {
+      type: 'issue',
+      identifier: 123,
+      originalInput: '123',
+    }
+
+    beforeEach(() => {
+      // Reset fs-extra mocks for each test
+      vi.mocked(fs.pathExists).mockReset()
+      vi.mocked(fs.ensureDir).mockReset()
+      vi.mocked(fg.glob).mockReset()
+
+      // Common setup for all tests
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test Issue',
+        body: '',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/test/repo/issues/123',
+      })
+
+      const expectedPath = '/test/worktree-issue-123'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {}
+      })
+    })
+
+    it('should skip copying when no patterns are configured', async () => {
+      // No copyGitIgnoredPatterns configured
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({})
+
+      await manager.createIloom(baseInput)
+
+      // fast-glob should not be called since no patterns configured
+      expect(fg.glob).not.toHaveBeenCalled()
+    })
+
+    it('should copy files matching configured patterns', async () => {
+      const mainWorktreePath = '/projects/myapp'
+
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => mainWorktreePath),
+        configurable: true
+      })
+
+      // Configure patterns
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        copyGitIgnoredPatterns: ['*.db']
+      })
+
+      // Mock fast-glob to return matching files
+      vi.mocked(fg.glob).mockResolvedValue(['app.db', 'cache.db'])
+
+      // Main files exist
+      vi.mocked(fs.pathExists).mockImplementation(async (p: fs.PathLike) => {
+        const pathStr = String(p)
+        if (pathStr === mainWorktreePath || pathStr.startsWith(mainWorktreePath)) {
+          return true
+        }
+        return false
+      })
+
+      // Files are not tracked by git
+      vi.mocked(isFileTrackedByGit).mockResolvedValue(false)
+
+      // Worktree files don't exist yet
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify fast-glob was called with array of patterns
+      expect(fg.glob).toHaveBeenCalledWith(['*.db'], {
+        cwd: mainWorktreePath,
+        onlyFiles: true,
+        dot: true,
+      })
+
+      // Verify copyIfExists was called for matching db files
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const dbFileCopies = copyIfExistsCalls.filter(
+        call => String(call[0]).endsWith('.db')
+      )
+      expect(dbFileCopies.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('should skip files that are tracked by git', async () => {
+      const mainWorktreePath = '/projects/myapp'
+
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => mainWorktreePath),
+        configurable: true
+      })
+
+      // Configure patterns
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        copyGitIgnoredPatterns: ['*.db']
+      })
+
+      // Mock fast-glob to return a file
+      vi.mocked(fg.glob).mockResolvedValue(['tracked.db'])
+
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+
+      // File IS tracked by git - should be skipped
+      vi.mocked(isFileTrackedByGit).mockResolvedValue(true)
+
+      await manager.createIloom(baseInput)
+
+      // Verify fast-glob was called with array of patterns
+      expect(fg.glob).toHaveBeenCalledWith(['*.db'], expect.any(Object))
+
+      // Verify copyIfExists was NOT called for tracked.db
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const trackedDbCopies = copyIfExistsCalls.filter(
+        call => String(call[0]).includes('tracked.db')
+      )
+      expect(trackedDbCopies.length).toBe(0)
+    })
+
+    it('should handle multiple patterns in a single glob call', async () => {
+      const mainWorktreePath = '/projects/myapp'
+
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => mainWorktreePath),
+        configurable: true
+      })
+
+      // Configure multiple patterns
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        copyGitIgnoredPatterns: ['*.db', '*.sqlite']
+      })
+
+      // Mock fast-glob to return files matching all patterns (deduplicated by fast-glob)
+      vi.mocked(fg.glob).mockResolvedValue(['app.db', 'data.sqlite'])
+
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(isFileTrackedByGit).mockResolvedValue(false)
+
+      await manager.createIloom(baseInput)
+
+      // All patterns should be passed to a single fg.glob call
+      expect(fg.glob).toHaveBeenCalledTimes(1)
+      expect(fg.glob).toHaveBeenCalledWith(['*.db', '*.sqlite'], {
+        cwd: mainWorktreePath,
+        onlyFiles: true,
+        dot: true,
+      })
+    })
+
+    it('should warn but not fail on copy errors', async () => {
+      const mainWorktreePath = '/projects/myapp'
+
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => mainWorktreePath),
+        configurable: true
+      })
+
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        copyGitIgnoredPatterns: ['*.db']
+      })
+
+      // Mock fast-glob to throw an error
+      vi.mocked(fg.glob).mockRejectedValue(new Error('Permission denied'))
+
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+
+      // Should not throw - errors are caught and logged
+      await expect(manager.createIloom(baseInput)).resolves.toBeDefined()
+    })
+
+    it('should support recursive ** patterns like **/*.db', async () => {
+      const mainWorktreePath = '/projects/myapp'
+      const worktreePath = '/test/worktree-issue-123'
+
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => mainWorktreePath),
+        configurable: true
+      })
+
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        copyGitIgnoredPatterns: ['**/*.db']
+      })
+
+      // Mock fast-glob to return nested files
+      vi.mocked(fg.glob).mockResolvedValue([
+        'app.db',
+        'data/nested.db',
+        'data/deep/other.db'
+      ])
+
+      // Main files exist, worktree files don't
+      vi.mocked(fs.pathExists).mockImplementation(async (p: fs.PathLike) => {
+        const pathStr = String(p)
+        // Files exist in main workspace, not in worktree
+        if (pathStr.startsWith(mainWorktreePath)) {
+          return true
+        }
+        if (pathStr.startsWith(worktreePath)) {
+          return false
+        }
+        return false
+      })
+      vi.mocked(isFileTrackedByGit).mockResolvedValue(false)
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify fast-glob was called with all patterns at once
+      expect(fg.glob).toHaveBeenCalledWith(['**/*.db'], {
+        cwd: mainWorktreePath,
+        onlyFiles: true,
+        dot: true,
+      })
+
+      // Verify copyIfExists was called for all nested db files
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const dbFileCopies = copyIfExistsCalls.filter(
+        call => String(call[0]).endsWith('.db')
+      )
+      expect(dbFileCopies.length).toBe(3)
+    })
+
+    it('should support brace expansion like {data,backup}/*.db', async () => {
+      const mainWorktreePath = '/projects/myapp'
+      const worktreePath = '/test/worktree-issue-123'
+
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => mainWorktreePath),
+        configurable: true
+      })
+
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        copyGitIgnoredPatterns: ['{data,backup}/*.db']
+      })
+
+      // Mock fast-glob to return files from both directories
+      vi.mocked(fg.glob).mockResolvedValue([
+        'data/app.db',
+        'backup/old.db'
+      ])
+
+      // Main files exist, worktree files don't
+      vi.mocked(fs.pathExists).mockImplementation(async (p: fs.PathLike) => {
+        const pathStr = String(p)
+        // Files exist in main workspace, not in worktree
+        if (pathStr.startsWith(mainWorktreePath)) {
+          return true
+        }
+        if (pathStr.startsWith(worktreePath)) {
+          return false
+        }
+        return false
+      })
+      vi.mocked(isFileTrackedByGit).mockResolvedValue(false)
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify fast-glob was called with all patterns at once
+      expect(fg.glob).toHaveBeenCalledWith(['{data,backup}/*.db'], {
+        cwd: mainWorktreePath,
+        onlyFiles: true,
+        dot: true,
+      })
+
+      // Verify copyIfExists was called for files from both directories
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const dbFileCopies = copyIfExistsCalls.filter(
+        call => String(call[0]).endsWith('.db')
+      )
+      expect(dbFileCopies.length).toBe(2)
     })
   })
 })

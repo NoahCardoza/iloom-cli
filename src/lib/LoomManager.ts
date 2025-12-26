@@ -1,5 +1,6 @@
 import path from 'path'
 import fs from 'fs-extra'
+import fg from 'fast-glob'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import type { IssueTracker } from './IssueTracker.js'
 import type { BranchNamingService } from './BranchNamingService.js'
@@ -116,6 +117,9 @@ export class LoomManager {
 
     // 7.5. Copy Claude settings (.claude/settings.local.json) - ALWAYS done regardless of capabilities
     await this.copyClaudeSettings(worktreePath)
+
+    // 7.6. Copy gitignored files matching configured patterns
+    await this.copyGitIgnoredFiles(worktreePath)
 
     // 8. Setup PORT environment variable - ONLY for web projects
     // Load base port from settings
@@ -781,6 +785,82 @@ export class LoomManager {
   }
 
   /**
+   * Copy gitignored files matching configured patterns from main repo to worktree
+   * Uses copyGitIgnoredPatterns from settings to determine which files to copy
+   * Only copies files that exist and are NOT tracked by git
+   *
+   * @param worktreePath Path to the worktree
+   */
+  private async copyGitIgnoredFiles(worktreePath: string): Promise<void> {
+    // Load settings to get patterns
+    const settingsData = await this.settings.loadSettings()
+    const patterns = settingsData.copyGitIgnoredPatterns
+
+    // Exit early if no patterns configured
+    if (!patterns || patterns.length === 0) {
+      getLogger().debug('No copyGitIgnoredPatterns configured, skipping gitignored file copy')
+      return
+    }
+
+    const mainWorkspacePath = this.gitWorktree.workingDirectory
+
+    try {
+      // Pass all patterns at once - fast-glob deduplicates automatically
+      const allMatches = await fg.glob(patterns, {
+        cwd: mainWorkspacePath,
+        onlyFiles: true,
+        dot: true,
+      })
+
+      if (allMatches.length === 0) {
+        getLogger().debug(`No files matched copyGitIgnoredPatterns: ${patterns.join(', ')}`)
+        return
+      }
+
+      getLogger().info(`Copying ${allMatches.length} gitignored file(s) matching: ${patterns.join(', ')}`)
+
+      // Copy each unique file once
+      let copiedCount = 0
+      for (const relativePath of allMatches) {
+        const mainFilePath = path.join(mainWorkspacePath, relativePath)
+        const worktreeFilePath = path.join(worktreePath, relativePath)
+
+        // Skip if file doesn't exist in main workspace
+        if (!(await fs.pathExists(mainFilePath))) {
+          continue
+        }
+
+        // Skip if file is tracked by git (it will exist in worktree via git)
+        if (await isFileTrackedByGit(relativePath, mainWorkspacePath)) {
+          getLogger().debug(`Skipping ${relativePath} (tracked by git, already in worktree)`)
+          continue
+        }
+
+        // Skip if file already exists in worktree
+        if (await fs.pathExists(worktreeFilePath)) {
+          getLogger().debug(`Skipping ${relativePath} (already exists in worktree)`)
+          continue
+        }
+
+        // Ensure parent directory exists
+        await fs.ensureDir(path.dirname(worktreeFilePath))
+
+        // Copy the untracked file
+        await this.environment.copyIfExists(mainFilePath, worktreeFilePath)
+        getLogger().debug(`Copied gitignored file: ${relativePath}`)
+        copiedCount++
+      }
+
+      if (copiedCount > 0) {
+        getLogger().debug(`Copied ${copiedCount} gitignored file(s) to loom`)
+      }
+    } catch (error) {
+      // Warn but don't fail - glob/file failures shouldn't block workflow
+      getLogger().warn(`Warning: Failed to copy gitignored files: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /**
    * Setup PORT environment variable for web projects
    * Only called when project has web capabilities
    */
@@ -1022,6 +1102,9 @@ export class LoomManager {
     await this.copyEnvironmentFiles(worktreePath)
     await this.copyIloomSettings(worktreePath)
     await this.copyClaudeSettings(worktreePath)
+
+    // 3.5. Copy gitignored files matching configured patterns
+    await this.copyGitIgnoredFiles(worktreePath)
 
     // 4. Setup PORT for web projects (ensure it's set even if .env existed)
     // Load base port from settings
