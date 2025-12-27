@@ -28,9 +28,6 @@ async function getProjectRoot(): Promise<string> {
  * 1. Project is not tracked as configured globally AND
  * 2. .iloom directory is missing or settings files are empty
  *
- * Also performs fixup for legacy projects that have local config but lack
- * the global marker file (configured before global tracking was implemented)
- *
  * Uses git repo root for path resolution to ensure consistent behavior
  * regardless of whether the CLI is run from a subdirectory or worktree
  */
@@ -38,11 +35,8 @@ export async function needsFirstRunSetup(): Promise<boolean> {
 	const projectRoot = await getProjectRoot()
 	const firstRunManager = new FirstRunManager()
 
-	// Fixup legacy projects that have local config but no global marker
-	// This also returns whether the project is configured, avoiding duplicate isProjectConfigured() call
-	const { isConfigured } = await firstRunManager.fixupLegacyProject(projectRoot)
-
 	// Check if project is tracked as configured globally
+	const isConfigured = await firstRunManager.isProjectConfigured(projectRoot)
 	if (isConfigured) {
 		logger.debug('needsFirstRunSetup: Project is tracked as configured globally')
 		return false
