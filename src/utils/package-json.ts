@@ -1,6 +1,7 @@
 import fs from 'fs-extra'
 import path from 'path'
 import { getLogger } from './logger-context.js'
+import type { ProjectCapability } from '../types/loom.js'
 
 /**
  * Path to the iloom package configuration file (relative to project root)
@@ -15,6 +16,7 @@ export interface PackageJson {
   dependencies?: Record<string, string>
   devDependencies?: Record<string, string>
   scripts?: Record<string, string>
+  capabilities?: Array<'cli' | 'web'>
   [key: string]: unknown
 }
 
@@ -212,4 +214,27 @@ export async function getPackageScripts(dir: string): Promise<Record<string, Pac
   }
 
   return scripts
+}
+
+/**
+ * Valid capability values that can be explicitly declared
+ */
+const VALID_CAPABILITIES: readonly ProjectCapability[] = ['cli', 'web'] as const
+
+/**
+ * Extract explicit capabilities from package configuration
+ * Used for non-Node.js projects that declare capabilities in package.iloom.json
+ * @param pkgJson Parsed package configuration object
+ * @returns Array of valid ProjectCapability values, or empty array if none declared
+ */
+export function getExplicitCapabilities(pkgJson: PackageJson): ProjectCapability[] {
+  // Return empty if no capabilities field or not an array
+  if (!pkgJson.capabilities || !Array.isArray(pkgJson.capabilities)) {
+    return []
+  }
+
+  // Filter to only valid ProjectCapability values
+  return pkgJson.capabilities.filter(
+    (cap): cap is ProjectCapability => VALID_CAPABILITIES.includes(cap as ProjectCapability)
+  )
 }

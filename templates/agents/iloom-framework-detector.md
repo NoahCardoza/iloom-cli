@@ -61,13 +61,18 @@ For each detected language, look for framework-specific indicators:
 
 ### Step 3: Generate package.iloom.json
 
-Create `.iloom/package.iloom.json` with appropriate scripts based on detection:
+Create `.iloom/package.iloom.json` with appropriate scripts and capabilities based on detection:
+
+**Capabilities Detection:**
+- `"cli"` - Include if project has CLI components (e.g., `[[bin]]` in Cargo.toml, CLI frameworks like click/typer/clap)
+- `"web"` - Include if project has web components (e.g., Flask/Django/FastAPI/Rails/Actix/Rocket)
 
 **Common Patterns by Language:**
 
-#### Rust
+#### Rust CLI
 ```json
 {
+  "capabilities": ["cli"],
   "scripts": {
     "build": "cargo build --release",
     "test": "cargo test",
@@ -80,9 +85,27 @@ Create `.iloom/package.iloom.json` with appropriate scripts based on detection:
 }
 ```
 
-#### Python (with pip)
+#### Rust Web (Actix/Rocket/Axum)
 ```json
 {
+  "capabilities": ["web"],
+  "scripts": {
+    "build": "cargo build --release",
+    "test": "cargo test",
+    "dev": "cargo run"
+  },
+  "_metadata": {
+    "detectedLanguage": "rust",
+    "detectedFramework": "actix-web",
+    "generatedBy": "iloom-framework-detector"
+  }
+}
+```
+
+#### Python CLI (with pip)
+```json
+{
+  "capabilities": ["cli"],
   "scripts": {
     "build": "pip install -e .",
     "test": "pytest",
@@ -96,9 +119,10 @@ Create `.iloom/package.iloom.json` with appropriate scripts based on detection:
 }
 ```
 
-#### Python (with poetry)
+#### Python CLI (with poetry)
 ```json
 {
+  "capabilities": ["cli"],
   "scripts": {
     "build": "poetry install",
     "test": "poetry run pytest",
@@ -115,6 +139,7 @@ Create `.iloom/package.iloom.json` with appropriate scripts based on detection:
 #### Python (Django)
 ```json
 {
+  "capabilities": ["web"],
   "scripts": {
     "build": "pip install -r requirements.txt",
     "test": "python manage.py test",
@@ -128,9 +153,27 @@ Create `.iloom/package.iloom.json` with appropriate scripts based on detection:
 }
 ```
 
+#### Python (Flask/FastAPI)
+```json
+{
+  "capabilities": ["web"],
+  "scripts": {
+    "build": "pip install -r requirements.txt",
+    "test": "pytest",
+    "dev": "flask run"
+  },
+  "_metadata": {
+    "detectedLanguage": "python",
+    "detectedFramework": "flask",
+    "generatedBy": "iloom-framework-detector"
+  }
+}
+```
+
 #### Ruby (with Bundler)
 ```json
 {
+  "capabilities": ["cli"],
   "scripts": {
     "build": "bundle install",
     "test": "bundle exec rspec",
@@ -146,6 +189,7 @@ Create `.iloom/package.iloom.json` with appropriate scripts based on detection:
 #### Ruby (Rails)
 ```json
 {
+  "capabilities": ["web"],
   "scripts": {
     "build": "bundle install",
     "test": "bundle exec rails test",
@@ -159,9 +203,10 @@ Create `.iloom/package.iloom.json` with appropriate scripts based on detection:
 }
 ```
 
-#### Go
+#### Go CLI
 ```json
 {
+  "capabilities": ["cli"],
   "scripts": {
     "build": "go build ./...",
     "test": "go test ./...",
@@ -174,9 +219,27 @@ Create `.iloom/package.iloom.json` with appropriate scripts based on detection:
 }
 ```
 
+#### Go Web (Gin/Echo/Fiber)
+```json
+{
+  "capabilities": ["web"],
+  "scripts": {
+    "build": "go build ./...",
+    "test": "go test ./...",
+    "dev": "go run ."
+  },
+  "_metadata": {
+    "detectedLanguage": "go",
+    "detectedFramework": "gin",
+    "generatedBy": "iloom-framework-detector"
+  }
+}
+```
+
 #### Java (Maven)
 ```json
 {
+  "capabilities": ["web"],
   "scripts": {
     "build": "mvn package",
     "test": "mvn test",
@@ -193,6 +256,7 @@ Create `.iloom/package.iloom.json` with appropriate scripts based on detection:
 #### Java (Gradle)
 ```json
 {
+  "capabilities": ["web"],
   "scripts": {
     "build": "./gradlew build",
     "test": "./gradlew test",
@@ -201,6 +265,21 @@ Create `.iloom/package.iloom.json` with appropriate scripts based on detection:
   "_metadata": {
     "detectedLanguage": "java",
     "detectedBuildTool": "gradle",
+    "generatedBy": "iloom-framework-detector"
+  }
+}
+```
+
+#### Library (no CLI or web)
+```json
+{
+  "capabilities": [],
+  "scripts": {
+    "build": "cargo build",
+    "test": "cargo test"
+  },
+  "_metadata": {
+    "detectedLanguage": "rust",
     "generatedBy": "iloom-framework-detector"
   }
 }
@@ -223,15 +302,17 @@ Detected:
 - Language: [language]
 - Framework: [framework or "None detected"]
 - Package Manager: [package manager]
+- Capabilities: [cli, web, or none]
 
 Created: .iloom/package.iloom.json
 
-Scripts configured:
+Configuration:
+- capabilities: [list of detected capabilities]
 - build: [command]
 - test: [command]
 - dev: [command]
 
-You can customize these scripts by editing .iloom/package.iloom.json.
+You can customize these settings by editing .iloom/package.iloom.json.
 ```
 
 ## Error Handling

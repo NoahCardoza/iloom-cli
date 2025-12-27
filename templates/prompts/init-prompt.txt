@@ -274,10 +274,12 @@ The agent will:
 2. Detect common frameworks
 3. Generate appropriate scripts for build, test, and dev commands
 4. Create `.iloom/package.iloom.json` with the detected configuration
+5. Detect and set project capabilities (cli, web) based on the framework
 
 **File Format:**
 ```json
 {
+  "capabilities": ["cli"],
   "scripts": {
     "build": "your-build-command",
     "test": "your-test-command",
@@ -286,9 +288,30 @@ The agent will:
 }
 ```
 
+**Capabilities:**
+- `"cli"` - Command-line interface/tool (enables CLI isolation features)
+- `"web"` - Web application with dev server (enables port assignment)
+
 **Note:** Scripts in `package.iloom.json` are raw shell commands, not npm script names. iloom will execute them directly.
 
-After the framework detector agent completes, proceed to Phase 2.
+**After framework detection, verify capabilities were set correctly:**
+
+If the framework detector did not set capabilities, or if you need to ask the user:
+- Question: "What type of project is this?"
+- Options:
+  - "cli" - Command-line interface/tool
+  - "web" - Web application with dev server
+  - "both" - Both CLI and web capabilities
+  - "neither" - Library or other project type
+- Update `.iloom/package.iloom.json` with the appropriate `capabilities` array.
+
+**When to infer capabilities:**
+- Flask/Django/FastAPI/Rails/Actix/Rocket detected -> include "web"
+- CLI frameworks (click, fire, typer, clap) detected -> include "cli"
+- `[[bin]]` in Cargo.toml -> include "cli"
+- No clear indicators -> ask user explicitly
+
+After the framework detector agent completes (and capabilities are set), proceed to Phase 2.
 {{/IF NO_PACKAGE_JSON}}
 
 ### Phase 2: Tooling Configuration

@@ -1,4 +1,4 @@
-import { getPackageConfig, parseBinField, hasWebDependencies } from '../utils/package-json.js'
+import { getPackageConfig, parseBinField, hasWebDependencies, getExplicitCapabilities } from '../utils/package-json.js'
 import type { ProjectCapability } from '../types/loom.js'
 
 export interface ProjectCapabilities {
@@ -8,13 +8,28 @@ export interface ProjectCapabilities {
 
 export class ProjectCapabilityDetector {
   /**
-   * Detect project capabilities by analyzing package.json
+   * Detect project capabilities by analyzing package configuration
+   *
+   * Detection priority:
+   * 1. Explicit capabilities from package.iloom.json (for non-Node.js projects)
+   * 2. Inferred capabilities from package.json (bin field, web dependencies)
+   *
    * @param worktreePath Path to the worktree directory
    * @returns Project capabilities and bin entries
    */
   async detectCapabilities(worktreePath: string): Promise<ProjectCapabilities> {
     try {
       const pkgJson = await getPackageConfig(worktreePath)
+
+      // Check for explicit capabilities first (from package.iloom.json)
+      const explicitCapabilities = getExplicitCapabilities(pkgJson)
+      if (explicitCapabilities.length > 0) {
+        // For non-Node.js projects with explicit capabilities,
+        // binEntries is empty (no bin field parsing needed)
+        return { capabilities: explicitCapabilities, binEntries: {} }
+      }
+
+      // Fall back to inferring capabilities from package.json
       const capabilities: ProjectCapability[] = []
 
       // CLI detection: has bin field

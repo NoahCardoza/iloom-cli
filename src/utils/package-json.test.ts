@@ -8,6 +8,7 @@ import {
   readIloomPackageScripts,
   getPackageConfig,
   getPackageScripts,
+  getExplicitCapabilities,
   ILOOM_PACKAGE_PATH
 } from './package-json.js'
 import type { PackageJson } from './package-json.js'
@@ -610,5 +611,73 @@ describe('getPackageScripts', () => {
     expect(result).toEqual({
       build: { command: 'tsc', source: 'package-manager' },
     })
+  })
+})
+
+describe('getExplicitCapabilities', () => {
+  it('should return capabilities array when present', () => {
+    const pkgJson: PackageJson = {
+      name: 'my-rust-project',
+      capabilities: ['cli', 'web'],
+    }
+
+    const result = getExplicitCapabilities(pkgJson)
+
+    expect(result).toEqual(['cli', 'web'])
+  })
+
+  it('should return empty array when capabilities not present', () => {
+    const pkgJson: PackageJson = {
+      name: 'my-project',
+      scripts: { build: 'tsc' },
+    }
+
+    const result = getExplicitCapabilities(pkgJson)
+
+    expect(result).toEqual([])
+  })
+
+  it('should filter invalid values from capabilities', () => {
+    const pkgJson: PackageJson = {
+      name: 'my-project',
+      capabilities: ['cli', 'invalid' as 'cli', 'unknown' as 'cli', 'web'],
+    }
+
+    const result = getExplicitCapabilities(pkgJson)
+
+    expect(result).toEqual(['cli', 'web'])
+  })
+
+  it('should return empty array for non-array capabilities field', () => {
+    const pkgJson = {
+      name: 'my-project',
+      capabilities: 'cli', // string instead of array
+    } as unknown as PackageJson
+
+    const result = getExplicitCapabilities(pkgJson)
+
+    expect(result).toEqual([])
+  })
+
+  it('should return single capability when only one is declared', () => {
+    const pkgJson: PackageJson = {
+      name: 'my-cli-project',
+      capabilities: ['cli'],
+    }
+
+    const result = getExplicitCapabilities(pkgJson)
+
+    expect(result).toEqual(['cli'])
+  })
+
+  it('should return empty array for empty capabilities array', () => {
+    const pkgJson: PackageJson = {
+      name: 'my-project',
+      capabilities: [],
+    }
+
+    const result = getExplicitCapabilities(pkgJson)
+
+    expect(result).toEqual([])
   })
 })

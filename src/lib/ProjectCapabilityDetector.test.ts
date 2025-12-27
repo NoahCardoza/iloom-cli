@@ -6,7 +6,8 @@ import type { PackageJson } from '../utils/package-json.js'
 vi.mock('../utils/package-json.js', () => ({
   getPackageConfig: vi.fn(),
   parseBinField: vi.fn(),
-  hasWebDependencies: vi.fn()
+  hasWebDependencies: vi.fn(),
+  getExplicitCapabilities: vi.fn()
 }))
 
 describe('ProjectCapabilityDetector', () => {
@@ -15,6 +16,8 @@ describe('ProjectCapabilityDetector', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     detector = new ProjectCapabilityDetector()
+    // Default: no explicit capabilities (fallback to package.json detection)
+    vi.mocked(packageJsonUtils.getExplicitCapabilities).mockReturnValue([])
   })
 
   describe('detectCapabilities', () => {
@@ -228,6 +231,102 @@ describe('ProjectCapabilityDetector', () => {
         './cli.js',
         '@scope/my-cli'
       )
+    })
+  })
+
+  describe('detectCapabilities with package.iloom.json', () => {
+    it('should detect capabilities from package.iloom.json when present', async () => {
+      const mockIloomPackage: PackageJson = {
+        name: 'my-rust-cli',
+        capabilities: ['cli'],
+        scripts: { build: 'cargo build' }
+      }
+
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockIloomPackage)
+      vi.mocked(packageJsonUtils.getExplicitCapabilities).mockReturnValueOnce(['cli'])
+
+      const result = await detector.detectCapabilities('/test/path')
+
+      expect(result.capabilities).toEqual(['cli'])
+      expect(result.binEntries).toEqual({})
+      expect(packageJsonUtils.getExplicitCapabilities).toHaveBeenCalledWith(mockIloomPackage)
+      // Should not call package.json detection methods
+      expect(packageJsonUtils.hasWebDependencies).not.toHaveBeenCalled()
+      expect(packageJsonUtils.parseBinField).not.toHaveBeenCalled()
+    })
+
+    it('should detect multiple capabilities from package.iloom.json', async () => {
+      const mockIloomPackage: PackageJson = {
+        name: 'my-fullstack-app',
+        capabilities: ['cli', 'web'],
+        scripts: { build: 'cargo build', dev: 'cargo run' }
+      }
+
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockIloomPackage)
+      vi.mocked(packageJsonUtils.getExplicitCapabilities).mockReturnValueOnce(['cli', 'web'])
+
+      const result = await detector.detectCapabilities('/test/path')
+
+      expect(result.capabilities).toEqual(['cli', 'web'])
+      expect(result.binEntries).toEqual({})
+    })
+
+    it('should fall back to package.json detection when no capabilities in iloom config', async () => {
+      const mockPackageJson: PackageJson = {
+        name: 'hybrid-project',
+        bin: './dist/cli.js',
+        scripts: { build: 'cargo build' }  // iloom scripts but no capabilities
+      }
+
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getExplicitCapabilities).mockReturnValueOnce([])
+      vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(false)
+      vi.mocked(packageJsonUtils.parseBinField).mockReturnValueOnce({
+        'hybrid-project': './dist/cli.js'
+      })
+
+      const result = await detector.detectCapabilities('/test/path')
+
+      // Falls back to package.json bin detection
+      expect(result.capabilities).toEqual(['cli'])
+      expect(result.binEntries).toEqual({ 'hybrid-project': './dist/cli.js' })
+      expect(packageJsonUtils.hasWebDependencies).toHaveBeenCalled()
+      expect(packageJsonUtils.parseBinField).toHaveBeenCalled()
+    })
+
+    it('should return empty binEntries for non-Node.js projects with explicit capabilities', async () => {
+      const mockIloomPackage: PackageJson = {
+        name: 'my-rust-cli',
+        capabilities: ['cli'],
+        scripts: { build: 'cargo build' }
+        // No package.json bin field - this is a pure Rust project
+      }
+
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockIloomPackage)
+      vi.mocked(packageJsonUtils.getExplicitCapabilities).mockReturnValueOnce(['cli'])
+
+      const result = await detector.detectCapabilities('/test/path')
+
+      expect(result.capabilities).toEqual(['cli'])
+      expect(result.binEntries).toEqual({})
+      // parseBinField should NOT be called for explicit capabilities
+      expect(packageJsonUtils.parseBinField).not.toHaveBeenCalled()
+    })
+
+    it('should detect web capability from package.iloom.json for Python web apps', async () => {
+      const mockIloomPackage: PackageJson = {
+        name: 'my-django-app',
+        capabilities: ['web'],
+        scripts: { dev: 'python manage.py runserver' }
+      }
+
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockIloomPackage)
+      vi.mocked(packageJsonUtils.getExplicitCapabilities).mockReturnValueOnce(['web'])
+
+      const result = await detector.detectCapabilities('/test/path')
+
+      expect(result.capabilities).toEqual(['web'])
+      expect(result.binEntries).toEqual({})
     })
   })
 })
