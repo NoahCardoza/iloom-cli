@@ -1,5 +1,6 @@
 import { execa, type ExecaError } from 'execa'
 import { getLogger } from './logger-context.js'
+import { getPackageScripts } from './package-json.js'
 import fs from 'fs-extra'
 import path from 'path'
 
@@ -138,8 +139,11 @@ export async function installDependencies(
 }
 
 /**
- * Run a package.json script
- * @param scriptName The script name from package.json
+ * Run a package.json or iloom config script
+ * Automatically detects whether to use package manager or direct shell execution
+ * based on the script source.
+ *
+ * @param scriptName The script name from package.json or package.iloom.json
  * @param cwd Working directory
  * @param args Additional arguments to pass to the script
  * @param options Execution options
@@ -150,20 +154,48 @@ export async function runScript(
   args: string[] = [],
   options: { quiet?: boolean } = {}
 ): Promise<void> {
-  const packageManager = await detectPackageManager(cwd)
+  // Get scripts with source metadata
+  const scripts = await getPackageScripts(cwd)
+  const scriptConfig = scripts[scriptName]
 
-  const command = packageManager === 'npm' ? ['run', scriptName] : [scriptName]
+  const isDebugMode = getLogger().isDebugEnabled()
+
+  if (!scriptConfig) {
+    throw new Error(`Script '${scriptName}' not found`)
+  }
 
   try {
-    await execa(packageManager, [...command, ...args], {
-      cwd,
-      stdio: options.quiet ? 'pipe' : 'inherit',
-      timeout: 600000,  // 10 minute timeout for scripts
-      env: {
-        ...process.env,
-        CI: 'true',
-      },
-    })
+    if (scriptConfig.source === 'iloom-config') {
+      // Execute directly as shell command (for non-Node.js projects)
+      // Use "$@" pattern to properly handle argument escaping via the shell
+      getLogger().debug(`Executing shell command: ${scriptConfig.command} with args: ${args.join(' ')}`)
+
+      await execa('sh', ['-c', `${scriptConfig.command} "$@"`, '--', ...args], {
+        cwd,
+        stdio: options.quiet ? 'pipe' : 'inherit',
+        timeout: 600000,  // 10 minute timeout for scripts
+        env: {
+          ...process.env,
+          CI: 'true',
+        },
+        verbose: isDebugMode,
+      })
+    } else {
+      // Execute via package manager (for Node.js projects)
+      const packageManager = await detectPackageManager(cwd)
+      const command = packageManager === 'npm' ? ['run', scriptName] : [scriptName]
+
+      await execa(packageManager, [...command, ...args], {
+        cwd,
+        stdio: options.quiet ? 'pipe' : 'inherit',
+        timeout: 600000,  // 10 minute timeout for scripts
+        env: {
+          ...process.env,
+          CI: 'true',
+        },
+        verbose: isDebugMode,
+      })
+    }
   } catch (error) {
     const execaError = error as ExecaError
     const stderr = execaError.stderr ?? execaError.message ?? 'Unknown error'

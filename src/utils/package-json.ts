@@ -19,6 +19,24 @@ export interface PackageJson {
 }
 
 /**
+ * Source of a script - determines how it should be executed
+ * - 'package-manager': Execute via package manager (pnpm/npm/yarn)
+ * - 'iloom-config': Execute directly as shell command
+ */
+export type ScriptSource = 'package-manager' | 'iloom-config'
+
+/**
+ * Configuration for a single script including its source
+ * The source determines whether to use package manager or direct shell execution
+ */
+export interface PackageScriptConfig {
+  /** The script command to execute */
+  command: string
+  /** Source of the script - determines execution method */
+  source: ScriptSource
+}
+
+/**
  * Read and parse package.json from a directory
  * @param dir Directory containing package.json
  * @returns Parsed package.json object
@@ -161,4 +179,37 @@ export function hasWebDependencies(pkgJson: PackageJson): boolean {
  */
 export function hasScript(pkgJson: PackageJson, scriptName: string): boolean {
   return !!pkgJson.scripts?.[scriptName]
+}
+
+/**
+ * Get all scripts with their source metadata
+ * Scripts from .iloom/package.iloom.json are marked as 'iloom-config' and should be executed directly
+ * Scripts from package.json are marked as 'package-manager' and should use pnpm/npm/yarn
+ *
+ * @param dir Directory to read package configuration from
+ * @returns Map of script names to their configurations including source
+ */
+export async function getPackageScripts(dir: string): Promise<Record<string, PackageScriptConfig>> {
+  const scripts: Record<string, PackageScriptConfig> = {}
+
+  // First, check if package.json exists and read scripts (these are package-manager sourced)
+  const packageJsonPath = path.join(dir, 'package.json')
+  if (await fs.pathExists(packageJsonPath)) {
+    const pkgJson = await readPackageJson(dir)
+    if (pkgJson.scripts) {
+      for (const [name, command] of Object.entries(pkgJson.scripts)) {
+        scripts[name] = { command, source: 'package-manager' }
+      }
+    }
+  }
+
+  // Then, read iloom package scripts (these override and are iloom-config sourced)
+  const iloomPackage = await readIloomPackageScripts(dir)
+  if (iloomPackage?.scripts) {
+    for (const [name, command] of Object.entries(iloomPackage.scripts)) {
+      scripts[name] = { command, source: 'iloom-config' }
+    }
+  }
+
+  return scripts
 }

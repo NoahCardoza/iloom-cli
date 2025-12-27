@@ -1,21 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { execa, type ExecaReturnValue } from 'execa'
 import { detectPackageManager, installDependencies, runScript } from '../../src/utils/package-manager.js'
-import { logger } from '../../src/utils/logger.js'
+import { getPackageScripts } from '../../src/utils/package-json.js'
 import fs from 'fs-extra'
 
 type MockExecaReturn = Partial<ExecaReturnValue<string>>
 
+// Create a shared mock logger that we can assert on
+const mockLogger = {
+  info: vi.fn(),
+  success: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+  isDebugEnabled: vi.fn(() => false),
+}
+
 vi.mock('execa')
 vi.mock('fs-extra')
-vi.mock('../../src/utils/logger.js', () => ({
-  logger: {
-    info: vi.fn(),
-    success: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
-  }
+vi.mock('../../src/utils/package-json.js')
+vi.mock('../../src/utils/logger-context.js', () => ({
+  getLogger: () => mockLogger,
 }))
 
 describe('package-manager utilities', () => {
@@ -158,7 +163,7 @@ describe('package-manager utilities', () => {
       const result = await detectPackageManager('/test/path')
 
       expect(result).toBe('npm')
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Could not read packageManager from package.json'))
+      expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('Could not read packageManager from package.json'))
     })
 
     it('should handle package.json read errors gracefully', async () => {
@@ -170,7 +175,7 @@ describe('package-manager utilities', () => {
       const result = await detectPackageManager('/test/path')
 
       expect(result).toBe('pnpm')
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Could not read packageManager from package.json'))
+      expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('Could not read packageManager from package.json'))
     })
 
     it('should handle non-existent package.json gracefully', async () => {
@@ -332,7 +337,7 @@ describe('package-manager utilities', () => {
       const result = await detectPackageManager('/test/path')
 
       expect(result).toBe('npm')
-      expect(logger.debug).toHaveBeenCalledWith('No package manager detected, defaulting to npm')
+      expect(mockLogger.debug).toHaveBeenCalledWith('No package manager detected, defaulting to npm')
     })
   })
 
@@ -355,7 +360,7 @@ describe('package-manager utilities', () => {
           timeout: 300000
         })
       )
-      expect(logger.success).toHaveBeenCalledWith('Dependencies installed successfully')
+      expect(mockLogger.success).toHaveBeenCalledWith('Dependencies installed successfully')
     })
 
     it('should install with pnpm without frozen lockfile', async () => {
@@ -510,7 +515,7 @@ describe('package-manager utilities', () => {
 
       // Should not call execa to run install
       expect(execa).not.toHaveBeenCalled()
-      expect(logger.debug).toHaveBeenCalledWith('Skipping dependency installation - no package.json found')
+      expect(mockLogger.debug).toHaveBeenCalledWith('Skipping dependency installation - no package.json found')
     })
 
     it('should use pipe stdio when quiet option is true', async () => {
@@ -555,144 +560,264 @@ describe('package-manager utilities', () => {
   })
 
   describe('runScript', () => {
-    it('should run script with pnpm', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
-        packageManager: 'pnpm@8.0.0'
-      }))
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // run command
-
-      await runScript('test', '/test/path', ['--coverage'])
-
-      expect(execa).toHaveBeenCalledWith(
-        'pnpm',
-        ['test', '--coverage'],
-        expect.objectContaining({
-          cwd: '/test/path',
-          stdio: 'inherit',
-          timeout: 600000
+    describe('package-manager sourced scripts', () => {
+      it('should run script with pnpm', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          test: { command: 'vitest', source: 'package-manager' }
         })
-      )
-    })
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
 
-    it('should run script with pnpm without additional args', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
-        packageManager: 'pnpm@8.0.0'
-      }))
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // run command
+        await runScript('test', '/test/path', ['--coverage'])
 
-      await runScript('build', '/test/path')
-
-      expect(execa).toHaveBeenCalledWith(
-        'pnpm',
-        ['build'],
-        expect.objectContaining({
-          cwd: '/test/path'
-        })
-      )
-    })
-
-    it('should use npm run for npm', async () => {
-      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
-        return path.toString().endsWith('package-lock.json')
-      })
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // run command
-
-      await runScript('build', '/test/path')
-
-      expect(execa).toHaveBeenCalledWith(
-        'npm',
-        ['run', 'build'],
-        expect.objectContaining({
-          cwd: '/test/path'
-        })
-      )
-    })
-
-    it('should use yarn for yarn', async () => {
-      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
-        return path.toString().endsWith('yarn.lock')
-      })
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // run command
-
-      await runScript('test', '/test/path')
-
-      expect(execa).toHaveBeenCalledWith(
-        'yarn',
-        ['test'],
-        expect.objectContaining({
-          cwd: '/test/path'
-        })
-      )
-    })
-
-    it('should throw error when script fails', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
-        packageManager: 'pnpm@8.0.0'
-      }))
-      vi.mocked(execa).mockRejectedValueOnce({
-        stderr: 'Test failed',
-        message: 'Command failed'
-      })
-
-      await expect(runScript('test', '/test/path')).rejects.toThrow(
-        "Failed to run script 'test': Test failed"
-      )
-    })
-
-    it('should handle script error with only message', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
-        packageManager: 'pnpm@8.0.0'
-      }))
-      vi.mocked(execa).mockRejectedValueOnce({
-        message: 'Script not found'
-      })
-
-      await expect(runScript('unknown', '/test/path')).rejects.toThrow(
-        "Failed to run script 'unknown': Script not found"
-      )
-    })
-
-    it('should use package manager from script directory', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
-        packageManager: 'pnpm@8.0.0'
-      }))
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
-
-      await runScript('test', '/script/path')
-
-      expect(execa).toHaveBeenCalledWith(
-        'pnpm',
-        ['test'],
-        expect.objectContaining({
-          cwd: '/script/path'
-        })
-      )
-    })
-
-    it('should set CI=true in environment when running scripts', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
-        packageManager: 'pnpm@8.0.0'
-      }))
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
-
-      await runScript('test', '/test/path')
-
-      expect(execa).toHaveBeenCalledWith(
-        'pnpm',
-        ['test'],
-        expect.objectContaining({
-          cwd: '/test/path',
-          env: expect.objectContaining({
-            CI: 'true'
+        expect(execa).toHaveBeenCalledWith(
+          'pnpm',
+          ['test', '--coverage'],
+          expect.objectContaining({
+            cwd: '/test/path',
+            stdio: 'inherit',
+            timeout: 600000
           })
+        )
+      })
+
+      it('should run script with pnpm without additional args', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          build: { command: 'tsc', source: 'package-manager' }
         })
-      )
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await runScript('build', '/test/path')
+
+        expect(execa).toHaveBeenCalledWith(
+          'pnpm',
+          ['build'],
+          expect.objectContaining({
+            cwd: '/test/path'
+          })
+        )
+      })
+
+      it('should use npm run for npm', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          build: { command: 'tsc', source: 'package-manager' }
+        })
+        vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+          return path.toString().endsWith('package-lock.json')
+        })
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await runScript('build', '/test/path')
+
+        expect(execa).toHaveBeenCalledWith(
+          'npm',
+          ['run', 'build'],
+          expect.objectContaining({
+            cwd: '/test/path'
+          })
+        )
+      })
+
+      it('should use yarn for yarn', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          test: { command: 'vitest', source: 'package-manager' }
+        })
+        vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+          return path.toString().endsWith('yarn.lock')
+        })
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await runScript('test', '/test/path')
+
+        expect(execa).toHaveBeenCalledWith(
+          'yarn',
+          ['test'],
+          expect.objectContaining({
+            cwd: '/test/path'
+          })
+        )
+      })
+
+      it('should set CI=true in environment when running scripts', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          test: { command: 'vitest', source: 'package-manager' }
+        })
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await runScript('test', '/test/path')
+
+        expect(execa).toHaveBeenCalledWith(
+          'pnpm',
+          ['test'],
+          expect.objectContaining({
+            cwd: '/test/path',
+            env: expect.objectContaining({
+              CI: 'true'
+            })
+          })
+        )
+      })
+    })
+
+    describe('iloom-config sourced scripts (shell execution)', () => {
+      it('should execute iloom-config script via shell', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          test: { command: 'cargo test', source: 'iloom-config' }
+        })
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await runScript('test', '/test/path')
+
+        expect(execa).toHaveBeenCalledWith(
+          'sh',
+          ['-c', 'cargo test "$@"', '--'],
+          expect.objectContaining({
+            cwd: '/test/path',
+            stdio: 'inherit',
+            timeout: 600000
+          })
+        )
+      })
+
+      it('should execute iloom-config script with args via shell', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          test: { command: 'pytest', source: 'iloom-config' }
+        })
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await runScript('test', '/test/path', ['-v', '--coverage'])
+
+        expect(execa).toHaveBeenCalledWith(
+          'sh',
+          ['-c', 'pytest "$@"', '--', '-v', '--coverage'],
+          expect.objectContaining({
+            cwd: '/test/path'
+          })
+        )
+      })
+
+      it('should set CI=true in environment for shell execution', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          build: { command: 'cargo build --release', source: 'iloom-config' }
+        })
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await runScript('build', '/test/path')
+
+        expect(execa).toHaveBeenCalledWith(
+          'sh',
+          ['-c', 'cargo build --release "$@"', '--'],
+          expect.objectContaining({
+            env: expect.objectContaining({
+              CI: 'true'
+            })
+          })
+        )
+      })
+
+      it('should use correct working directory for shell execution', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          lint: { command: './scripts/lint.sh', source: 'iloom-config' }
+        })
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await runScript('lint', '/my/project/path')
+
+        expect(execa).toHaveBeenCalledWith(
+          'sh',
+          ['-c', './scripts/lint.sh "$@"', '--'],
+          expect.objectContaining({
+            cwd: '/my/project/path'
+          })
+        )
+      })
+
+      it('should use pipe stdio when quiet option is true', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          test: { command: 'cargo test', source: 'iloom-config' }
+        })
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await runScript('test', '/test/path', [], { quiet: true })
+
+        expect(execa).toHaveBeenCalledWith(
+          'sh',
+          ['-c', 'cargo test "$@"', '--'],
+          expect.objectContaining({
+            stdio: 'pipe'
+          })
+        )
+      })
+    })
+
+    describe('error handling', () => {
+      it('should throw error when script not found', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({})
+
+        await expect(runScript('unknown', '/test/path')).rejects.toThrow(
+          "Script 'unknown' not found"
+        )
+      })
+
+      it('should throw error when package-manager script fails', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          test: { command: 'vitest', source: 'package-manager' }
+        })
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockRejectedValueOnce({
+          stderr: 'Test failed',
+          message: 'Command failed'
+        })
+
+        await expect(runScript('test', '/test/path')).rejects.toThrow(
+          "Failed to run script 'test': Test failed"
+        )
+      })
+
+      it('should throw error when iloom-config script fails', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          test: { command: 'cargo test', source: 'iloom-config' }
+        })
+        vi.mocked(execa).mockRejectedValueOnce({
+          stderr: 'Compilation failed',
+          message: 'Command failed'
+        })
+
+        await expect(runScript('test', '/test/path')).rejects.toThrow(
+          "Failed to run script 'test': Compilation failed"
+        )
+      })
+
+      it('should handle script error with only message', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          test: { command: 'vitest', source: 'package-manager' }
+        })
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockRejectedValueOnce({
+          message: 'Script execution failed'
+        })
+
+        await expect(runScript('test', '/test/path')).rejects.toThrow(
+          "Failed to run script 'test': Script execution failed"
+        )
+      })
     })
   })
 })

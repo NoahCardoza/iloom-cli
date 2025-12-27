@@ -7,6 +7,7 @@ import {
   hasScript,
   readIloomPackageScripts,
   getPackageConfig,
+  getPackageScripts,
   ILOOM_PACKAGE_PATH
 } from './package-json.js'
 import type { PackageJson } from './package-json.js'
@@ -474,5 +475,140 @@ describe('getPackageConfig', () => {
     const result = await getPackageConfig('/test/path')
 
     expect(result).toEqual(mockPackageJson)
+  })
+})
+
+describe('getPackageScripts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should return scripts from package.json with source package-manager', async () => {
+    const mockPackageJson = {
+      name: 'my-node-project',
+      scripts: {
+        build: 'tsc',
+        test: 'vitest',
+      },
+    }
+    // First pathExists: package.json exists
+    // Second pathExists: iloom config does not exist
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(true)
+    vi.mocked(fs.readJson).mockResolvedValueOnce(mockPackageJson)
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(false)
+
+    const result = await getPackageScripts('/test/path')
+
+    expect(result).toEqual({
+      build: { command: 'tsc', source: 'package-manager' },
+      test: { command: 'vitest', source: 'package-manager' },
+    })
+  })
+
+  it('should return scripts from package.iloom.json with source iloom-config', async () => {
+    const mockIloomPackage = {
+      name: 'my-rust-project',
+      scripts: {
+        build: 'cargo build',
+        test: 'cargo test',
+      },
+    }
+    // First pathExists: package.json does not exist
+    // Second pathExists: iloom config exists
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(false)
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(true)
+    vi.mocked(fs.readJson).mockResolvedValueOnce(mockIloomPackage)
+
+    const result = await getPackageScripts('/test/path')
+
+    expect(result).toEqual({
+      build: { command: 'cargo build', source: 'iloom-config' },
+      test: { command: 'cargo test', source: 'iloom-config' },
+    })
+  })
+
+  it('should override package.json scripts with iloom scripts using correct source', async () => {
+    const mockPackageJson = {
+      name: 'my-project',
+      scripts: {
+        build: 'tsc',
+        test: 'vitest',
+        lint: 'eslint .',
+      },
+    }
+    const mockIloomPackage = {
+      name: 'my-project',
+      scripts: {
+        test: 'pytest',
+        dev: 'python -m myapp',
+      },
+    }
+
+    // First pathExists: package.json exists
+    // Second pathExists: iloom config exists
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(true)
+    vi.mocked(fs.readJson).mockResolvedValueOnce(mockPackageJson)
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(true)
+    vi.mocked(fs.readJson).mockResolvedValueOnce(mockIloomPackage)
+
+    const result = await getPackageScripts('/test/path')
+
+    expect(result).toEqual({
+      build: { command: 'tsc', source: 'package-manager' },
+      test: { command: 'pytest', source: 'iloom-config' },
+      lint: { command: 'eslint .', source: 'package-manager' },
+      dev: { command: 'python -m myapp', source: 'iloom-config' },
+    })
+  })
+
+  it('should return empty object when neither file exists', async () => {
+    // First pathExists: package.json does not exist
+    // Second pathExists: iloom config does not exist
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(false)
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(false)
+
+    const result = await getPackageScripts('/test/path')
+
+    expect(result).toEqual({})
+  })
+
+  it('should handle package.json without scripts field', async () => {
+    const mockPackageJson = {
+      name: 'my-project',
+      version: '1.0.0',
+    }
+    // First pathExists: package.json exists
+    // Second pathExists: iloom config does not exist
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(true)
+    vi.mocked(fs.readJson).mockResolvedValueOnce(mockPackageJson)
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(false)
+
+    const result = await getPackageScripts('/test/path')
+
+    expect(result).toEqual({})
+  })
+
+  it('should handle iloom package without scripts field', async () => {
+    const mockPackageJson = {
+      name: 'my-project',
+      scripts: {
+        build: 'tsc',
+      },
+    }
+    const mockIloomPackage = {
+      name: 'my-project',
+    }
+    // First pathExists: package.json exists
+    // Second pathExists: iloom config exists
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(true)
+    vi.mocked(fs.readJson).mockResolvedValueOnce(mockPackageJson)
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(true)
+    vi.mocked(fs.readJson).mockResolvedValueOnce(mockIloomPackage)
+
+    const result = await getPackageScripts('/test/path')
+
+    expect(result).toEqual({
+      build: { command: 'tsc', source: 'package-manager' },
+    })
   })
 })
