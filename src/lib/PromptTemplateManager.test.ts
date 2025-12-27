@@ -242,6 +242,49 @@ Footer`)
 
 			expect(result).toBe('First Middle Second')
 		})
+
+		it('should include conditional section when INTERACTIVE_MODE is true', () => {
+			const template = 'Start{{#IF INTERACTIVE_MODE}} interactive content {{/IF INTERACTIVE_MODE}}End'
+			const variables: TemplateVariables = { INTERACTIVE_MODE: true }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('Start interactive content End')
+		})
+
+		it('should exclude conditional section when INTERACTIVE_MODE is false', () => {
+			const template = 'Start{{#IF INTERACTIVE_MODE}} interactive content {{/IF INTERACTIVE_MODE}}End'
+			const variables: TemplateVariables = { INTERACTIVE_MODE: false }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('StartEnd')
+		})
+
+		it('should exclude conditional section when INTERACTIVE_MODE is undefined', () => {
+			const template = 'Start{{#IF INTERACTIVE_MODE}} interactive content {{/IF INTERACTIVE_MODE}}End'
+			const variables: TemplateVariables = {}
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('StartEnd')
+		})
+
+		it('should handle multi-line INTERACTIVE_MODE conditional sections', () => {
+			const template = `Header
+{{#IF INTERACTIVE_MODE}}
+2.5. Extract and validate assumptions (batched validation):
+   - Read the agent's output
+   - Use AskUserQuestion tool
+{{/IF INTERACTIVE_MODE}}
+Footer`
+			const variables: TemplateVariables = { INTERACTIVE_MODE: true }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toContain('Extract and validate assumptions')
+			expect(result).toContain('AskUserQuestion tool')
+		})
 	})
 
 	describe('getPrompt', () => {
