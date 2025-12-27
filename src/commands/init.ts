@@ -7,6 +7,7 @@ import path from 'path'
 import os from 'os'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
+import { AgentManager } from '../lib/AgentManager.js'
 import { fileURLToPath } from 'url'
 import { GitRemote, parseGitRemotes } from '../utils/remote.js'
 import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
@@ -20,10 +21,16 @@ import { FirstRunManager } from '../utils/FirstRunManager.js'
 export class InitCommand {
   private readonly shellCompletion: ShellCompletion
   private readonly templateManager: PromptTemplateManager
+  private readonly agentManager: AgentManager
 
-  constructor(shellCompletion?: ShellCompletion, templateManager?: PromptTemplateManager) {
+  constructor(
+    shellCompletion?: ShellCompletion,
+    templateManager?: PromptTemplateManager,
+    agentManager?: AgentManager
+  ) {
     this.shellCompletion = shellCompletion ?? new ShellCompletion()
     this.templateManager = templateManager ?? new PromptTemplateManager()
+    this.agentManager = agentManager ?? new AgentManager()
   }
 
   /**
@@ -406,6 +413,11 @@ export class InitCommand {
         readmeContentLength: readmeContent.length,
       })
 
+      // Detect if project has package.json for multi-language support
+      const packageJsonPath = path.join(process.cwd(), 'package.json')
+      const hasPackageJson = existsSync(packageJsonPath)
+      logger.debug('Package.json detection', { packageJsonPath, hasPackageJson })
+
       // Build template variables
       const variables = {
         SETTINGS_SCHEMA: schemaContent,
@@ -423,6 +435,9 @@ export class InitCommand {
         NO_REMOTES: noRemotes.toString(),
         README_CONTENT: readmeContent,
         VSCODE_SETTINGS_GITIGNORED: vscodeSettingsGitignored.toString(),
+        // Multi-language support - mutually exclusive booleans
+        HAS_PACKAGE_JSON: hasPackageJson,
+        NO_PACKAGE_JSON: !hasPackageJson,
       }
 
       logger.debug('Building template variables', {
@@ -443,10 +458,29 @@ export class InitCommand {
         containsExistingSettings: prompt.includes('EXISTING_SETTINGS')
       })
 
+      // Load framework-detector agent for non-Node.js project setup
+      let agents: Record<string, unknown> | undefined
+      try {
+        const loadedAgents = await this.agentManager.loadAgents(
+          undefined, // No settings overrides for init
+          variables,
+          ['iloom-framework-detector.md']
+        )
+        agents = this.agentManager.formatForCli(loadedAgents)
+        logger.debug('Loaded framework-detector agent for init', {
+          agentCount: Object.keys(agents).length,
+          agentNames: Object.keys(agents),
+        })
+      } catch (error) {
+        // Log warning but continue without agents
+        logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+
       const claudeOptions = {
         headless: false,
         appendSystemPrompt: prompt,
         addDir: process.cwd(),
+        ...(agents && { agents }),
       }
 
       logger.debug('Launching Claude with options', {
@@ -455,7 +489,8 @@ export class InitCommand {
         hasSystemPrompt: !!claudeOptions.appendSystemPrompt,
         addDir: claudeOptions.addDir,
         promptLength: prompt.length,
-        hasCustomInitialMessage: !!customInitialMessage
+        hasCustomInitialMessage: !!customInitialMessage,
+        hasAgents: !!agents,
       })
 
       // Launch Claude in interactive mode with custom initial message if provided

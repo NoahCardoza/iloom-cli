@@ -45,7 +45,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -75,7 +75,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -105,7 +105,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsup' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -144,7 +144,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsup' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -175,7 +175,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockRejectedValueOnce(
         new Error('TypeScript compilation failed')
@@ -198,7 +198,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -218,7 +218,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -246,7 +246,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -279,7 +279,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -309,7 +309,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -339,7 +339,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -369,7 +369,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -401,7 +401,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -433,7 +433,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -466,7 +466,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -493,7 +493,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)
@@ -521,7 +521,7 @@ describe('CLIIsolationManager', () => {
         scripts: { build: 'tsc' }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasScript).mockReturnValueOnce(true)
       vi.mocked(packageManager.runScript).mockResolvedValueOnce(undefined)
       vi.mocked(fs.ensureDir).mockResolvedValueOnce(undefined)

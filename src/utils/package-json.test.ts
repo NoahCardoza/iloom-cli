@@ -1,9 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import fs from 'fs-extra'
-import { readPackageJson, parseBinField, hasWebDependencies, hasScript } from './package-json.js'
+import {
+  readPackageJson,
+  parseBinField,
+  hasWebDependencies,
+  hasScript,
+  readIloomPackageScripts,
+  getPackageConfig,
+  ILOOM_PACKAGE_PATH
+} from './package-json.js'
 import type { PackageJson } from './package-json.js'
 
 vi.mock('fs-extra')
+vi.mock('./logger-context.js', () => ({
+  getLogger: () => ({
+    debug: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+    success: vi.fn()
+  })
+}))
 
 describe('readPackageJson', () => {
   beforeEach(() => {
@@ -265,5 +282,197 @@ describe('hasScript', () => {
     }
 
     expect(hasScript(pkgJson, 'build')).toBe(false)
+  })
+})
+
+describe('ILOOM_PACKAGE_PATH', () => {
+  it('should have correct path value', () => {
+    expect(ILOOM_PACKAGE_PATH).toBe('.iloom/package.iloom.json')
+  })
+})
+
+describe('readIloomPackageScripts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should return null when package.iloom.json does not exist', async () => {
+    vi.mocked(fs.pathExists).mockResolvedValue(false)
+
+    const result = await readIloomPackageScripts('/test/path')
+
+    expect(result).toBeNull()
+    expect(fs.pathExists).toHaveBeenCalledWith('/test/path/.iloom/package.iloom.json')
+  })
+
+  it('should read and return scripts from package.iloom.json when it exists', async () => {
+    const mockIloomPackage = {
+      name: 'my-rust-project',
+      scripts: {
+        build: 'cargo build',
+        test: 'cargo test',
+        dev: 'cargo run',
+      },
+    }
+    vi.mocked(fs.pathExists).mockResolvedValue(true)
+    vi.mocked(fs.readJson).mockResolvedValue(mockIloomPackage)
+
+    const result = await readIloomPackageScripts('/test/path')
+
+    expect(result).toEqual(mockIloomPackage)
+    expect(fs.readJson).toHaveBeenCalledWith('/test/path/.iloom/package.iloom.json')
+  })
+
+  it('should return null and log warning when package.iloom.json contains invalid JSON', async () => {
+    vi.mocked(fs.pathExists).mockResolvedValue(true)
+    vi.mocked(fs.readJson).mockRejectedValue(new Error('Invalid JSON'))
+
+    const result = await readIloomPackageScripts('/test/path')
+
+    expect(result).toBeNull()
+  })
+})
+
+describe('getPackageConfig', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should return package.json when package.iloom.json does not exist', async () => {
+    const mockPackageJson = {
+      name: 'my-node-project',
+      version: '1.0.0',
+      bin: './dist/cli.js',
+      scripts: {
+        build: 'tsc',
+        test: 'vitest',
+      },
+    }
+    vi.mocked(fs.pathExists).mockResolvedValue(false)
+    vi.mocked(fs.readJson).mockResolvedValue(mockPackageJson)
+
+    const result = await getPackageConfig('/test/path')
+
+    expect(result).toEqual(mockPackageJson)
+  })
+
+  it('should merge scripts when both files exist', async () => {
+    const mockPackageJson = {
+      name: 'my-node-project',
+      version: '1.0.0',
+      bin: './dist/cli.js',
+      dependencies: { commander: '^11.0.0' },
+      scripts: {
+        build: 'tsc',
+        test: 'vitest',
+        lint: 'eslint .',
+      },
+    }
+    const mockIloomPackage = {
+      name: 'custom',
+      scripts: {
+        test: 'pytest',  // Override test script
+        dev: 'python -m myapp',  // Add new script
+      },
+    }
+
+    // First call: pathExists for package.iloom.json
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(true)
+    // First readJson: package.iloom.json
+    vi.mocked(fs.readJson).mockResolvedValueOnce(mockIloomPackage)
+    // Second readJson: package.json
+    vi.mocked(fs.readJson).mockResolvedValueOnce(mockPackageJson)
+
+    const result = await getPackageConfig('/test/path')
+
+    // Should have all package.json fields
+    expect(result.name).toBe('my-node-project')
+    expect(result.version).toBe('1.0.0')
+    expect(result.bin).toBe('./dist/cli.js')
+    expect(result.dependencies).toEqual({ commander: '^11.0.0' })
+
+    // Scripts should be merged with iloom taking precedence
+    expect(result.scripts).toEqual({
+      build: 'tsc',       // From package.json
+      test: 'pytest',     // Overridden by iloom
+      lint: 'eslint .',   // From package.json
+      dev: 'python -m myapp',  // Added by iloom
+    })
+  })
+
+  it('should preserve all package.json fields when merging', async () => {
+    const mockPackageJson = {
+      name: 'my-cli',
+      version: '2.0.0',
+      bin: { 'my-cli': './dist/index.js' },
+      dependencies: { lodash: '^4.17.21' },
+      devDependencies: { typescript: '^5.0.0' },
+      scripts: { build: 'tsc' },
+    }
+    const mockIloomPackage = {
+      name: 'ignored',
+      scripts: { test: 'cargo test' },
+    }
+
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(true)
+    vi.mocked(fs.readJson)
+      .mockResolvedValueOnce(mockIloomPackage)
+      .mockResolvedValueOnce(mockPackageJson)
+
+    const result = await getPackageConfig('/test/path')
+
+    expect(result.name).toBe('my-cli')
+    expect(result.version).toBe('2.0.0')
+    expect(result.bin).toEqual({ 'my-cli': './dist/index.js' })
+    expect(result.dependencies).toEqual({ lodash: '^4.17.21' })
+    expect(result.devDependencies).toEqual({ typescript: '^5.0.0' })
+    expect(result.scripts).toEqual({
+      build: 'tsc',
+      test: 'cargo test',
+    })
+  })
+
+  it('should use only package.iloom.json when package.json does not exist', async () => {
+    const mockIloomPackage = {
+      name: 'my-rust-project',
+      scripts: {
+        build: 'cargo build',
+        test: 'cargo test',
+      },
+    }
+
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(true)
+    vi.mocked(fs.readJson)
+      .mockResolvedValueOnce(mockIloomPackage)
+      .mockRejectedValueOnce({ code: 'ENOENT' })
+
+    const result = await getPackageConfig('/test/path')
+
+    expect(result).toEqual(mockIloomPackage)
+  })
+
+  it('should throw when neither file exists', async () => {
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(false)
+    vi.mocked(fs.readJson).mockRejectedValueOnce({ code: 'ENOENT' })
+
+    await expect(getPackageConfig('/test/path')).rejects.toThrow(
+      'package.json not found in /test/path'
+    )
+  })
+
+  it('should fall back to package.json when package.iloom.json is malformed', async () => {
+    const mockPackageJson = {
+      name: 'my-node-project',
+      scripts: { build: 'tsc' },
+    }
+
+    vi.mocked(fs.pathExists).mockResolvedValueOnce(true)
+    vi.mocked(fs.readJson)
+      .mockRejectedValueOnce(new Error('Invalid JSON'))
+      .mockResolvedValueOnce(mockPackageJson)
+
+    const result = await getPackageConfig('/test/path')
+
+    expect(result).toEqual(mockPackageJson)
   })
 })

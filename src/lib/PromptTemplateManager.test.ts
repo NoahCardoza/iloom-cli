@@ -285,6 +285,54 @@ Footer`
 			expect(result).toContain('Extract and validate assumptions')
 			expect(result).toContain('AskUserQuestion tool')
 		})
+
+		it('should include content when HAS_PACKAGE_JSON is true', () => {
+			const template = '{{#IF HAS_PACKAGE_JSON}}Node.js project detected{{/IF HAS_PACKAGE_JSON}}'
+			const variables: TemplateVariables = { HAS_PACKAGE_JSON: true }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('Node.js project detected')
+		})
+
+		it('should exclude content when HAS_PACKAGE_JSON is false', () => {
+			const template = '{{#IF HAS_PACKAGE_JSON}}Node.js project detected{{/IF HAS_PACKAGE_JSON}}'
+			const variables: TemplateVariables = { HAS_PACKAGE_JSON: false }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('')
+		})
+
+		it('should include content when NO_PACKAGE_JSON is true', () => {
+			const template = '{{#IF NO_PACKAGE_JSON}}Non-Node.js project detected{{/IF NO_PACKAGE_JSON}}'
+			const variables: TemplateVariables = { NO_PACKAGE_JSON: true }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('Non-Node.js project detected')
+		})
+
+		it('should exclude content when NO_PACKAGE_JSON is false', () => {
+			const template = '{{#IF NO_PACKAGE_JSON}}Non-Node.js project detected{{/IF NO_PACKAGE_JSON}}'
+			const variables: TemplateVariables = { NO_PACKAGE_JSON: false }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('')
+		})
+
+		it('should handle mutually exclusive HAS_PACKAGE_JSON and NO_PACKAGE_JSON', () => {
+			const template = '{{#IF HAS_PACKAGE_JSON}}Node{{/IF HAS_PACKAGE_JSON}}{{#IF NO_PACKAGE_JSON}}Other{{/IF NO_PACKAGE_JSON}}'
+			const variablesWithPackageJson: TemplateVariables = { HAS_PACKAGE_JSON: true, NO_PACKAGE_JSON: false }
+			const variablesWithoutPackageJson: TemplateVariables = { HAS_PACKAGE_JSON: false, NO_PACKAGE_JSON: true }
+
+			const resultWithPackage = manager.substituteVariables(template, variablesWithPackageJson)
+			const resultWithoutPackage = manager.substituteVariables(template, variablesWithoutPackageJson)
+
+			expect(resultWithPackage).toBe('Node')
+			expect(resultWithoutPackage).toBe('Other')
+		})
 	})
 
 	describe('getPrompt', () => {

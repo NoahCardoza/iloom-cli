@@ -233,7 +233,12 @@ export class IgniteCommand {
 				}
 
 				// Load agents with settings overrides and template variables for substitution
-				const loadedAgents = await this.agentManager.loadAgents(this.settings, variables)
+				// Exclude init-only agents (e.g., framework-detector which is only for il init)
+				const loadedAgents = await this.agentManager.loadAgents(
+					this.settings,
+					variables,
+					['*.md', '!iloom-framework-detector.md']
+				)
 				agents = this.agentManager.formatForCli(loadedAgents)
 				logger.debug('Loaded agent configurations', {
 					agentCount: Object.keys(agents).length,

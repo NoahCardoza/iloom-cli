@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { AgentManager, type AgentConfigs } from './AgentManager.js'
-import { readFile, readdir } from 'fs/promises'
+import { readFile } from 'fs/promises'
+import fg from 'fast-glob'
 
 vi.mock('fs/promises')
+vi.mock('fast-glob')
 vi.mock('../utils/logger.js', () => ({
 	logger: {
 		debug: vi.fn(),
@@ -25,12 +27,12 @@ describe('AgentManager', () => {
 
 	describe('loadAgents', () => {
 		it('should load all three agent markdown files successfully', async () => {
-			// Mock readdir to return the agent filenames
-			vi.mocked(readdir).mockResolvedValueOnce([
+			// Mock fast-glob to return the agent filenames
+			vi.mocked(fg).mockResolvedValueOnce([
 				'iloom-issue-analyzer.md',
 				'iloom-issue-planner.md',
 				'iloom-issue-implementer.md',
-			] as string[])
+			])
 
 			// Mock readFile to return valid markdown for each agent
 			const mockAnalyzerMd = `---
@@ -95,9 +97,9 @@ You are an implementer`
 		})
 
 		it('should handle missing agent files gracefully', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce([
+			vi.mocked(fg).mockResolvedValueOnce([
 				'iloom-issue-analyzer.md',
-			] as string[])
+			])
 			vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT: no such file'))
 
 			await expect(manager.loadAgents()).rejects.toThrow(
@@ -106,9 +108,9 @@ You are an implementer`
 		})
 
 		it('should handle malformed markdown in agent files', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce([
+			vi.mocked(fg).mockResolvedValueOnce([
 				'bad-agent.md',
-			] as string[])
+			])
 			// Markdown without proper frontmatter delimiters
 			vi.mocked(readFile).mockResolvedValueOnce('Just some text without frontmatter')
 
@@ -172,9 +174,9 @@ You are an implementer`
 	describe('loadAgents - Markdown Support', () => {
 		it('should successfully load agent from .md file with valid frontmatter', async () => {
 			// Mock readdir to return .md file
-			vi.mocked(readdir).mockResolvedValueOnce([
+			vi.mocked(fg).mockResolvedValueOnce([
 				'test-agent.md',
-			] as string[])
+			])
 
 			// Mock readFile to return markdown with frontmatter
 			const markdownContent = `---
@@ -203,7 +205,7 @@ This is the prompt content.`
 		})
 
 		it('should extract all required fields from frontmatter', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
 name: full-agent
@@ -229,7 +231,7 @@ Agent prompt here.`
 		})
 
 		it('should handle multiline description field with embedded XML', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['complex-agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['complex-agent.md'])
 
 			const markdownContent = `---
 name: complex-agent
@@ -251,7 +253,7 @@ Prompt content`
 		})
 
 		it('should parse name field from frontmatter', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['filename.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['filename.md'])
 
 			const markdownContent = `---
 name: frontmatter-name
@@ -272,7 +274,7 @@ Prompt`
 		})
 
 		it('should convert comma-separated tools string to array', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
 name: tools-agent
@@ -292,7 +294,7 @@ Prompt`
 		})
 
 		it('should handle tools with special characters and patterns', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
 name: special-tools-agent
@@ -315,7 +317,7 @@ Prompt`
 		})
 
 		it('should trim whitespace from each tool name', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
 name: whitespace-agent
@@ -334,7 +336,7 @@ Prompt`
 		})
 
 		it('should extract markdown body as prompt field', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
 name: prompt-agent
@@ -357,7 +359,7 @@ With various formatting.`
 		})
 
 		it('should preserve formatting in prompt', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
 name: format-agent
@@ -384,7 +386,7 @@ const code = "block";
 		})
 
 		it('should throw error for missing frontmatter delimiters', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['bad-agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['bad-agent.md'])
 
 			const markdownContent = `name: bad-agent
 description: Missing delimiters
@@ -399,7 +401,7 @@ Just content without frontmatter`
 		})
 
 		it('should throw error for missing required field: name', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
 description: Missing name
@@ -415,7 +417,7 @@ Prompt`
 		})
 
 		it('should throw error for missing required field: description', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
 name: no-desc-agent
@@ -431,7 +433,7 @@ Prompt`
 		})
 
 		it('should throw error for missing required field: tools', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
 name: no-tools-agent
@@ -447,7 +449,7 @@ Prompt`
 		})
 
 		it('should throw error for missing required field: model', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
 name: no-model-agent
@@ -463,7 +465,7 @@ Prompt`
 		})
 
 		it('should handle optional color field', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
 name: no-color-agent
@@ -488,7 +490,7 @@ Prompt`
 
 			for (const model of validModels) {
 				vi.clearAllMocks()
-				vi.mocked(readdir).mockResolvedValueOnce(['agent.md'] as string[])
+				vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 				const markdownContent = `---
 name: ${model}-agent
@@ -510,10 +512,10 @@ Prompt`
 
 	describe('loadAgents with settings overrides', () => {
 		it('should merge settings model overrides into agent configs', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce([
+			vi.mocked(fg).mockResolvedValueOnce([
 				'iloom-issue-analyzer.md',
 				'iloom-issue-planner.md',
-			] as string[])
+			])
 
 			const mockAnalyzerMd = `---
 name: iloom-issue-analyzer
@@ -554,7 +556,7 @@ Planner prompt`
 		})
 
 		it('should preserve template model when agent not in settings', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
 
 			const mockMd = `---
 name: test-agent
@@ -577,7 +579,7 @@ Prompt`
 		})
 
 		it('should use settings model when agent is overridden', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
 
 			const mockMd = `---
 name: test-agent
@@ -604,7 +606,7 @@ Prompt`
 		})
 
 		it('should handle settings with extra agents not in templates', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
 
 			const mockMd = `---
 name: test-agent
@@ -637,7 +639,7 @@ Prompt`
 		})
 
 		it('should handle settings with missing model field (use template default)', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
 
 			const mockMd = `---
 name: test-agent
@@ -663,7 +665,7 @@ Prompt`
 		})
 
 		it('should maintain backward compatibility when settings is undefined', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
 
 			const mockMd = `---
 name: test-agent
@@ -682,11 +684,11 @@ Prompt`
 		})
 
 		it('should override multiple agents correctly', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce([
+			vi.mocked(fg).mockResolvedValueOnce([
 				'agent1.md',
 				'agent2.md',
 				'agent3.md',
-			] as string[])
+			])
 
 			const mock1 = `---
 name: agent1
@@ -741,7 +743,7 @@ Prompt`
 
 	describe('model precedence with settings', () => {
 		it('should prioritize settings model over template model', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
 
 			const mockMd = `---
 name: test-agent
@@ -775,7 +777,7 @@ Prompt`
 		})
 
 		it('should preserve all other agent config fields when overriding model', async () => {
-			vi.mocked(readdir).mockResolvedValueOnce(['test-agent.md'] as string[])
+			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
 
 			const mockMd = `---
 name: test-agent
@@ -807,6 +809,107 @@ and various content.`
 			expect(result['test-agent'].color).toBe('pink')
 			// Only model should be changed
 			expect(result['test-agent'].model).toBe('opus')
+		})
+	})
+
+	describe('loadAgents with pattern filtering', () => {
+		it('should filter agents using glob patterns', async () => {
+			vi.mocked(fg).mockResolvedValueOnce(['iloom-framework-detector.md'])
+
+			const mockDetectorMd = `---
+name: iloom-framework-detector
+description: Framework detector
+tools: Read, Grep
+model: sonnet
+---
+
+Detect framework`
+
+			vi.mocked(readFile).mockResolvedValueOnce(mockDetectorMd)
+
+			const result = await manager.loadAgents(undefined, undefined, ['iloom-framework-detector.md'])
+
+			expect(Object.keys(result)).toHaveLength(1)
+			expect(result['iloom-framework-detector']).toBeDefined()
+
+			// Verify fast-glob was called with correct pattern
+			expect(fg).toHaveBeenCalledWith(['iloom-framework-detector.md'], {
+				cwd: 'templates/agents',
+				onlyFiles: true,
+			})
+		})
+
+		it('should support negation patterns to exclude specific agents', async () => {
+			vi.mocked(fg).mockResolvedValueOnce([
+				'iloom-issue-analyzer.md',
+				'iloom-issue-planner.md',
+			])
+
+			const mockAnalyzerMd = `---
+name: iloom-issue-analyzer
+description: Analyzer
+tools: Read
+model: sonnet
+---
+
+Analyzer`
+
+			const mockPlannerMd = `---
+name: iloom-issue-planner
+description: Planner
+tools: Write
+model: sonnet
+---
+
+Planner`
+
+			vi.mocked(readFile)
+				.mockResolvedValueOnce(mockAnalyzerMd)
+				.mockResolvedValueOnce(mockPlannerMd)
+
+			const result = await manager.loadAgents(undefined, undefined, ['*.md', '!iloom-framework-detector.md'])
+
+			expect(Object.keys(result)).toHaveLength(2)
+			expect(result['iloom-issue-analyzer']).toBeDefined()
+			expect(result['iloom-issue-planner']).toBeDefined()
+			expect(result['iloom-framework-detector']).toBeUndefined()
+
+			// Verify fast-glob was called with negation pattern
+			expect(fg).toHaveBeenCalledWith(['*.md', '!iloom-framework-detector.md'], {
+				cwd: 'templates/agents',
+				onlyFiles: true,
+			})
+		})
+
+		it('should use default pattern *.md when no patterns provided', async () => {
+			vi.mocked(fg).mockResolvedValueOnce(['test-agent.md'])
+
+			const mockMd = `---
+name: test-agent
+description: Test
+tools: Read
+model: sonnet
+---
+
+Prompt`
+
+			vi.mocked(readFile).mockResolvedValueOnce(mockMd)
+
+			await manager.loadAgents()
+
+			// Verify default pattern was used
+			expect(fg).toHaveBeenCalledWith(['*.md'], {
+				cwd: 'templates/agents',
+				onlyFiles: true,
+			})
+		})
+
+		it('should return empty object when no agents match pattern', async () => {
+			vi.mocked(fg).mockResolvedValueOnce([])
+
+			const result = await manager.loadAgents(undefined, undefined, ['nonexistent-agent.md'])
+
+			expect(result).toEqual({})
 		})
 	})
 })

@@ -262,6 +262,35 @@ Use AskUserQuestion to ask ALL local development settings questions **IN A SINGL
 - Users can select "Other" on any question to provide custom input
 - Process all answers at once when the user submits
 
+{{#IF NO_PACKAGE_JSON}}
+### Phase 1.5: Framework Detection (Non-Node.js Project) - DO NOT SKIP
+
+iloom needs to detect the project's language and framework to configure build/test/dev scripts.
+
+**Invoke the framework detector agent** using the `iloom-framework-detector` agent:
+
+The agent will:
+1. Scan for language markers (Cargo.toml, requirements.txt, Gemfile, go.mod, etc.)
+2. Detect common frameworks
+3. Generate appropriate scripts for build, test, and dev commands
+4. Create `.iloom/package.iloom.json` with the detected configuration
+
+**File Format:**
+```json
+{
+  "scripts": {
+    "build": "your-build-command",
+    "test": "your-test-command",
+    "dev": "your-dev-command"
+  }
+}
+```
+
+**Note:** Scripts in `package.iloom.json` are raw shell commands, not npm script names. iloom will execute them directly.
+
+After the framework detector agent completes, proceed to Phase 2.
+{{/IF NO_PACKAGE_JSON}}
+
 ### Phase 2: Tooling Configuration
 
 This phase configures external tooling integrations. Use AskUserQuestion to gather these settings.
@@ -807,6 +836,7 @@ Need more advanced configuration? I can help you set up:
   • Database Settings - Configure database branching for isolated development
   • Workflow Behavior - Control permissions, IDE launching, dev servers, and terminal behavior
   • Protected Branches - Prevent iloom from creating worktrees for certain branches
+  • Custom Scripts - Override package.json scripts with custom commands
 
 You can ask me questions like:
   "Is it possible to have the analysis agent use a different model?"
@@ -814,6 +844,7 @@ You can ask me questions like:
   "Can I disable the IDE from launching automatically?"
   "How do I protect my main branch from worktree creation?"
   "What models are available for the different agents?"
+  "How do I use custom build/test commands instead of package.json scripts?"
 
 Just ask any of these questions and I'll help you modify your settings.
 
@@ -866,6 +897,26 @@ If users ask about specific configurations, help them add these sections to thei
      "type": "cursor"
    }
    ```
+
+6. **Custom Script Configuration (package.iloom.json):**
+
+   If users want to override or supplement npm scripts with custom commands, help them create `.iloom/package.iloom.json`:
+   ```json
+   {
+     "scripts": {
+       "build": "your-custom-build-command",
+       "test": "your-custom-test-command",
+       "dev": "your-custom-dev-command"
+     }
+   }
+   ```
+
+   When `package.iloom.json` exists, iloom uses its scripts instead of `package.json`.
+
+   **Common use cases:**
+   - Using a different test runner than what's in package.json
+   - Running additional commands before/after the standard npm scripts
+   - Wrapping commands with environment variables or tools
 
 ## Important Notes
 

@@ -1220,7 +1220,8 @@ describe('IgniteCommand', () => {
 					expect.objectContaining({
 						ISSUE_NUMBER: '123',
 						WORKSPACE_PATH: '/path/to/feat/issue-123__test',
-					})
+					}),
+					['*.md', '!iloom-framework-detector.md']
 				)
 			} finally {
 				process.cwd = originalCwd
@@ -1274,7 +1275,8 @@ describe('IgniteCommand', () => {
 					expect.objectContaining({
 						ISSUE_NUMBER: '123',
 						WORKSPACE_PATH: '/path/to/feat/issue-123__test',
-					})
+					}),
+					['*.md', '!iloom-framework-detector.md']
 				)
 				expect(launchClaudeSpy).toHaveBeenCalled()
 			} finally {

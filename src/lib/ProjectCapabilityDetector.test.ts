@@ -4,7 +4,7 @@ import * as packageJsonUtils from '../utils/package-json.js'
 import type { PackageJson } from '../utils/package-json.js'
 
 vi.mock('../utils/package-json.js', () => ({
-  readPackageJson: vi.fn(),
+  getPackageConfig: vi.fn(),
   parseBinField: vi.fn(),
   hasWebDependencies: vi.fn()
 }))
@@ -30,7 +30,7 @@ describe('ProjectCapabilityDetector', () => {
         }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(false)
       vi.mocked(packageJsonUtils.parseBinField).mockReturnValueOnce({
         il: './dist/cli.js',
@@ -44,7 +44,7 @@ describe('ProjectCapabilityDetector', () => {
         il: './dist/cli.js',
         iloom: './dist/cli.js'
       })
-      expect(packageJsonUtils.readPackageJson).toHaveBeenCalledWith('/test/path')
+      expect(packageJsonUtils.getPackageConfig).toHaveBeenCalledWith('/test/path')
       expect(packageJsonUtils.parseBinField).toHaveBeenCalledWith(
         mockPackageJson.bin,
         'iloom-ai'
@@ -60,7 +60,7 @@ describe('ProjectCapabilityDetector', () => {
         }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(true)
       vi.mocked(packageJsonUtils.parseBinField).mockReturnValueOnce({})
 
@@ -79,7 +79,7 @@ describe('ProjectCapabilityDetector', () => {
         }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(true)
       vi.mocked(packageJsonUtils.parseBinField).mockReturnValueOnce({
         'hybrid-tool': './dist/cli.js'
@@ -101,7 +101,7 @@ describe('ProjectCapabilityDetector', () => {
         }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(false)
       vi.mocked(packageJsonUtils.parseBinField).mockReturnValueOnce({})
 
@@ -120,7 +120,7 @@ describe('ProjectCapabilityDetector', () => {
         }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(false)
       vi.mocked(packageJsonUtils.parseBinField).mockReturnValueOnce({
         'my-cli': './bin/cli.js',
@@ -142,18 +142,18 @@ describe('ProjectCapabilityDetector', () => {
 
     it('should return empty capabilities when package.json does not exist', async () => {
       const error = new Error('package.json not found in /test/path')
-      vi.mocked(packageJsonUtils.readPackageJson).mockRejectedValueOnce(error)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockRejectedValueOnce(error)
 
       const result = await detector.detectCapabilities('/test/path')
 
       expect(result.capabilities).toEqual([])
       expect(result.binEntries).toEqual({})
-      expect(packageJsonUtils.readPackageJson).toHaveBeenCalledWith('/test/path')
+      expect(packageJsonUtils.getPackageConfig).toHaveBeenCalledWith('/test/path')
     })
 
     it('should re-throw non-ENOENT errors', async () => {
       const error = new Error('Invalid JSON in package.json')
-      vi.mocked(packageJsonUtils.readPackageJson).mockRejectedValueOnce(error)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockRejectedValueOnce(error)
 
       await expect(detector.detectCapabilities('/test/path')).rejects.toThrow('Invalid JSON in package.json')
     })
@@ -166,7 +166,7 @@ describe('ProjectCapabilityDetector', () => {
         bin: './index.js'
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(false)
       vi.mocked(packageJsonUtils.parseBinField).mockReturnValueOnce({
         'simple-cli': './index.js'
@@ -192,7 +192,7 @@ describe('ProjectCapabilityDetector', () => {
         }
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(false)
       vi.mocked(packageJsonUtils.parseBinField).mockReturnValueOnce({
         cmd1: './bin/cmd1.js',
@@ -213,7 +213,7 @@ describe('ProjectCapabilityDetector', () => {
         bin: './cli.js'
       }
 
-      vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValueOnce(mockPackageJson)
+      vi.mocked(packageJsonUtils.getPackageConfig).mockResolvedValueOnce(mockPackageJson)
       vi.mocked(packageJsonUtils.hasWebDependencies).mockReturnValueOnce(false)
       vi.mocked(packageJsonUtils.parseBinField).mockReturnValueOnce({
         '@scope/my-cli': './cli.js'

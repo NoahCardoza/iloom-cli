@@ -1,6 +1,6 @@
 import { getLogger } from '../utils/logger-context.js'
 import { detectPackageManager, runScript } from '../utils/package-manager.js'
-import { readPackageJson, hasScript } from '../utils/package-json.js'
+import { getPackageConfig, hasScript } from '../utils/package-json.js'
 import { ProjectCapabilityDetector } from './ProjectCapabilityDetector.js'
 
 export interface BuildOptions {
@@ -34,8 +34,8 @@ export class BuildRunner {
 		const startTime = Date.now()
 
 		try {
-			// Step 1: Check if build script exists
-			const pkgJson = await readPackageJson(buildPath)
+			// Step 1: Check if build script exists (checks .iloom/package.iloom.json first, then package.json)
+			const pkgJson = await getPackageConfig(buildPath)
 			const hasBuildScript = hasScript(pkgJson, 'build')
 
 			if (!hasBuildScript) {
@@ -43,18 +43,18 @@ export class BuildRunner {
 				return {
 					success: true,
 					skipped: true,
-					reason: 'No build script found in package.json',
+					reason: 'No build script found in package configuration',
 					duration: Date.now() - startTime,
 				}
 			}
 		} catch (error) {
-			// Handle missing package.json - skip build for non-Node.js projects
+			// Handle missing package.json - skip build for non-Node.js projects without package.iloom.json
 			if (error instanceof Error && error.message.includes('package.json not found')) {
-			getLogger().debug('Skipping build - no package.json found (non-Node.js project)')
+			getLogger().debug('Skipping build - no package configuration found')
 				return {
 					success: true,
 					skipped: true,
-					reason: 'No package.json found in project',
+					reason: 'No package configuration found in project',
 					duration: Date.now() - startTime,
 				}
 			}

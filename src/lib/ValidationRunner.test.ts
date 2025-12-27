@@ -33,7 +33,7 @@ describe('ValidationRunner', () => {
 	describe('Package Manager Detection', () => {
 		it('should detect and use pnpm when pnpm-lock.yaml exists', async () => {
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -52,7 +52,7 @@ describe('ValidationRunner', () => {
 
 		it('should detect and use npm when package-lock.json exists', async () => {
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('npm')
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -71,7 +71,7 @@ describe('ValidationRunner', () => {
 
 		it('should detect and use yarn when yarn.lock exists', async () => {
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('yarn')
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -96,7 +96,7 @@ describe('ValidationRunner', () => {
 				scripts: { typecheck: 'tsc' },
 			}
 
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue(mockPkgJson)
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue(mockPkgJson)
 			vi.mocked(packageJson.hasScript).mockImplementation(
 				(pkg, scriptName) => scriptName === 'typecheck'
 			)
@@ -117,7 +117,7 @@ describe('ValidationRunner', () => {
 				scripts: { lint: 'eslint .' },
 			}
 
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue(mockPkgJson)
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue(mockPkgJson)
 			vi.mocked(packageJson.hasScript).mockImplementation(
 				(pkg, scriptName) => scriptName === 'lint'
 			)
@@ -138,7 +138,7 @@ describe('ValidationRunner', () => {
 				scripts: { test: 'vitest run' },
 			}
 
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue(mockPkgJson)
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue(mockPkgJson)
 			vi.mocked(packageJson.hasScript).mockImplementation(
 				(pkg, scriptName) => scriptName === 'test'
 			)
@@ -159,7 +159,7 @@ describe('ValidationRunner', () => {
 				scripts: {},
 			}
 
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue(mockPkgJson)
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue(mockPkgJson)
 			vi.mocked(packageJson.hasScript).mockReturnValue(false)
 
 			const result = await runner.runValidations('/test/worktree')
@@ -176,7 +176,7 @@ describe('ValidationRunner', () => {
 				name: 'test',
 			}
 
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue(mockPkgJson)
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue(mockPkgJson)
 			vi.mocked(packageJson.hasScript).mockReturnValue(false)
 
 			const result = await runner.runValidations('/test/worktree')
@@ -188,7 +188,7 @@ describe('ValidationRunner', () => {
 
 	describe('Compile vs Typecheck Priority', () => {
 		it('should prefer compile script over typecheck when both exist', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { compile: 'tsc --build', typecheck: 'tsc' },
 			})
@@ -219,7 +219,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should use typecheck when only typecheck exists (no compile)', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -243,7 +243,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should use compile when only compile exists (no typecheck)', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { compile: 'tsc --build' },
 			})
@@ -267,7 +267,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should skip when neither compile nor typecheck exists', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { lint: 'eslint .' },
 			})
@@ -287,7 +287,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should throw correct error message when compile fails', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { compile: 'tsc --build' },
 			})
@@ -308,7 +308,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should show correct command in compile error message', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { compile: 'tsc --build' },
 			})
@@ -329,7 +329,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should show correct npm command in compile error message', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { compile: 'tsc --build' },
 			})
@@ -350,7 +350,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should use correct dry-run command for compile', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { compile: 'tsc --build' },
 			})
@@ -372,7 +372,7 @@ describe('ValidationRunner', () => {
 
 	describe('Typecheck Validation', () => {
 		it('should successfully run typecheck when script exists and passes', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -401,7 +401,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should throw error when typecheck fails', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -422,7 +422,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should use correct package manager command (pnpm typecheck)', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -443,7 +443,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should use correct package manager command (npm run typecheck)', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -466,7 +466,7 @@ describe('ValidationRunner', () => {
 
 	describe('Lint Validation', () => {
 		it('should successfully run lint when script exists and passes', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { lint: 'eslint .' },
 			})
@@ -494,7 +494,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should throw error when lint fails', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { lint: 'eslint .' },
 			})
@@ -515,7 +515,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should use correct package manager command', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { lint: 'eslint .' },
 			})
@@ -538,7 +538,7 @@ describe('ValidationRunner', () => {
 
 	describe('Test Validation', () => {
 		it('should successfully run tests when script exists and passes', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { test: 'vitest run' },
 			})
@@ -566,7 +566,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should throw error when tests fail', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { test: 'vitest run' },
 			})
@@ -587,7 +587,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should use correct package manager command', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { test: 'vitest run' },
 			})
@@ -612,7 +612,7 @@ describe('ValidationRunner', () => {
 		it('should run all validations in order: typecheck → lint → test', async () => {
 			const callOrder: string[] = []
 
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: {
 					typecheck: 'tsc',
@@ -638,7 +638,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should stop at first failure (fail-fast behavior)', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: {
 					typecheck: 'tsc',
@@ -663,7 +663,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should return success when all validations pass', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: {
 					typecheck: 'tsc',
@@ -685,7 +685,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should skip validations when scripts do not exist', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: {},
 			})
@@ -701,7 +701,7 @@ describe('ValidationRunner', () => {
 
 	describe('Dry-Run Mode', () => {
 		it('should log what would be executed without running commands', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -719,7 +719,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should still validate that scripts exist in dry-run mode', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -736,7 +736,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should still detect package manager in dry-run mode', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -755,7 +755,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should not throw errors in dry-run mode', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -772,7 +772,7 @@ describe('ValidationRunner', () => {
 
 	describe('Error Handling', () => {
 		it('should provide clear error message for typecheck failure', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -793,7 +793,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should provide clear error message for lint failure', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { lint: 'eslint .' },
 			})
@@ -814,7 +814,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should provide clear error message for test failure', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { test: 'vitest run' },
 			})
@@ -835,7 +835,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should include command to run for debugging (typecheck)', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { typecheck: 'tsc' },
 			})
@@ -856,7 +856,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should include command to run for debugging (lint)', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { lint: 'eslint .' },
 			})
@@ -877,7 +877,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should include command to run for debugging (test)', async () => {
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { test: 'vitest run' },
 			})
@@ -898,7 +898,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should handle package.json read errors', async () => {
-			vi.mocked(packageJson.readPackageJson).mockRejectedValue(
+			vi.mocked(packageJson.getPackageConfig).mockRejectedValue(
 				new Error('Invalid JSON in package.json')
 			)
 
@@ -908,7 +908,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should skip typecheck when package.json does not exist', async () => {
-			vi.mocked(packageJson.readPackageJson).mockRejectedValue(
+			vi.mocked(packageJson.getPackageConfig).mockRejectedValue(
 				new Error('package.json not found in /test/worktree')
 			)
 
@@ -925,7 +925,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should skip lint when package.json does not exist', async () => {
-			vi.mocked(packageJson.readPackageJson).mockRejectedValue(
+			vi.mocked(packageJson.getPackageConfig).mockRejectedValue(
 				new Error('package.json not found in /test/worktree')
 			)
 
@@ -942,7 +942,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should skip tests when package.json does not exist', async () => {
-			vi.mocked(packageJson.readPackageJson).mockRejectedValue(
+			vi.mocked(packageJson.getPackageConfig).mockRejectedValue(
 				new Error('package.json not found in /test/worktree')
 			)
 
@@ -959,7 +959,7 @@ describe('ValidationRunner', () => {
 		})
 
 		it('should skip all validations when package.json does not exist', async () => {
-			vi.mocked(packageJson.readPackageJson).mockRejectedValue(
+			vi.mocked(packageJson.getPackageConfig).mockRejectedValue(
 				new Error('package.json not found in /test/worktree')
 			)
 
@@ -975,7 +975,7 @@ describe('ValidationRunner', () => {
 	describe('Claude Auto-Fix Integration', () => {
 		describe('Typecheck Auto-Fix', () => {
 			it('should attempt Claude fix when typecheck fails', async () => {
-				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 					name: 'test',
 					scripts: { typecheck: 'tsc' },
 				})
@@ -1010,7 +1010,7 @@ describe('ValidationRunner', () => {
 			})
 
 			it('should throw error when Claude cannot fix typecheck errors', async () => {
-				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 					name: 'test',
 					scripts: { typecheck: 'tsc' },
 				})
@@ -1036,7 +1036,7 @@ describe('ValidationRunner', () => {
 			})
 
 			it('should fallback to error when Claude CLI not available', async () => {
-				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 					name: 'test',
 					scripts: { typecheck: 'tsc' },
 				})
@@ -1063,7 +1063,7 @@ describe('ValidationRunner', () => {
 
 		describe('Compile Auto-Fix', () => {
 			it('should attempt Claude fix when compile fails', async () => {
-				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 					name: 'test',
 					scripts: { compile: 'tsc --build' },
 				})
@@ -1105,7 +1105,7 @@ describe('ValidationRunner', () => {
 			})
 
 			it('should throw error when Claude cannot fix compile errors', async () => {
-				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 					name: 'test',
 					scripts: { compile: 'tsc --build' },
 				})
@@ -1133,7 +1133,7 @@ describe('ValidationRunner', () => {
 
 		describe('Lint Auto-Fix', () => {
 			it('should attempt Claude fix when lint fails', async () => {
-				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 					name: 'test',
 					scripts: { lint: 'eslint .' },
 				})
@@ -1167,7 +1167,7 @@ describe('ValidationRunner', () => {
 			})
 
 			it('should throw error when Claude cannot fix lint errors', async () => {
-				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 					name: 'test',
 					scripts: { lint: 'eslint .' },
 				})
@@ -1194,7 +1194,7 @@ describe('ValidationRunner', () => {
 
 		describe('Test Auto-Fix', () => {
 			it('should attempt Claude fix when tests fail', async () => {
-				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 					name: 'test',
 					scripts: { test: 'vitest run' },
 				})
@@ -1230,7 +1230,7 @@ describe('ValidationRunner', () => {
 			})
 
 			it('should throw error when Claude cannot fix test failures', async () => {
-				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 					name: 'test',
 					scripts: { test: 'vitest run' },
 				})
@@ -1257,7 +1257,7 @@ describe('ValidationRunner', () => {
 
 		describe('Claude Integration Details', () => {
 			it('should use correct prompt for typecheck', async () => {
-				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 					name: 'test',
 					scripts: { typecheck: 'tsc' },
 				})
@@ -1283,7 +1283,7 @@ describe('ValidationRunner', () => {
 			})
 
 			it('should use correct prompt for lint', async () => {
-				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 					name: 'test',
 					scripts: { lint: 'eslint .' },
 				})
@@ -1309,7 +1309,7 @@ describe('ValidationRunner', () => {
 			})
 
 			it('should use correct prompt for tests', async () => {
-				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 					name: 'test',
 					scripts: { test: 'vitest run' },
 				})
@@ -1335,7 +1335,7 @@ describe('ValidationRunner', () => {
 			})
 
 			it('should handle Claude launch errors gracefully', async () => {
-				vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+				vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 					name: 'test',
 					scripts: { typecheck: 'tsc' },
 				})

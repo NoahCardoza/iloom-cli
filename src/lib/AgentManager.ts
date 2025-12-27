@@ -2,6 +2,7 @@ import { readFile } from 'fs/promises'
 import { accessSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import fg from 'fast-glob'
 import { MarkdownAgentParser } from '../utils/MarkdownAgentParser.js'
 import { logger } from '../utils/logger.js'
 import type { IloomSettings } from './SettingsManager.js'
@@ -58,17 +59,24 @@ export class AgentManager {
 	}
 
 	/**
-	 * Load all agent configuration files from markdown (.md) format
+	 * Load agent configuration files from markdown (.md) format
 	 * Optionally apply model overrides from settings and template variable substitution
 	 * Throws error if agents directory doesn't exist or files are malformed
 	 * @param settings - Optional project settings with per-agent model overrides
 	 * @param templateVariables - Optional variables for template substitution in agent prompts
+	 * @param patterns - Optional glob patterns to filter which agents to load (default: ['*.md'])
+	 *                   Supports negation patterns like ['*.md', '!iloom-framework-detector.md']
 	 */
-	async loadAgents(settings?: IloomSettings, templateVariables?: TemplateVariables): Promise<AgentConfigs> {
-		// Load all .md files from the agents directory
-		const { readdir } = await import('fs/promises')
-		const files = await readdir(this.agentDir)
-		const agentFiles = files.filter(file => file.endsWith('.md'))
+	async loadAgents(
+		settings?: IloomSettings,
+		templateVariables?: TemplateVariables,
+		patterns: string[] = ['*.md']
+	): Promise<AgentConfigs> {
+		// Use fast-glob to filter agent files based on patterns
+		const agentFiles = await fg(patterns, {
+			cwd: this.agentDir,
+			onlyFiles: true,
+		})
 
 		const agents: AgentConfigs = {}
 

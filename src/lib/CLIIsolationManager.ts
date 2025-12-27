@@ -2,7 +2,7 @@ import fs from 'fs-extra'
 import path from 'path'
 import os from 'os'
 import { runScript } from '../utils/package-manager.js'
-import { readPackageJson, hasScript } from '../utils/package-json.js'
+import { getPackageConfig, hasScript } from '../utils/package-json.js'
 import { getLogger } from '../utils/logger-context.js'
 
 export class CLIIsolationManager {
@@ -54,7 +54,7 @@ export class CLIIsolationManager {
    * @param worktreePath Path to the worktree
    */
   private async buildProject(worktreePath: string): Promise<void> {
-    const pkgJson = await readPackageJson(worktreePath)
+    const pkgJson = await getPackageConfig(worktreePath)
 
     if (!hasScript(pkgJson, 'build')) {
       getLogger().warn('No build script found in package.json - skipping build')

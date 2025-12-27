@@ -43,7 +43,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -70,7 +70,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'next build' },
 			})
@@ -93,7 +93,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsc' },
 			})
@@ -117,7 +117,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: {}, // No build script
 				bin: { il: './dist/cli.js' },
@@ -146,7 +146,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue(mockPkgJson)
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue(mockPkgJson)
 			vi.mocked(packageJson.hasScript).mockReturnValue(true)
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 			vi.mocked(packageManager.runScript).mockResolvedValue()
@@ -167,7 +167,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -197,7 +197,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -220,7 +220,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -250,7 +250,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -275,7 +275,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -298,7 +298,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -323,7 +323,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -348,7 +348,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -372,7 +372,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -401,7 +401,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue(mockPkgJson)
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue(mockPkgJson)
 			vi.mocked(packageJson.hasScript).mockReturnValue(true)
 			vi.mocked(packageManager.detectPackageManager).mockResolvedValue('pnpm')
 
@@ -419,7 +419,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'next build' },
 			})
@@ -443,7 +443,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -466,7 +466,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -489,7 +489,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -506,7 +506,7 @@ describe('BuildRunner', () => {
 		})
 
 		it('should handle non-ENOENT package.json read errors', async () => {
-			vi.mocked(packageJson.readPackageJson).mockRejectedValue(
+			vi.mocked(packageJson.getPackageConfig).mockRejectedValue(
 				new Error('Invalid JSON in package.json')
 			)
 
@@ -516,7 +516,7 @@ describe('BuildRunner', () => {
 		})
 
 		it('should skip build when package.json does not exist', async () => {
-			vi.mocked(packageJson.readPackageJson).mockRejectedValue(
+			vi.mocked(packageJson.getPackageConfig).mockRejectedValue(
 				new Error('package.json not found in /test/path')
 			)
 
@@ -524,7 +524,7 @@ describe('BuildRunner', () => {
 
 			expect(result.success).toBe(true)
 			expect(result.skipped).toBe(true)
-			expect(result.reason).toContain('No package.json found')
+			expect(result.reason).toContain('No package configuration found')
 			expect(packageManager.runScript).not.toHaveBeenCalled()
 		})
 	})
@@ -539,7 +539,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'tsup' },
 				bin: { il: './dist/cli.js' },
@@ -562,7 +562,7 @@ describe('BuildRunner', () => {
 			vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue(
 				mockCapabilities
 			)
-			vi.mocked(packageJson.readPackageJson).mockResolvedValue({
+			vi.mocked(packageJson.getPackageConfig).mockResolvedValue({
 				name: 'test',
 				scripts: { build: 'next build' },
 			})
@@ -574,3 +574,6 @@ describe('BuildRunner', () => {
 		})
 	})
 })
+
+// Note: Tests for readIloomPackageScripts, getPackageConfig, and ILOOM_PACKAGE_PATH
+// have been moved to src/utils/package-json.test.ts since those functions now live there.

@@ -1,4 +1,4 @@
-import { readPackageJson, parseBinField, hasWebDependencies } from '../utils/package-json.js'
+import { getPackageConfig, parseBinField, hasWebDependencies } from '../utils/package-json.js'
 import type { ProjectCapability } from '../types/loom.js'
 
 export interface ProjectCapabilities {
@@ -14,7 +14,7 @@ export class ProjectCapabilityDetector {
    */
   async detectCapabilities(worktreePath: string): Promise<ProjectCapabilities> {
     try {
-      const pkgJson = await readPackageJson(worktreePath)
+      const pkgJson = await getPackageConfig(worktreePath)
       const capabilities: ProjectCapability[] = []
 
       // CLI detection: has bin field

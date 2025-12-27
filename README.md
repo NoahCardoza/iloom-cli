@@ -120,7 +120,7 @@ Each loom is a fully isolated container for your work:
     
 *   **Database Branch:** (Neon support) Schema changes in this loom are isolated—they won't break your main environment or your other active looms.
 
-*   **Environment Variables:** Each loom has its own environment files (`.env`, `.env.local`, `.env.development`, `.env.development.local`). Uses `development` by default, override with `DOTENV_FLOW_NODE_ENV`.
+*   **Environment Variables:** Each loom has its own environment files (`.env`, `.env.local`, `.env.development`, `.env.development.local`). Uses `development` by default, override with `DOTENV_FLOW_NODE_ENV`. See [Secret Storage Limitations](#multi-language-project-support) for frameworks with encrypted credentials.
 
 *   **Unique Runtime:**
     
@@ -231,6 +231,54 @@ This example shows how to configure a project-wide default (e.g., GitHub remote)
   }
 }
 ```
+
+### Multi-Language/Framework Project Support
+
+iloom supports projects in any programming language through `.iloom/package.iloom.json`. This file defines build, test, and dev commands using raw shell commands instead of npm scripts.
+
+**File Location:** `.iloom/package.iloom.json`
+
+**Format:**
+```json
+{
+  "scripts": {
+    "build": "cargo build --release",
+    "test": "cargo test",
+    "dev": "cargo run"
+  }
+}
+```
+
+**Language Examples:**
+
+| Language | Build | Test | Dev |
+|----------|-------|------|-----|
+| Rust | `cargo build` | `cargo test` | `cargo run` |
+| Python (pip) | `pip install -e .` | `pytest` | `python -m myapp` |
+| Python (poetry) | `poetry install` | `poetry run pytest` | `poetry run python -m myapp` |
+| Ruby | `bundle install` | `bundle exec rspec` | `bundle exec rails s` |
+| Go | `go build ./...` | `go test ./...` | `go run .` |
+
+**Precedence Rules:**
+1. `.iloom/package.iloom.json` (if exists) - highest priority
+2. `package.json` (if exists) - fallback for Node.js projects
+
+**Key Differences from package.json:**
+- Scripts are raw shell commands, executed directly (not via npm/pnpm)
+- No package manager prefix is added to commands
+- Works with any language's toolchain
+
+**Automatic Detection:** When running `il init` on a non-Node.js project, iloom will offer to detect your project's language and generate an appropriate `package.iloom.json`.
+
+**Secret Storage Limitations:** iloom manages environment variables through standard `.env` files (via dotenv-flow). The following encrypted/proprietary secret storage formats are **not supported**:
+
+| Format | Why Unsupported |
+|--------|-----------------|
+| Rails encrypted credentials (`config/credentials.yml.enc`) | Requires Rails internals + master key |
+| ASP.NET Core User Secrets | Stored outside project at `~/.microsoft/usersecrets/<guid>/` |
+| SOPS/Sealed Secrets | Requires external decryption keys |
+
+**Recommendation:** If you want to use database isolation features (or anything else that requires updating env variables), use standard `.env` files for iloom compatibility. For Rails, consider [dotenv-rails](https://github.com/bkeepers/dotenv). For ASP.NET, use a local `.env` file alongside User Secrets.
 
 ### Copying Gitignored Files to Looms
 
@@ -380,10 +428,10 @@ This is an early-stage product.
 **Project Support:**
 
 *   ✅ **Node.js Web Projects:** First-class support via package.json scripts (dev, test, build).
-    
+
 *   ✅ **Node.js CLI Tools:** Full support with isolated binary generation.
-    
-*   ⚠️ **Other Stacks:** Python/Go/Rust etc. can work via generic package.json scripts, but are not natively supported yet.    
+
+*   ✅ **Multi-Language Projects:** Python, Rust, Ruby, Go, and other languages via `.iloom/package.iloom.json`.    
 
 See all [known limitations](https://github.com/iloom-ai/iloom-cli/issues?q=is:issue+is:open+label:known-limitation) on GitHub. If you're feeling left out - you're absolutely right! The best way to complain about something is to fix it. So...
 

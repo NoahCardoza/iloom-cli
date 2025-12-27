@@ -1,6 +1,6 @@
 import { getLogger } from '../utils/logger-context.js'
 import { detectPackageManager, runScript } from '../utils/package-manager.js'
-import { readPackageJson, hasScript } from '../utils/package-json.js'
+import { getPackageConfig, hasScript } from '../utils/package-json.js'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import type {
 	ValidationOptions,
@@ -85,7 +85,7 @@ export class ValidationRunner {
 
 		try {
 			// Check for compile and typecheck scripts - prefer compile if both exist
-			const pkgJson = await readPackageJson(worktreePath)
+			const pkgJson = await getPackageConfig(worktreePath)
 			const hasCompileScript = hasScript(pkgJson, 'compile')
 			const hasTypecheckScript = hasScript(pkgJson, 'typecheck')
 
@@ -190,7 +190,7 @@ export class ValidationRunner {
 
 		try {
 			// Check if lint script exists
-			const pkgJson = await readPackageJson(worktreePath)
+			const pkgJson = await getPackageConfig(worktreePath)
 			const hasLintScript = hasScript(pkgJson, 'lint')
 
 			if (!hasLintScript) {
@@ -284,7 +284,7 @@ export class ValidationRunner {
 
 		try {
 			// Check if test script exists
-			const pkgJson = await readPackageJson(worktreePath)
+			const pkgJson = await getPackageConfig(worktreePath)
 			const hasTestScript = hasScript(pkgJson, 'test')
 
 			if (!hasTestScript) {

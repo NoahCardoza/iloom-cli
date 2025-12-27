@@ -304,6 +304,58 @@ describe('InitCommand', () => {
     })
   })
 
+  describe('package.json detection', () => {
+    beforeEach(() => {
+      vi.mocked(mockShellCompletion.detectShell).mockReturnValue('bash')
+      vi.mocked(mockShellCompletion.grepCompletionConfig).mockResolvedValue({
+        path: '/home/user/.bashrc',
+        content: '',
+      })
+      vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValue(true)
+      vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
+      vi.mocked(readFile).mockResolvedValue('')
+    })
+
+    it('should set HAS_PACKAGE_JSON=true when package.json exists', async () => {
+      // Mock existsSync to return true for package.json
+      vi.mocked(existsSync).mockImplementation((filePath: string | Buffer | URL) => {
+        const pathStr = filePath.toString()
+        return pathStr.endsWith('package.json')
+      })
+
+      // Mock getPrompt to capture template variables
+      let capturedVariables: Record<string, unknown> = {}
+      vi.mocked(mockTemplateManager.getPrompt).mockImplementation(async (_template, variables) => {
+        capturedVariables = variables as Record<string, unknown>
+        return 'Test prompt'
+      })
+
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
+      await initCommand.execute()
+
+      expect(capturedVariables.HAS_PACKAGE_JSON).toBe(true)
+      expect(capturedVariables.NO_PACKAGE_JSON).toBe(false)
+    })
+
+    it('should set NO_PACKAGE_JSON=true when package.json does not exist', async () => {
+      // Mock existsSync to return false for package.json
+      vi.mocked(existsSync).mockReturnValue(false)
+
+      // Mock getPrompt to capture template variables
+      let capturedVariables: Record<string, unknown> = {}
+      vi.mocked(mockTemplateManager.getPrompt).mockImplementation(async (_template, variables) => {
+        capturedVariables = variables as Record<string, unknown>
+        return 'Test prompt'
+      })
+
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
+      await initCommand.execute()
+
+      expect(capturedVariables.HAS_PACKAGE_JSON).toBe(false)
+      expect(capturedVariables.NO_PACKAGE_JSON).toBe(true)
+    })
+  })
+
   describe('README content injection', () => {
     beforeEach(() => {
       vi.mocked(mockShellCompletion.detectShell).mockReturnValue('bash')

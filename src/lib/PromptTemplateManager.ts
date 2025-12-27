@@ -40,6 +40,9 @@ export interface TemplateVariables {
 	DRAFT_PR_NUMBER?: number  // PR number for draft PR workflow
 	DRAFT_PR_MODE?: boolean   // True when using github-draft-pr merge mode
 	STANDARD_ISSUE_MODE?: boolean  // True when using standard issue commenting (not draft PR)
+	// Multi-language support variables - mutually exclusive
+	HAS_PACKAGE_JSON?: boolean  // True when project has package.json
+	NO_PACKAGE_JSON?: boolean   // True when project does not have package.json (non-Node.js projects)
 }
 
 export class PromptTemplateManager {
@@ -363,6 +366,28 @@ export class PromptTemplateManager {
 		} else {
 			// Remove the entire conditional block
 			result = result.replace(standardIssueModeRegex, '')
+		}
+
+		// Process HAS_PACKAGE_JSON conditionals
+		const hasPackageJsonRegex = /\{\{#IF HAS_PACKAGE_JSON\}\}(.*?)\{\{\/IF HAS_PACKAGE_JSON\}\}/gs
+
+		if (variables.HAS_PACKAGE_JSON === true) {
+			// Include the content, remove the conditional markers
+			result = result.replace(hasPackageJsonRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(hasPackageJsonRegex, '')
+		}
+
+		// Process NO_PACKAGE_JSON conditionals
+		const noPackageJsonRegex = /\{\{#IF NO_PACKAGE_JSON\}\}(.*?)\{\{\/IF NO_PACKAGE_JSON\}\}/gs
+
+		if (variables.NO_PACKAGE_JSON === true) {
+			// Include the content, remove the conditional markers
+			result = result.replace(noPackageJsonRegex, '$1')
+		} else {
+			// Remove the entire conditional block
+			result = result.replace(noPackageJsonRegex, '')
 		}
 
 		return result
