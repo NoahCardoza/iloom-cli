@@ -4,12 +4,16 @@ import { ProcessManager } from './process/ProcessManager.js'
 import { execa, type ExecaChildProcess } from 'execa'
 import { setTimeout } from 'timers/promises'
 import * as devServerUtils from '../utils/dev-server.js'
+import * as packageManagerUtils from '../utils/package-manager.js'
+import * as packageJsonUtils from '../utils/package-json.js'
 
 // Mock dependencies
 vi.mock('execa')
 vi.mock('timers/promises')
 vi.mock('./process/ProcessManager.js')
 vi.mock('../utils/dev-server.js')
+vi.mock('../utils/package-manager.js')
+vi.mock('../utils/package-json.js')
 
 // Mock the logger
 vi.mock('../utils/logger.js', () => ({
@@ -36,6 +40,12 @@ describe('DevServerManager', () => {
 
 		// Reset all mocks
 		vi.clearAllMocks()
+
+		// Default: mock readPackageJson to return a package.json with dev script
+		vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValue({
+			name: 'test-project',
+			scripts: { dev: 'pnpm dev' },
+		})
 	})
 
 	afterEach(async () => {
@@ -233,6 +243,47 @@ describe('DevServerManager', () => {
 			)
 			expect(mockProcess.unref).toHaveBeenCalled()
 		})
+
+		it('should skip server start and return true if package.json has no dev script', async () => {
+			const port = 3087
+
+			// Mock server not running
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValue(null)
+
+			// Mock package.json exists but no dev script
+			vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValue({
+				name: 'test-project',
+				scripts: { build: 'tsc' },
+			})
+
+			const result = await manager.ensureServerRunning(mockWorktreePath, port)
+
+			// Should return true (graceful skip - auto-start is convenience feature)
+			expect(result).toBe(true)
+			// Should not attempt to build command or execute
+			expect(devServerUtils.buildDevServerCommand).not.toHaveBeenCalled()
+			expect(execa).not.toHaveBeenCalled()
+		})
+
+		it('should skip server start and return true if package.json does not exist', async () => {
+			const port = 3087
+
+			// Mock server not running
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValue(null)
+
+			// Mock package.json doesn't exist (readPackageJson throws)
+			vi.mocked(packageJsonUtils.readPackageJson).mockRejectedValue(
+				new Error('package.json not found')
+			)
+
+			const result = await manager.ensureServerRunning(mockWorktreePath, port)
+
+			// Should return true (graceful skip - auto-start is convenience feature)
+			expect(result).toBe(true)
+			// Should not attempt to build command or execute
+			expect(devServerUtils.buildDevServerCommand).not.toHaveBeenCalled()
+			expect(execa).not.toHaveBeenCalled()
+		})
 	})
 
 	describe('waitForServerReady', () => {
@@ -307,7 +358,38 @@ describe('DevServerManager', () => {
 	})
 
 	describe('runServerForeground', () => {
-		it('should merge envOverrides with process.env when provided', async () => {
+		it('should use runScript for non-redirect mode', async () => {
+			const port = 3087
+			const onStart = vi.fn()
+
+			vi.mocked(packageManagerUtils.runScript).mockResolvedValue({ pid: 12345 })
+
+			const result = await manager.runServerForeground(
+				mockWorktreePath,
+				port,
+				false,
+				onStart,
+				{ DATABASE_URL: 'postgres://test' }
+			)
+
+			expect(packageManagerUtils.runScript).toHaveBeenCalledWith(
+				'dev',
+				mockWorktreePath,
+				[],
+				expect.objectContaining({
+					env: expect.objectContaining({
+						DATABASE_URL: 'postgres://test',
+						PORT: '3087',
+					}),
+					foreground: true,
+					onStart,
+					noCi: true,
+				})
+			)
+			expect(result).toEqual({ pid: 12345 })
+		})
+
+		it('should use buildDevServerCommand for redirectToStderr mode', async () => {
 			const port = 3087
 
 			vi.mocked(devServerUtils.buildDevServerCommand).mockResolvedValue('pnpm dev')
@@ -324,11 +406,12 @@ describe('DevServerManager', () => {
 			await manager.runServerForeground(
 				mockWorktreePath,
 				port,
-				false,
+				true,  // redirectToStderr = true
 				undefined,
 				{ DATABASE_URL: 'postgres://test', CUSTOM_VAR: 'value' }
 			)
 
+			expect(devServerUtils.buildDevServerCommand).toHaveBeenCalledWith(mockWorktreePath)
 			expect(execa).toHaveBeenCalledWith(
 				'sh',
 				['-c', 'pnpm dev'],
@@ -338,23 +421,16 @@ describe('DevServerManager', () => {
 						CUSTOM_VAR: 'value',
 						PORT: '3087',
 					}),
+					stdio: [process.stdin, process.stderr, process.stderr],
 				})
 			)
+			expect(packageManagerUtils.runScript).not.toHaveBeenCalled()
 		})
 
 		it('should let PORT parameter override envOverrides.PORT', async () => {
 			const port = 3087
 
-			vi.mocked(devServerUtils.buildDevServerCommand).mockResolvedValue('pnpm dev')
-
-			const mockProcess = {
-				pid: 12345,
-				then: (resolve: (value: unknown) => void) => {
-					resolve(undefined)
-					return mockProcess
-				},
-			} as unknown as ExecaChildProcess
-			vi.mocked(execa).mockReturnValue(mockProcess)
+			vi.mocked(packageManagerUtils.runScript).mockResolvedValue({ pid: 12345 })
 
 			await manager.runServerForeground(
 				mockWorktreePath,
@@ -364,9 +440,10 @@ describe('DevServerManager', () => {
 				{ PORT: '9999' } // Should be overridden
 			)
 
-			expect(execa).toHaveBeenCalledWith(
-				'sh',
-				['-c', 'pnpm dev'],
+			expect(packageManagerUtils.runScript).toHaveBeenCalledWith(
+				'dev',
+				mockWorktreePath,
+				[],
 				expect.objectContaining({
 					env: expect.objectContaining({
 						PORT: '3087', // Function param wins
@@ -378,6 +455,51 @@ describe('DevServerManager', () => {
 		it('should work with empty envOverrides', async () => {
 			const port = 3087
 
+			vi.mocked(packageManagerUtils.runScript).mockResolvedValue({ pid: 12345 })
+
+			await manager.runServerForeground(
+				mockWorktreePath,
+				port,
+				false,
+				undefined,
+				{}
+			)
+
+			expect(packageManagerUtils.runScript).toHaveBeenCalledWith(
+				'dev',
+				mockWorktreePath,
+				[],
+				expect.objectContaining({
+					env: expect.objectContaining({
+						PORT: '3087',
+					}),
+				})
+			)
+		})
+
+		it('should work without envOverrides (undefined)', async () => {
+			const port = 3087
+
+			vi.mocked(packageManagerUtils.runScript).mockResolvedValue({ pid: 12345 })
+
+			await manager.runServerForeground(mockWorktreePath, port, false, undefined)
+
+			expect(packageManagerUtils.runScript).toHaveBeenCalledWith(
+				'dev',
+				mockWorktreePath,
+				[],
+				expect.objectContaining({
+					env: expect.objectContaining({
+						PORT: '3087',
+					}),
+				})
+			)
+		})
+
+		it('should call onProcessStarted callback in redirectToStderr mode', async () => {
+			const port = 3087
+			const onStart = vi.fn()
+
 			vi.mocked(devServerUtils.buildDevServerCommand).mockResolvedValue('pnpm dev')
 
 			const mockProcess = {
@@ -392,47 +514,11 @@ describe('DevServerManager', () => {
 			await manager.runServerForeground(
 				mockWorktreePath,
 				port,
-				false,
-				undefined,
-				{}
+				true,  // redirectToStderr
+				onStart
 			)
 
-			expect(execa).toHaveBeenCalledWith(
-				'sh',
-				['-c', 'pnpm dev'],
-				expect.objectContaining({
-					env: expect.objectContaining({
-						PORT: '3087',
-					}),
-				})
-			)
-		})
-
-		it('should work without envOverrides (undefined)', async () => {
-			const port = 3087
-
-			vi.mocked(devServerUtils.buildDevServerCommand).mockResolvedValue('pnpm dev')
-
-			const mockProcess = {
-				pid: 12345,
-				then: (resolve: (value: unknown) => void) => {
-					resolve(undefined)
-					return mockProcess
-				},
-			} as unknown as ExecaChildProcess
-			vi.mocked(execa).mockReturnValue(mockProcess)
-
-			await manager.runServerForeground(mockWorktreePath, port, false, undefined)
-
-			expect(execa).toHaveBeenCalledWith(
-				'sh',
-				['-c', 'pnpm dev'],
-				expect.objectContaining({
-					env: expect.objectContaining({
-						PORT: '3087',
-					}),
-				})
-			)
+			expect(onStart).toHaveBeenCalledWith(12345)
 		})
 	})
 

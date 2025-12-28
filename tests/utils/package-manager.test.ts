@@ -26,6 +26,8 @@ vi.mock('../../src/utils/logger-context.js', () => ({
 describe('package-manager utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Isolate tests from CI environment variable
+    vi.stubEnv('CI', undefined)
   })
 
   describe('detectPackageManager', () => {
@@ -817,6 +819,163 @@ describe('package-manager utilities', () => {
         await expect(runScript('test', '/test/path')).rejects.toThrow(
           "Failed to run script 'test': Script execution failed"
         )
+      })
+    })
+
+    describe('new options (foreground, env, onStart, noCi)', () => {
+      it('should merge custom env with process.env', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          dev: { command: 'vite', source: 'package-manager' }
+        })
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await runScript('dev', '/test/path', [], {
+          env: { PORT: '3000', CUSTOM_VAR: 'value' }
+        })
+
+        expect(execa).toHaveBeenCalledWith(
+          'pnpm',
+          ['dev'],
+          expect.objectContaining({
+            env: expect.objectContaining({
+              PORT: '3000',
+              CUSTOM_VAR: 'value',
+              CI: 'true'
+            })
+          })
+        )
+      })
+
+      it('should not set CI=true when noCi is true', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          dev: { command: 'vite', source: 'package-manager' }
+        })
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await runScript('dev', '/test/path', [], { noCi: true })
+
+        expect(execa).toHaveBeenCalledWith(
+          'pnpm',
+          ['dev'],
+          expect.objectContaining({
+            env: expect.not.objectContaining({
+              CI: 'true'
+            })
+          })
+        )
+      })
+
+      it('should use inherited stdio when foreground is true', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          dev: { command: 'vite', source: 'package-manager' }
+        })
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        const mockProcess = { pid: 12345, stdout: '' } as unknown as ReturnType<typeof execa>
+        vi.mocked(execa).mockReturnValueOnce(mockProcess as unknown as ReturnType<typeof execa> & Promise<MockExecaReturn>)
+
+        await runScript('dev', '/test/path', [], { foreground: true })
+
+        expect(execa).toHaveBeenCalledWith(
+          'pnpm',
+          ['dev'],
+          expect.objectContaining({
+            stdio: 'inherit',
+          })
+        )
+        // Verify timeout is NOT set for foreground mode
+        const callArgs = vi.mocked(execa).mock.calls[0][2] as Record<string, unknown>
+        expect(callArgs).not.toHaveProperty('timeout')
+      })
+
+      it('should call onStart callback with pid when foreground is true', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          dev: { command: 'vite', source: 'package-manager' }
+        })
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        const mockProcess = { pid: 12345, stdout: '' } as unknown as ReturnType<typeof execa>
+        vi.mocked(execa).mockReturnValueOnce(mockProcess as unknown as ReturnType<typeof execa> & Promise<MockExecaReturn>)
+
+        const onStart = vi.fn()
+        await runScript('dev', '/test/path', [], { foreground: true, onStart })
+
+        expect(onStart).toHaveBeenCalledWith(12345)
+      })
+
+      it('should return pid when foreground is true', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          dev: { command: 'vite', source: 'package-manager' }
+        })
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        const mockProcess = { pid: 12345, stdout: '' } as unknown as ReturnType<typeof execa>
+        vi.mocked(execa).mockReturnValueOnce(mockProcess as unknown as ReturnType<typeof execa> & Promise<MockExecaReturn>)
+
+        const result = await runScript('dev', '/test/path', [], { foreground: true })
+
+        expect(result).toEqual({ pid: 12345 })
+      })
+
+      it('should return empty object when foreground is false', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          test: { command: 'vitest', source: 'package-manager' }
+        })
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        const result = await runScript('test', '/test/path')
+
+        expect(result).toEqual({})
+      })
+
+      it('should apply foreground options for iloom-config scripts', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          dev: { command: 'rails server', source: 'iloom-config' }
+        })
+        const mockProcess = { pid: 98765, stdout: '' } as unknown as ReturnType<typeof execa>
+        vi.mocked(execa).mockReturnValueOnce(mockProcess as unknown as ReturnType<typeof execa> & Promise<MockExecaReturn>)
+
+        const onStart = vi.fn()
+        const result = await runScript('dev', '/test/path', [], {
+          foreground: true,
+          env: { PORT: '3000' },
+          onStart,
+          noCi: true
+        })
+
+        expect(execa).toHaveBeenCalledWith(
+          'sh',
+          ['-c', 'rails server "$@"', '--'],
+          expect.objectContaining({
+            stdio: 'inherit',
+            env: expect.objectContaining({
+              PORT: '3000'
+            })
+          })
+        )
+        // Verify timeout is NOT set for foreground mode
+        const callArgs = vi.mocked(execa).mock.calls[0][2] as Record<string, unknown>
+        expect(callArgs).not.toHaveProperty('timeout')
+        expect(onStart).toHaveBeenCalledWith(98765)
+        expect(result).toEqual({ pid: 98765 })
       })
     })
   })

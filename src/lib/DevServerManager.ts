@@ -2,6 +2,8 @@ import { execa, type ExecaChildProcess } from 'execa'
 import { setTimeout } from 'timers/promises'
 import { ProcessManager } from './process/ProcessManager.js'
 import { buildDevServerCommand } from '../utils/dev-server.js'
+import { runScript } from '../utils/package-manager.js'
+import { readPackageJson } from '../utils/package-json.js'
 import { logger } from '../utils/logger.js'
 
 export interface DevServerManagerOptions {
@@ -76,6 +78,21 @@ export class DevServerManager {
 	 * Start dev server in background and wait for it to be ready
 	 */
 	private async startDevServer(worktreePath: string, port: number): Promise<void> {
+		// Guard: Check if package.json exists and has a dev script
+		// Note: buildDevServerCommand only supports package.json via package managers,
+		// not package.iloom.json. See #406 for multi-language support.
+		try {
+			const packageJson = await readPackageJson(worktreePath)
+			if (!packageJson.scripts?.['dev']) {
+				logger.warn('Skipping auto-start: no "dev" script found in package.json')
+				return
+			}
+		} catch {
+			// package.json doesn't exist - skip auto-start silently
+			logger.debug('Skipping auto-start: no package.json found')
+			return
+		}
+
 		// Build dev server command
 		const devCommand = await buildDevServerCommand(worktreePath)
 		logger.debug(`Starting dev server with command: ${devCommand}`)
@@ -171,38 +188,45 @@ export class DevServerManager {
 		onProcessStarted?: (pid?: number) => void,
 		envOverrides?: Record<string, string>
 	): Promise<{ pid?: number }> {
-		// Build dev server command
-		const devCommand = await buildDevServerCommand(worktreePath)
-		logger.debug(`Starting dev server in foreground with command: ${devCommand}`)
+		logger.debug(`Starting dev server in foreground on port ${port}`)
 
-		// Configure stdio based on redirect option
-		const stdio = redirectToStderr ? [process.stdin, process.stderr, process.stderr] : 'inherit'
+		// Use runScript for foreground mode to support multi-language projects
+		// Note: redirectToStderr is handled via custom execa call when needed
+		if (redirectToStderr) {
+			// For redirectToStderr, we still need direct execa control for custom stdio
+			const devCommand = await buildDevServerCommand(worktreePath)
+			logger.debug(`Starting dev server with command: ${devCommand}`)
 
-		// Start server in foreground (blocking with configured stdio)
-		const serverProcess = execa('sh', ['-c', devCommand], {
-			cwd: worktreePath,
-			env: {
-				...process.env,
-				...envOverrides,
-				PORT: port.toString(), // PORT always wins (explicit parameter)
-			},
-			// Configure stdio based on whether we want to redirect output
-			stdio,
-		})
+			const serverProcess = execa('sh', ['-c', devCommand], {
+				cwd: worktreePath,
+				env: {
+					...process.env,
+					...envOverrides,
+					PORT: port.toString(),
+				},
+				stdio: [process.stdin, process.stderr, process.stderr],
+			})
 
-		// Process info is available immediately after spawn
-		// Use conditional property to satisfy exactOptionalPropertyTypes
-		const processInfo: { pid?: number } = serverProcess.pid !== undefined ? { pid: serverProcess.pid } : {}
+			const processInfo: { pid?: number } = serverProcess.pid !== undefined ? { pid: serverProcess.pid } : {}
 
-		// Call the callback immediately with the PID (for JSON output)
-		if (onProcessStarted) {
-			onProcessStarted(processInfo.pid)
+			if (onProcessStarted) {
+				onProcessStarted(processInfo.pid)
+			}
+
+			await serverProcess
+			return processInfo
 		}
 
-		// Now wait for the process to complete (this blocks)
-		await serverProcess
-
-		return processInfo
+		// Use runScript for standard foreground mode
+		return await runScript('dev', worktreePath, [], {
+			env: {
+				...envOverrides,
+				PORT: port.toString(),
+			},
+			foreground: true,
+			...(onProcessStarted && { onStart: onProcessStarted }),
+			noCi: true, // Dev servers should not have CI=true
+		})
 	}
 
 	/**

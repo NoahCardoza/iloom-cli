@@ -139,6 +139,22 @@ export async function installDependencies(
 }
 
 /**
+ * Options for running a script
+ */
+export interface RunScriptOptions {
+  /** Suppress command output (default: false) */
+  quiet?: boolean
+  /** Custom environment variables merged with process.env */
+  env?: Record<string, string>
+  /** Use inherited stdio, return process info (default: false) */
+  foreground?: boolean
+  /** Callback when process starts, receives PID */
+  onStart?: (pid?: number) => void
+  /** Don't set CI=true (for dev servers, default: false) */
+  noCi?: boolean
+}
+
+/**
  * Run a package.json or iloom config script
  * Automatically detects whether to use package manager or direct shell execution
  * based on the script source.
@@ -147,13 +163,14 @@ export async function installDependencies(
  * @param cwd Working directory
  * @param args Additional arguments to pass to the script
  * @param options Execution options
+ * @returns Object with pid when foreground mode is enabled
  */
 export async function runScript(
   scriptName: string,
   cwd: string,
   args: string[] = [],
-  options: { quiet?: boolean } = {}
-): Promise<void> {
+  options: RunScriptOptions = {}
+): Promise<{ pid?: number }> {
   // Get scripts with source metadata
   const scripts = await getPackageScripts(cwd)
   const scriptConfig = scripts[scriptName]
@@ -164,20 +181,33 @@ export async function runScript(
     throw new Error(`Script '${scriptName}' not found`)
   }
 
+  // Build environment variables
+  const env: Record<string, string> = {
+    ...process.env as Record<string, string>,
+    ...options.env,
+  }
+
+  // Add CI=true unless noCi is set
+  if (!options.noCi) {
+    env.CI = 'true'
+  }
+
+  // Determine stdio mode
+  const stdio = options.foreground ? 'inherit' : (options.quiet ? 'pipe' : 'inherit')
+
   try {
+    let execaProcess
+
     if (scriptConfig.source === 'iloom-config') {
       // Execute directly as shell command (for non-Node.js projects)
       // Use "$@" pattern to properly handle argument escaping via the shell
       getLogger().debug(`Executing shell command: ${scriptConfig.command} with args: ${args.join(' ')}`)
 
-      await execa('sh', ['-c', `${scriptConfig.command} "$@"`, '--', ...args], {
+      execaProcess = execa('sh', ['-c', `${scriptConfig.command} "$@"`, '--', ...args], {
         cwd,
-        stdio: options.quiet ? 'pipe' : 'inherit',
-        timeout: 600000,  // 10 minute timeout for scripts
-        env: {
-          ...process.env,
-          CI: 'true',
-        },
+        stdio,
+        ...(!options.foreground && { timeout: 600000 }), // No timeout for foreground mode
+        env,
         verbose: isDebugMode,
       })
     } else {
@@ -185,17 +215,30 @@ export async function runScript(
       const packageManager = await detectPackageManager(cwd)
       const command = packageManager === 'npm' ? ['run', scriptName] : [scriptName]
 
-      await execa(packageManager, [...command, ...args], {
+      execaProcess = execa(packageManager, [...command, ...args], {
         cwd,
-        stdio: options.quiet ? 'pipe' : 'inherit',
-        timeout: 600000,  // 10 minute timeout for scripts
-        env: {
-          ...process.env,
-          CI: 'true',
-        },
+        stdio,
+        ...(!options.foreground && { timeout: 600000 }), // No timeout for foreground mode
+        env,
         verbose: isDebugMode,
       })
     }
+
+    // For foreground mode, get PID and call onStart callback immediately
+    const result: { pid?: number } = {}
+    if (options.foreground && execaProcess.pid !== undefined) {
+      result.pid = execaProcess.pid
+    }
+
+    // Call onStart callback if provided
+    if (options.onStart) {
+      options.onStart(result.pid)
+    }
+
+    // Wait for process to complete
+    await execaProcess
+
+    return result
   } catch (error) {
     const execaError = error as ExecaError
     const stderr = execaError.stderr ?? execaError.message ?? 'Unknown error'
