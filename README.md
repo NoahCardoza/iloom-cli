@@ -238,7 +238,7 @@ This example shows how to configure a project-wide default (e.g., GitHub remote)
 
 ### Multi-Language/Framework Project Support
 
-iloom supports projects in any programming language through `.iloom/package.iloom.json`. This file defines build, test, and dev commands using raw shell commands instead of npm scripts.
+iloom supports projects in any programming language through `.iloom/package.iloom.json`. This file defines scripts using raw shell commands instead of npm scripts.
 
 **File Location:** `.iloom/package.iloom.json`
 
@@ -248,20 +248,34 @@ iloom supports projects in any programming language through `.iloom/package.iloo
   "scripts": {
     "build": "cargo build --release",
     "test": "cargo test",
-    "dev": "cargo run"
+    "dev": "cargo run",
+    "lint": "cargo clippy",
+    "typecheck": "cargo check"
   }
 }
 ```
 
+**Supported Scripts:**
+
+| Script | Purpose | When Used |
+|--------|---------|-----------|
+| `build` | Compile/build project | `il build`, `il finish` (CLI projects, post-merge) |
+| `test` | Run test suite | `il test`, `il finish` validation |
+| `dev` | Start dev server | `il dev-server` |
+| `lint` | Run linter | `il lint`, `il finish` validation |
+| `typecheck` | Type checking | `il typecheck`, `il finish` validation |
+| `compile` | Alternative to typecheck | `il compile`, `il finish` validation (preferred over typecheck if both exist) |
+
+All scripts are optional. If not defined, that step is skipped.
+
 **Language Examples:**
 
-| Language | Build | Test | Dev |
-|----------|-------|------|-----|
-| Rust | `cargo build` | `cargo test` | `cargo run` |
-| Python (pip) | `pip install -e .` | `pytest` | `python -m myapp` |
-| Python (poetry) | `poetry install` | `poetry run pytest` | `poetry run python -m myapp` |
-| Ruby | `bundle install` | `bundle exec rspec` | `bundle exec rails s` |
-| Go | `go build ./...` | `go test ./...` | `go run .` |
+| Language | Build | Test | Dev | Lint | Typecheck |
+|----------|-------|------|-----|------|-----------|
+| Rust | `cargo build` | `cargo test` | `cargo run` | `cargo clippy` | `cargo check` |
+| Python | `pip install -e .` | `pytest` | `uvicorn app:app` | `ruff check .` | `mypy .` |
+| Ruby | `bundle install` | `bundle exec rspec` | `rails server` | `bundle exec rubocop` | - |
+| Go | `go build ./...` | `go test ./...` | `go run .` | `golangci-lint run` | `go vet ./...` |
 
 **Precedence Rules:**
 1. `.iloom/package.iloom.json` (if exists) - highest priority
@@ -273,6 +287,8 @@ iloom supports projects in any programming language through `.iloom/package.iloo
 - Works with any language's toolchain
 
 **Automatic Detection:** When running `il init` on a non-Node.js project, iloom will offer to detect your project's language and generate an appropriate `package.iloom.json`.
+
+**→ [Complete Multi-Language Project Guide](docs/multi-language-projects.md)** - Detailed setup instructions, more language examples, and troubleshooting.
 
 **Secret Storage Limitations:** iloom manages environment variables through standard `.env` files (via dotenv-flow). The following encrypted/proprietary secret storage formats are **not supported**:
 
