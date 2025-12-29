@@ -89,15 +89,26 @@ export async function installDependencies(
   frozen: boolean = true,
   quiet: boolean = false
 ): Promise<void> {
-  // Check if package.json exists before attempting installation
+  // Check if working directory is provided
   if (!cwd) {
     getLogger().debug('Skipping dependency installation - no working directory provided')
     return
   }
 
+  // Check for install script in package.iloom.json or package.json
+  const scripts = await getPackageScripts(cwd)
+  if (scripts.install) {
+    getLogger().info('Installing dependencies with install script...')
+    // runScript handles both iloom-config (shell execution) and package-manager (npm/pnpm/yarn) sources
+    await runScript('install', cwd, [], { quiet })
+    getLogger().success('Dependencies installed successfully')
+    return
+  }
+
+  // Fall back to Node.js package manager detection for projects without install script
   const pkgPath = path.join(cwd, 'package.json')
   if (!(await fs.pathExists(pkgPath))) {
-    getLogger().debug('Skipping dependency installation - no package.json found')
+    getLogger().debug('Skipping dependency installation - no package.json found and no install script')
     return
   }
 

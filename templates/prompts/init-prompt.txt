@@ -281,12 +281,26 @@ The agent will:
 {
   "capabilities": ["cli"],
   "scripts": {
+    "install": "your-install-command",
     "build": "your-build-command",
     "test": "your-test-command",
-    "dev": "your-dev-command"
+    "dev": "your-dev-command",
+    "lint": "your-lint-command",
+    "typecheck": "your-typecheck-command"
   }
 }
 ```
+
+**Supported Scripts:**
+| Script | Purpose | When Used |
+|--------|---------|-----------|
+| `install` | Install dependencies | `il start` (loom creation), `il finish` (post-merge) |
+| `build` | Compile/build project | `il build`, `il finish` (CLI projects, post-merge) |
+| `test` | Run test suite | `il test`, `il finish` validation |
+| `dev` | Start dev server | `il dev-server` |
+| `lint` | Run linter | `il lint`, `il finish` validation |
+| `typecheck` | Type checking | `il typecheck`, `il finish` validation |
+| `compile` | Alternative to typecheck | `il compile`, `il finish` validation (preferred over typecheck if both exist) |
 
 **Capabilities:**
 - `"cli"` - Command-line interface/tool (enables CLI isolation features)
@@ -927,16 +941,28 @@ If users ask about specific configurations, help them add these sections to thei
    ```json
    {
      "scripts": {
+       "install": "your-custom-install-command",
        "build": "your-custom-build-command",
        "test": "your-custom-test-command",
-       "dev": "your-custom-dev-command"
+       "dev": "your-custom-dev-command",
+       "lint": "your-custom-lint-command",
+       "typecheck": "your-custom-typecheck-command"
      }
    }
    ```
 
    When `package.iloom.json` exists, iloom uses its scripts instead of `package.json`.
 
+   **Supported scripts:**
+   - `install` - Run during loom creation and post-merge (e.g., `bundle install`, `poetry install`)
+   - `build` - Compile/build the project
+   - `test` - Run the test suite
+   - `dev` - Start the development server
+   - `lint` - Run the linter
+   - `typecheck` or `compile` - Type checking (compile takes precedence if both exist)
+
    **Common use cases:**
+   - Non-Node.js projects (Ruby, Python, Rust, Go, etc.)
    - Using a different test runner than what's in package.json
    - Running additional commands before/after the standard npm scripts
    - Wrapping commands with environment variables or tools

@@ -246,6 +246,7 @@ iloom supports projects in any programming language through `.iloom/package.iloo
 ```json
 {
   "scripts": {
+    "install": "bundle install",
     "build": "cargo build --release",
     "test": "cargo test",
     "dev": "cargo run",
@@ -259,6 +260,7 @@ iloom supports projects in any programming language through `.iloom/package.iloo
 
 | Script | Purpose | When Used |
 |--------|---------|-----------|
+| `install` | Install dependencies | `il start` (loom creation), `il finish` (post-merge) |
 | `build` | Compile/build project | `il build`, `il finish` (CLI projects, post-merge) |
 | `test` | Run test suite | `il test`, `il finish` validation |
 | `dev` | Start dev server | `il dev-server` |
@@ -270,12 +272,13 @@ All scripts are optional. If not defined, that step is skipped.
 
 **Language Examples:**
 
-| Language | Build | Test | Dev | Lint | Typecheck |
-|----------|-------|------|-----|------|-----------|
-| Rust | `cargo build` | `cargo test` | `cargo run` | `cargo clippy` | `cargo check` |
-| Python | `pip install -e .` | `pytest` | `uvicorn app:app` | `ruff check .` | `mypy .` |
-| Ruby | `bundle install` | `bundle exec rspec` | `rails server` | `bundle exec rubocop` | - |
-| Go | `go build ./...` | `go test ./...` | `go run .` | `golangci-lint run` | `go vet ./...` |
+| Language | Install | Build | Test | Dev | Lint | Typecheck |
+|----------|---------|-------|------|-----|------|-----------|
+| Rust | `cargo fetch` | `cargo build` | `cargo test` | `cargo run` | `cargo clippy` | `cargo check` |
+| Python (pip) | `pip install -e .` | - | `pytest` | `uvicorn app:app` | `ruff check .` | `mypy .` |
+| Python (poetry) | `poetry install` | - | `pytest` | `uvicorn app:app` | `ruff check .` | `mypy .` |
+| Ruby | `bundle install` | - | `bundle exec rspec` | `rails server` | `bundle exec rubocop` | - |
+| Go | `go mod download` | `go build ./...` | `go test ./...` | `go run .` | `golangci-lint run` | `go vet ./...` |
 
 **Precedence Rules:**
 1. `.iloom/package.iloom.json` (if exists) - highest priority

@@ -344,220 +344,342 @@ describe('package-manager utilities', () => {
   })
 
   describe('installDependencies', () => {
-    it('should install with pnpm --frozen-lockfile', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
-        packageManager: 'pnpm@8.0.0'
-      }))
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // install command
+    describe('with install script (iloom-config or package.json)', () => {
+      it('should execute iloom-config install script via runScript', async () => {
+        // Mock twice: once for installDependencies check, once for runScript
+        const installScript = { install: { command: 'bundle install', source: 'iloom-config' as const } }
+        vi.mocked(getPackageScripts)
+          .mockResolvedValueOnce(installScript)  // for installDependencies
+          .mockResolvedValueOnce(installScript)  // for runScript
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
 
-      await installDependencies('/test/path', true)
+        await installDependencies('/test/path', true)
 
-      expect(execa).toHaveBeenCalledWith(
-        'pnpm',
-        ['install', '--frozen-lockfile'],
-        expect.objectContaining({
-          cwd: '/test/path',
-          stdio: 'inherit',
-          timeout: 300000
-        })
-      )
-      expect(mockLogger.success).toHaveBeenCalledWith('Dependencies installed successfully')
-    })
-
-    it('should install with pnpm without frozen lockfile', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
-        packageManager: 'pnpm@8.0.0'
-      }))
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // install command
-
-      await installDependencies('/test/path', false)
-
-      expect(execa).toHaveBeenCalledWith(
-        'pnpm',
-        ['install'],
-        expect.objectContaining({
-          cwd: '/test/path'
-        })
-      )
-    })
-
-    it('should use npm ci for frozen installs', async () => {
-      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
-        const pathStr = path.toString()
-        return pathStr.endsWith('package-lock.json') || pathStr.endsWith('package.json')
-      })
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // install command
-
-      await installDependencies('/test/path', true)
-
-      expect(execa).toHaveBeenCalledWith(
-        'npm',
-        ['ci'],
-        expect.objectContaining({
-          cwd: '/test/path'
-        })
-      )
-    })
-
-    it('should use npm install for non-frozen installs', async () => {
-      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
-        const pathStr = path.toString()
-        return pathStr.endsWith('package-lock.json') || pathStr.endsWith('package.json')
-      })
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // install command
-
-      await installDependencies('/test/path', false)
-
-      expect(execa).toHaveBeenCalledWith(
-        'npm',
-        ['install'],
-        expect.objectContaining({
-          cwd: '/test/path'
-        })
-      )
-    })
-
-    it('should use yarn with frozen lockfile', async () => {
-      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
-        const pathStr = path.toString()
-        return pathStr.endsWith('yarn.lock') || pathStr.endsWith('package.json')
-      })
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // install command
-
-      await installDependencies('/test/path', true)
-
-      expect(execa).toHaveBeenCalledWith(
-        'yarn',
-        ['install', '--frozen-lockfile'],
-        expect.objectContaining({
-          cwd: '/test/path'
-        })
-      )
-    })
-
-    it('should throw error when install fails', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
-        packageManager: 'pnpm@8.0.0'
-      }))
-      vi.mocked(execa).mockRejectedValueOnce({
-        stderr: 'Lockfile is out of date',
-        message: 'Command failed'
+        // Should use shell execution for iloom-config scripts
+        expect(execa).toHaveBeenCalledWith(
+          'sh',
+          ['-c', 'bundle install "$@"', '--'],
+          expect.objectContaining({
+            cwd: '/test/path',
+            stdio: 'inherit'
+          })
+        )
+        expect(mockLogger.info).toHaveBeenCalledWith('Installing dependencies with install script...')
+        expect(mockLogger.success).toHaveBeenCalledWith('Dependencies installed successfully')
       })
 
-      await expect(installDependencies('/test/path')).rejects.toThrow(
-        'Failed to install dependencies: Lockfile is out of date'
-      )
-    })
+      it('should execute package.json install script via runScript', async () => {
+        const installScript = { install: { command: 'npm run setup', source: 'package-manager' as const } }
+        vi.mocked(getPackageScripts)
+          .mockResolvedValueOnce(installScript)  // for installDependencies
+          .mockResolvedValueOnce(installScript)  // for runScript
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'npm@9.0.0'
+        }))
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
 
-    it('should handle install error with only message', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
-        packageManager: 'pnpm@8.0.0'
-      }))
-      vi.mocked(execa).mockRejectedValueOnce({
-        message: 'Install failed'
+        await installDependencies('/test/path', true)
+
+        // Should use package manager execution for package-manager scripts
+        expect(execa).toHaveBeenCalledWith(
+          'npm',
+          ['run', 'install'],
+          expect.objectContaining({
+            cwd: '/test/path',
+            stdio: 'inherit'
+          })
+        )
       })
 
-      await expect(installDependencies('/test/path')).rejects.toThrow(
-        'Failed to install dependencies: Install failed'
-      )
-    })
+      it('should respect quiet flag when using install script', async () => {
+        const installScript = { install: { command: 'bundle install', source: 'iloom-config' as const } }
+        vi.mocked(getPackageScripts)
+          .mockResolvedValueOnce(installScript)  // for installDependencies
+          .mockResolvedValueOnce(installScript)  // for runScript
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
 
-    it('should use package manager from worktree package.json', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
-        packageManager: 'yarn@1.22.0'
-      }))
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+        await installDependencies('/test/path', true, true)
 
-      await installDependencies('/worktree/path', true)
-
-      expect(execa).toHaveBeenCalledWith(
-        'yarn',
-        ['install', '--frozen-lockfile'],
-        expect.objectContaining({
-          cwd: '/worktree/path'
-        })
-      )
-    })
-
-    it('should detect different package manager than system default', async () => {
-      // Mock npm project (has package-lock.json)
-      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
-        const pathStr = path.toString()
-        return pathStr.endsWith('package-lock.json') || pathStr.endsWith('package.json')
+        expect(execa).toHaveBeenCalledWith(
+          'sh',
+          ['-c', 'bundle install "$@"', '--'],
+          expect.objectContaining({
+            cwd: '/test/path',
+            stdio: 'pipe'
+          })
+        )
       })
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
 
-      await installDependencies('/worktree/path', true)
-
-      // Should use npm ci, not pnpm (even if pnpm is installed)
-      expect(execa).toHaveBeenCalledWith(
-        'npm',
-        ['ci'],
-        expect.objectContaining({
-          cwd: '/worktree/path'
+      it('should throw error when install script fails', async () => {
+        const installScript = { install: { command: 'bundle install', source: 'iloom-config' as const } }
+        vi.mocked(getPackageScripts)
+          .mockResolvedValueOnce(installScript)  // for installDependencies
+          .mockResolvedValueOnce(installScript)  // for runScript
+        vi.mocked(execa).mockRejectedValueOnce({
+          stderr: 'Bundler failed',
+          message: 'Command failed'
         })
-      )
+
+        await expect(installDependencies('/test/path')).rejects.toThrow(
+          "Failed to run script 'install': Bundler failed"
+        )
+      })
+
+      it('should fall back to package manager when no install script exists', async () => {
+        // No install script, but have package.json with package manager
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({
+          test: { command: 'vitest', source: 'package-manager' }  // has scripts, but not install
+        })
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await installDependencies('/test/path', true)
+
+        expect(execa).toHaveBeenCalledWith(
+          'pnpm',
+          ['install', '--frozen-lockfile'],
+          expect.objectContaining({
+            cwd: '/test/path'
+          })
+        )
+      })
+
+      it('should skip when no install script and no package.json', async () => {
+        vi.mocked(getPackageScripts).mockResolvedValueOnce({})  // no scripts
+        vi.mocked(fs.pathExists).mockResolvedValue(false)  // no package.json
+
+        await installDependencies('/test/path', true)
+
+        expect(execa).not.toHaveBeenCalled()
+        expect(mockLogger.debug).toHaveBeenCalledWith('Skipping dependency installation - no package.json found and no install script')
+      })
     })
 
-    it('should skip installation when package.json does not exist', async () => {
-      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
-        // Only return false for package.json
-        if (path.toString().endsWith('package.json')) {
+    describe('fallback to Node.js package manager (no install script)', () => {
+      beforeEach(() => {
+        // Mock no install script to trigger fallback behavior
+        vi.mocked(getPackageScripts).mockResolvedValue({})
+      })
+
+      it('should install with pnpm --frozen-lockfile', async () => {
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // install command
+
+        await installDependencies('/test/path', true)
+
+        expect(execa).toHaveBeenCalledWith(
+          'pnpm',
+          ['install', '--frozen-lockfile'],
+          expect.objectContaining({
+            cwd: '/test/path',
+            stdio: 'inherit',
+            timeout: 300000
+          })
+        )
+        expect(mockLogger.success).toHaveBeenCalledWith('Dependencies installed successfully')
+      })
+
+      it('should install with pnpm without frozen lockfile', async () => {
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // install command
+
+        await installDependencies('/test/path', false)
+
+        expect(execa).toHaveBeenCalledWith(
+          'pnpm',
+          ['install'],
+          expect.objectContaining({
+            cwd: '/test/path'
+          })
+        )
+      })
+
+      it('should use npm ci for frozen installs', async () => {
+        vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+          const pathStr = path.toString()
+          return pathStr.endsWith('package-lock.json') || pathStr.endsWith('package.json')
+        })
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // install command
+
+        await installDependencies('/test/path', true)
+
+        expect(execa).toHaveBeenCalledWith(
+          'npm',
+          ['ci'],
+          expect.objectContaining({
+            cwd: '/test/path'
+          })
+        )
+      })
+
+      it('should use npm install for non-frozen installs', async () => {
+        vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+          const pathStr = path.toString()
+          return pathStr.endsWith('package-lock.json') || pathStr.endsWith('package.json')
+        })
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // install command
+
+        await installDependencies('/test/path', false)
+
+        expect(execa).toHaveBeenCalledWith(
+          'npm',
+          ['install'],
+          expect.objectContaining({
+            cwd: '/test/path'
+          })
+        )
+      })
+
+      it('should use yarn with frozen lockfile', async () => {
+        vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+          const pathStr = path.toString()
+          return pathStr.endsWith('yarn.lock') || pathStr.endsWith('package.json')
+        })
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)  // install command
+
+        await installDependencies('/test/path', true)
+
+        expect(execa).toHaveBeenCalledWith(
+          'yarn',
+          ['install', '--frozen-lockfile'],
+          expect.objectContaining({
+            cwd: '/test/path'
+          })
+        )
+      })
+
+      it('should throw error when install fails', async () => {
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockRejectedValueOnce({
+          stderr: 'Lockfile is out of date',
+          message: 'Command failed'
+        })
+
+        await expect(installDependencies('/test/path')).rejects.toThrow(
+          'Failed to install dependencies: Lockfile is out of date'
+        )
+      })
+
+      it('should handle install error with only message', async () => {
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockRejectedValueOnce({
+          message: 'Install failed'
+        })
+
+        await expect(installDependencies('/test/path')).rejects.toThrow(
+          'Failed to install dependencies: Install failed'
+        )
+      })
+
+      it('should use package manager from worktree package.json', async () => {
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'yarn@1.22.0'
+        }))
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await installDependencies('/worktree/path', true)
+
+        expect(execa).toHaveBeenCalledWith(
+          'yarn',
+          ['install', '--frozen-lockfile'],
+          expect.objectContaining({
+            cwd: '/worktree/path'
+          })
+        )
+      })
+
+      it('should detect different package manager than system default', async () => {
+        // Mock npm project (has package-lock.json)
+        vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+          const pathStr = path.toString()
+          return pathStr.endsWith('package-lock.json') || pathStr.endsWith('package.json')
+        })
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+
+        await installDependencies('/worktree/path', true)
+
+        // Should use npm ci, not pnpm (even if pnpm is installed)
+        expect(execa).toHaveBeenCalledWith(
+          'npm',
+          ['ci'],
+          expect.objectContaining({
+            cwd: '/worktree/path'
+          })
+        )
+      })
+
+      it('should skip installation when package.json does not exist', async () => {
+        vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+          // Only return false for package.json
+          if (path.toString().endsWith('package.json')) {
+            return false
+          }
           return false
-        }
-        return false
+        })
+
+        await installDependencies('/test/path', true)
+
+        // Should not call execa to run install
+        expect(execa).not.toHaveBeenCalled()
+        expect(mockLogger.debug).toHaveBeenCalledWith('Skipping dependency installation - no package.json found and no install script')
       })
 
-      await installDependencies('/test/path', true)
+      it('should use pipe stdio when quiet option is true', async () => {
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
 
-      // Should not call execa to run install
-      expect(execa).not.toHaveBeenCalled()
-      expect(mockLogger.debug).toHaveBeenCalledWith('Skipping dependency installation - no package.json found')
-    })
+        await installDependencies('/test/path', true, true)
 
-    it('should use pipe stdio when quiet option is true', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
-        packageManager: 'pnpm@8.0.0'
-      }))
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
+        expect(execa).toHaveBeenCalledWith(
+          'pnpm',
+          ['install', '--frozen-lockfile'],
+          expect.objectContaining({
+            cwd: '/test/path',
+            stdio: 'pipe',
+            timeout: 300000
+          })
+        )
+      })
 
-      await installDependencies('/test/path', true, true)
+      it('should use inherit stdio when quiet option is false', async () => {
+        vi.mocked(fs.pathExists).mockResolvedValue(true)
+        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+          packageManager: 'pnpm@8.0.0'
+        }))
+        vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
 
-      expect(execa).toHaveBeenCalledWith(
-        'pnpm',
-        ['install', '--frozen-lockfile'],
-        expect.objectContaining({
-          cwd: '/test/path',
-          stdio: 'pipe',
-          timeout: 300000
-        })
-      )
-    })
+        await installDependencies('/test/path', true, false)
 
-    it('should use inherit stdio when quiet option is false', async () => {
-      vi.mocked(fs.pathExists).mockResolvedValue(true)
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
-        packageManager: 'pnpm@8.0.0'
-      }))
-      vi.mocked(execa).mockResolvedValueOnce({ stdout: '' } as MockExecaReturn)
-
-      await installDependencies('/test/path', true, false)
-
-      expect(execa).toHaveBeenCalledWith(
-        'pnpm',
-        ['install', '--frozen-lockfile'],
-        expect.objectContaining({
-          cwd: '/test/path',
-          stdio: 'inherit',
-          timeout: 300000
-        })
-      )
+        expect(execa).toHaveBeenCalledWith(
+          'pnpm',
+          ['install', '--frozen-lockfile'],
+          expect.objectContaining({
+            cwd: '/test/path',
+            stdio: 'inherit',
+            timeout: 300000
+          })
+        )
+      })
     })
   })
 

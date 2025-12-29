@@ -54,6 +54,7 @@ your-project/
   "name": "my-project",
   "capabilities": ["cli", "web"],
   "scripts": {
+    "install": "cargo fetch",
     "build": "cargo build --release",
     "test": "cargo test",
     "dev": "cargo run --bin my-project",
@@ -84,6 +85,7 @@ Shell commands for common development tasks. All scripts are optional - if not d
 
 | Script | Purpose | When Used |
 |--------|---------|-----------|
+| `install` | Install dependencies | `il start` (loom creation), `il finish` (post-merge) |
 | `build` | Compile/build project | `il build`, `il finish` (CLI projects, post-merge) |
 | `test` | Run test suite | `il test`, `il finish` validation |
 | `dev` | Start dev server | `il dev-server` |
@@ -100,6 +102,7 @@ Shell commands for common development tasks. All scripts are optional - if not d
   "name": "my-python-app",
   "capabilities": ["web"],
   "scripts": {
+    "install": "python -m pip install -e .",
     "build": "python -m pip install -e .",
     "test": "pytest tests/",
     "dev": "python -m uvicorn app.main:app --reload --port $PORT",
@@ -116,6 +119,7 @@ Shell commands for common development tasks. All scripts are optional - if not d
   "name": "my-poetry-app",
   "capabilities": ["web"],
   "scripts": {
+    "install": "poetry install",
     "build": "poetry install",
     "test": "poetry run pytest",
     "dev": "poetry run python -m uvicorn app.main:app --reload --port $PORT",
@@ -132,6 +136,7 @@ Shell commands for common development tasks. All scripts are optional - if not d
   "name": "my-rust-app",
   "capabilities": ["cli", "web"],
   "scripts": {
+    "install": "cargo fetch",
     "build": "cargo build --release",
     "test": "cargo test",
     "dev": "cargo run --bin server -- --port $PORT",
@@ -148,7 +153,8 @@ Shell commands for common development tasks. All scripts are optional - if not d
   "name": "my-rails-app",
   "capabilities": ["web"],
   "scripts": {
-    "build": "bundle install && rails assets:precompile",
+    "install": "bundle install",
+    "build": "bundle exec rails assets:precompile",
     "test": "bundle exec rspec",
     "dev": "bundle exec rails server -p $PORT",
     "lint": "bundle exec rubocop"
@@ -163,7 +169,7 @@ Shell commands for common development tasks. All scripts are optional - if not d
   "name": "my-ruby-app",
   "capabilities": ["cli"],
   "scripts": {
-    "build": "bundle install",
+    "install": "bundle install",
     "test": "bundle exec rspec",
     "lint": "bundle exec rubocop",
     "typecheck": "bundle exec steep check"
@@ -178,6 +184,7 @@ Shell commands for common development tasks. All scripts are optional - if not d
   "name": "my-go-app",
   "capabilities": ["cli", "web"],
   "scripts": {
+    "install": "go mod download",
     "build": "go build -o ./bin/myapp ./cmd/myapp",
     "test": "go test ./...",
     "dev": "go run ./cmd/server -port $PORT",
@@ -194,6 +201,7 @@ Shell commands for common development tasks. All scripts are optional - if not d
   "name": "my-java-app",
   "capabilities": ["web"],
   "scripts": {
+    "install": "./gradlew dependencies",
     "build": "./gradlew build",
     "test": "./gradlew test",
     "dev": "./gradlew bootRun --args='--server.port=$PORT'",
@@ -209,7 +217,7 @@ Shell commands for common development tasks. All scripts are optional - if not d
   "name": "my-php-app",
   "capabilities": ["web"],
   "scripts": {
-    "build": "composer install",
+    "install": "composer install",
     "test": "vendor/bin/phpunit",
     "dev": "php -S localhost:$PORT -t public",
     "lint": "vendor/bin/phpcs"
