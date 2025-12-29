@@ -6,6 +6,7 @@ import * as claudeUtils from '../utils/claude.js'
 import { mkdir, writeFile, readFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
+import { FirstRunManager } from '../utils/FirstRunManager.js'
 
 // Mock fs/promises and fs
 vi.mock('fs/promises')
@@ -28,6 +29,9 @@ vi.mock('../lib/SettingsMigrationManager.js', () => ({
     migrateSettingsIfNeeded: vi.fn().mockResolvedValue(undefined),
   })),
 }))
+
+// Mock FirstRunManager to prevent writing to real filesystem during tests
+vi.mock('../utils/FirstRunManager.js')
 
 // Mock claude utils
 vi.mock('../utils/claude.js', () => ({
@@ -60,6 +64,14 @@ describe('InitCommand', () => {
       getPrompt: vi.fn(),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any
+
+    // Setup FirstRunManager mock to prevent writing to real filesystem
+    vi.mocked(FirstRunManager).mockImplementation(() => ({
+      isProjectConfigured: vi.fn().mockResolvedValue(false),
+      markProjectAsConfigured: vi.fn().mockResolvedValue(undefined),
+      isFirstRun: vi.fn().mockResolvedValue(false),
+      markAsRun: vi.fn().mockResolvedValue(undefined),
+    }) as unknown as FirstRunManager)
   })
 
   describe('execute', () => {
