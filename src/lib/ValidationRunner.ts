@@ -430,15 +430,14 @@ export class ValidationRunner {
 
 	/**
 	 * Get validation command string for prompts
+	 * Uses il commands for multi-language project support
 	 */
 	private getValidationCommand(
 		validationType: 'compile' | 'typecheck' | 'lint' | 'test',
-		packageManager: string
+		_packageManager: string
 	): string {
-		if (packageManager === 'npm') {
-			return `npm run ${validationType}`
-		}
-		return `${packageManager} ${validationType}`
+		// Use il commands for consistent multi-language project support
+		return `il ${validationType}`
 	}
 
 	/**

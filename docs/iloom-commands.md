@@ -13,6 +13,11 @@ Complete documentation for all iloom CLI commands, options, and flags.
 - [Context & Development Commands](#context--development-commands)
   - [il spin](#il-spin)
   - [il open](#il-open)
+  - [il dev-server](#il-dev-server)
+  - [il build](#il-build)
+  - [il lint](#il-lint)
+  - [il test](#il-test)
+  - [il compile](#il-compile)
   - [il summary](#il-summary)
   - [il shell](#il-shell)
 - [Issue Management Commands](#issue-management-commands)
@@ -422,6 +427,297 @@ il open 25
 il open 25 --help
 il open 25 --version
 ```
+
+---
+
+### il dev-server
+
+Start development server in foreground for a workspace.
+
+**Alias:** `dev`
+
+**Usage:**
+```bash
+il dev-server [identifier] [options]
+```
+
+**Arguments:**
+- `[identifier]` - Optional issue number, PR number, or branch name
+- If omitted and inside a loom, starts dev server for current loom
+- If omitted outside a loom, prompts for selection
+
+**Behavior:**
+
+1. Resolves the target loom
+2. Loads environment variables from `.env` files
+3. Executes dev script from `package.json` or `.iloom/package.iloom.json`
+4. Runs in foreground (useful for debugging and manual testing)
+
+**Examples:**
+
+```bash
+# Start dev server for current loom
+il dev-server
+
+# Start dev server for specific issue
+il dev-server 25
+
+# Start dev server for a branch
+il dev-server feat/my-branch
+```
+
+**Notes:**
+- Runs in foreground to see server output and errors
+- Use Ctrl+C to stop the server
+- Respects `sourceEnvOnStart` setting for environment loading
+
+---
+
+### il build
+
+Run the build script for a workspace.
+
+**Usage:**
+```bash
+il build [identifier]
+```
+
+**Arguments:**
+- `[identifier]` - Optional issue number, PR number, or branch name
+- If omitted and inside a loom, builds current loom
+- If omitted outside a loom, prompts for selection
+
+**Behavior:**
+
+1. Resolves the target loom or current workspace
+2. Loads environment variables from `.env` files
+3. Executes build script from:
+   - `.iloom/package.iloom.json` (highest priority)
+   - `package.json` (fallback for Node.js projects)
+4. Exits with non-zero code if build fails
+
+**Script Resolution:**
+
+Scripts are resolved in this order:
+1. `scripts.build` in `.iloom/package.iloom.json` (if exists)
+2. `scripts.build` in `package.json` (if exists)
+
+**Examples:**
+
+```bash
+# Build current loom (auto-detected)
+il build
+
+# Build specific issue
+il build 25
+
+# Run in specific loom workspace
+cd ~/my-project-looms/feat-issue-42-feature/
+il build
+```
+
+**Supported Projects:**
+
+| Language | Build Command | Configuration source |
+|----------|---------------|---------------|
+| Node.js (npm) | `npm run build` | `package.json` scripts |
+| Node.js (pnpm) | `pnpm build` | `package.json` scripts |
+| Node.js (yarn) | `yarn build` | `package.json` scripts |
+| Rust | `cargo build --release` | `.iloom/package.iloom.json` |
+| Python (pip) | `pip install -e .` | `.iloom/package.iloom.json` |
+| Python (poetry) | `poetry install` | `.iloom/package.iloom.json` |
+| Ruby | `bundle install` | `.iloom/package.iloom.json` |
+| Go | `go build ./...` | `.iloom/package.iloom.json` |
+
+**Notes:**
+- Works with any language/framework via `.iloom/package.iloom.json`
+- Environment variables are automatically loaded before execution
+- Build failures are reported with exit codes for CI/CD integration
+
+---
+
+### il lint
+
+Run the lint script for a workspace.
+
+**Usage:**
+```bash
+il lint [identifier]
+```
+
+**Arguments:**
+- `[identifier]` - Optional issue number, PR number, or branch name
+- If omitted and inside a loom, lints current loom
+- If omitted outside a loom, prompts for selection
+
+**Behavior:**
+
+1. Resolves the target loom or current workspace
+2. Loads environment variables from `.env` files
+3. Executes lint script from:
+   - `.iloom/package.iloom.json` (highest priority)
+   - `package.json` (fallback for Node.js projects)
+4. Exits with non-zero code if linting fails
+
+**Script Resolution:**
+
+Scripts are resolved in this order:
+1. `scripts.lint` in `.iloom/package.iloom.json` (if exists)
+2. `scripts.lint` in `package.json` (if exists)
+
+**Examples:**
+
+```bash
+# Lint current loom (auto-detected)
+il lint
+
+# Lint specific issue
+il lint 25
+
+# Validate code style in feature branch
+il lint feat/my-feature
+```
+
+**Supported Linters:**
+
+| Language | Typical Command | Configuration source |
+|----------|-----------------|---------------|
+| JavaScript/TypeScript | `eslint .` | `.iloom/package.iloom.json` or `package.json` |
+| Python | `pylint src/` | `.iloom/package.iloom.json` |
+| Rust | `cargo clippy` | `.iloom/package.iloom.json` |
+| Ruby | `rubocop` | `.iloom/package.iloom.json` |
+| Go | `golangci-lint run` | `.iloom/package.iloom.json` |
+
+**Notes:**
+- Works with any linter via `.iloom/package.iloom.json`
+- Environment variables are automatically loaded before execution
+- Lint failures are reported with exit codes for CI/CD integration
+
+---
+
+### il test
+
+Run the test script for a workspace.
+
+**Usage:**
+```bash
+il test [identifier]
+```
+
+**Arguments:**
+- `[identifier]` - Optional issue number, PR number, or branch name
+- If omitted and inside a loom, tests current loom
+- If omitted outside a loom, prompts for selection
+
+**Behavior:**
+
+1. Resolves the target loom or current workspace
+2. Loads environment variables from `.env` files
+3. Executes test script from:
+   - `.iloom/package.iloom.json` (highest priority)
+   - `package.json` (fallback for Node.js projects)
+4. Exits with non-zero code if tests fail
+
+**Script Resolution:**
+
+Scripts are resolved in this order:
+1. `scripts.test` in `.iloom/package.iloom.json` (if exists)
+2. `scripts.test` in `package.json` (if exists)
+
+**Examples:**
+
+```bash
+# Run tests for current loom (auto-detected)
+il test
+
+# Run tests for specific issue
+il test 25
+
+# Test feature branch
+il test feat/my-feature
+```
+
+**Supported Test Frameworks:**
+
+| Language | Typical Command | Configuration |
+|----------|-----------------|---------------|
+| JavaScript/TypeScript | `vitest run` or `jest` | `.iloom/package.iloom.json` or `package.json` |
+| Python | `pytest` | `.iloom/package.iloom.json` |
+| Rust | `cargo test` | `.iloom/package.iloom.json` |
+| Ruby | `bundle exec rspec` | `.iloom/package.iloom.json` |
+| Go | `go test ./...` | `.iloom/package.iloom.json` |
+
+**Notes:**
+- Works with any test framework via `.iloom/package.iloom.json`
+- Environment variables are automatically loaded before execution
+- Test failures are reported with exit codes for CI/CD integration
+
+---
+
+### il compile
+
+Run the compile or typecheck script for a workspace.
+
+**Alias:** `typecheck`
+
+**Usage:**
+```bash
+il compile [identifier]
+il typecheck [identifier]
+```
+
+**Arguments:**
+- `[identifier]` - Optional issue number, PR number, or branch name
+- If omitted and inside a loom, compiles current loom
+- If omitted outside a loom, prompts for selection
+
+**Behavior:**
+
+1. Resolves the target loom or current workspace
+2. Loads environment variables from `.env` files
+3. Executes compile/typecheck script from:
+   - `.iloom/package.iloom.json` (highest priority)
+   - `package.json` (fallback for Node.js projects)
+4. Exits with non-zero code if compilation/typecheck fails
+
+**Script Resolution:**
+
+Scripts are resolved in this order:
+1. `scripts.compile` in `.iloom/package.iloom.json` (if exists)
+2. `scripts.typecheck` in `.iloom/package.iloom.json` (if exists)
+3. `scripts.compile` in `package.json` (if exists)
+4. `scripts.typecheck` in `package.json` (if exists)
+
+**Examples:**
+
+```bash
+# Typecheck current loom (auto-detected)
+il compile
+
+# Or using the typecheck alias
+il typecheck
+
+# Typecheck specific issue
+il compile 25
+
+# Validate types in feature branch
+il typecheck feat/my-feature
+```
+
+**Supported Languages:**
+
+| Language | Typical Command | Configuration |
+|----------|-----------------|---------------|
+| TypeScript | `tsc --noEmit` | `.iloom/package.iloom.json` or `package.json` |
+| Python | `mypy src/` | `.iloom/package.iloom.json` |
+| Rust | `cargo check` | `.iloom/package.iloom.json` |
+| Go | `go build ./...` (no-op compile) | `.iloom/package.iloom.json` |
+
+**Notes:**
+- Works with any compiler/type checker via `.iloom/package.iloom.json`
+- Useful for catching type errors without running full test suite
+- Environment variables are automatically loaded before execution
+- Compilation failures are reported with exit codes for CI/CD integration
 
 ---
 

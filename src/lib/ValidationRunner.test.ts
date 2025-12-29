@@ -1099,7 +1099,7 @@ describe('ValidationRunner', () => {
 				)
 				// Should use compile command in the prompt
 				expect(claude.launchClaude).toHaveBeenCalledWith(
-					expect.stringContaining('pnpm compile'),
+					expect.stringContaining('il compile'),
 					expect.any(Object)
 				)
 			})
@@ -1277,7 +1277,7 @@ describe('ValidationRunner', () => {
 				})
 
 				expect(claude.launchClaude).toHaveBeenCalledWith(
-					expect.stringContaining('pnpm typecheck'),
+					expect.stringContaining('il typecheck'),
 					expect.any(Object)
 				)
 			})
@@ -1303,7 +1303,7 @@ describe('ValidationRunner', () => {
 				})
 
 				expect(claude.launchClaude).toHaveBeenCalledWith(
-					expect.stringContaining('npm run lint'),
+					expect.stringContaining('il lint'),
 					expect.any(Object)
 				)
 			})
@@ -1329,7 +1329,7 @@ describe('ValidationRunner', () => {
 				})
 
 				expect(claude.launchClaude).toHaveBeenCalledWith(
-					expect.stringContaining('yarn test'),
+					expect.stringContaining('il test'),
 					expect.any(Object)
 				)
 			})

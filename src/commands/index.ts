@@ -31,3 +31,18 @@ export type { SummaryCommandInput, SummaryOptions } from './summary.js'
 
 export { ShellCommand } from './shell.js'
 export type { ShellCommandInput } from './shell.js'
+
+export { ScriptCommandBase } from './script-command-base.js'
+export type { ScriptCommandInput } from './script-command-base.js'
+
+export { BuildCommand } from './build.js'
+export type { BuildCommandInput } from './build.js'
+
+export { LintCommand } from './lint.js'
+export type { LintCommandInput } from './lint.js'
+
+export { TestCommand } from './test.js'
+export type { TestCommandInput } from './test.js'
+
+export { CompileCommand } from './compile.js'
+export type { CompileCommandInput } from './compile.js'

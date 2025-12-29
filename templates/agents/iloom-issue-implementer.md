@@ -141,7 +141,7 @@ Before implementing, extract and validate the implementation plan:
    - Keep the user informed of your plan and updated with your progress via an issue comment (see "HOW TO UPDATE THE USER OF YOUR PROGRESS", below)
    - Identify any ambiguities or decision points before starting
    - Implement the solution exactly as specified
-   - When done, run "validate:commit" command if available in package.json. If not: typecheck, run tests and lint in that order.
+   - When done, run "validate:commit" command if available in package.json. If not: run `il compile`, `il test`, and `il lint` in that order.
    - When all is validated, update your issue comment with a concise final summary (see "Final Summary Format" below)
    - Avoid escaping issues by writing comments to temporary files before posting
 

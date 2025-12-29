@@ -678,6 +678,67 @@ program
   })
 
 program
+  .command('build')
+  .description('Run the build script')
+  .argument('[identifier]', 'Issue number, PR number, or branch name (auto-detected if omitted)')
+  .action(async (identifier?: string) => {
+    try {
+      const { BuildCommand } = await import('./commands/build.js')
+      const cmd = new BuildCommand()
+      await cmd.execute(identifier ? { identifier } : {})
+    } catch (error) {
+      logger.error(`Build failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
+  .command('lint')
+  .description('Run the lint script')
+  .argument('[identifier]', 'Issue number, PR number, or branch name (auto-detected if omitted)')
+  .action(async (identifier?: string) => {
+    try {
+      const { LintCommand } = await import('./commands/lint.js')
+      const cmd = new LintCommand()
+      await cmd.execute(identifier ? { identifier } : {})
+    } catch (error) {
+      logger.error(`Lint failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
+  .command('test')
+  .description('Run the test script')
+  .argument('[identifier]', 'Issue number, PR number, or branch name (auto-detected if omitted)')
+  .action(async (identifier?: string) => {
+    try {
+      const { TestCommand } = await import('./commands/test.js')
+      const cmd = new TestCommand()
+      await cmd.execute(identifier ? { identifier } : {})
+    } catch (error) {
+      logger.error(`Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
+  .command('compile')
+  .alias('typecheck')
+  .description('Run the compile or typecheck script (prefers compile if both exist)')
+  .argument('[identifier]', 'Issue number, PR number, or branch name (auto-detected if omitted)')
+  .action(async (identifier?: string) => {
+    try {
+      const { CompileCommand } = await import('./commands/compile.js')
+      const cmd = new CompileCommand()
+      await cmd.execute(identifier ? { identifier } : {})
+    } catch (error) {
+      logger.error(`Compile failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
   .command('cleanup')
   .alias('remove')
   .alias('clean')
