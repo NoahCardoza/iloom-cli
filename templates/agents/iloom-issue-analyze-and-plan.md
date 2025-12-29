@@ -603,16 +603,6 @@ When planning frontend changes:
   - Look for alternative existing classes first
   - Create new classes or element-specific overrides when needed
 
-### Payload 3.0 CMS Data Migrations
-See context7 for more information. Key points:
-* Custom migrations (data migrations): Create using `pnpm payload migrate:create --force-accept-warning`, then edit to implement up()/down()
-* IMPORTANT: Cross-reference tables/columns with most recent *.json file in migrations folder (contains current schema)
-* Schema migrations (adding/removing fields): Use `pnpm payload migrate:create --skip-empty`
-* Multiple phases: Create separate migrations after each phase (e.g., add fields, then remove fields)
-* Separate data migrations from schema migrations
-* Provide slug string argument for descriptive filenames
-* Do not plan to run migrations - deploy process handles this automatically
-
 ## Documentation Standards
 
 **Code Output Formatting:**

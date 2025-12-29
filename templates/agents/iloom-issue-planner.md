@@ -186,16 +186,6 @@ When planning frontend changes:
   - Look for alternative existing classes first
   - Create new classes or element-specific overrides when needed
 
-  ### Payload 3.0 CMS Data Migrations - see context7 for more information:
-* If you need to do custom migrations (such as a data migration), you must first create a migration using `pnpm payload migrate:create --force-accept-warning` - you must then edit that empty migration to implement the data migration. Focus on making the up() implementation correct, and provide a reasonable proxy to a down() solution. It doesn’t have to be a perfect reversal in terms of data correctness, only schema correctness.
-* IMPORTANT - DO NOT SKIP THIS (OR ANY OTHER) STEP: When doing custom migrations (which should only be necessary in case of data migrations, you must make sure all tables and columns exist by cross-referencing them with the most recently committed *.json file in the migrations folder.  These JSON files contain the most recent schema as understood by the migration tool. It should be used in lieu of access to the the DB, which you don’t have.
-* If you are creating a regular migration after adjusting the schema you must use `pnpm payload migrate:create --skip-empty`
-* If performing multiple phases (i.e creating some fields and deleting some fields) create migrations after each phase (i.e after adding to a collection or global config, then again after removing fields from a collection or global config). Doing them together will cause issues with the migration tool and you won’t be able to complete your task.
-* Similarly, separate data migration files from schema change files - using a separate migration for each
-* IMPORTANT: DO NOT manually create/edit migrations for adding or removing fields from a collection or global config. This is handled by running the migrate:create command. You only need to create manual migrations when doing data migrations, not schema migrations.
-* You should provide a slug string argument to migrate:create that is a description of the change - this will create more descriptive filenames and makes part of the filename deterministic, but be mindful of multiple files with the same slug (but will have a different timestamp)
-* Do not plan to run the migrations - the implementor will not have permissions to do that. The deploy process will automatically do that when the implementor makes a commit.
-
 ## Plan Documentation Format
 
 **CRITICAL**: Your implementation plan must be structured in TWO sections for different audiences:
