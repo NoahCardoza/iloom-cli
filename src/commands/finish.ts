@@ -202,8 +202,8 @@ export class FinishCommand {
 		if (isJsonMode) {
 			const settings = await this.settingsManager.loadSettings()
 			// In github-pr mode, require explicit --cleanup or --no-cleanup
-			if (settings.mergeBehavior?.mode === 'github-pr' && input.options.cleanup === undefined) {
-				throw new Error('JSON mode with github-pr workflow requires --cleanup or --no-cleanup flag. Use: il finish --json --cleanup <identifier>')
+			if ((settings.mergeBehavior?.mode === 'github-pr' || settings.mergeBehavior?.mode === 'github-draft-pr') && input.options.cleanup === undefined) {
+				throw new Error('JSON mode with "github-pr"/"github-draft-pr" workflow requires --cleanup or --no-cleanup flag. Use: il finish --json --cleanup <identifier>')
 			}
 		}
 
@@ -216,7 +216,7 @@ export class FinishCommand {
 		// 1. Merge mode is github-pr (for creating PRs on GitHub, even with Linear issues)
 		// 2. Provider is GitHub (for GitHub issue operations)
 		const needsRepo =
-			settings.mergeBehavior?.mode === 'github-pr' || this.issueTracker.providerName === 'github'
+			settings.mergeBehavior?.mode === 'github-pr' || settings.mergeBehavior?.mode === 'github-draft-pr' || this.issueTracker.providerName === 'github'
 		if (needsRepo && (await hasMultipleRemotes())) {
 			repo = await getConfiguredRepoFromSettings(settings)
 			getLogger().info(`Using GitHub repository: ${repo}`)

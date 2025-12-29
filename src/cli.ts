@@ -169,7 +169,7 @@ export async function validateGhCliForCommand(command: Command): Promise<void> {
       const provider = IssueTrackerFactory.getProviderName(settings)
       const mergeBehaviorMode = settings.mergeBehavior?.mode
 
-      needsGhCli = provider === 'github' || mergeBehaviorMode === 'github-pr'
+      needsGhCli = provider === 'github' || mergeBehaviorMode === 'github-pr' || mergeBehaviorMode === 'github-draft-pr'
     } catch {
       // If we can't load settings, assume we might need gh CLI
       needsGhCli = true
@@ -182,7 +182,7 @@ export async function validateGhCliForCommand(command: Command): Promise<void> {
       // ERROR: gh CLI is required for this command
       const errorMessage = alwaysRequireGh.includes(commandName)
         ? `The "${commandName}" command requires GitHub CLI (gh) to be installed.`
-        : `GitHub CLI (gh) is required when using GitHub as the issue tracker or "github-pr" merge mode.`
+        : `GitHub CLI (gh) is required when using GitHub as the issue tracker or "github-pr"/"github-draft-pr" merge mode.`
 
       logger.error(errorMessage)
       logger.info('')
@@ -203,10 +203,10 @@ export async function validateGhCliForCommand(command: Command): Promise<void> {
         const provider = IssueTrackerFactory.getProviderName(settings)
         const mergeBehaviorMode = settings.mergeBehavior?.mode
 
-        if (provider === 'github' || mergeBehaviorMode === 'github-pr') {
+        if (provider === 'github' || mergeBehaviorMode === 'github-pr' || mergeBehaviorMode === 'github-draft-pr') {
           logger.warn('GitHub CLI (gh) is not installed.')
           logger.warn(
-            'Some features may not work correctly with your current configuration (GitHub provider or github-pr merge mode).'
+            'Some features may not work correctly with your current configuration (GitHub provider or "github-pr"/"github-draft-pr" merge mode).'
           )
           logger.info('To install: brew install gh (macOS) or see https://github.com/cli/cli#installation')
           logger.info('')
