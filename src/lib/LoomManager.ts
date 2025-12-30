@@ -237,16 +237,12 @@ export class LoomManager {
       const prTitle = issueData?.title ?? `Work on ${branchName}`
       const prBody = `Draft PR for issue #${input.identifier}\n\nThis PR was created automatically by iloom.`
 
-      // Get base branch
-      const mainBranch = settingsData.mainBranch ?? 'main'
-
       // Create draft PR
       getLogger().info('Creating draft PR...')
       const prResult = await prManager.createDraftPR(
         branchName,
         prTitle,
         prBody,
-        mainBranch,
         worktreePath
       )
 

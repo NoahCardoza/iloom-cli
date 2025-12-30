@@ -358,7 +358,6 @@ Start your response immediately with the PR body text.
 	 * @param branchName - Branch to create PR from (used as --head)
 	 * @param title - PR title
 	 * @param body - PR body
-	 * @param baseBranch - Base branch to target (usually main/master)
 	 * @param cwd - Working directory
 	 * @returns PR URL and number
 	 */
@@ -366,7 +365,6 @@ Start your response immediately with the PR body text.
 		branchName: string,
 		title: string,
 		body: string,
-		baseBranch: string,
 		cwd?: string
 	): Promise<{ url: string; number: number }> {
 		try {
@@ -389,7 +387,8 @@ Start your response immediately with the PR body text.
 			}
 
 			// Build gh pr create command with --draft flag
-			const args = ['pr', 'create', '--head', headValue, '--title', title, '--body', body, '--base', baseBranch, '--draft']
+			// Omit --base to let GitHub use the repository's default branch (main, master, etc.)
+			const args = ['pr', 'create', '--head', headValue, '--title', title, '--body', body, '--draft']
 
 			// If target remote is not 'origin', we need to specify the repo
 			if (targetRemote !== 'origin') {
