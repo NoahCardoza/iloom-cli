@@ -1217,5 +1217,35 @@ describe('MergeManager', () => {
 			expect(options?.appendSystemPrompt).toContain('git add')
 			expect(options?.appendSystemPrompt).toContain('git rebase --continue')
 		})
+
+		it('should pass allowedTools with git command patterns for conflict resolution', async () => {
+			// Mock: successful Claude resolution
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref
+				.mockResolvedValueOnce('') // status
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockRejectedValueOnce(new Error('CONFLICT')) // rebase fails
+				.mockResolvedValueOnce('src/file1.ts') // conflicted files (first)
+				.mockResolvedValueOnce('') // conflicted files (after Claude)
+				.mockResolvedValueOnce('') // rebase not in progress
+
+			vi.mocked(claude.detectClaudeCli).mockResolvedValueOnce(true)
+			vi.mocked(claude.launchClaude).mockResolvedValueOnce(undefined)
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify allowedTools contains essential git commands for rebase
+			// Note: git reset and git checkout are intentionally excluded as they can be destructive
+			const options = vi.mocked(claude.launchClaude).mock.calls[0][1]
+			expect(options?.allowedTools).toEqual(expect.arrayContaining([
+				'Bash(git status:*)',
+				'Bash(git diff:*)',
+				'Bash(git log:*)',
+				'Bash(git add:*)',
+				'Bash(git rebase:*)',
+			]))
+		})
 	})
 })

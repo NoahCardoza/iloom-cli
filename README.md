@@ -362,6 +362,18 @@ Control how `il finish` handles your work. Configure in `.iloom/settings.json`:
 | `github-pr` | Push branch and create a GitHub PR on `il finish`. Worktree cleanup is optional. |
 | `github-draft-pr` | Create a draft PR immediately on `il start`. On `il finish`, the PR is marked ready for review. **Recommended for contributions to forked repos.** |
 
+### Rebase Conflict Resolution
+
+When `il finish` or `il rebase` encounter rebase conflicts, iloom automatically launches Claude to help resolve them. During conflict resolution, the following git commands are **auto-approved** so Claude can work efficiently without requiring manual permission for each command:
+
+- `git status` - View current rebase state
+- `git diff` - Examine conflicts
+- `git log` - Understand branch history
+- `git add` - Stage resolved files
+- `git rebase` - Continue or abort rebase
+
+Note: Potentially destructive commands like `git reset` and `git checkout` are intentionally not auto-approved to prevent accidental data loss.
+
 **When to use `github-draft-pr`:**
 - **Contributing to forks:** When you don't are contributing to a forked repo use this mode to create the PR from your fork immediately, allowing iloom's agents to post workflow comments directly to the PR instead of writing to the upstream repo's issues (which may not be appreciated by the repo owners).
 - CI runs on your branch during development (draft PRs trigger CI on most repos)

@@ -445,6 +445,17 @@ export class MergeManager {
 		const prompt =
 			`Help me with this rebase please.`
 
+		// Git commands to auto-approve during rebase conflict resolution
+		// These are the essential commands Claude needs to analyze and resolve conflicts
+		// Note: git reset and git checkout are intentionally excluded as they can be destructive
+		const rebaseAllowedTools = [
+			'Bash(git status:*)',
+			'Bash(git diff:*)',
+			'Bash(git log:*)',
+			'Bash(git add:*)',
+			'Bash(git rebase:*)',
+		]
+
 		try {
 			// Launch Claude interactively in current terminal
 			// User will interact directly with Claude to resolve conflicts
@@ -452,6 +463,7 @@ export class MergeManager {
 				appendSystemPrompt: systemPrompt,
 				addDir: worktreePath,
 				headless: false, // Interactive - runs in current terminal with stdio: inherit
+				allowedTools: rebaseAllowedTools,
 			})
 
 			// After Claude interaction completes, check if conflicts resolved
