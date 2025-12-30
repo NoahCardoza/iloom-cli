@@ -479,6 +479,19 @@ We (Claude and I) welcome contributions! We've made it easy to get started — i
 iloom contribute   # Handles forking, cloning, and setting up the dev environment automatically.
 ```
 
+You can also use `iloom contribute` to set up any GitHub repository for contribution:
+
+```bash
+# Full URL format
+iloom contribute "https://github.com/n8n-io/n8n"
+
+# Shortened URL format
+iloom contribute "github.com/n8n-io/n8n"
+
+# owner/repo format
+iloom contribute "n8n-io/n8n"
+```
+
 **All PRs should be created with iloom or include detailed context.** When you run `iloom contribute`, it configures iloom to create a draft PR as soon as you start work. As you work, iloom posts the AI's analysis, implementation plan, and progress directly to that draft PR—giving reviewers full context before the code is even ready for review. If you're not using iloom, please provide equivalent detail in your PR.
 
 New contributors should start with issues labeled [starter-task](https://github.com/iloom-ai/iloom-cli/issues?q=is%3Aissue+is%3Aopen+label%3Astarter-task). For details, see our [Contributing Guide](CONTRIBUTING.md).

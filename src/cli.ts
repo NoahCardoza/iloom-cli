@@ -883,12 +883,13 @@ program
 
 program
   .command('contribute')
-  .description('Set up local development environment for contributing to iloom')
-  .action(async () => {
+  .description('Set up local development environment for contributing to a GitHub project')
+  .argument('[repository]', 'GitHub repository (owner/repo, github.com/owner/repo, or full URL). Defaults to iloom-ai/iloom-cli')
+  .action(async (repository?: string) => {
     try {
       const { ContributeCommand } = await import('./commands/contribute.js')
       const command = new ContributeCommand()
-      await command.execute()
+      await command.execute(repository)
     } catch (error) {
       logger.error(`Failed to set up contributor environment: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { ContributeCommand, validateDirectoryName } from './contribute.js'
+import { ContributeCommand, validateDirectoryName, parseGitHubRepoUrl, validateRepoExists } from './contribute.js'
 import * as githubUtils from '../utils/github.js'
 import * as gitUtils from '../utils/git.js'
 import * as promptUtils from '../utils/prompt.js'
@@ -300,6 +300,182 @@ describe('ContributeCommand', () => {
 			await expect(command.execute()).rejects.toThrow('Invalid directory after 3 attempts')
 		})
 
+	})
+
+	describe('execute - custom repository parameter', () => {
+		it('should use provided repository instead of default', async () => {
+			// Mock repo validation - first call validates the repo exists
+			vi.mocked(githubUtils.executeGhCommand)
+				.mockResolvedValueOnce({ name: 'n8n' }) // validateRepoExists
+				.mockRejectedValueOnce(new Error('Not Found')) // forkExists - no fork
+				.mockResolvedValueOnce('') // createFork
+				.mockResolvedValueOnce('') // cloneRepository
+
+			vi.mocked(promptUtils.promptInput).mockResolvedValueOnce('./n8n')
+
+			// Update existsSync mock for n8n directory
+			vi.mocked(existsSync).mockImplementation(createExistsSyncMock('./n8n'))
+
+			await command.execute('n8n-io/n8n')
+
+			// Should fork n8n-io/n8n, not iloom-cli
+			expect(githubUtils.executeGhCommand).toHaveBeenCalledWith(['repo', 'fork', 'n8n-io/n8n', '--clone=false'])
+			// Should clone testuser/n8n
+			expect(githubUtils.executeGhCommand).toHaveBeenCalledWith(['repo', 'clone', 'testuser/n8n', './n8n'])
+		})
+
+		it('should accept full GitHub URL format', async () => {
+			vi.mocked(githubUtils.executeGhCommand)
+				.mockResolvedValueOnce({ name: 'repo' }) // validateRepoExists
+				.mockResolvedValueOnce({ name: 'repo' }) // forkExists - has fork
+				.mockResolvedValueOnce('') // cloneRepository
+
+			vi.mocked(promptUtils.promptInput).mockResolvedValueOnce('./repo')
+			vi.mocked(existsSync).mockImplementation(createExistsSyncMock('./repo'))
+
+			await command.execute('https://github.com/owner/repo')
+
+			// Should check for fork of repo (not iloom-cli)
+			expect(githubUtils.executeGhCommand).toHaveBeenCalledWith(['api', 'repos/testuser/repo'])
+		})
+
+		it('should accept shortened URL format', async () => {
+			vi.mocked(githubUtils.executeGhCommand)
+				.mockResolvedValueOnce({ name: 'repo' }) // validateRepoExists
+				.mockResolvedValueOnce({ name: 'repo' }) // forkExists - has fork
+				.mockResolvedValueOnce('') // cloneRepository
+
+			vi.mocked(promptUtils.promptInput).mockResolvedValueOnce('./repo')
+			vi.mocked(existsSync).mockImplementation(createExistsSyncMock('./repo'))
+
+			await command.execute('github.com/owner/repo')
+
+			// Verify correct repository was used
+			expect(githubUtils.executeGhCommand).toHaveBeenCalledWith(['api', 'repos/owner/repo'])
+		})
+
+		it('should error if repository does not exist', async () => {
+			// Mock repo validation to return 404
+			vi.mocked(githubUtils.executeGhCommand).mockRejectedValueOnce(new Error('Not Found'))
+
+			await expect(command.execute('owner/nonexistent')).rejects.toThrow('Repository not found')
+		})
+
+		it('should error on invalid repository format', async () => {
+			await expect(command.execute('invalid-format')).rejects.toThrow('Invalid repository format')
+		})
+
+		it('should set correct upstream URL for custom repository', async () => {
+			vi.mocked(githubUtils.executeGhCommand)
+				.mockResolvedValueOnce({ name: 'custom-repo' }) // validateRepoExists
+				.mockResolvedValueOnce({ name: 'custom-repo' }) // forkExists - has fork
+				.mockResolvedValueOnce('') // cloneRepository
+
+			vi.mocked(promptUtils.promptInput).mockResolvedValueOnce('./custom-repo')
+			vi.mocked(existsSync).mockImplementation(createExistsSyncMock('./custom-repo'))
+
+			// Mock git commands: get-url fails (no upstream), add succeeds
+			vi.mocked(gitUtils.executeGitCommand)
+				.mockRejectedValueOnce(new Error('No such remote'))
+				.mockResolvedValueOnce('')
+
+			await command.execute('custom-org/custom-repo')
+
+			// Should add upstream with correct URL
+			expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(
+				['remote', 'add', 'upstream', 'https://github.com/custom-org/custom-repo.git'],
+				expect.objectContaining({ cwd: expect.stringContaining('custom-repo') })
+			)
+		})
+
+		it('should use repository name as default directory', async () => {
+			vi.mocked(githubUtils.executeGhCommand)
+				.mockResolvedValueOnce({ name: 'my-project' }) // validateRepoExists
+				.mockResolvedValueOnce({ name: 'my-project' }) // forkExists - has fork
+				.mockResolvedValueOnce('') // cloneRepository
+
+			vi.mocked(promptUtils.promptInput).mockResolvedValueOnce('./my-project')
+			vi.mocked(existsSync).mockImplementation(createExistsSyncMock('./my-project'))
+
+			await command.execute('some-org/my-project')
+
+			// Should prompt with repo name as default
+			expect(promptUtils.promptInput).toHaveBeenCalledWith(
+				'Where should the repository be cloned?',
+				'./my-project'
+			)
+		})
+	})
+})
+
+// Tests for parseGitHubRepoUrl function
+describe('parseGitHubRepoUrl', () => {
+	it.each([
+		['https://github.com/n8n-io/n8n', 'n8n-io/n8n'],
+		['https://github.com/owner/repo', 'owner/repo'],
+		['http://github.com/owner/repo', 'owner/repo'],
+		['https://github.com/owner/repo.git', 'owner/repo'],
+	])('should parse full URL %s to %s', (input, expected) => {
+		expect(parseGitHubRepoUrl(input)).toBe(expected)
+	})
+
+	it.each([
+		['github.com/n8n-io/n8n', 'n8n-io/n8n'],
+		['github.com/owner/repo', 'owner/repo'],
+		['github.com/owner/repo.git', 'owner/repo'],
+	])('should parse shortened URL %s to %s', (input, expected) => {
+		expect(parseGitHubRepoUrl(input)).toBe(expected)
+	})
+
+	it.each([
+		['n8n-io/n8n', 'n8n-io/n8n'],
+		['owner/repo', 'owner/repo'],
+		['my-org/my-repo', 'my-org/my-repo'],
+		['owner_name/repo_name', 'owner_name/repo_name'],
+		['owner.name/repo.name', 'owner.name/repo.name'],
+	])('should parse direct format %s to %s', (input, expected) => {
+		expect(parseGitHubRepoUrl(input)).toBe(expected)
+	})
+
+	it('should handle whitespace in input', () => {
+		expect(parseGitHubRepoUrl('  owner/repo  ')).toBe('owner/repo')
+	})
+
+	it.each([
+		'invalid',
+		'not-a-repo',
+		'https://gitlab.com/owner/repo',
+		'owner/repo/extra',
+		'owner',
+		'',
+		'//owner/repo',
+	])('should throw on invalid format: %s', (input) => {
+		expect(() => parseGitHubRepoUrl(input)).toThrow('Invalid repository format')
+	})
+})
+
+// Tests for validateRepoExists function
+describe('validateRepoExists', () => {
+	beforeEach(() => {
+		vi.mocked(githubUtils.executeGhCommand).mockReset()
+	})
+
+	it('should return true when repository exists', async () => {
+		vi.mocked(githubUtils.executeGhCommand).mockResolvedValueOnce({ name: 'repo' })
+		const result = await validateRepoExists('owner/repo')
+		expect(result).toBe(true)
+		expect(githubUtils.executeGhCommand).toHaveBeenCalledWith(['api', 'repos/owner/repo'])
+	})
+
+	it('should return false when repository not found (404)', async () => {
+		vi.mocked(githubUtils.executeGhCommand).mockRejectedValueOnce(new Error('Not Found'))
+		const result = await validateRepoExists('owner/nonexistent')
+		expect(result).toBe(false)
+	})
+
+	it('should throw on unexpected errors', async () => {
+		vi.mocked(githubUtils.executeGhCommand).mockRejectedValueOnce(new Error('Network error'))
+		await expect(validateRepoExists('owner/repo')).rejects.toThrow('Network error')
 	})
 })
 
