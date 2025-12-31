@@ -1112,36 +1112,46 @@ il feedback "Tests fail on finish but Claude doesn't launch to help fix"
 
 ### il contribute
 
-Set up development environment for contributing to iloom.
+Fork, clone, and set up a GitHub repository for contribution (defaults to iloom-cli).
 
 **Usage:**
 ```bash
-il contribute
+il contribute [repository]
 ```
+
+**Arguments:**
+- `[repository]` - GitHub repository to contribute to (defaults to iloom-cli)
+  - Full URL: `https://github.com/owner/repo`
+  - Short URL: `github.com/owner/repo`
+  - Owner/repo: `owner/repo`
 
 **Workflow:**
 
-1. Forks iloom-cli repository to your GitHub account
+1. Forks the repository to your GitHub account (if not already forked)
 2. Clones your fork locally
-3. Sets up upstream remote
-4. Installs dependencies
-5. Runs initial build and tests
-6. Creates starter development environment
-7. Opens contributing guide
+3. Sets up upstream remote to track the original repository
+4. Configures iloom settings:
+   - Sets `issueManagement.github.remote` to `upstream`
+   - Sets `mergeBehavior.mode` to `github-draft-pr`
 
 **Examples:**
 
 ```bash
-# Set up iloom development environment
+# Set up iloom development environment (default)
 il contribute
+
+# Contribute to any GitHub repository
+il contribute "https://github.com/n8n-io/n8n"
+il contribute "github.com/vercel/next.js"
+il contribute "facebook/react"
 ```
 
 **Notes:**
 - Requires GitHub CLI (`gh`) to be authenticated
 - Creates fork if it doesn't exist
-- Sets up recommended development settings
-- Automatically creates a loom for your first contribution
-- See [CONTRIBUTING.md](../CONTRIBUTING.md) for detailed guidelines
+- Sets up `github-draft-pr` mode so PRs are created immediately when you start work
+- Draft PRs receive iloom's AI analysis and planning comments, giving maintainers full context
+- For iloom contributions, see [CONTRIBUTING.md](../CONTRIBUTING.md) for detailed guidelines
 
 ---
 

@@ -16,7 +16,7 @@ iloom
 
 #### Links to key sections
 
-[How It Works](#how-it-works-the-multi-agent-workflow) • [Installation](#quick-start) • [Configuration](#configuration) • [Advanced Features](#advanced-features) • [Limitations](#system-requirements--limitations)
+[How It Works](#how-it-works-the-multi-agent-workflow) • [Installation](#quick-start) • [Configuration](#configuration) • [Advanced Features](#advanced-features) • [Limitations](#system-requirements--limitations) • [Contributing](#contributing-to-iloom)
 
 ## Built For Modern Tools...
 
@@ -149,6 +149,7 @@ Command Reference
 | `il test` |  | Run the test script for a workspace. |
 | `il compile` | `typecheck` | Run the compile or typecheck script for a workspace. |
 | `il add-issue` | `a` | Create and AI-enhance a new issue without starting work yet. |
+| `il contribute` |  | Fork, clone, and set up a GitHub repo for contribution (defaults to iloom-cli). |
 | `il init` | `config` | Interactive configuration wizard. |
 | `il feedback` | `f` | Submit bug reports/feedback directly from the CLI. |
 | `il update` |  | Update iloom CLI to the latest version. |
@@ -470,16 +471,23 @@ This is an early-stage product.
 
 See all [known limitations](https://github.com/iloom-ai/iloom-cli/issues?q=is:issue+is:open+label:known-limitation) on GitHub. If you're feeling left out - you're absolutely right! The best way to complain about something is to fix it. So...
 
-Contributing
-------------
+Contributing to iloom
+---------------------
 
-We (Claude and I) welcome contributions! We've made it easy to get started — iloom can even set up its own dev environment.
+We (Claude and I) welcome contributions! iloom can set up its own dev environment:
 
 ```bash
-iloom contribute   # Handles forking, cloning, and setting up the dev environment automatically.
+iloom contribute   # Handles forking, cloning, and dev setup automatically
 ```
 
-You can also use `iloom contribute` to set up any GitHub repository for contribution:
+**PR Requirements:** All PRs should be created with iloom or include detailed context. If you're not using iloom, please provide equivalent detail explaining your approach and reasoning.
+
+New contributors should start with issues labeled [starter-task](https://github.com/iloom-ai/iloom-cli/issues?q=is%3Aissue+is%3Aopen+label%3Astarter-task). For details, see our [Contributing Guide](CONTRIBUTING.md).
+
+Contributing to Open Source
+---------------------------
+
+iloom streamlines the fork → clone → setup → PR workflow for any GitHub repository:
 
 ```bash
 # Full URL format
@@ -492,9 +500,13 @@ iloom contribute "github.com/n8n-io/n8n"
 iloom contribute "n8n-io/n8n"
 ```
 
-**All PRs should be created with iloom or include detailed context.** When you run `iloom contribute`, it configures iloom to create a draft PR as soon as you start work. As you work, iloom posts the AI's analysis, implementation plan, and progress directly to that draft PR—giving reviewers full context before the code is even ready for review. If you're not using iloom, please provide equivalent detail in your PR.
+This command:
+1. Forks the repository (if not already forked)
+2. Clones your fork locally
+3. Configures iloom for the project
+4. Sets merge behavior to `github-draft-pr` (creates a draft PR immediately when you start work)
 
-New contributors should start with issues labeled [starter-task](https://github.com/iloom-ai/iloom-cli/issues?q=is%3Aissue+is%3Aopen+label%3Astarter-task). For details, see our [Contributing Guide](CONTRIBUTING.md).
+The draft PR workflow is ideal for open source: as you work, iloom posts the AI's analysis, implementation plan, and progress directly to that draft PR—giving maintainers full context before the code is even ready for review.
 
 License & Name
 --------------
