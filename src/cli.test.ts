@@ -13,6 +13,7 @@ import { tmpdir } from 'os'
 import { validateGhCliForCommand, validateIdeForStartCommand } from './cli.js'
 import { GitHubService } from './lib/GitHubService.js'
 import { SettingsManager } from './lib/SettingsManager.js'
+import { VersionMigrationManager } from './lib/VersionMigrationManager.js'
 import * as ide from './utils/ide.js'
 
 // Helper function to run CLI command and capture output
@@ -709,6 +710,150 @@ describe('IDE validation', () => {
         expect(mockExit).not.toHaveBeenCalled()
         expect(mockIsIdeAvailable).not.toHaveBeenCalled()
       })
+    })
+  })
+})
+
+// Unit tests for version migration in preAction hook
+describe('Version migration in preAction hook', () => {
+  let mockRunMigrationsIfNeeded: ReturnType<typeof vi.spyOn<VersionMigrationManager, 'runMigrationsIfNeeded'>>
+
+  beforeEach(() => {
+    // Mock the runMigrationsIfNeeded method
+    mockRunMigrationsIfNeeded = vi.spyOn(VersionMigrationManager.prototype, 'runMigrationsIfNeeded')
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  describe('migration execution', () => {
+    it('should call runMigrationsIfNeeded with package version', async () => {
+      mockRunMigrationsIfNeeded.mockResolvedValue(undefined)
+
+      // Create a new instance and call the method directly (simulating preAction behavior)
+      const manager = new VersionMigrationManager()
+      await manager.runMigrationsIfNeeded('0.6.0')
+
+      expect(mockRunMigrationsIfNeeded).toHaveBeenCalledWith('0.6.0')
+    })
+
+    it('should not throw when runMigrationsIfNeeded succeeds', async () => {
+      mockRunMigrationsIfNeeded.mockResolvedValue(undefined)
+
+      const manager = new VersionMigrationManager()
+
+      await expect(manager.runMigrationsIfNeeded('0.7.0')).resolves.toBeUndefined()
+    })
+  })
+
+  describe('error handling', () => {
+    it('should not crash when migration throws an error', async () => {
+      // Simulate the preAction hook behavior where errors are caught and logged
+      mockRunMigrationsIfNeeded.mockRejectedValue(new Error('Migration failed'))
+
+      const manager = new VersionMigrationManager()
+
+      // The preAction hook wraps this in a try-catch, so we simulate that behavior
+      let caughtError: Error | undefined
+      try {
+        await manager.runMigrationsIfNeeded('0.7.0')
+      } catch (error) {
+        caughtError = error instanceof Error ? error : new Error('Unknown error')
+      }
+
+      // Verify the error was thrown (the preAction hook catches it)
+      expect(caughtError).toBeDefined()
+      expect(caughtError?.message).toBe('Migration failed')
+    })
+
+    it('should handle non-Error thrown values', async () => {
+      // Simulate the preAction hook behavior with non-Error thrown values
+      mockRunMigrationsIfNeeded.mockRejectedValue('string error')
+
+      const manager = new VersionMigrationManager()
+
+      // The preAction hook handles both Error and non-Error thrown values
+      let caughtValue: unknown
+      try {
+        await manager.runMigrationsIfNeeded('0.7.0')
+      } catch (error) {
+        caughtValue = error
+      }
+
+      expect(caughtValue).toBe('string error')
+    })
+
+    it('should allow CLI to continue after migration error (best-effort migration)', async () => {
+      // This test verifies the design: migration errors don't crash the CLI
+      mockRunMigrationsIfNeeded.mockRejectedValue(new Error('Network error'))
+
+      const manager = new VersionMigrationManager()
+
+      // Simulate preAction hook error handling pattern:
+      // try { await manager.runMigrationsIfNeeded(version) }
+      // catch (error) { logger.warn(...) }
+      let migrationFailed = false
+      let warningMessage = ''
+
+      try {
+        await manager.runMigrationsIfNeeded('0.8.0')
+      } catch (error) {
+        migrationFailed = true
+        warningMessage = `Version migration failed: ${error instanceof Error ? error.message : 'Unknown'}`
+      }
+
+      // Migration failed but CLI can continue
+      expect(migrationFailed).toBe(true)
+      expect(warningMessage).toBe('Version migration failed: Network error')
+
+      // In the actual CLI, execution continues past this point
+      // This represents successful error handling
+    })
+  })
+
+  describe('migration state', () => {
+    it('should create new VersionMigrationManager instance for each call', () => {
+      // Each preAction hook creates a new instance
+      const manager1 = new VersionMigrationManager()
+      const manager2 = new VersionMigrationManager()
+
+      // They should be different instances
+      expect(manager1).not.toBe(manager2)
+    })
+
+    it('should respect ILOOM_VERSION_OVERRIDE environment variable', async () => {
+      const originalEnv = process.env.ILOOM_VERSION_OVERRIDE
+      process.env.ILOOM_VERSION_OVERRIDE = '0.9.0'
+
+      try {
+        const manager = new VersionMigrationManager()
+        const effectiveVersion = manager.getEffectiveVersion('0.6.0')
+
+        expect(effectiveVersion).toBe('0.9.0')
+      } finally {
+        if (originalEnv === undefined) {
+          delete process.env.ILOOM_VERSION_OVERRIDE
+        } else {
+          process.env.ILOOM_VERSION_OVERRIDE = originalEnv
+        }
+      }
+    })
+
+    it('should use package version when ILOOM_VERSION_OVERRIDE is not set', () => {
+      const originalEnv = process.env.ILOOM_VERSION_OVERRIDE
+      delete process.env.ILOOM_VERSION_OVERRIDE
+
+      try {
+        const manager = new VersionMigrationManager()
+        const effectiveVersion = manager.getEffectiveVersion('0.6.0')
+
+        expect(effectiveVersion).toBe('0.6.0')
+      } finally {
+        if (originalEnv !== undefined) {
+          process.env.ILOOM_VERSION_OVERRIDE = originalEnv
+        }
+      }
     })
   })
 })

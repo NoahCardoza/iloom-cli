@@ -22,6 +22,7 @@ import { fileURLToPath } from 'url'
 import { realpathSync } from 'fs'
 import { formatLoomsForJson } from './utils/loom-formatter.js'
 import { findMainWorktreePathWithSettings } from './utils/git.js'
+import { VersionMigrationManager } from './lib/VersionMigrationManager.js'
 
 // Get package.json for version
 const __filename = fileURLToPath(import.meta.url)
@@ -79,6 +80,15 @@ program
     } catch (error) {
       // Log warning but don't fail - migration is best-effort
       logger.debug(`Settings migration failed: ${error instanceof Error ? error.message : 'Unknown'}`)
+    }
+
+    // Run version-based migrations (AFTER settings migration, BEFORE settings validation)
+    try {
+      const versionMigrationManager = new VersionMigrationManager()
+      await versionMigrationManager.runMigrationsIfNeeded(packageJson.version)
+    } catch (error) {
+      // Log warning but don't fail - migration is best-effort
+      logger.warn(`Version migration failed: ${error instanceof Error ? error.message : 'Unknown'}`)
     }
 
     // Validate settings for all commands
