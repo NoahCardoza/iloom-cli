@@ -253,6 +253,8 @@ export class ContributeCommand {
 			logger.info(`  3. iloom start <issue_number>`)
 		} else {
 			logger.info(`  2. See README.md or CONTRIBUTING.md for setup instructions`)
+			logger.info(`  3. If this is not a JavaScript/TypeScript project, run:`)
+			logger.info(`     iloom init "help me set up iloom for this non-javascript/typescript project"`)
 		}
 		logger.info(`\nHappy contributing to ${owner}/${repoName}!`)
 	}
