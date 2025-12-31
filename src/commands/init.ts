@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger.js'
 import { ShellCompletion } from '../lib/ShellCompletion.js'
 import chalk from 'chalk'
-import { mkdir, writeFile, readFile } from 'fs/promises'
+import { mkdir, readFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
 import os from 'os'
@@ -11,7 +11,7 @@ import { AgentManager } from '../lib/AgentManager.js'
 import { fileURLToPath } from 'url'
 import { GitRemote, parseGitRemotes } from '../utils/remote.js'
 import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
-import { isFileGitignored, getRepoRoot } from '../utils/git.js'
+import { getRepoRoot, isFileGitignored } from '../utils/git.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
 
 /**
@@ -81,7 +81,7 @@ export class InitCommand {
 
   /**
    * Setup project configuration files
-   * Creates settings.local.json and updates .gitignore
+   * Ensures .iloom directory exists and runs legacy migrations
    */
   private async setupProjectConfiguration(): Promise<void> {
     logger.debug('setupProjectConfiguration() starting')
@@ -99,83 +99,12 @@ export class InitCommand {
       logger.debug('Settings migration error details', { error })
     }
 
-    // Update .gitignore
-    logger.debug('Starting .gitignore update')
-    await this.updateGitignore()
-    logger.debug('setupProjectConfiguration() completed')
-
     // Ensure .iloom directory exists
     const iloomDir = path.join(process.cwd(), '.iloom')
     logger.debug('Creating .iloom directory', { iloomDir })
     await mkdir(iloomDir, { recursive: true })
     logger.debug('.iloom directory created/verified')
-
-    // // Create settings.local.json if it doesn't exist
-    // const settingsLocalPath = path.join(iloomDir, 'settings.local.json')
-    // logger.debug('Checking for existing settings.local.json', { settingsLocalPath })
-
-    // if (!existsSync(settingsLocalPath)) {
-    //   logger.debug('Creating settings.local.json file')
-    //   await writeFile(settingsLocalPath, '{}\n', 'utf-8')
-    //   logger.info('Created .iloom/settings.local.json')
-    //   logger.debug('settings.local.json file created successfully')
-    // } else {
-    //   logger.debug('settings.local.json file already exists, skipping')
-    // }
-  }
-
-  /**
-   * Add settings.local.json to .gitignore if not already present
-   */
-  private async updateGitignore(): Promise<void> {
-    const gitignorePath = path.join(process.cwd(), '.gitignore')
-    const entryToAdd = '.iloom/settings.local.json'
-
-    logger.debug('updateGitignore() starting', {
-      gitignorePath,
-      entryToAdd
-    })
-
-    // Read existing .gitignore or create empty
-    let content = ''
-    if (existsSync(gitignorePath)) {
-      logger.debug('.gitignore file exists, reading content')
-      content = await readFile(gitignorePath, 'utf-8')
-      logger.debug('Read .gitignore content', {
-        contentLength: content.length,
-        lineCount: content.split('\n').length
-      })
-    } else {
-      logger.debug('.gitignore file does not exist, will create new one')
-    }
-
-    // Check if entry already exists
-    const lines = content.split('\n')
-    const entryExists = lines.some(line => line.trim() === entryToAdd)
-    logger.debug('Checking if entry already exists', {
-      entryExists,
-      totalLines: lines.length
-    })
-
-    if (entryExists) {
-      logger.debug('Entry already exists, skipping .gitignore update')
-      return
-    }
-
-    // Add entry with comment
-    const commentLine = '\n# Added by iloom CLI'
-    const separator = content.endsWith('\n') || content === '' ? '' : '\n'
-    const newContent = content + separator + commentLine + '\n' + entryToAdd + '\n'
-
-    logger.debug('Writing updated .gitignore', {
-      originalLength: content.length,
-      newLength: newContent.length,
-      addedLines: 3 // comment + entry + newline
-    })
-
-    await writeFile(gitignorePath, newContent, 'utf-8')
-    logger.info('Added .iloom/settings.local.json to .gitignore')
-    logger.debug('.gitignore update completed successfully')
+    logger.debug('setupProjectConfiguration() completed')
   }
 
   /**

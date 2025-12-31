@@ -720,14 +720,7 @@ Reason: mainBranch has same value in both files, so it's removed from local
    - `.iloom/settings.local.json` if user chose Local
 4. Use the Write tool to create/update the file
 
-### Phase 7: Update .gitignore
-
-If the user chose `.iloom/settings.local.json`, ensure `.gitignore` includes this entry:
-- Read `.gitignore` if it exists
-- Check if `.iloom/settings.local.json` is already listed
-- If not, append it to the file
-
-### Phase 7.5: Offer to Commit Changes
+### Phase 7: Offer to Commit Changes
 
 After making configuration changes, offer to commit the iloom-related files:
 

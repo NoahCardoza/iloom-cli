@@ -3,7 +3,7 @@ import { InitCommand } from './init.js'
 import { ShellCompletion } from '../lib/ShellCompletion.js'
 import { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import * as claudeUtils from '../utils/claude.js'
-import { mkdir, writeFile, readFile } from 'fs/promises'
+import { mkdir, readFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
@@ -97,7 +97,7 @@ describe('InitCommand', () => {
     it('should skip autocomplete setup if user declines but still run project configuration', async () => {
       vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValue(false)
       vi.mocked(existsSync).mockReturnValue(false)
-      vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
+      vi.mocked(readFile).mockResolvedValue('')
 
       initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
@@ -105,13 +105,8 @@ describe('InitCommand', () => {
       // When Claude CLI is not available, shell detection is not called
       expect(mockShellCompletion.grepCompletionConfig).not.toHaveBeenCalled()
 
-      // Verify project configuration still runs
+      // Verify project configuration still runs (creates .iloom directory)
       expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.iloom'), { recursive: true })
-      expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('.gitignore'),
-        '\n# Added by iloom CLI\n.iloom/settings.local.json\n',
-        'utf-8'
-      )
     })
 
     it('should generate and display setup instructions for bash', async () => {
@@ -183,91 +178,14 @@ describe('InitCommand', () => {
       expect(SettingsMigrationManager).toHaveBeenCalled()
     })
 
-    it('should create .gitignore entry if not exists', async () => {
+    it('should create .iloom directory', async () => {
       vi.mocked(existsSync).mockReturnValue(false)
-      vi.mocked(readFile).mockResolvedValue('') // Empty .gitignore
+      vi.mocked(readFile).mockResolvedValue('')
 
       initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
       await initCommand.execute()
 
       expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.iloom'), { recursive: true })
-      expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('.gitignore'),
-        '\n# Added by iloom CLI\n.iloom/settings.local.json\n',
-        'utf-8'
-      )
-    })
-
-    it('should not create settings.local.json file', async () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFile).mockResolvedValue('.iloom/settings.local.json\n') // Entry already in .gitignore
-
-      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
-      await initCommand.execute()
-
-      expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('.iloom'), { recursive: true })
-      // writeFile should not be called at all since .gitignore already has the entry
-      const writeFileCalls = vi.mocked(writeFile).mock.calls
-      const settingsLocalCalls = writeFileCalls.filter(call =>
-        call[0].toString().includes('settings.local.json')
-      )
-      expect(settingsLocalCalls).toHaveLength(0)
-    })
-
-    it('should add settings.local.json to .gitignore', async () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFile).mockResolvedValue('node_modules/\n')
-
-      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
-      await initCommand.execute()
-
-      expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('.gitignore'),
-        'node_modules/\n\n# Added by iloom CLI\n.iloom/settings.local.json\n',
-        'utf-8'
-      )
-    })
-
-    it('should create .gitignore if missing', async () => {
-      vi.mocked(existsSync).mockReturnValue(false)
-
-      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
-      await initCommand.execute()
-
-      expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('.gitignore'),
-        '\n# Added by iloom CLI\n.iloom/settings.local.json\n',
-        'utf-8'
-      )
-    })
-
-    it('should not duplicate entry in .gitignore', async () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFile).mockResolvedValue('.iloom/settings.local.json\n')
-
-      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
-      await initCommand.execute()
-
-      // Should not write to .gitignore since entry already exists
-      const writeFileCalls = vi.mocked(writeFile).mock.calls
-      const gitignoreCalls = writeFileCalls.filter(call =>
-        call[0].toString().includes('.gitignore')
-      )
-      expect(gitignoreCalls).toHaveLength(0)
-    })
-
-    it('should handle .gitignore without trailing newline', async () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFile).mockResolvedValue('node_modules/')
-
-      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
-      await initCommand.execute()
-
-      expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('.gitignore'),
-        'node_modules/\n\n# Added by iloom CLI\n.iloom/settings.local.json\n',
-        'utf-8'
-      )
     })
   })
 
