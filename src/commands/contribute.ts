@@ -7,6 +7,7 @@ import { writeFile, mkdir } from 'fs/promises'
 import path from 'path'
 import { InitCommand } from './init.js'
 import chalk from 'chalk'
+import { FirstRunManager } from '../utils/FirstRunManager.js'
 
 const DEFAULT_REPO = 'iloom-ai/iloom-cli'
 
@@ -416,5 +417,10 @@ export class ContributeCommand {
 		}
 
 		await writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n')
+
+		// Mark project as configured for il projects list and VSCode extension detection
+		const firstRunManager = new FirstRunManager()
+		await firstRunManager.markProjectAsConfigured(directory)
+		logger.debug('Project marked as configured', { directory })
 	}
 }

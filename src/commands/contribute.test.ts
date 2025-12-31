@@ -7,6 +7,7 @@ import { existsSync, accessSync } from 'fs'
 import { mkdir, writeFile } from 'fs/promises'
 import type { InitCommand } from './init.js'
 import path from 'path'
+import { FirstRunManager } from '../utils/FirstRunManager.js'
 
 // Mock dependencies
 vi.mock('../utils/github.js')
@@ -14,6 +15,7 @@ vi.mock('../utils/git.js')
 vi.mock('../utils/prompt.js')
 vi.mock('fs')
 vi.mock('fs/promises')
+vi.mock('../utils/FirstRunManager.js')
 vi.mock('../utils/logger.js', () => ({
 	logger: {
 		debug: vi.fn(),
@@ -246,6 +248,25 @@ describe('ContributeCommand', () => {
 			expect(writeFile).toHaveBeenCalledWith(
 				expect.stringContaining('settings.local.json'),
 				expect.stringContaining('"remote": "upstream"')
+			)
+		})
+
+		it('should mark project as configured after setup', async () => {
+			const mockMarkProjectAsConfigured = vi.fn().mockResolvedValue(undefined)
+			vi.mocked(FirstRunManager).mockImplementation(() => ({
+				markProjectAsConfigured: mockMarkProjectAsConfigured,
+			}) as unknown as FirstRunManager)
+
+			vi.mocked(promptUtils.promptInput)
+				.mockResolvedValueOnce('./iloom-cli')
+
+			vi.mocked(githubUtils.executeGhCommand).mockResolvedValue('')
+
+			await command.execute()
+
+			// Should mark the cloned directory as configured
+			expect(mockMarkProjectAsConfigured).toHaveBeenCalledWith(
+				expect.stringContaining('iloom-cli')
 			)
 		})
 
