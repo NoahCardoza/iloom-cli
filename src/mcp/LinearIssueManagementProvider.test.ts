@@ -11,6 +11,7 @@ vi.mock('../utils/linear.js', async (importOriginal) => {
 		getLinearComment: vi.fn(),
 		updateLinearComment: vi.fn(),
 		fetchLinearIssueComments: vi.fn(),
+		createLinearIssue: vi.fn(),
 	}
 })
 
@@ -21,6 +22,7 @@ import {
 	getLinearComment,
 	updateLinearComment,
 	fetchLinearIssueComments,
+	createLinearIssue,
 } from '../utils/linear.js'
 
 describe('LinearIssueManagementProvider', () => {
@@ -335,6 +337,54 @@ New content here
 
 			// Should pass through unchanged
 			expect(updateLinearComment).toHaveBeenCalledWith('comment-uuid', regularBody)
+		})
+	})
+
+	describe('createIssue', () => {
+		it('should create an issue with title, body, and teamKey', async () => {
+			vi.mocked(createLinearIssue).mockResolvedValue({
+				identifier: 'ENG-456',
+				url: 'https://linear.app/team/issue/ENG-456/new-issue',
+			})
+
+			const result = await provider.createIssue({
+				title: 'New Issue',
+				body: 'Issue description',
+				teamKey: 'ENG',
+			})
+
+			expect(createLinearIssue).toHaveBeenCalledWith('New Issue', 'Issue description', 'ENG', undefined)
+			expect(result.id).toBe('ENG-456')
+			expect(result.url).toBe('https://linear.app/team/issue/ENG-456/new-issue')
+			expect(result.number).toBeUndefined() // Linear doesn't use numeric issue numbers
+		})
+
+		it('should create an issue with labels', async () => {
+			vi.mocked(createLinearIssue).mockResolvedValue({
+				identifier: 'ENG-789',
+				url: 'https://linear.app/team/issue/ENG-789/labeled-issue',
+			})
+
+			const result = await provider.createIssue({
+				title: 'Labeled Issue',
+				body: 'Issue with labels',
+				teamKey: 'ENG',
+				labels: ['bug', 'priority:high'],
+			})
+
+			expect(createLinearIssue).toHaveBeenCalledWith('Labeled Issue', 'Issue with labels', 'ENG', ['bug', 'priority:high'])
+			expect(result.id).toBe('ENG-789')
+		})
+
+		it('should throw error when teamKey is missing', async () => {
+			await expect(
+				provider.createIssue({
+					title: 'Issue without team',
+					body: 'Body',
+				})
+			).rejects.toThrow('teamKey is required for Linear issue creation')
+
+			expect(createLinearIssue).not.toHaveBeenCalled()
 		})
 	})
 })

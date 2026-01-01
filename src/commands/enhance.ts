@@ -106,6 +106,7 @@ export class EnhanceCommand {
 				'mcp__issue_management__get_comment',
 				'mcp__issue_management__create_comment',
 				'mcp__issue_management__update_comment',
+				'mcp__issue_management__create_issue',
 			]
 			disallowedTools = ['Bash(gh api:*)']
 

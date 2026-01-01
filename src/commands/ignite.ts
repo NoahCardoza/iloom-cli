@@ -178,6 +178,7 @@ export class IgniteCommand {
 						'mcp__issue_management__get_comment',
 						'mcp__issue_management__create_comment',
 						'mcp__issue_management__update_comment',
+						'mcp__issue_management__create_issue',
 						'mcp__recap__add_entry',
 						'mcp__recap__get_recap',
 						'mcp__recap__add_artifact',

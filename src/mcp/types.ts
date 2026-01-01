@@ -53,6 +53,25 @@ export interface UpdateCommentInput {
 }
 
 /**
+ * Input schema for creating an issue
+ */
+export interface CreateIssueInput {
+	title: string // Issue title
+	body: string // Issue body/description (markdown supported)
+	labels?: string[] | undefined // Optional labels to apply
+	teamKey?: string | undefined // Required for Linear, ignored for GitHub
+}
+
+/**
+ * Output schema for issue creation
+ */
+export interface CreateIssueResult {
+	id: string // Issue identifier (number for GitHub, identifier for Linear)
+	url: string // Issue URL
+	number?: number // GitHub issue number (undefined for Linear)
+}
+
+/**
  * Flexible author structure supporting multiple providers
  * Core fields: id, displayName
  * Passthrough fields: login (GitHub), name (Linear), email, avatarUrl, etc.
@@ -143,4 +162,9 @@ export interface IssueManagementProvider {
 	 * Update an existing comment
 	 */
 	updateComment(input: UpdateCommentInput): Promise<CommentResult>
+
+	/**
+	 * Create a new issue
+	 */
+	createIssue(input: CreateIssueInput): Promise<CreateIssueResult>
 }

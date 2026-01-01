@@ -16,6 +16,7 @@ import type {
 	GetCommentInput,
 	CreateCommentInput,
 	UpdateCommentInput,
+	CreateIssueInput,
 } from './types.js'
 
 // Validate required environment variables
@@ -291,6 +292,56 @@ server.registerTool(
 				error instanceof Error ? error.message : 'Unknown error'
 			console.error(`Failed to update comment: ${errorMessage}`)
 			throw new Error(`Failed to update comment: ${errorMessage}`)
+		}
+	}
+)
+
+// Register create_issue tool
+server.registerTool(
+	'create_issue',
+	{
+		title: 'Create Issue',
+		description:
+			'Create a new issue in the configured issue tracker. ' +
+			'For GitHub: creates issue in the configured repository. ' +
+			'For Linear: requires teamKey parameter (e.g., "ENG", "PLAT").',
+		inputSchema: {
+			title: z.string().describe('The issue title'),
+			body: z.string().describe('The issue body/description (markdown supported)'),
+			labels: z.array(z.string()).optional().describe('Optional labels to apply to the issue'),
+			teamKey: z.string().optional().describe('Team key for Linear (e.g., "ENG"). Required for Linear, ignored for GitHub.'),
+		},
+		outputSchema: {
+			id: z.string().describe('Issue identifier'),
+			url: z.string().describe('Issue URL'),
+			number: z.number().optional().describe('Issue number (GitHub only)'),
+		},
+	},
+	async ({ title, body, labels, teamKey }: CreateIssueInput) => {
+		console.error(`Creating issue: ${title}`)
+
+		try {
+			const provider = IssueManagementProviderFactory.create(
+				process.env.ISSUE_PROVIDER as IssueProvider
+			)
+			const result = await provider.createIssue({ title, body, labels, teamKey })
+
+			console.error(`Issue created successfully: ${result.id} at ${result.url}`)
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify(result),
+					},
+				],
+				structuredContent: result as unknown as { [x: string]: unknown },
+			}
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to create issue: ${errorMessage}`)
+			throw new Error(`Failed to create issue: ${errorMessage}`)
 		}
 	}
 )

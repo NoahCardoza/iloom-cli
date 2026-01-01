@@ -9,6 +9,8 @@ import type {
 	GetCommentInput,
 	CreateCommentInput,
 	UpdateCommentInput,
+	CreateIssueInput,
+	CreateIssueResult,
 	IssueResult,
 	CommentDetailResult,
 	CommentResult,
@@ -19,6 +21,7 @@ import {
 	getLinearComment,
 	updateLinearComment,
 	fetchLinearIssueComments,
+	createLinearIssue,
 } from '../utils/linear.js'
 import { LinearMarkupConverter } from '../utils/linear-markup-converter.js'
 
@@ -143,6 +146,24 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 			id: result.id,
 			url: result.url,
 			updated_at: result.updatedAt,
+		}
+	}
+
+	/**
+	 * Create a new issue
+	 */
+	async createIssue(input: CreateIssueInput): Promise<CreateIssueResult> {
+		const { title, body, labels, teamKey } = input
+
+		if (!teamKey) {
+			throw new Error('teamKey is required for Linear issue creation')
+		}
+
+		const result = await createLinearIssue(title, body, teamKey, labels)
+
+		return {
+			id: result.identifier,
+			url: result.url,
 		}
 	}
 }

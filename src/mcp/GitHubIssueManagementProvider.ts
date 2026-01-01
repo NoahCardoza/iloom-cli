@@ -10,6 +10,8 @@ import type {
 	GetCommentInput,
 	CreateCommentInput,
 	UpdateCommentInput,
+	CreateIssueInput,
+	CreateIssueResult,
 	IssueResult,
 	CommentDetailResult,
 	CommentResult,
@@ -20,6 +22,7 @@ import {
 	createIssueComment,
 	updateIssueComment,
 	createPRComment,
+	createIssue,
 } from '../utils/github.js'
 
 /**
@@ -248,6 +251,27 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 		return {
 			...result,
 			id: String(result.id),
+		}
+	}
+
+	/**
+	 * Create a new issue
+	 */
+	async createIssue(input: CreateIssueInput): Promise<CreateIssueResult> {
+		const { title, body, labels } = input
+		// teamKey is ignored for GitHub
+
+		const result = await createIssue(title, body, { labels })
+
+		// Ensure number is numeric
+		const issueNumber = typeof result.number === 'number'
+			? result.number
+			: parseInt(String(result.number), 10)
+
+		return {
+			id: String(issueNumber),
+			url: result.url,
+			number: issueNumber,
 		}
 	}
 }

@@ -7,9 +7,10 @@ vi.mock('../utils/github.js', () => ({
 	createIssueComment: vi.fn(),
 	updateIssueComment: vi.fn(),
 	createPRComment: vi.fn(),
+	createIssue: vi.fn(),
 }))
 
-import { executeGhCommand } from '../utils/github.js'
+import { executeGhCommand, createIssue } from '../utils/github.js'
 
 describe('extractNumericIdFromUrl', () => {
 	it('extracts numeric ID from valid GitHub issue comment URL', () => {
@@ -123,6 +124,60 @@ describe('GitHubIssueManagementProvider', () => {
 			await expect(provider.getIssue({ number: '123' })).rejects.toThrow(
 				'Cannot extract comment ID from URL'
 			)
+		})
+	})
+
+	describe('createIssue', () => {
+		it('should create an issue with title and body', async () => {
+			vi.mocked(createIssue).mockResolvedValueOnce({
+				number: 456,
+				url: 'https://github.com/owner/repo/issues/456',
+			})
+
+			const result = await provider.createIssue({
+				title: 'New Issue',
+				body: 'Issue description',
+			})
+
+			expect(createIssue).toHaveBeenCalledWith('New Issue', 'Issue description', { labels: undefined })
+			expect(result.id).toBe('456')
+			expect(result.url).toBe('https://github.com/owner/repo/issues/456')
+			expect(result.number).toBe(456)
+		})
+
+		it('should create an issue with optional labels', async () => {
+			vi.mocked(createIssue).mockResolvedValueOnce({
+				number: 789,
+				url: 'https://github.com/owner/repo/issues/789',
+			})
+
+			const result = await provider.createIssue({
+				title: 'Labeled Issue',
+				body: 'Issue with labels',
+				labels: ['bug', 'priority:high'],
+			})
+
+			expect(createIssue).toHaveBeenCalledWith('Labeled Issue', 'Issue with labels', {
+				labels: ['bug', 'priority:high'],
+			})
+			expect(result.id).toBe('789')
+			expect(result.number).toBe(789)
+		})
+
+		it('should ignore teamKey parameter', async () => {
+			vi.mocked(createIssue).mockResolvedValueOnce({
+				number: 101,
+				url: 'https://github.com/owner/repo/issues/101',
+			})
+
+			const result = await provider.createIssue({
+				title: 'Issue with teamKey',
+				body: 'Body',
+				teamKey: 'ENG', // Should be ignored for GitHub
+			})
+
+			expect(createIssue).toHaveBeenCalledWith('Issue with teamKey', 'Body', { labels: undefined })
+			expect(result.id).toBe('101')
 		})
 	})
 })
