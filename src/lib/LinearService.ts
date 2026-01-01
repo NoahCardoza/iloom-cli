@@ -13,7 +13,7 @@ import {
 } from '../utils/linear.js'
 import { promptConfirmation } from '../utils/prompt.js'
 import type { IssueTracker } from './IssueTracker.js'
-import { logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 
 /**
  * Linear service configuration options
@@ -61,7 +61,7 @@ export class LinearService implements IssueTracker {
     input: string,
     _repo?: string,
   ): Promise<IssueTrackerInputDetection> {
-    logger.debug(`LinearService.detectInputType called with input: "${input}"`)
+    getLogger().debug(`LinearService.detectInputType called with input: "${input}"`)
 
     // Pattern: TEAM-NUMBER (e.g., ENG-123, PLAT-456)
     // Requires at least 2 letters before dash to avoid conflict with PR-123 format
@@ -69,24 +69,24 @@ export class LinearService implements IssueTracker {
     const match = input.match(linearPattern)
 
     if (!match?.[1]) {
-      logger.debug(`LinearService: Input "${input}" does not match Linear pattern`)
+      getLogger().debug(`LinearService: Input "${input}" does not match Linear pattern`)
       return { type: 'unknown', identifier: null, rawInput: input }
     }
 
     const identifier = match[1].toUpperCase()
-    logger.debug(`LinearService: Matched Linear identifier: ${identifier}`)
+    getLogger().debug(`LinearService: Matched Linear identifier: ${identifier}`)
 
     // Validate the issue exists in Linear
-    logger.debug(`LinearService: Checking if ${identifier} is a valid Linear issue via SDK`)
+    getLogger().debug(`LinearService: Checking if ${identifier} is a valid Linear issue via SDK`)
     const issue = await this.isValidIssue(identifier)
 
     if (issue) {
-      logger.debug(`LinearService: Issue ${identifier} found: "${issue.title}"`)
+      getLogger().debug(`LinearService: Issue ${identifier} found: "${issue.title}"`)
       return { type: 'issue', identifier, rawInput: input }
     }
 
     // Not found
-    logger.debug(`LinearService: Issue ${identifier} NOT found by SDK`)
+    getLogger().debug(`LinearService: Issue ${identifier} NOT found by SDK`)
     return { type: 'unknown', identifier: null, rawInput: input }
   }
 
@@ -161,7 +161,7 @@ export class LinearService implements IssueTracker {
       )
     }
 
-    logger.info(`Creating Linear issue in team ${this.config.teamId}: ${title}`)
+    getLogger().info(`Creating Linear issue in team ${this.config.teamId}: ${title}`)
 
     const result = await createLinearIssue(title, body, this.config.teamId, labels)
 
@@ -188,7 +188,7 @@ export class LinearService implements IssueTracker {
    * @throws LinearServiceError if state update fails
    */
   public async moveIssueToInProgress(identifier: string | number): Promise<void> {
-    logger.info(`Moving Linear issue ${identifier} to In Progress`)
+    getLogger().info(`Moving Linear issue ${identifier} to In Progress`)
     await updateLinearIssueState(String(identifier), 'In Progress')
   }
 
