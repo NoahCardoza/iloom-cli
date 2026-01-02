@@ -3,6 +3,7 @@ import { MergeManager } from '../lib/MergeManager.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { isValidGitRepo, getWorktreeRoot } from '../utils/git.js'
+import { installDependencies } from '../utils/package-manager.js'
 import type { MergeOptions } from '../types/index.js'
 
 export interface RebaseOptions {
@@ -123,5 +124,20 @@ export class RebaseCommand {
 		// - Executing rebase
 		// - Claude-assisted conflict resolution
 		await this.mergeManager.rebaseOnMain(worktreePath, mergeOptions)
+
+		// Install dependencies after successful rebase
+		if (!options.dryRun) {
+			logger.info('Installing dependencies...')
+			try {
+				await installDependencies(worktreePath, true, true) // frozen=true, quiet=true
+			} catch (error) {
+				// Log warning but don't fail - rebase succeeded, user can fix deps manually
+				const message = error instanceof Error ? error.message : 'Unknown error'
+				logger.warn(`Dependency installation failed: ${message}`)
+				logger.warn('Please run your package manager install command manually')
+			}
+		} else {
+			logger.info('[DRY RUN] Would install dependencies')
+		}
 	}
 }

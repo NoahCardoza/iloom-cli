@@ -13,9 +13,13 @@ vi.mock('../utils/git.js', () => ({
 	isValidGitRepo: vi.fn(),
 	getWorktreeRoot: vi.fn(),
 }))
+vi.mock('../utils/package-manager.js', () => ({
+	installDependencies: vi.fn(),
+}))
 
 // Import mocked functions
 import { isValidGitRepo, getWorktreeRoot } from '../utils/git.js'
+import { installDependencies } from '../utils/package-manager.js'
 
 describe('RebaseCommand', () => {
 	let command: RebaseCommand
@@ -257,6 +261,26 @@ describe('RebaseCommand', () => {
 				dryRun: true,
 				force: true,
 			})
+		})
+
+		it('calls installDependencies after successful rebase', async () => {
+			await command.execute()
+
+			expect(installDependencies).toHaveBeenCalledWith('/test/worktree', true, true)
+		})
+
+		it('skips dependency installation in dry-run mode', async () => {
+			await command.execute({ dryRun: true })
+
+			expect(installDependencies).not.toHaveBeenCalled()
+		})
+
+		it('does not fail when dependency installation fails', async () => {
+			vi.mocked(installDependencies).mockRejectedValue(new Error('npm install failed'))
+
+			// Should not throw - rebase succeeded, installation failure is just a warning
+			await expect(command.execute()).resolves.toBeUndefined()
+			expect(installDependencies).toHaveBeenCalledWith('/test/worktree', true, true)
 		})
 	})
 
