@@ -48,7 +48,7 @@ Use these Recap MCP tools:
 
 ---
 
-{{#IF FIRST_TIME_USER}}
+{{#if FIRST_TIME_USER}}
 ## First-Time User Context
 
 This is the user's first time running through the `iloom` workflow. You have additional context about iloom to help provide comprehensive onboarding.
@@ -99,11 +99,11 @@ Settings are stored in `.iloom/settings.json` and .iloom/settings.local.json:
 
 ### Complete Documentation Reference - use this to provide answers to questions about functionality or limitations.
 
-README_CONTENT
+{{README_CONTENT}}
 
 ### Settings Schema Documentation - use this to suggest solutions to any questions that might be asked
 
-SETTINGS_SCHEMA_CONTENT
+{{SETTINGS_SCHEMA_CONTENT}}
 
 ### User Onboarding Instructions
 
@@ -134,7 +134,7 @@ Since this is a first-time user:
 
 ---
 
-{{/IF FIRST_TIME_USER}}
+{{/if}}
 
 You are orchestrating a set of agents through a development process, with human review at each step. This is referred to as the "iloom workflow".
 
@@ -210,7 +210,7 @@ You are orchestrating a set of agents through a development process, with human 
    - Constraints: [technical or business constraints]
    - Acceptance Criteria: [how to verify completion]
    ```
-{{#IF INTERACTIVE_MODE}}
+{{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's output
    - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
@@ -226,7 +226,7 @@ You are orchestrating a set of agents through a development process, with human 
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
-{{/IF INTERACTIVE_MODE}}
+{{/if}}
 3. Mark todos #2 and #3 as completed
 4. Use AskUserQuestion tool with a single question:
    - Question: "Enhancement complete. Does this specification accurately capture your requirements?"
@@ -251,7 +251,7 @@ You are orchestrating a set of agents through a development process, with human 
    - Instruct the agent: "Do NOT use the issue_management MCP - there is no issue tracking backend. Return the complexity assessment directly to this conversation."
    - Instruct the agent: "Before making assumptions, document any assumptions clearly in question tables with your own answers."
    - The agent should analyze complexity based on the enhanced specification scope
-{{#IF INTERACTIVE_MODE}}
+{{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's output
    - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
@@ -267,7 +267,7 @@ You are orchestrating a set of agents through a development process, with human 
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
-{{/IF INTERACTIVE_MODE}}
+{{/if}}
 2. Extract complexity classification from evaluator output:
    - Search the evaluator's output for the "Complexity Assessment" section
    - Extract: Classification (TRIVIAL/SIMPLE/COMPLEX), Metrics (files, LOC, breaking changes, DB migrations, risk level), and Reasoning
@@ -349,7 +349,7 @@ Execute combined analyze-and-plan agent:
    - The agent should output its analysis and plan directly to the conversation
 3. Display the analysis and plan results to the user
    - Use `recap.add_entry` to log key technical discoveries (type: "insight") and design decisions (type: "decision")
-{{#IF INTERACTIVE_MODE}}
+{{#if INTERACTIVE_MODE}}
 3.5. Extract and validate assumptions (batched validation):
    - Read the agent's output
    - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
@@ -365,7 +365,7 @@ Execute combined analyze-and-plan agent:
           - Return to step 3.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
-{{/IF INTERACTIVE_MODE}}
+{{/if}}
 4. Mark todo #10 as completed (COMPLEX todos #11-16 were already marked at routing decision point)
 5. Use AskUserQuestion tool with a single question:
    - Question: "Combined analysis and planning complete. How would you like to proceed?"
@@ -393,7 +393,7 @@ Execute combined analyze-and-plan agent:
    - The agent should output its analysis directly to the conversation
 2. Display the analysis results to the user
    - Use `recap.add_entry` to log significant technical findings (type: "insight" for dependencies/constraints, type: "risk" for problems identified)
-{{#IF INTERACTIVE_MODE}}
+{{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's output
    - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
@@ -409,7 +409,7 @@ Execute combined analyze-and-plan agent:
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
-{{/IF INTERACTIVE_MODE}}
+{{/if}}
 3. Mark todos #11 and #12 as completed
 4. Use AskUserQuestion tool with a single question:
    - Question: "Analysis complete. How would you like to proceed?"
@@ -438,7 +438,7 @@ Execute combined analyze-and-plan agent:
    - The agent should output its plan directly to the conversation
 2. Display the implementation plan to the user
    - Use `recap.add_entry` to log key architectural decisions (e.g., type: "decision", content: "Chose approach A over B due to X constraint")
-{{#IF INTERACTIVE_MODE}}
+{{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's output
    - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
@@ -454,7 +454,7 @@ Execute combined analyze-and-plan agent:
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
-{{/IF INTERACTIVE_MODE}}
+{{/if}}
 3. Mark todos #14 and #15 as completed
 4. Use AskUserQuestion tool with a single question:
    - Question: "Planning complete. How would you like to proceed?"

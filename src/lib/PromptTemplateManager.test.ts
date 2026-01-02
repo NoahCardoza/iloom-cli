@@ -75,7 +75,7 @@ describe('PromptTemplateManager', () => {
 
 	describe('substituteVariables', () => {
 		it('should substitute ISSUE_NUMBER variable', () => {
-			const template = 'Work on issue ISSUE_NUMBER'
+			const template = 'Work on issue {{ISSUE_NUMBER}}'
 			const variables: TemplateVariables = { ISSUE_NUMBER: 123 }
 
 			const result = manager.substituteVariables(template, variables)
@@ -83,8 +83,17 @@ describe('PromptTemplateManager', () => {
 			expect(result).toBe('Work on issue 123')
 		})
 
+		it('should NOT substitute variable names that appear as substrings', () => {
+			const template = 'IMPORTANT: Use port {{PORT}}'
+			const variables: TemplateVariables = { PORT: 3000 }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('IMPORTANT: Use port 3000')
+		})
+
 		it('should substitute PR_NUMBER variable', () => {
-			const template = 'Review PR PR_NUMBER'
+			const template = 'Review PR {{PR_NUMBER}}'
 			const variables: TemplateVariables = { PR_NUMBER: 456 }
 
 			const result = manager.substituteVariables(template, variables)
@@ -93,7 +102,7 @@ describe('PromptTemplateManager', () => {
 		})
 
 		it('should substitute ISSUE_TITLE variable', () => {
-			const template = 'Title: ISSUE_TITLE'
+			const template = 'Title: {{ISSUE_TITLE}}'
 			const variables: TemplateVariables = { ISSUE_TITLE: 'Add authentication' }
 
 			const result = manager.substituteVariables(template, variables)
@@ -102,7 +111,7 @@ describe('PromptTemplateManager', () => {
 		})
 
 		it('should substitute PR_TITLE variable', () => {
-			const template = 'PR: PR_TITLE'
+			const template = 'PR: {{PR_TITLE}}'
 			const variables: TemplateVariables = { PR_TITLE: 'Fix bug in login' }
 
 			const result = manager.substituteVariables(template, variables)
@@ -111,7 +120,7 @@ describe('PromptTemplateManager', () => {
 		})
 
 		it('should substitute WORKSPACE_PATH variable', () => {
-			const template = 'Working in WORKSPACE_PATH'
+			const template = 'Working in {{WORKSPACE_PATH}}'
 			const variables: TemplateVariables = { WORKSPACE_PATH: '/path/to/workspace' }
 
 			const result = manager.substituteVariables(template, variables)
@@ -120,7 +129,7 @@ describe('PromptTemplateManager', () => {
 		})
 
 		it('should substitute PORT variable', () => {
-			const template = 'Dev server on PORT'
+			const template = 'Dev server on {{PORT}}'
 			const variables: TemplateVariables = { PORT: 3123 }
 
 			const result = manager.substituteVariables(template, variables)
@@ -129,7 +138,7 @@ describe('PromptTemplateManager', () => {
 		})
 
 		it('should substitute multiple variables', () => {
-			const template = 'Issue ISSUE_NUMBER: ISSUE_TITLE at WORKSPACE_PATH'
+			const template = 'Issue {{ISSUE_NUMBER}}: {{ISSUE_TITLE}} at {{WORKSPACE_PATH}}'
 			const variables: TemplateVariables = {
 				ISSUE_NUMBER: 123,
 				ISSUE_TITLE: 'Add feature',
@@ -142,7 +151,7 @@ describe('PromptTemplateManager', () => {
 		})
 
 		it('should substitute all occurrences of a variable', () => {
-			const template = 'ISSUE_NUMBER is important. Work on ISSUE_NUMBER now.'
+			const template = '{{ISSUE_NUMBER}} is important. Work on {{ISSUE_NUMBER}} now.'
 			const variables: TemplateVariables = { ISSUE_NUMBER: 123 }
 
 			const result = manager.substituteVariables(template, variables)
@@ -151,34 +160,34 @@ describe('PromptTemplateManager', () => {
 		})
 
 		it('should handle empty variables object', () => {
-			const template = 'Work on ISSUE_NUMBER'
+			const template = 'Work on {{ISSUE_NUMBER}}'
 			const variables: TemplateVariables = {}
 
 			const result = manager.substituteVariables(template, variables)
 
-			expect(result).toBe('Work on ISSUE_NUMBER')
+			expect(result).toBe('Work on ')
 		})
 
 		it('should only substitute defined variables', () => {
-			const template = 'Issue ISSUE_NUMBER and PR PR_NUMBER'
+			const template = 'Issue {{ISSUE_NUMBER}} and PR {{PR_NUMBER}}'
 			const variables: TemplateVariables = { ISSUE_NUMBER: 123 }
 
 			const result = manager.substituteVariables(template, variables)
 
-			expect(result).toBe('Issue 123 and PR PR_NUMBER')
+			expect(result).toBe('Issue 123 and PR ')
 		})
 
-		it('should handle undefined variable values by not substituting', () => {
-			const template = 'Issue ISSUE_NUMBER'
+		it('should handle undefined variable values by outputting empty string', () => {
+			const template = 'Issue {{ISSUE_NUMBER}}'
 			const variables: TemplateVariables = { ISSUE_NUMBER: undefined }
 
 			const result = manager.substituteVariables(template, variables)
 
-			expect(result).toBe('Issue ISSUE_NUMBER')
+			expect(result).toBe('Issue ')
 		})
 
 		it('should include conditional section when ONE_SHOT_MODE is true', () => {
-			const template = 'Start{{#IF ONE_SHOT_MODE}} one-shot content {{/IF ONE_SHOT_MODE}}End'
+			const template = 'Start{{#if ONE_SHOT_MODE}} one-shot content {{/if}}End'
 			const variables: TemplateVariables = { ONE_SHOT_MODE: true }
 
 			const result = manager.substituteVariables(template, variables)
@@ -187,7 +196,7 @@ describe('PromptTemplateManager', () => {
 		})
 
 		it('should exclude conditional section when ONE_SHOT_MODE is false', () => {
-			const template = 'Start{{#IF ONE_SHOT_MODE}} one-shot content {{/IF ONE_SHOT_MODE}}End'
+			const template = 'Start{{#if ONE_SHOT_MODE}} one-shot content {{/if}}End'
 			const variables: TemplateVariables = { ONE_SHOT_MODE: false }
 
 			const result = manager.substituteVariables(template, variables)
@@ -196,7 +205,7 @@ describe('PromptTemplateManager', () => {
 		})
 
 		it('should exclude conditional section when ONE_SHOT_MODE is undefined', () => {
-			const template = 'Start{{#IF ONE_SHOT_MODE}} one-shot content {{/IF ONE_SHOT_MODE}}End'
+			const template = 'Start{{#if ONE_SHOT_MODE}} one-shot content {{/if}}End'
 			const variables: TemplateVariables = {}
 
 			const result = manager.substituteVariables(template, variables)
@@ -206,27 +215,25 @@ describe('PromptTemplateManager', () => {
 
 		it('should handle multi-line conditional sections', () => {
 			const template = `Header
-{{#IF ONE_SHOT_MODE}}
+{{#if ONE_SHOT_MODE}}
 Line 1
 Line 2
 Line 3
-{{/IF ONE_SHOT_MODE}}
+{{/if}}
 Footer`
 			const variables: TemplateVariables = { ONE_SHOT_MODE: true }
 
 			const result = manager.substituteVariables(template, variables)
 
 			expect(result).toBe(`Header
-
 Line 1
 Line 2
 Line 3
-
 Footer`)
 		})
 
-		it('should process conditionals before variable substitution', () => {
-			const template = '{{#IF ONE_SHOT_MODE}}Issue ISSUE_NUMBER{{/IF ONE_SHOT_MODE}}'
+		it('should process conditionals and variable substitution together', () => {
+			const template = '{{#if ONE_SHOT_MODE}}Issue {{ISSUE_NUMBER}}{{/if}}'
 			const variables: TemplateVariables = { ONE_SHOT_MODE: true, ISSUE_NUMBER: 123 }
 
 			const result = manager.substituteVariables(template, variables)
@@ -235,7 +242,7 @@ Footer`)
 		})
 
 		it('should handle multiple conditional sections in same template', () => {
-			const template = '{{#IF ONE_SHOT_MODE}}First{{/IF ONE_SHOT_MODE}} Middle {{#IF ONE_SHOT_MODE}}Second{{/IF ONE_SHOT_MODE}}'
+			const template = '{{#if ONE_SHOT_MODE}}First{{/if}} Middle {{#if ONE_SHOT_MODE}}Second{{/if}}'
 			const variables: TemplateVariables = { ONE_SHOT_MODE: true }
 
 			const result = manager.substituteVariables(template, variables)
@@ -244,7 +251,7 @@ Footer`)
 		})
 
 		it('should include conditional section when INTERACTIVE_MODE is true', () => {
-			const template = 'Start{{#IF INTERACTIVE_MODE}} interactive content {{/IF INTERACTIVE_MODE}}End'
+			const template = 'Start{{#if INTERACTIVE_MODE}} interactive content {{/if}}End'
 			const variables: TemplateVariables = { INTERACTIVE_MODE: true }
 
 			const result = manager.substituteVariables(template, variables)
@@ -253,7 +260,7 @@ Footer`)
 		})
 
 		it('should exclude conditional section when INTERACTIVE_MODE is false', () => {
-			const template = 'Start{{#IF INTERACTIVE_MODE}} interactive content {{/IF INTERACTIVE_MODE}}End'
+			const template = 'Start{{#if INTERACTIVE_MODE}} interactive content {{/if}}End'
 			const variables: TemplateVariables = { INTERACTIVE_MODE: false }
 
 			const result = manager.substituteVariables(template, variables)
@@ -262,7 +269,7 @@ Footer`)
 		})
 
 		it('should exclude conditional section when INTERACTIVE_MODE is undefined', () => {
-			const template = 'Start{{#IF INTERACTIVE_MODE}} interactive content {{/IF INTERACTIVE_MODE}}End'
+			const template = 'Start{{#if INTERACTIVE_MODE}} interactive content {{/if}}End'
 			const variables: TemplateVariables = {}
 
 			const result = manager.substituteVariables(template, variables)
@@ -272,11 +279,11 @@ Footer`)
 
 		it('should handle multi-line INTERACTIVE_MODE conditional sections', () => {
 			const template = `Header
-{{#IF INTERACTIVE_MODE}}
+{{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's output
    - Use AskUserQuestion tool
-{{/IF INTERACTIVE_MODE}}
+{{/if}}
 Footer`
 			const variables: TemplateVariables = { INTERACTIVE_MODE: true }
 
@@ -287,7 +294,7 @@ Footer`
 		})
 
 		it('should include content when HAS_PACKAGE_JSON is true', () => {
-			const template = '{{#IF HAS_PACKAGE_JSON}}Node.js project detected{{/IF HAS_PACKAGE_JSON}}'
+			const template = '{{#if HAS_PACKAGE_JSON}}Node.js project detected{{/if}}'
 			const variables: TemplateVariables = { HAS_PACKAGE_JSON: true }
 
 			const result = manager.substituteVariables(template, variables)
@@ -296,7 +303,7 @@ Footer`
 		})
 
 		it('should exclude content when HAS_PACKAGE_JSON is false', () => {
-			const template = '{{#IF HAS_PACKAGE_JSON}}Node.js project detected{{/IF HAS_PACKAGE_JSON}}'
+			const template = '{{#if HAS_PACKAGE_JSON}}Node.js project detected{{/if}}'
 			const variables: TemplateVariables = { HAS_PACKAGE_JSON: false }
 
 			const result = manager.substituteVariables(template, variables)
@@ -305,7 +312,7 @@ Footer`
 		})
 
 		it('should include content when NO_PACKAGE_JSON is true', () => {
-			const template = '{{#IF NO_PACKAGE_JSON}}Non-Node.js project detected{{/IF NO_PACKAGE_JSON}}'
+			const template = '{{#if NO_PACKAGE_JSON}}Non-Node.js project detected{{/if}}'
 			const variables: TemplateVariables = { NO_PACKAGE_JSON: true }
 
 			const result = manager.substituteVariables(template, variables)
@@ -314,7 +321,7 @@ Footer`
 		})
 
 		it('should exclude content when NO_PACKAGE_JSON is false', () => {
-			const template = '{{#IF NO_PACKAGE_JSON}}Non-Node.js project detected{{/IF NO_PACKAGE_JSON}}'
+			const template = '{{#if NO_PACKAGE_JSON}}Non-Node.js project detected{{/if}}'
 			const variables: TemplateVariables = { NO_PACKAGE_JSON: false }
 
 			const result = manager.substituteVariables(template, variables)
@@ -323,7 +330,7 @@ Footer`
 		})
 
 		it('should handle mutually exclusive HAS_PACKAGE_JSON and NO_PACKAGE_JSON', () => {
-			const template = '{{#IF HAS_PACKAGE_JSON}}Node{{/IF HAS_PACKAGE_JSON}}{{#IF NO_PACKAGE_JSON}}Other{{/IF NO_PACKAGE_JSON}}'
+			const template = '{{#if HAS_PACKAGE_JSON}}Node{{/if}}{{#if NO_PACKAGE_JSON}}Other{{/if}}'
 			const variablesWithPackageJson: TemplateVariables = { HAS_PACKAGE_JSON: true, NO_PACKAGE_JSON: false }
 			const variablesWithoutPackageJson: TemplateVariables = { HAS_PACKAGE_JSON: false, NO_PACKAGE_JSON: true }
 
@@ -337,7 +344,7 @@ Footer`
 
 	describe('getPrompt', () => {
 		it('should load and substitute variables for issue template', async () => {
-			const template = 'Work on issue ISSUE_NUMBER: ISSUE_TITLE'
+			const template = 'Work on issue {{ISSUE_NUMBER}}: {{ISSUE_TITLE}}'
 			vi.mocked(readFile).mockResolvedValueOnce(template)
 
 			const variables: TemplateVariables = {
@@ -352,7 +359,7 @@ Footer`
 		})
 
 		it('should load and substitute variables for pr template', async () => {
-			const template = 'Review PR PR_NUMBER'
+			const template = 'Review PR {{PR_NUMBER}}'
 			vi.mocked(readFile).mockResolvedValueOnce(template)
 
 			const variables: TemplateVariables = { PR_NUMBER: 456 }
@@ -383,7 +390,7 @@ Footer`
 
 		it('should handle complex variable substitution', async () => {
 			const template =
-				'Issue ISSUE_NUMBER at WORKSPACE_PATH\nTitle: ISSUE_TITLE\nPort: PORT'
+				'Issue {{ISSUE_NUMBER}} at {{WORKSPACE_PATH}}\nTitle: {{ISSUE_TITLE}}\nPort: {{PORT}}'
 			vi.mocked(readFile).mockResolvedValueOnce(template)
 
 			const variables: TemplateVariables = {
@@ -401,7 +408,7 @@ Footer`
 		})
 
 		it('should process conditional sections and variables together', async () => {
-			const template = 'Issue ISSUE_NUMBER{{#IF ONE_SHOT_MODE}} (one-shot mode){{/IF ONE_SHOT_MODE}}'
+			const template = 'Issue {{ISSUE_NUMBER}}{{#if ONE_SHOT_MODE}} (one-shot mode){{/if}}'
 			vi.mocked(readFile).mockResolvedValueOnce(template)
 
 			const variables: TemplateVariables = {
@@ -415,7 +422,7 @@ Footer`
 		})
 
 		it('should exclude conditional sections when ONE_SHOT_MODE is false', async () => {
-			const template = 'Issue ISSUE_NUMBER{{#IF ONE_SHOT_MODE}} (one-shot mode){{/IF ONE_SHOT_MODE}}'
+			const template = 'Issue {{ISSUE_NUMBER}}{{#if ONE_SHOT_MODE}} (one-shot mode){{/if}}'
 			vi.mocked(readFile).mockResolvedValueOnce(template)
 
 			const variables: TemplateVariables = {

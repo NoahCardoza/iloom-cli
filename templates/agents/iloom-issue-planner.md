@@ -43,9 +43,9 @@ Available Tools:
   Parameters: { commentId: string, number: string }
   Returns: { id, body, author, created_at, ... }
 
-{{#IF DRAFT_PR_MODE}}- mcp__issue_management__create_comment: Create a new comment on PR DRAFT_PR_NUMBER
-  Parameters: { number: string, body: "markdown content", type: "pr" }{{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}- mcp__issue_management__create_comment: Create a new comment on issue ISSUE_NUMBER
-  Parameters: { number: string, body: "markdown content", type: "issue" }{{/IF STANDARD_ISSUE_MODE}}
+{{#if DRAFT_PR_MODE}}- mcp__issue_management__create_comment: Create a new comment on PR {{DRAFT_PR_NUMBER}}
+  Parameters: { number: string, body: "markdown content", type: "pr" }{{/if}}{{#if STANDARD_ISSUE_MODE}}- mcp__issue_management__create_comment: Create a new comment on issue {{ISSUE_NUMBER}}
+  Parameters: { number: string, body: "markdown content", type: "issue" }{{/if}}
   Returns: { id: string, url: string, created_at: string }
 
 - mcp__issue_management__update_comment: Update an existing comment
@@ -68,15 +68,15 @@ Workflow Comment Strategy:
 Example Usage:
 ```
 // Start
-{{#IF DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
-  number: DRAFT_PR_NUMBER,
+{{#if DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
+  number: {{DRAFT_PR_NUMBER}},
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
   type: "pr"
-}){{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}const comment = await mcp__issue_management__create_comment({
-  number: ISSUE_NUMBER,
+}){{/if}}{{#if STANDARD_ISSUE_MODE}}const comment = await mcp__issue_management__create_comment({
+  number: {{ISSUE_NUMBER}},
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
   type: "issue"
-}){{/IF STANDARD_ISSUE_MODE}}
+}){{/if}}
 
 // Log the comment as an artifact
 await mcp__recap__add_artifact({
@@ -86,15 +86,15 @@ await mcp__recap__add_artifact({
 })
 
 // Update as you progress
-{{#IF DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
+{{#if DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
-  number: DRAFT_PR_NUMBER,
+  number: {{DRAFT_PR_NUMBER}},
   body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
-}){{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}await mcp__issue_management__update_comment({
+}){{/if}}{{#if STANDARD_ISSUE_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
-  number: ISSUE_NUMBER,
+  number: {{ISSUE_NUMBER}},
   body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
-}){{/IF STANDARD_ISSUE_MODE}}
+}){{/if}}
 ```
 </comment_tool_info>
 
@@ -103,7 +103,7 @@ await mcp__recap__add_artifact({
 When analyzing an issue:
 
 ### Step 1: Fetch the Issue
-First fetch the issue using the MCP tool `mcp__issue_management__get_issue` with `{ number: ISSUE_NUMBER, includeComments: true }`. This returns the issue body, title, comments, labels, assignees, and other metadata.
+First fetch the issue using the MCP tool `mcp__issue_management__get_issue` with `{ number: {{ISSUE_NUMBER}}, includeComments: true }`. This returns the issue body, title, comments, labels, assignees, and other metadata.
 
 If no issue number has been provided, use the current branch name to look for an issue number (i.e issue-NN). If there is a pr_NN suffix, look at both the PR and the issue (if one is also referenced in the branch name).
 
@@ -378,7 +378,7 @@ Provide execution steps concisely:
 
 ## Workflow
 
-1. Use the MCP issue management tool `mcp__issue_management__get_issue` with `{ number: ISSUE_NUMBER, includeComments: true }` to get full context (body, title, comments, labels, assignees, milestone)
+1. Use the MCP issue management tool `mcp__issue_management__get_issue` with `{ number: {{ISSUE_NUMBER}}, includeComments: true }` to get full context (body, title, comments, labels, assignees, milestone)
 2. Search and read relevant files in the codebase
 3. Create detailed implementation plan with exact locations (but,  per instructions above, don't write the exact code)
 4. Write plan to temporary file

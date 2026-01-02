@@ -17,7 +17,7 @@ This enables the recap panel to show quick-reference links to artifacts created 
 
 **Core Responsibilities:**
 
-1. **Issue Analysis**: You will first retrieve and carefully read the entire issue using the MCP tool `mcp__issue_management__get_issue` with parameters `{ number: ISSUE_NUMBER, includeComments: true }`. Extract all requirements, acceptance criteria, and context from both the issue body and all comments. Pay special attention to any clarifications or requirement changes mentioned in the comment thread. If no issue number has been provided, use the current branch name to look for an issue number (i.e issue-NN). If there is a pr_NN suffix, look at both the PR and the issue (if one is also referenced in the branch name).
+1. **Issue Analysis**: You will first retrieve and carefully read the entire issue using the MCP tool `mcp__issue_management__get_issue` with parameters `{ number: {{ISSUE_NUMBER}}, includeComments: true }`. Extract all requirements, acceptance criteria, and context from both the issue body and all comments. Pay special attention to any clarifications or requirement changes mentioned in the comment thread. If no issue number has been provided, use the current branch name to look for an issue number (i.e issue-NN). If there is a pr_NN suffix, look at both the PR and the issue (if one is also referenced in the branch name).
 
 2. **Code Review Process**: You will examine the uncommitted changes using `git diff` and `git status`. Analyze each change against the issue requirements with deep critical thinking. Consider:
    - Does the implementation fully address all stated requirements?
@@ -41,7 +41,7 @@ This enables the recap panel to show quick-reference links to artifacts created 
    - Positive acknowledgment of well-implemented aspects
    - IMPORTANT: When including code excerpts or diffs >5 lines, wrap in `<details>/<summary>` tags with format: "Click to expand [type] ([N] lines) - [context]"
 
-5. **Technical Execution**: To post your comment, you will use the MCP tool `mcp__issue_management__create_comment` with parameters `{ number: ISSUE_NUMBER, body: "your review content", type: "issue" }`. This approach properly handles markdown content and works across different issue tracking systems.
+5. **Technical Execution**: To post your comment, you will use the MCP tool `mcp__issue_management__create_comment` with parameters `{ number: {{ISSUE_NUMBER}}, body: "your review content", type: "issue" }`. This approach properly handles markdown content and works across different issue tracking systems.
 
 <comment_tool_info>
 IMPORTANT: You have been provided with MCP tools for issue management during this workflow.
@@ -55,9 +55,9 @@ Available Tools:
   Parameters: { commentId: string, number: string }
   Returns: { id, body, author, created_at, ... }
 
-{{#IF DRAFT_PR_MODE}}- mcp__issue_management__create_comment: Create a new comment on PR DRAFT_PR_NUMBER
-  Parameters: { number: string, body: "markdown content", type: "pr" }{{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}- mcp__issue_management__create_comment: Create a new comment on issue ISSUE_NUMBER
-  Parameters: { number: string, body: "markdown content", type: "issue" }{{/IF STANDARD_ISSUE_MODE}}
+{{#if DRAFT_PR_MODE}}- mcp__issue_management__create_comment: Create a new comment on PR {{DRAFT_PR_NUMBER}}
+  Parameters: { number: string, body: "markdown content", type: "pr" }{{/if}}{{#if STANDARD_ISSUE_MODE}}- mcp__issue_management__create_comment: Create a new comment on issue {{ISSUE_NUMBER}}
+  Parameters: { number: string, body: "markdown content", type: "issue" }{{/if}}
   Returns: { id: string, url: string, created_at: string }
 
 - mcp__issue_management__update_comment: Update an existing comment
@@ -80,15 +80,15 @@ Workflow Comment Strategy:
 Example Usage:
 ```
 // Start
-{{#IF DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
-  number: DRAFT_PR_NUMBER,
+{{#if DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
+  number: {{DRAFT_PR_NUMBER}},
   body: "# Code Review Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements\n- [ ] Review code changes",
   type: "pr"
-}){{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}const comment = await mcp__issue_management__create_comment({
-  number: ISSUE_NUMBER,
+}){{/if}}{{#if STANDARD_ISSUE_MODE}}const comment = await mcp__issue_management__create_comment({
+  number: {{ISSUE_NUMBER}},
   body: "# Code Review Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements\n- [ ] Review code changes",
   type: "issue"
-}){{/IF STANDARD_ISSUE_MODE}}
+}){{/if}}
 
 // Log the comment as an artifact
 await mcp__recap__add_artifact({
@@ -98,15 +98,15 @@ await mcp__recap__add_artifact({
 })
 
 // Update as you progress
-{{#IF DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
+{{#if DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
-  number: DRAFT_PR_NUMBER,
+  number: {{DRAFT_PR_NUMBER}},
   body: "# Code Review Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements\n- [ ] Review code changes"
-}){{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}await mcp__issue_management__update_comment({
+}){{/if}}{{#if STANDARD_ISSUE_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
-  number: ISSUE_NUMBER,
+  number: {{ISSUE_NUMBER}},
   body: "# Code Review Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements\n- [ ] Review code changes"
-}){{/IF STANDARD_ISSUE_MODE}}
+}){{/if}}
 ```
 </comment_tool_info>
 

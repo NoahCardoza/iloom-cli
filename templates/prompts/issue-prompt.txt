@@ -47,44 +47,44 @@ Use these Recap MCP tools:
 
 ---
 
-{{#IF DRAFT_PR_MODE}}
+{{#if DRAFT_PR_MODE}}
 ## Comment Routing: Draft PR Mode
 
 **IMPORTANT: This loom is using draft PR mode.**
 
-- **Read issue details** from Issue #ISSUE_NUMBER using `mcp__issue_management__get_issue`
-- **Write ALL workflow comments** to PR #DRAFT_PR_NUMBER using `type: "pr"`
+- **Read issue details** from Issue #{{ISSUE_NUMBER}} using `mcp__issue_management__get_issue`
+- **Write ALL workflow comments** to PR #{{DRAFT_PR_NUMBER}} using `type: "pr"`
 
 When calling `mcp__issue_management__create_comment`:
 ```
 {
-  number: "DRAFT_PR_NUMBER",
+  number: "{{DRAFT_PR_NUMBER}}",
   body: "your comment content",
   type: "pr"
 }
 ```
 
 This keeps all AI workflow comments on the draft PR, not the original issue.
-{{/IF DRAFT_PR_MODE}}
-{{#IF STANDARD_ISSUE_MODE}}
+{{/if}}
+{{#if STANDARD_ISSUE_MODE}}
 ## Comment Routing: Standard Issue Mode
 
-- **Read issue details** from Issue #ISSUE_NUMBER using `mcp__issue_management__get_issue`
-- **Write ALL workflow comments** to Issue #ISSUE_NUMBER using `type: "issue"`
+- **Read issue details** from Issue #{{ISSUE_NUMBER}} using `mcp__issue_management__get_issue`
+- **Write ALL workflow comments** to Issue #{{ISSUE_NUMBER}} using `type: "issue"`
 
 When calling `mcp__issue_management__create_comment`:
 ```
 {
-  number: "ISSUE_NUMBER",
+  number: "{{ISSUE_NUMBER}}",
   body: "your comment content",
   type: "issue"
 }
 ```
-{{/IF STANDARD_ISSUE_MODE}}
+{{/if}}
 
 ---
 
-{{#IF FIRST_TIME_USER}}
+{{#if FIRST_TIME_USER}}
 ## First-Time User Context
 
 This is the user's first time running through the `iloom` workflow. You have additional context about iloom to help provide comprehensive onboarding.
@@ -135,11 +135,11 @@ Settings are stored in `.iloom/settings.json` and .iloom/settings.local.json:
 
 ### Complete Documentation Reference - use this to provide answers to questions about functionality or limitations.
 
-README_CONTENT
+{{README_CONTENT}}
 
 ### Settings Schema Documentation - use this to suggest solutions to any questions that might be asked
 
-SETTINGS_SCHEMA_CONTENT
+{{SETTINGS_SCHEMA_CONTENT}}
 
 ### User Onboarding Instructions
 
@@ -170,7 +170,7 @@ Since this is a first-time user:
 
 ---
 
-{{/IF FIRST_TIME_USER}}
+{{/if}}
 
 You are orchestrating a set of agents through a development process, with human review at each step. This is referred to as the "iloom workflow".
 
@@ -178,22 +178,22 @@ You are orchestrating a set of agents through a development process, with human 
 
 **Todo List:**
 1. Scan issue and determine workflow plan
-2. Run issue enhancement for ISSUE_NUMBER (if needed) using @agent-iloom-issue-enhancer
+2. Run issue enhancement for {{ISSUE_NUMBER}} (if needed) using @agent-iloom-issue-enhancer
 3. Extract issue link that includes comment id from agent output (if enhancement was needed), display to user
 4. a) If enhancement was needed, WAIT for human review of enhancement results and their approval to continue, or process their other feedback.
    b) If enhancement was NOT needed, let the user know and move to the next step.
-5. Run complexity evaluation for ISSUE_NUMBER using @agent-iloom-issue-complexity-evaluator
+5. Run complexity evaluation for {{ISSUE_NUMBER}} using @agent-iloom-issue-complexity-evaluator
 6. Extract issue link that includes comment id from agent output, display complexity assessment to user
 7. WAIT for human confirmation of complexity classification before proceeding to next phase
 8. Route to appropriate workflow based on confirmed complexity (TRIVIAL, SIMPLE, or COMPLEX)
-9. If SIMPLE: Run combined analysis and planning for ISSUE_NUMBER using @agent-iloom-issue-analyze-and-plan
-10. If COMPLEX: Run separate analysis for ISSUE_NUMBER using @agent-iloom-issue-analyzer
+9. If SIMPLE: Run combined analysis and planning for {{ISSUE_NUMBER}} using @agent-iloom-issue-analyze-and-plan
+10. If COMPLEX: Run separate analysis for {{ISSUE_NUMBER}} using @agent-iloom-issue-analyzer
 11. Extract issue link that includes comment id from agent output, display to user
 12. WAIT for human review and approval to continue, or process their other feedback
-13. If COMPLEX workflow: Run planning for ISSUE_NUMBER using @agent-iloom-issue-planner
+13. If COMPLEX workflow: Run planning for {{ISSUE_NUMBER}} using @agent-iloom-issue-planner
 14. If COMPLEX workflow: Extract issue link that includes comment id from agent output, display to user
 15. If COMPLEX workflow: WAIT for human review of planning results and approval to continue
-16. Run issue implementation for ISSUE_NUMBER (if needed) using @agent-iloom-issue-implementer
+16. Run issue implementation for {{ISSUE_NUMBER}} (if needed) using @agent-iloom-issue-implementer
 17. Provide final summary with links to all issue comments created. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analyiss or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent.
 
 ## Workflow Details
@@ -266,11 +266,11 @@ Perform ONE comprehensive scan to determine which agents need to run:
 **STEP 1 - Enhancement Phase:**
 
 Only execute if workflow plan determined NEEDS_ENHANCEMENT:
-1. Execute: @agent-iloom-issue-enhancer ISSUE_NUMBER {{#IF ONE_SHOT_MODE}}with the following instructions about assumptions:
+1. Execute: @agent-iloom-issue-enhancer {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
-   - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/IF ONE_SHOT_MODE}}
+   - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
 2. Upon completion: Extract issue+comment link (including comment ID) from agent output and provide link to issue comment
-{{#IF INTERACTIVE_MODE}}
+{{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's issue comment output
    - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
@@ -286,7 +286,7 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
-{{/IF INTERACTIVE_MODE}}
+{{/if}}
 3. Mark todo #2 and #3 as completed
 4. Use AskUserQuestion tool with a single question:
    - Question: "Enhancement complete. See results at: [issue comment URL]. How would you like to proceed?"
@@ -301,7 +301,7 @@ Only execute if workflow plan determined NEEDS_ENHANCEMENT:
 
 If workflow plan determined SKIP_ENHANCEMENT:
 1. Mark todos #2 and #3 as completed
-{{#IF INTERACTIVE_MODE}}
+{{#if INTERACTIVE_MODE}}
 2. Check for unanswered questions in the existing enhancement:
    - Read the existing enhancement comment that was found during workflow planning
    - Search for "Questions for Reporter" or similar question table sections
@@ -311,17 +311,17 @@ If workflow plan determined SKIP_ENHANCEMENT:
      b. After collecting all answers, update the enhancement comment with the user's answers (use mcp__issue_management__update_comment)
      c. Proceed to next step with the newly answered questions available for subsequent agents
    - If no unanswered questions found: Proceed to next step
-{{/IF INTERACTIVE_MODE}}
+{{/if}}
 3. Proceed directly to Step 1.5 (Complexity Evaluation Phase)
 
 **STEP 1.5 - Complexity Evaluation Phase:**
 
 Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
-1. Execute: @agent-iloom-issue-complexity-evaluator ISSUE_NUMBER {{#IF ONE_SHOT_MODE}}with the following instructions about assumptions:
+1. Execute: @agent-iloom-issue-complexity-evaluator {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
-   - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/IF ONE_SHOT_MODE}}
+   - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
 2. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
-{{#IF INTERACTIVE_MODE}}
+{{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's issue comment output
    - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
@@ -337,7 +337,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
-{{/IF INTERACTIVE_MODE}}
+{{/if}}
 3. Extract complexity classification from evaluator output:
    - Search the evaluator's output for the "Complexity Assessment" section
    - Extract: Classification (TRIVIAL/SIMPLE/COMPLEX), Metrics (files, LOC, breaking changes, DB migrations, risk level), and Reasoning
@@ -385,12 +385,12 @@ If workflow plan determined SKIP_COMPLEXITY_EVAL:
 **STEP 2 - Analysis Phase (COMPLEX workflow only):**
 
 Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLEX:
-1. Execute: @agent-iloom-issue-analyzer ISSUE_NUMBER {{#IF ONE_SHOT_MODE}}with the following instructions about assumptions:
+1. Execute: @agent-iloom-issue-analyzer {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
-   - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/IF ONE_SHOT_MODE}}
+   - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
 2. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
    - Use `recap.add_entry` to log significant technical findings (type: "insight" for dependencies/constraints, type: "risk" for problems identified)
-{{#IF INTERACTIVE_MODE}}
+{{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's issue comment output
    - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
@@ -406,7 +406,7 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
-{{/IF INTERACTIVE_MODE}}
+{{/if}}
 3. Mark todos #10, #11, and #12 as completed (todo #9 was already marked at routing decision point)
 4. Use AskUserQuestion tool with a single question:
    - Question: "Analysis complete. See findings at: [issue comment URL]. How would you like to proceed?"
@@ -464,12 +464,12 @@ After STEP 1.5 completes and complexity is confirmed, determine which workflow p
 
 Execute combined analyze-and-plan agent:
 1. Display: "Executing combined analyze-and-plan agent for SIMPLE task..."
-2. Execute: @agent-iloom-issue-analyze-and-plan ISSUE_NUMBER {{#IF ONE_SHOT_MODE}}with the following instructions about assumptions:
+2. Execute: @agent-iloom-issue-analyze-and-plan {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
-   - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/IF ONE_SHOT_MODE}}
+   - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
 3. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
    - Use `recap.add_entry` to log key technical discoveries (type: "insight") and design decisions (type: "decision")
-{{#IF INTERACTIVE_MODE}}
+{{#if INTERACTIVE_MODE}}
 3.5. Extract and validate assumptions (batched validation):
    - Read the agent's issue comment output
    - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
@@ -485,7 +485,7 @@ Execute combined analyze-and-plan agent:
           - Return to step 3.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
-{{/IF INTERACTIVE_MODE}}
+{{/if}}
 4. Mark todo #9 as completed (COMPLEX todos #10-15 were already marked at routing decision point)
 5. Use AskUserQuestion tool with a single question:
    - Question: "Combined analysis and planning complete. See results at: [issue comment URL]. How would you like to proceed?"
@@ -505,12 +505,12 @@ Execute combined analyze-and-plan agent:
 **IMPORTANT: Only execute this step if COMPLEX workflow is being followed (not SIMPLE)**
 
 Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLEX:
-1. Execute: @agent-iloom-issue-planner ISSUE_NUMBER {{#IF ONE_SHOT_MODE}}with the following instructions about assumptions:
+1. Execute: @agent-iloom-issue-planner {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
-   - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/IF ONE_SHOT_MODE}}
+   - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
 2. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
    - Use `recap.add_entry` to log key architectural decisions (e.g., type: "decision", content: "Chose approach A over B due to X constraint")
-{{#IF INTERACTIVE_MODE}}
+{{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's issue comment output
    - Search for "Questions for Reporter", "Questions and Key Decisions", or "Assumption" table section
@@ -526,7 +526,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
           - Return to step 2.5 (validate the revised assumptions again)
         - If all user answers match agent assumptions: Proceed to next step
    - If no assumptions found: Proceed to next step
-{{/IF INTERACTIVE_MODE}}
+{{/if}}
 3. Mark todos #13, #14, and #15 as completed (todos #9-12 were already marked at routing decision point and analysis phase)
 4. Use AskUserQuestion tool with a single question:
    - Question: "Planning complete. See implementation plan at: [issue comment URL]. How would you like to proceed?"
@@ -552,9 +552,9 @@ Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
    - Look back at the planning phase output (STEP 3 for COMPLEX or STEP 2-SIMPLE for SIMPLE workflows)
    - Extract the comment ID from the issue comment URL that was provided
    - The comment ID is the numeric value after "#issuecomment-" in the URL (e.g., https://github.com/org/repo/issues/123#issuecomment-456789 has comment ID 456789)
-2. Execute: @agent-iloom-issue-implementer ISSUE_NUMBER {{#IF ONE_SHOT_MODE}}with the following instructions about assumptions:
+2. Execute: @agent-iloom-issue-implementer {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
-   - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/IF ONE_SHOT_MODE}}
+   - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
    Additional critical instructions:
    - **CRITICAL**: The implementation plan in the issue comments contains exact file paths and line numbers. You MUST use these exact locations - DO NOT search for files when the plan specifies them. Extract file locations from the plan in Step 1.5 before implementing.
    - The implementation plan is located in comment ID [COMMENT_ID] (if planning phase was executed). Read this comment first in Step 1.5 to extract file specifications.

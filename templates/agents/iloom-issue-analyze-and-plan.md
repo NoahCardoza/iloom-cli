@@ -35,7 +35,7 @@ The recap panel helps users stay oriented without reading all your output. Captu
 
 ### Step 1: Fetch the Issue
 
-Read the issue thoroughly using the MCP tool `mcp__issue_management__get_issue` with `{ number: ISSUE_NUMBER, includeComments: true }`. This returns the issue body, title, comments, labels, assignees, and other metadata.
+Read the issue thoroughly using the MCP tool `mcp__issue_management__get_issue` with `{ number: {{ISSUE_NUMBER}}, includeComments: true }`. This returns the issue body, title, comments, labels, assignees, and other metadata.
 
 Extract:
 - The complete issue body for context
@@ -225,9 +225,9 @@ Available Tools:
   Parameters: { commentId: string, number: string }
   Returns: { id, body, author, created_at, ... }
 
-{{#IF DRAFT_PR_MODE}}- mcp__issue_management__create_comment: Create a new comment on PR DRAFT_PR_NUMBER
-  Parameters: { number: string, body: "markdown content", type: "pr" }{{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}- mcp__issue_management__create_comment: Create a new comment on issue ISSUE_NUMBER
-  Parameters: { number: string, body: "markdown content", type: "issue" }{{/IF STANDARD_ISSUE_MODE}}
+{{#if DRAFT_PR_MODE}}- mcp__issue_management__create_comment: Create a new comment on PR {{DRAFT_PR_NUMBER}}
+  Parameters: { number: string, body: "markdown content", type: "pr" }{{/if}}{{#if STANDARD_ISSUE_MODE}}- mcp__issue_management__create_comment: Create a new comment on issue {{ISSUE_NUMBER}}
+  Parameters: { number: string, body: "markdown content", type: "issue" }{{/if}}
   Returns: { id: string, url: string, created_at: string }
 
 - mcp__issue_management__update_comment: Update an existing comment
@@ -250,15 +250,15 @@ Workflow Comment Strategy:
 Example Usage:
 ```
 // Start
-{{#IF DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
-  number: DRAFT_PR_NUMBER,
+{{#if DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
+  number: {{DRAFT_PR_NUMBER}},
   body: "# Combined Analysis and Planning\n\n- [ ] Perform lightweight analysis\n- [ ] Create implementation plan",
   type: "pr"
-}){{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}const comment = await mcp__issue_management__create_comment({
-  number: ISSUE_NUMBER,
+}){{/if}}{{#if STANDARD_ISSUE_MODE}}const comment = await mcp__issue_management__create_comment({
+  number: {{ISSUE_NUMBER}},
   body: "# Combined Analysis and Planning\n\n- [ ] Perform lightweight analysis\n- [ ] Create implementation plan",
   type: "issue"
-}){{/IF STANDARD_ISSUE_MODE}}
+}){{/if}}
 
 // Log the comment as an artifact
 await mcp__recap__add_artifact({
@@ -268,15 +268,15 @@ await mcp__recap__add_artifact({
 })
 
 // Update as you progress
-{{#IF DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
+{{#if DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
-  number: DRAFT_PR_NUMBER,
+  number: {{DRAFT_PR_NUMBER}},
   body: "# Combined Analysis and Planning\n\n- [x] Perform lightweight analysis\n- [ ] Create implementation plan"
-}){{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}await mcp__issue_management__update_comment({
+}){{/if}}{{#if STANDARD_ISSUE_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
-  number: ISSUE_NUMBER,
+  number: {{ISSUE_NUMBER}},
   body: "# Combined Analysis and Planning\n\n- [x] Perform lightweight analysis\n- [ ] Create implementation plan"
-}){{/IF STANDARD_ISSUE_MODE}}
+}){{/if}}
 ```
 </comment_tool_info>
 

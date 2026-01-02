@@ -26,7 +26,7 @@ The recap panel helps users stay oriented without reading all your output. Captu
 ## Core Workflow
 
 ### Step 1: Fetch the Issue
-Please read the referenced issue and comments using the MCP tool `mcp__issue_management__get_issue` with `{ number: ISSUE_NUMBER, includeComments: true }`
+Please read the referenced issue and comments using the MCP tool `mcp__issue_management__get_issue` with `{ number: {{ISSUE_NUMBER}}, includeComments: true }`
 
 ### Step 2: Perform Comprehensive Research
 
@@ -298,9 +298,9 @@ Available Tools:
   Parameters: { commentId: string, number: string }
   Returns: { id, body, author, created_at, ... }
 
-{{#IF DRAFT_PR_MODE}}- mcp__issue_management__create_comment: Create a new comment on PR DRAFT_PR_NUMBER
-  Parameters: { number: string, body: "markdown content", type: "pr" }{{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}- mcp__issue_management__create_comment: Create a new comment on issue ISSUE_NUMBER
-  Parameters: { number: string, body: "markdown content", type: "issue" }{{/IF STANDARD_ISSUE_MODE}}
+{{#if DRAFT_PR_MODE}}- mcp__issue_management__create_comment: Create a new comment on PR {{DRAFT_PR_NUMBER}}
+  Parameters: { number: string, body: "markdown content", type: "pr" }{{/if}}{{#if STANDARD_ISSUE_MODE}}- mcp__issue_management__create_comment: Create a new comment on issue {{ISSUE_NUMBER}}
+  Parameters: { number: string, body: "markdown content", type: "issue" }{{/if}}
   Returns: { id: string, url: string, created_at: string }
 
 - mcp__issue_management__update_comment: Update an existing comment
@@ -323,15 +323,15 @@ Workflow Comment Strategy:
 Example Usage:
 ```
 // Start
-{{#IF DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
-  number: DRAFT_PR_NUMBER,
+{{#if DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
+  number: {{DRAFT_PR_NUMBER}},
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
   type: "pr"
-}){{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}const comment = await mcp__issue_management__create_comment({
-  number: ISSUE_NUMBER,
+}){{/if}}{{#if STANDARD_ISSUE_MODE}}const comment = await mcp__issue_management__create_comment({
+  number: {{ISSUE_NUMBER}},
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
   type: "issue"
-}){{/IF STANDARD_ISSUE_MODE}}
+}){{/if}}
 
 // Log the comment as an artifact
 await mcp__recap__add_artifact({
@@ -341,15 +341,15 @@ await mcp__recap__add_artifact({
 })
 
 // Update as you progress
-{{#IF DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
+{{#if DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
-  number: DRAFT_PR_NUMBER,
+  number: {{DRAFT_PR_NUMBER}},
   body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
-}){{/IF DRAFT_PR_MODE}}{{#IF STANDARD_ISSUE_MODE}}await mcp__issue_management__update_comment({
+}){{/if}}{{#if STANDARD_ISSUE_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
-  number: ISSUE_NUMBER,
+  number: {{ISSUE_NUMBER}},
   body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
-}){{/IF STANDARD_ISSUE_MODE}}
+}){{/if}}
 ```
 </comment_tool_info>
 
