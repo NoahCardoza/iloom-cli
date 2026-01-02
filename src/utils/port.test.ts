@@ -1,8 +1,76 @@
 import { describe, it, expect } from 'vitest'
-import { generatePortOffsetFromBranchName, calculatePortForBranch } from './port.js'
+import { generatePortOffsetFromBranchName, calculatePortForBranch, extractNumericSuffix, wrapPort } from './port.js'
 import fc from 'fast-check'
 
 describe('Port utilities', () => {
+	describe('wrapPort', () => {
+		it('should return port unchanged if within valid range', () => {
+			expect(wrapPort(3042, 3000)).toBe(3042)
+			expect(wrapPort(65535, 3000)).toBe(65535)
+		})
+
+		it('should wrap ports that exceed 65535', () => {
+			// rawPort = 3000 + 70000 = 73000
+			// range = 65535 - 3000 = 62535
+			// wrapped = ((73000 - 3000 - 1) % 62535) + 3000 + 1 = (69999 % 62535) + 3001 = 7464 + 3001 = 10465
+			expect(wrapPort(73000, 3000)).toBe(10465)
+		})
+
+		it('should wrap very large issue numbers', () => {
+			// issueNumber 100000 with basePort 3000: rawPort = 103000
+			// range = 62535
+			// ((103000 - 3000 - 1) % 62535) + 3001 = (99999 % 62535) + 3001 = 37464 + 3001 = 40465
+			expect(wrapPort(103000, 3000)).toBe(40465)
+		})
+
+		it('should wrap port at exactly boundary + 1', () => {
+			// rawPort = 65536 (just over the limit)
+			// range = 62535
+			// ((65536 - 3000 - 1) % 62535) + 3001 = (62535 % 62535) + 3001 = 0 + 3001 = 3001
+			expect(wrapPort(65536, 3000)).toBe(3001)
+		})
+
+		it('should work with different base ports', () => {
+			// With basePort 5000, range = 60535
+			// rawPort = 70000
+			// ((70000 - 5000 - 1) % 60535) + 5001 = (64999 % 60535) + 5001 = 4464 + 5001 = 9465
+			expect(wrapPort(70000, 5000)).toBe(9465)
+		})
+	})
+
+	describe('extractNumericSuffix', () => {
+		it('should return numeric part from PROJ-123 format', () => {
+			expect(extractNumericSuffix('MARK-324')).toBe(324)
+			expect(extractNumericSuffix('PROJECT-1')).toBe(1)
+			expect(extractNumericSuffix('ABC-999')).toBe(999)
+		})
+
+		it('should handle multiple dashes (PROJ-SUB-456 -> 456)', () => {
+			expect(extractNumericSuffix('PROJ-SUB-456')).toBe(456)
+			expect(extractNumericSuffix('A-B-C-123')).toBe(123)
+		})
+
+		it('should handle underscore separator', () => {
+			expect(extractNumericSuffix('PROJ_123')).toBe(123)
+			expect(extractNumericSuffix('ABC_DEF_789')).toBe(789)
+		})
+
+		it('should return null for pure text without numbers', () => {
+			expect(extractNumericSuffix('PROJECT')).toBeNull()
+			expect(extractNumericSuffix('MARK')).toBeNull()
+			expect(extractNumericSuffix('abc-def')).toBeNull()
+		})
+
+		it('should return null for empty string', () => {
+			expect(extractNumericSuffix('')).toBeNull()
+		})
+
+		it('should handle numbers without separator', () => {
+			expect(extractNumericSuffix('PROJ123')).toBe(123)
+			expect(extractNumericSuffix('ABC456')).toBe(456)
+		})
+	})
+
 	describe('generatePortOffsetFromBranchName', () => {
 		it('should generate deterministic port offset for same branch name', () => {
 			const branchName = 'feat/issue-87__add-commands'
@@ -116,20 +184,21 @@ describe('Port utilities', () => {
 			expect(port1).not.toBe(port2)
 		})
 
-		it('should validate port does not exceed 65535', () => {
+		it('should wrap port if it exceeds 65535', () => {
 			// Find a branch name that hashes to high offset (close to 999)
 			// and use basePort that causes total to exceed 65535
 			// Using basePort 65000 and any offset > 535 will exceed 65535
-			// We need to find a branch that hashes to offset > 535
 
 			// This branch 'feat/trigger-high-port' hashes to offset 793
 			// 65000 + 793 = 65793 > 65535
+			// range = 65535 - 65000 = 535
+			// wrapped = ((65793 - 65000 - 1) % 535) + 65000 + 1 = (792 % 535) + 65001 = 257 + 65001 = 65258
 			const branchName = 'feat/trigger-high-port'
 			const basePort = 65000
+			const port = calculatePortForBranch(branchName, basePort)
 
-			expect(() => calculatePortForBranch(branchName, basePort)).toThrow(
-				'exceeds maximum (65535)'
-			)
+			expect(port).toBeGreaterThanOrEqual(basePort + 1)
+			expect(port).toBeLessThanOrEqual(65535)
 		})
 
 		it('should throw error for empty branch name', () => {

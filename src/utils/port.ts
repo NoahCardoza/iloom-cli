@@ -1,6 +1,32 @@
 import { createHash } from 'crypto'
 
 /**
+ * Wrap a raw port that exceeds 65535 into the valid port range.
+ * Uses modulo arithmetic to wrap back into [basePort+1, 65535].
+ *
+ * @param rawPort - The calculated port (basePort + issueNumber)
+ * @param basePort - The base port (default: 3000)
+ * @returns Port in valid range [basePort+1, 65535]
+ */
+export function wrapPort(rawPort: number, basePort: number): number {
+	if (rawPort <= 65535) return rawPort
+	const range = 65535 - basePort
+	return ((rawPort - basePort - 1) % range) + basePort + 1
+}
+
+/**
+ * Extract numeric suffix from alphanumeric issue ID (e.g., MARK-324 -> 324)
+ * @returns The numeric part or null if no trailing number found
+ */
+export function extractNumericSuffix(issueId: string): number | null {
+	// Match trailing digits after optional separator (-, _)
+	const match = issueId.match(/[-_]?(\d+)$/)
+	const digits = match?.[1]
+	if (digits === undefined) return null
+	return parseInt(digits, 10)
+}
+
+/**
  * Generate deterministic port offset from branch name using SHA256 hash
  * Range: 1-999 (matches existing random range for branches)
  *
@@ -31,18 +57,12 @@ export function generatePortOffsetFromBranchName(branchName: string): number {
  * @param branchName - Branch name
  * @param basePort - Base port (default: 3000)
  * @returns Port number
- * @throws Error if calculated port exceeds 65535 or branchName is empty
+ * @throws Error if branchName is empty
  */
 export function calculatePortForBranch(branchName: string, basePort: number = 3000): number {
 	const offset = generatePortOffsetFromBranchName(branchName)
 	const port = basePort + offset
 
-	// Validate port range (same as EnvironmentManager.calculatePort)
-	if (port > 65535) {
-		throw new Error(
-			`Calculated port ${port} exceeds maximum (65535). Use a lower base port (current: ${basePort}).`
-		)
-	}
-
-	return port
+	// Use wrap-around for port overflow
+	return wrapPort(port, basePort)
 }

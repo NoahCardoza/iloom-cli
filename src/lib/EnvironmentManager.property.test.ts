@@ -11,26 +11,27 @@ describe('EnvironmentManager property tests', () => {
   })
 
   describe('calculatePort properties', () => {
-    it('should always return valid port numbers', () => {
+    it('should always return valid port numbers with wrap-around', () => {
       fc.assert(
         fc.property(
           fc.integer({ min: 1, max: 9999 }),
           fc.integer({ min: 1000, max: 60000 }),
           (issueNumber, basePort) => {
-            try {
-              const port = manager.calculatePort({ issueNumber, basePort })
+            const port = manager.calculatePort({ issueNumber, basePort })
 
-              // Port should always be in valid range
-              expect(port).toBeGreaterThanOrEqual(1)
+            // Port should always be in valid range (never throws, uses wrap-around)
+            expect(port).toBeGreaterThanOrEqual(1)
+            expect(port).toBeLessThanOrEqual(65535)
+            expect(port).toBeGreaterThan(basePort)
+
+            const rawPort = basePort + issueNumber
+            if (rawPort <= 65535) {
+              // No wrap-around needed - port equals basePort + issueNumber
+              expect(port).toBe(rawPort)
+            } else {
+              // Wrap-around occurred - port is in valid range [basePort+1, 65535]
+              expect(port).toBeGreaterThan(basePort)
               expect(port).toBeLessThanOrEqual(65535)
-
-              // Port should equal basePort + issueNumber
-              expect(port).toBe(basePort + issueNumber)
-            } catch (error) {
-              // If it throws, it should be because the port exceeds the max
-              expect(error).toBeInstanceOf(Error)
-              expect((error as Error).message).toContain('exceeds maximum')
-              expect(basePort + issueNumber).toBeGreaterThan(65535)
             }
           }
         )

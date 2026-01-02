@@ -8,7 +8,7 @@ import { SettingsManager } from '../lib/SettingsManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { openBrowser } from '../utils/browser.js'
 import { parseEnvFile, extractPort, findEnvFileContainingVariable } from '../utils/env.js'
-import { calculatePortForBranch } from '../utils/port.js'
+import { calculatePortForBranch, extractNumericSuffix } from '../utils/port.js'
 import { extractIssueNumber } from '../utils/git.js'
 import { logger } from '../utils/logger.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
@@ -304,7 +304,14 @@ export class OpenCommand {
 				logger.debug(`Calculated PORT for issue #${issueId}: ${port}`)
 				return port
 			}
-			// For alphanumeric IDs, fall through to branch-based hash
+			// Try extracting numeric suffix for alphanumeric IDs like MARK-324
+			const numericSuffix = extractNumericSuffix(issueId)
+			if (numericSuffix !== null) {
+				const port = basePort + numericSuffix
+				logger.debug(`Calculated PORT for alphanumeric issue ${issueId}: ${port}`)
+				return port
+			}
+			// No numeric suffix found - fall through to branch-based hash
 		}
 
 		// Branch-based workspace - use deterministic hash

@@ -1,7 +1,7 @@
 import { execa } from 'execa'
 import { setTimeout } from 'timers/promises'
 import type { ProcessInfo, Platform } from '../../types/process.js'
-import { calculatePortForBranch } from '../../utils/port.js'
+import { calculatePortForBranch, extractNumericSuffix } from '../../utils/port.js'
 
 /**
  * Manages process detection and termination across platforms
@@ -225,7 +225,7 @@ export class ProcessManager {
 	/**
 	 * Calculate dev server port from issue/PR number
 	 * Ports logic from merge-and-clean.sh lines 1093-1098
-	 * For alphanumeric identifiers, uses hash-based port calculation
+	 * For alphanumeric identifiers, tries to extract numeric suffix before falling back to hash
 	 */
 	calculatePort(number: string | number): number {
 		// For numeric identifiers, use simple arithmetic (original behavior)
@@ -239,7 +239,13 @@ export class ProcessManager {
 			return 3000 + numericValue
 		}
 
-		// For non-numeric strings (alphanumeric identifiers), use hash-based calculation
+		// Try extracting numeric suffix from alphanumeric identifiers (e.g., MARK-324 -> 324)
+		const numericSuffix = extractNumericSuffix(number)
+		if (numericSuffix !== null) {
+			return 3000 + numericSuffix
+		}
+
+		// For non-numeric strings without numeric suffix, use hash-based calculation
 		return calculatePortForBranch(`issue-${number}`, 3000)
 	}
 }

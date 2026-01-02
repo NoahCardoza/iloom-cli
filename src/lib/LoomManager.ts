@@ -927,8 +927,8 @@ export class LoomManager {
       if (typeof input.identifier === 'number') {
         return this.environment.calculatePort({ basePort, issueNumber: input.identifier })
       } else if (typeof input.identifier === 'string') {
-        // Alphanumeric issue ID (e.g., Linear: ENG-123) - use hash-based port calculation
-        return this.environment.calculatePort({ basePort, branchName: input.identifier })
+        // Alphanumeric issue ID (e.g., Linear: ENG-123) - delegate to EnvironmentManager
+        return this.environment.calculatePort({ basePort, issueNumber: input.identifier })
       }
     }
 

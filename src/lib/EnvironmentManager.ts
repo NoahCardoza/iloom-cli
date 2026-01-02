@@ -8,7 +8,7 @@ import {
   formatEnvLine,
   validateEnvVariable,
 } from '../utils/env.js'
-import { calculatePortForBranch } from '../utils/port.js'
+import { calculatePortForBranch, extractNumericSuffix, wrapPort } from '../utils/port.js'
 
 export class EnvironmentManager {
   private readonly backupSuffix: string = '.backup'
@@ -171,29 +171,23 @@ export class EnvironmentManager {
         : parseInt(String(options.issueNumber), 10)
 
       if (!isNaN(numericIssue) && String(numericIssue) === String(options.issueNumber)) {
-        // Purely numeric issue ID - use arithmetic port calculation
+        // Purely numeric issue ID - use arithmetic port calculation with wrap-around
         const port = basePort + numericIssue
-        // Validate port range
-        if (port > 65535) {
-          throw new Error(
-            `Calculated port ${port} exceeds maximum (65535). Use a lower base port or issue number.`
-          )
-        }
-        return port
+        return wrapPort(port, basePort)
       }
-      // Alphanumeric ID - use hash-based calculation
+      // Alphanumeric ID - try to extract numeric suffix (e.g., MARK-324 -> 324)
+      const numericSuffix = extractNumericSuffix(String(options.issueNumber))
+      if (numericSuffix !== null) {
+        const port = basePort + numericSuffix
+        return wrapPort(port, basePort)
+      }
+      // No numeric suffix found - use hash-based calculation
       return calculatePortForBranch(String(options.issueNumber), basePort)
     }
 
     if (options.prNumber !== undefined) {
       const port = basePort + options.prNumber
-      // Validate port range
-      if (port > 65535) {
-        throw new Error(
-          `Calculated port ${port} exceeds maximum (65535). Use a lower base port or PR number.`
-        )
-      }
-      return port
+      return wrapPort(port, basePort)
     }
 
     if (options.branchName !== undefined) {

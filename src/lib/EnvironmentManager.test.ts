@@ -286,6 +286,45 @@ describe('EnvironmentManager', () => {
     })
   })
 
+  describe('calculatePort', () => {
+    it('should extract numeric suffix from alphanumeric issue ID (MARK-324 -> 3324)', () => {
+      const port = manager.calculatePort({ issueNumber: 'MARK-324' })
+      expect(port).toBe(3324)
+    })
+
+    it('should extract numeric suffix from PROJECT-1 -> 3001', () => {
+      const port = manager.calculatePort({ issueNumber: 'PROJECT-1' })
+      expect(port).toBe(3001)
+    })
+
+    it('should handle multiple dashes (PROJ-SUB-456 -> 3456)', () => {
+      const port = manager.calculatePort({ issueNumber: 'PROJ-SUB-456' })
+      expect(port).toBe(3456)
+    })
+
+    it('should fall back to hash for pure text without numbers', () => {
+      const port = manager.calculatePort({ issueNumber: 'PROJECT' })
+      // Hash-based port is in range [3001, 3999]
+      expect(port).toBeGreaterThanOrEqual(3001)
+      expect(port).toBeLessThanOrEqual(3999)
+    })
+
+    it('should wrap port for alphanumeric ID with large numeric suffix', () => {
+      // MARK-70000 with basePort 3000: rawPort = 73000
+      // range = 65535 - 3000 = 62535
+      // wrapped = ((73000 - 3000 - 1) % 62535) + 3001 = 10465
+      const port = manager.calculatePort({ issueNumber: 'MARK-70000', basePort: 3000 })
+      expect(port).toBe(10465)
+      expect(port).toBeGreaterThan(3000)
+      expect(port).toBeLessThanOrEqual(65535)
+    })
+
+    it('should use custom basePort with alphanumeric IDs', () => {
+      const port = manager.calculatePort({ issueNumber: 'MARK-324', basePort: 5000 })
+      expect(port).toBe(5324)
+    })
+  })
+
   describe('validateEnvFile', () => {
     it('should validate correct file', async () => {
       const filePath = '/test/.env'
