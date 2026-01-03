@@ -5,6 +5,13 @@ import { fileURLToPath } from 'url'
 import Handlebars from 'handlebars'
 import { logger } from '../utils/logger.js'
 
+// Register raw helper to handle content with curly braces (e.g., JSON)
+// Usage: {{{{raw}}}}{{VARIABLE}}{{{{/raw}}}}
+// This outputs the variable content as-is without Handlebars parsing its curly braces
+Handlebars.registerHelper('raw', function (this: unknown, options: Handlebars.HelperOptions) {
+	return options.fn(this)
+})
+
 export interface TemplateVariables {
 	ISSUE_NUMBER?: string | number
 	PR_NUMBER?: number

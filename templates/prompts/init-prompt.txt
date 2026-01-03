@@ -67,7 +67,7 @@ When the documentation below and the settings schema conflict, ALWAYS follow the
 
 ### Main Project Documentation
 
-{{README_CONTENT}}
+{{{{raw}}}}{{README_CONTENT}}{{{{/raw}}}}
 
 ---
 
@@ -76,7 +76,7 @@ When the documentation below and the settings schema conflict, ALWAYS follow the
 The following JSON Schema defines valid iloom settings:
 
 ```json
-{{SETTINGS_SCHEMA}}
+{{{{raw}}}}{{SETTINGS_SCHEMA}}{{{{/raw}}}}
 ```
 
 {{#if SETTINGS_JSON}}
@@ -87,7 +87,7 @@ The following JSON Schema defines valid iloom settings:
 The user has shared configuration at `.iloom/settings.json`:
 
 ```json
-{{SETTINGS_JSON}}
+{{{{raw}}}}{{SETTINGS_JSON}}{{{{/raw}}}}
 ```
 {{/if}}
 
@@ -99,7 +99,7 @@ The user has shared configuration at `.iloom/settings.json`:
 The user has local configuration at `.iloom/settings.local.json`:
 
 ```json
-{{SETTINGS_LOCAL_JSON}}
+{{{{raw}}}}{{SETTINGS_LOCAL_JSON}}{{{{/raw}}}}
 ```
 {{/if}}
 
@@ -111,7 +111,7 @@ The user has local configuration at `.iloom/settings.local.json`:
 The user has global configuration at `~/.config/iloom-ai/settings.json`:
 
 ```json
-{{SETTINGS_GLOBAL_JSON}}
+{{{{raw}}}}{{SETTINGS_GLOBAL_JSON}}{{{{/raw}}}}
 ```
 {{/if}}
 

@@ -340,6 +340,63 @@ Footer`
 			expect(resultWithPackage).toBe('Node')
 			expect(resultWithoutPackage).toBe('Other')
 		})
+
+		it('should output raw block content literally without parsing Handlebars syntax', () => {
+			// Raw blocks output their content literally - {{VARIABLE}} is NOT substituted
+			const template = '{{{{raw}}}}{{VARIABLE}}{{{{/raw}}}}'
+			const variables: TemplateVariables = {}
+
+			const result = manager.substituteVariables(template, variables)
+
+			// Raw block outputs {{VARIABLE}} literally, not the substituted value
+			expect(result).toBe('{{VARIABLE}}')
+		})
+
+		it('should handle JSON content with single braces without raw blocks', () => {
+			// Single braces in JSON are safe - Handlebars only parses {{ double braces }}
+			const template = '```json\n{"definitions": {"foo": {"type": "object"}}}\n```\nValue: {{SETTINGS_SCHEMA}}'
+			const jsonValue = '{"test": true}'
+			const variables: TemplateVariables = { SETTINGS_SCHEMA: jsonValue }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('```json\n{"definitions": {"foo": {"type": "object"}}}\n```\nValue: {"test": true}')
+		})
+
+		it('should handle complex JSON schema embedded directly in template', () => {
+			// This simulates what happens after export-schema.ts embeds the schema
+			const complexJson = `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "IloomSettings": {
+      "type": "object",
+      "properties": {
+        "mainBranch": { "type": "string" }
+      }
+    }
+  }
+}`
+			const template = `\`\`\`json\n${complexJson}\n\`\`\`\nHello {{NAME}}`
+			const variables: TemplateVariables = {}
+
+			const result = manager.substituteVariables(template, { ...variables, NAME: 'World' } as TemplateVariables & { NAME: string })
+
+			expect(result).toBe(`\`\`\`json\n${complexJson}\n\`\`\`\nHello World`)
+		})
+
+		it('should handle README content with code blocks containing curly braces', () => {
+			// Code blocks with curly braces are safe since Handlebars only parses {{ }}
+			const readmeWithCodeBlocks = `# My Project
+
+\`\`\`typescript
+const obj = { key: "value" }
+\`\`\`
+`
+			const template = `${readmeWithCodeBlocks}\nVersion: {{VERSION}}`
+			const result = manager.substituteVariables(template, { VERSION: '1.0.0' } as TemplateVariables & { VERSION: string })
+
+			expect(result).toBe(`${readmeWithCodeBlocks}\nVersion: 1.0.0`)
+		})
 	})
 
 	describe('getPrompt', () => {

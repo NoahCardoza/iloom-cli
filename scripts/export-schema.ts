@@ -25,10 +25,15 @@ async function exportSchema() {
 	if (existsSync(initTemplatePath)) {
 		const template = await readFile(initTemplatePath, 'utf-8')
 
-		// Replace SETTINGS_SCHEMA placeholder with actual schema JSON
+		// Replace the raw block containing SETTINGS_SCHEMA with the schema JSON
+		// The raw block syntax {{{{raw}}}}...{{{{/raw}}}} is used in the source template
+		// to prevent Handlebars from parsing the curly braces during development.
+		// At build time, we replace the entire raw block with the actual schema JSON.
+		// Single braces in JSON are safe since Handlebars only parses {{ double braces }}.
+		const schemaJson = JSON.stringify(jsonSchema, null, 2)
 		const embeddedTemplate = template.replace(
-			'SETTINGS_SCHEMA',
-			JSON.stringify(jsonSchema, null, 2)
+			'{{{{raw}}}}{{SETTINGS_SCHEMA}}{{{{/raw}}}}',
+			schemaJson
 		)
 
 		await writeFile(initTemplatePath, embeddedTemplate, 'utf-8')
