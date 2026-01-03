@@ -304,12 +304,12 @@ server.registerTool(
 		description:
 			'Create a new issue in the configured issue tracker. ' +
 			'For GitHub: creates issue in the configured repository. ' +
-			'For Linear: requires teamKey parameter (e.g., "ENG", "PLAT").',
+			'For Linear: requires teamKey parameter (e.g., "ENG", "PLAT"), or configure issueManagement.linear.teamId in settings, or call get_issue first to auto-detect the team.',
 		inputSchema: {
 			title: z.string().describe('The issue title'),
 			body: z.string().describe('The issue body/description (markdown supported)'),
 			labels: z.array(z.string()).optional().describe('Optional labels to apply to the issue'),
-			teamKey: z.string().optional().describe('Team key for Linear (e.g., "ENG"). Required for Linear, ignored for GitHub.'),
+			teamKey: z.string().optional().describe('Team key for Linear (e.g., "ENG"). Falls back to settings or team extracted from previous get_issue call. Ignored for GitHub.'),
 		},
 		outputSchema: {
 			id: z.string().describe('Issue identifier'),

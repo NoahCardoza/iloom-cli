@@ -33,10 +33,23 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 	readonly issuePrefix = ''
 
 	/**
+	 * Cached team key extracted from issue identifiers (e.g., "ENG-123" -> "ENG")
+	 * Used as fallback when teamKey is not explicitly provided to createIssue()
+	 */
+	private cachedTeamKey: string | undefined = undefined
+
+	/**
 	 * Fetch issue details using Linear SDK
 	 */
 	async getIssue(input: GetIssueInput): Promise<IssueResult> {
 		const { number, includeComments = true } = input
+
+		// Extract and cache team key from identifier (e.g., "ENG-123" -> "ENG")
+		// This enables createIssue() to use the team key as a fallback
+		const match = number.match(/^([A-Z]{2,})-\d+$/i)
+		if (match?.[1]) {
+			this.cachedTeamKey = match[1].toUpperCase()
+		}
 
 		// Fetch issue - Linear uses alphanumeric identifiers like "ENG-123"
 		const raw = await fetchLinearIssue(number)
@@ -156,11 +169,14 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 	async createIssue(input: CreateIssueInput): Promise<CreateIssueResult> {
 		const { title, body, labels, teamKey } = input
 
-		if (!teamKey) {
-			throw new Error('teamKey is required for Linear issue creation')
+		// Fallback chain: explicit param > settings (via env) > cached key from getIssue()
+		const effectiveTeamKey = teamKey ?? process.env.LINEAR_TEAM_KEY ?? this.cachedTeamKey
+
+		if (!effectiveTeamKey) {
+			throw new Error('teamKey is required for Linear issue creation. Configure issueManagement.linear.teamId in settings, or call getIssue first to extract the team from an issue identifier.')
 		}
 
-		const result = await createLinearIssue(title, body, teamKey, labels)
+		const result = await createLinearIssue(title, body, effectiveTeamKey, labels)
 
 		return {
 			id: result.identifier,

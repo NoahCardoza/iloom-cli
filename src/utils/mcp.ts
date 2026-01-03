@@ -82,9 +82,17 @@ export async function generateIssueManagementMcpConfig(
 			envVars.LINEAR_API_TOKEN = apiToken
 		}
 
+		// Pass through LINEAR_TEAM_KEY from settings (primary) or env var (fallback)
+		// Settings teamId is the preferred source as it's configured via `il init`
+		const teamKey = settings?.issueManagement?.linear?.teamId ?? process.env.LINEAR_TEAM_KEY
+		if (teamKey) {
+			envVars.LINEAR_TEAM_KEY = teamKey
+		}
+
 		logger.debug('Generated MCP config for Linear issue management', {
 			provider,
 			hasApiToken: !!apiToken,
+			hasTeamKey: !!teamKey,
 			contextType: contextType ?? 'auto-detect',
 		})
 	}
