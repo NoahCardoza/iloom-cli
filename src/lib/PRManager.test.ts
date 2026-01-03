@@ -72,6 +72,32 @@ describe('PRManager', () => {
 			expect(body).toContain('Fixes #123')
 		})
 
+		it('should use empty prefix for Linear issues', async () => {
+			// Create PRManager with Linear provider
+			const linearSettings = {
+				...mockSettings,
+				issueManagement: {
+					provider: 'linear' as const,
+				},
+			} as IloomSettings
+			const linearPrManager = new PRManager(linearSettings)
+
+			vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValueOnce(false)
+
+			const body = await linearPrManager.generatePRBody('ENG-123', '/path/to/worktree')
+
+			expect(body).toContain('Fixes ENG-123')
+			expect(body).not.toContain('Fixes #ENG-123')
+		})
+
+		it('should use # prefix for GitHub issues (default)', async () => {
+			vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValueOnce(false)
+
+			const body = await prManager.generatePRBody(456, '/path/to/worktree')
+
+			expect(body).toContain('Fixes #456')
+		})
+
 		it('should use Claude for body generation when available', async () => {
 			vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValueOnce(true)
 			vi.mocked(claudeUtils.launchClaude).mockResolvedValueOnce('Claude-generated PR body\n\nFixes #123')

@@ -38,6 +38,12 @@ describe('LinearIssueManagementProvider', () => {
 		})
 	})
 
+	describe('issuePrefix', () => {
+		it('should return empty string for Linear provider', () => {
+			expect(provider.issuePrefix).toBe('')
+		})
+	})
+
 	describe('getIssue', () => {
 		it('should fetch and normalize a Linear issue', async () => {
 			const mockLinearIssue = {

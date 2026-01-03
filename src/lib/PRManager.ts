@@ -4,6 +4,7 @@ import { getEffectivePRTargetRemote, getConfiguredRepoFromSettings, parseGitRemo
 import { openBrowser } from '../utils/browser.js'
 import { getLogger } from '../utils/logger-context.js'
 import type { IloomSettings } from './SettingsManager.js'
+import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 
 interface ExistingPR {
 	number: number
@@ -19,6 +20,15 @@ interface PRCreationResult {
 export class PRManager {
 	constructor(private settings: IloomSettings) {
 		// Uses getLogger() for all logging operations
+	}
+
+	/**
+	 * Get the issue prefix from the configured provider
+	 */
+	private get issuePrefix(): string {
+		const providerType = this.settings.issueManagement?.provider ?? 'github'
+		const provider = IssueManagementProviderFactory.create(providerType)
+		return provider.issuePrefix
 	}
 
 	/**
@@ -80,7 +90,7 @@ export class PRManager {
 		let body = 'This PR contains changes from the iloom workflow.\n\n'
 
 		if (issueNumber) {
-			body += `Fixes #${issueNumber}`
+			body += `Fixes ${this.issuePrefix}${issueNumber}`
 		}
 
 		return body
@@ -93,25 +103,26 @@ export class PRManager {
 	private buildPRBodyPrompt(issueNumber?: string | number): string {
 		const issueContext = issueNumber
 			? `\n<IssueContext>
-This PR is associated with GitHub issue #${issueNumber}.
-Include "Fixes #${issueNumber}" at the end of the body on its own line.
+This PR is associated with issue ${this.issuePrefix}${issueNumber}.
+Include "Fixes ${this.issuePrefix}${issueNumber}" at the end of the body on its own line.
 </IssueContext>`
 			: ''
 
+		const examplePrefix = this.issuePrefix || ''  // Use empty string for Linear examples
 		return `<Task>
 You are a software engineer writing a pull request body for this repository.
 Examine the changes in the git repository and generate a concise, professional PR description.
 </Task>
 
 <Requirements>
-<Format>Write 2-3 sentences summarizing what was changed and why.${issueNumber ? `\n\nEnd with "Fixes #${issueNumber}" on its own line.` : ''}</Format>
+<Format>Write 2-3 sentences summarizing what was changed and why.${issueNumber ? `\n\nEnd with "Fixes ${this.issuePrefix}${issueNumber}" on its own line.` : ''}</Format>
 <Tone>Professional and concise</Tone>
 <Focus>Summarize the changes and their purpose</Focus>
 <NoMeta>CRITICAL: Do NOT include ANY explanatory text, analysis, or meta-commentary. Output ONLY the raw PR body text.</NoMeta>
 <Examples>
 Good: "Add user authentication with JWT tokens to secure the API endpoints. This includes login and registration endpoints with proper password hashing.
 
-Fixes #42"
+Fixes ${examplePrefix}42"
 Good: "Fix navigation bug in sidebar menu that caused incorrect highlighting on nested routes."
 Bad: "Here's the PR body:\n\n---\n\nAdd user authentication..."
 Bad: "Based on the changes, I'll write: Fix navigation bug..."

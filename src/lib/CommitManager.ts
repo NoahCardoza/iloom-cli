@@ -72,7 +72,7 @@ export class CommitManager {
     // Skip Claude if custom message provided
     if (!options.message) {
       try {
-        message = await this.generateClaudeCommitMessage(worktreePath, options.issueNumber)
+        message = await this.generateClaudeCommitMessage(worktreePath, options.issueNumber, options.issuePrefix)
       } catch (error) {
         getLogger().debug('Claude commit message generation failed, using fallback', { error })
       }
@@ -237,7 +237,7 @@ export class CommitManager {
 
     // Generate WIP message
     if (options.issueNumber) {
-      return `WIP: Auto-commit for issue #${options.issueNumber}\n\nFixes #${options.issueNumber}`
+      return `WIP: Auto-commit for issue ${options.issuePrefix}${options.issueNumber}\n\nFixes ${options.issuePrefix}${options.issueNumber}`
     } else {
       return 'WIP: Auto-commit uncommitted changes'
     }
@@ -295,7 +295,8 @@ export class CommitManager {
    */
   private async generateClaudeCommitMessage(
     worktreePath: string,
-    issueNumber?: string | number
+    issueNumber: string | number | undefined,
+    issuePrefix: string
   ): Promise<string | null> {
     const startTime = Date.now()
 
@@ -315,7 +316,7 @@ export class CommitManager {
 
     // Build XML-based structured prompt
     getLogger().debug('Building commit message prompt...')
-    const prompt = this.buildCommitMessagePrompt(issueNumber)
+    const prompt = this.buildCommitMessagePrompt(issueNumber, issuePrefix)
     getLogger().debug('Prompt built', { promptLength: prompt.length })
 
     // Debug log the actual prompt content for troubleshooting
@@ -374,15 +375,16 @@ export class CommitManager {
         return null
       }
 
-      // Append "Fixes #N" trailer if issue number provided
+      // Append "Fixes #N" or "Fixes TEAM-123" trailer if issue number provided
       let finalMessage = sanitized
       if (issueNumber) {
+        const fixesRef = `Fixes ${issuePrefix}${issueNumber}`
         // Add Fixes trailer if not already present
-        if (!finalMessage.includes(`Fixes #${issueNumber}`)) {
-          finalMessage = `${finalMessage}\n\nFixes #${issueNumber}`
-          getLogger().debug(`Added "Fixes #${issueNumber}" trailer to commit message`)
+        if (!finalMessage.includes(fixesRef)) {
+          finalMessage = `${finalMessage}\n\n${fixesRef}`
+          getLogger().debug(`Added "${fixesRef}" trailer to commit message`)
         } else {
-          getLogger().debug(`"Fixes #${issueNumber}" already present in commit message`)
+          getLogger().debug(`"${fixesRef}" already present in commit message`)
         }
       }
 
@@ -418,21 +420,22 @@ export class CommitManager {
    * Build structured XML prompt for commit message generation
    * Uses XML format for clear task definition and output expectations
    */
-  private buildCommitMessagePrompt(issueNumber?: string | number): string {
+  private buildCommitMessagePrompt(issueNumber: string | number | undefined, issuePrefix: string): string {
     const issueContext = issueNumber
       ? `\n<IssueContext>
-This commit is associated with GitHub issue #${issueNumber}.
-If the changes appear to resolve the issue, include "Fixes #${issueNumber}" at the end of the first line of commit message.
+This commit is associated with issue ${issuePrefix}${issueNumber}.
+If the changes appear to resolve the issue, include "Fixes ${issuePrefix}${issueNumber}" at the end of the first line of commit message.
 </IssueContext>`
       : ''
 
+    const examplePrefix = issuePrefix || ''  // Use empty string for Linear examples
     return `<Task>
 You are a software engineer writing a commit message for this repository.
 Examine the staged changes in the git repository and generate a concise, meaningful commit message.
 </Task>
 
 <Requirements>
-<Format>The first line must be a brief summary of the changes made as a full sentence. If it references an issue, include "Fixes #N" at the end of this line.
+<Format>The first line must be a brief summary of the changes made as a full sentence. If it references an issue, include "Fixes ${examplePrefix}N" at the end of this line.
 
 Add 2 newlines, then add a bullet-point form description of the changes made, each change on a new line.</Format>
 <Mood>Use imperative mood (e.g., "Add feature" not "Added feature")</Mood>
@@ -440,7 +443,7 @@ Add 2 newlines, then add a bullet-point form description of the changes made, ea
 <Conciseness>Keep message under 72 characters for subject line when possible</Conciseness>
 <NoMeta>CRITICAL: Do NOT include ANY explanatory text, analysis, or meta-commentary. Output ONLY the raw commit message.</NoMeta>
 <Examples>
-Good: "Add user authentication with JWT tokens. Fixes #42
+Good: "Add user authentication with JWT tokens. Fixes ${examplePrefix}42
 
 - Implement login and registration endpoints
 - Secure routes with JWT middleware

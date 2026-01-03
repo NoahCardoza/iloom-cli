@@ -67,6 +67,7 @@ export function extractNumericIdFromUrl(url: string): string {
  */
 export class GitHubIssueManagementProvider implements IssueManagementProvider {
 	readonly providerName = 'github'
+	readonly issuePrefix = '#'
 
 	/**
 	 * Fetch issue details using gh CLI

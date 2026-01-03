@@ -142,6 +142,7 @@ export interface CommentResult {
  */
 export interface IssueManagementProvider {
 	readonly providerName: string
+	readonly issuePrefix: string  // "#" for GitHub, "" for Linear
 
 	/**
 	 * Fetch issue details

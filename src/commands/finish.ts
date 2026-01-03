@@ -1,4 +1,5 @@
 import { getLogger } from '../utils/logger-context.js'
+import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import type { IssueTracker } from '../lib/IssueTracker.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ValidationRunner } from '../lib/ValidationRunner.js'
@@ -653,13 +654,16 @@ export class FinishCommand {
 			} else {
 				getLogger().info('Validation passed, auto-committing uncommitted changes...')
 
-				// Load settings to get skipVerify configuration
+				// Load settings to get skipVerify configuration and issuePrefix
 				const settings = await this.settingsManager.loadSettings(worktree.path)
 				const skipVerify = settings.workflows?.issue?.noVerify ?? false
+				const providerType = settings.issueManagement?.provider ?? 'github'
+				const issuePrefix = IssueManagementProviderFactory.create(providerType).issuePrefix
 
 				const commitOptions: CommitOptions = {
 					dryRun: options.dryRun ?? false,
 					skipVerify,
+					issuePrefix,
 				}
 
 				// Only add issueNumber if it's an issue
@@ -927,14 +931,17 @@ export class FinishCommand {
 				} else {
 					getLogger().info('Committing uncommitted changes...')
 
-					// Load settings to get skipVerify configuration
+					// Load settings to get skipVerify configuration and issuePrefix
 					const settings = await this.settingsManager.loadSettings(worktree.path)
 					const skipVerify = settings.workflows?.pr?.noVerify ?? false
+					const providerType = settings.issueManagement?.provider ?? 'github'
+					const issuePrefix = IssueManagementProviderFactory.create(providerType).issuePrefix
 
 					try {
 						await this.commitManager.commitChanges(worktree.path, {
 							dryRun: false,
 							skipVerify,
+							issuePrefix,
 							// Do NOT pass issueNumber for PRs - no "Fixes #" trailer needed
 						})
 						getLogger().success('Changes committed')

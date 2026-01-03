@@ -241,6 +241,7 @@ describe('CommitManager', () => {
 
       await manager.commitChanges(mockWorktreePath, {
         issueNumber: 123,
+        issuePrefix: '#',
         dryRun: false,
       })
 
@@ -250,10 +251,41 @@ describe('CommitManager', () => {
       )
     })
 
+    it('should use empty prefix for Linear issues', async () => {
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, {
+        issueNumber: 'ENG-123',
+        issuePrefix: '',
+        dryRun: false,
+      })
+
+      expect(git.executeGitCommand).toHaveBeenCalledWith(
+        ['commit', '-e', '-m', 'WIP: Auto-commit for issue ENG-123\n\nFixes ENG-123'],
+        { cwd: mockWorktreePath, stdio: 'inherit', timeout: 300000 }
+      )
+    })
+
+    it('should use # prefix by default (GitHub)', async () => {
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, {
+        issueNumber: 456,
+        issuePrefix: '#',
+        dryRun: false,
+      })
+
+      expect(git.executeGitCommand).toHaveBeenCalledWith(
+        ['commit', '-e', '-m', 'WIP: Auto-commit for issue #456\n\nFixes #456'],
+        { cwd: mockWorktreePath, stdio: 'inherit', timeout: 300000 }
+      )
+    })
+
     it('should generate WIP message without issue number when none provided', async () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
       await manager.commitChanges(mockWorktreePath, {
+        issuePrefix: '#',
         dryRun: false,
       })
 
@@ -282,6 +314,7 @@ describe('CommitManager', () => {
 
       await manager.commitChanges(mockWorktreePath, {
         issueNumber: 456,
+        issuePrefix: '#',
         dryRun: false,
       })
 
@@ -297,6 +330,7 @@ describe('CommitManager', () => {
 
       await manager.commitChanges(mockWorktreePath, {
         issueNumber: 999999999,
+        issuePrefix: '#',
         dryRun: false,
       })
 
@@ -311,7 +345,7 @@ describe('CommitManager', () => {
     it('should stage all changes with git add -A', async () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(['add', '-A'], {
         cwd: mockWorktreePath,
@@ -321,7 +355,7 @@ describe('CommitManager', () => {
     it('should commit with generated message', async () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-e', '-m', 'WIP: Auto-commit uncommitted changes'],
@@ -345,7 +379,7 @@ describe('CommitManager', () => {
     it('should throw when git add fails', async () => {
       vi.mocked(git.executeGitCommand).mockRejectedValueOnce(new Error('Add failed'))
 
-      await expect(manager.commitChanges(mockWorktreePath, { dryRun: false })).rejects.toThrow(
+      await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })).rejects.toThrow(
         'Add failed'
       )
     })
@@ -354,7 +388,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('')
       vi.mocked(git.executeGitCommand).mockRejectedValueOnce(new Error('Commit failed'))
 
-      await expect(manager.commitChanges(mockWorktreePath, { dryRun: false })).rejects.toThrow(
+      await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })).rejects.toThrow(
         'Commit failed'
       )
     })
@@ -365,7 +399,7 @@ describe('CommitManager', () => {
         new Error('nothing to commit, working tree clean')
       )
 
-      await expect(manager.commitChanges(mockWorktreePath, { dryRun: false })).resolves.not.toThrow()
+      await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })).resolves.not.toThrow()
     })
 
     it('should call git add before git commit', async () => {
@@ -375,7 +409,7 @@ describe('CommitManager', () => {
         return ''
       })
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       const addIndex = callOrder.indexOf('add')
       const commitIndex = callOrder.indexOf('commit')
@@ -385,7 +419,7 @@ describe('CommitManager', () => {
     it('should execute commands in correct worktree path', async () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       const calls = vi.mocked(git.executeGitCommand).mock.calls
       const addCall = calls.find(call => call[0][0] === 'add')
@@ -401,7 +435,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('M  file.ts')
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('main')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: true })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: true })
 
       const gitCalls = vi.mocked(git.executeGitCommand).mock.calls
       const hasAddCall = gitCalls.some((call) => call[0][0] === 'add')
@@ -415,7 +449,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('M  file.ts')
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('main')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: true, issueNumber: 123 })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: true, issueNumber: 123 })
 
       expect(logger.info).toHaveBeenCalledWith('[DRY RUN] Would run: git add -A')
       expect(logger.info).toHaveBeenCalledWith(
@@ -427,7 +461,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('M  file.ts')
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('main')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: true })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: true })
 
       const addCalls = vi.mocked(git.executeGitCommand).mock.calls.filter(
         (call) => call[0][0] === 'add'
@@ -439,7 +473,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('M  file.ts')
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('main')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: true })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: true })
 
       const commitCalls = vi.mocked(git.executeGitCommand).mock.calls.filter(
         (call) => call[0][0] === 'commit'
@@ -452,7 +486,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('main')
 
       await expect(
-        manager.commitChanges(mockWorktreePath, { dryRun: true })
+        manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: true })
       ).resolves.not.toThrow()
     })
   })
@@ -469,7 +503,7 @@ describe('CommitManager', () => {
     it('should handle git add command failure', async () => {
       vi.mocked(git.executeGitCommand).mockRejectedValueOnce(new Error('Add failed'))
 
-      await expect(manager.commitChanges(mockWorktreePath, { dryRun: false })).rejects.toThrow(
+      await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })).rejects.toThrow(
         'Add failed'
       )
     })
@@ -478,7 +512,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('')
       vi.mocked(git.executeGitCommand).mockRejectedValueOnce(new Error('Commit failed'))
 
-      await expect(manager.commitChanges(mockWorktreePath, { dryRun: false })).rejects.toThrow(
+      await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })).rejects.toThrow(
         'Commit failed'
       )
     })
@@ -489,14 +523,14 @@ describe('CommitManager', () => {
         new Error('nothing to commit, working tree clean')
       )
 
-      await expect(manager.commitChanges(mockWorktreePath, { dryRun: false })).resolves.not.toThrow()
+      await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })).resolves.not.toThrow()
     })
 
     it('should not swallow unexpected errors', async () => {
       vi.mocked(git.executeGitCommand).mockResolvedValueOnce('')
       vi.mocked(git.executeGitCommand).mockRejectedValueOnce(new Error('Unexpected error'))
 
-      await expect(manager.commitChanges(mockWorktreePath, { dryRun: false })).rejects.toThrow(
+      await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })).rejects.toThrow(
         'Unexpected error'
       )
     })
@@ -507,7 +541,7 @@ describe('CommitManager', () => {
         new Error('The commit failed because the pre-commit hook exited with code 1')
       )
 
-      await expect(manager.commitChanges(mockWorktreePath, { dryRun: false })).rejects.toThrow(
+      await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })).rejects.toThrow(
         'pre-commit hook'
       )
     })
@@ -523,7 +557,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Add user authentication with JWT tokens')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       expect(claude.launchClaude).toHaveBeenCalled()
       expect(git.executeGitCommand).toHaveBeenCalledWith(
@@ -536,7 +570,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Fix navigation bug in sidebar menu')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, issuePrefix: '#', dryRun: false })
 
       const commitCall = vi.mocked(git.executeGitCommand).mock.calls.find(
         (call) => call[0][0] === 'commit'
@@ -544,11 +578,24 @@ describe('CommitManager', () => {
       expect(commitCall?.[0][3]).toContain('Fixes #123')
     })
 
+    it('should include "Fixes TEAM-123" trailer for Linear issues with empty prefix', async () => {
+      vi.mocked(claude.launchClaude).mockResolvedValue('Fix navigation bug in sidebar menu')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, { issueNumber: 'ENG-456', issuePrefix: '', dryRun: false })
+
+      const commitCall = vi.mocked(git.executeGitCommand).mock.calls.find(
+        (call) => call[0][0] === 'commit'
+      )
+      expect(commitCall?.[0][3]).toContain('Fixes ENG-456')
+      expect(commitCall?.[0][3]).not.toContain('Fixes #ENG-456')
+    })
+
     it('should pass worktree path to Claude via addDir option', async () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Add feature')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       const claudeCall = vi.mocked(claude.launchClaude).mock.calls[0]
       expect(claudeCall[1]).toEqual(
@@ -562,7 +609,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Add feature')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       const claudeCall = vi.mocked(claude.launchClaude).mock.calls[0]
       expect(claudeCall[1]).toEqual(
@@ -576,7 +623,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Add feature')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       const claudeCall = vi.mocked(claude.launchClaude).mock.calls[0]
       expect(claudeCall[1]).toEqual(
@@ -590,7 +637,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Add feature')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       const claudeCall = vi.mocked(claude.launchClaude).mock.calls[0]
       const prompt = claudeCall[0]
@@ -605,7 +652,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.detectClaudeCli).mockResolvedValue(false)
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, issuePrefix: '#', dryRun: false })
 
       expect(claude.launchClaude).not.toHaveBeenCalled()
       expect(git.executeGitCommand).toHaveBeenCalledWith(
@@ -619,7 +666,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, issuePrefix: '#', dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-e', '-m', 'WIP: Auto-commit for issue #123\n\nFixes #123'],
@@ -632,7 +679,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Error: API rate limit exceeded')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, issuePrefix: '#', dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-e', '-m', 'Error: API rate limit exceeded\n\nFixes #123'],
@@ -645,7 +692,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Error: prompt is too long for this model')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, issuePrefix: '#', dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-e', '-m', 'Error: prompt is too long for this model\n\nFixes #123'],
@@ -658,7 +705,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockRejectedValue(new Error('Claude CLI error'))
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, issuePrefix: '#', dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-e', '-m', 'WIP: Auto-commit for issue #123\n\nFixes #123'],
@@ -672,7 +719,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
       await expect(
-        manager.commitChanges(mockWorktreePath, { dryRun: false })
+        manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
       ).resolves.not.toThrow()
     })
   })
@@ -686,7 +733,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('error in processing')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, issuePrefix: '#', dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-e', '-m', 'error in processing\n\nFixes #123'],
@@ -698,7 +745,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Error: something failed')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, issuePrefix: '#', dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-e', '-m', 'Error: something failed\n\nFixes #123'],
@@ -710,7 +757,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('API call failed')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, issuePrefix: '#', dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-e', '-m', 'API call failed\n\nFixes #123'],
@@ -723,7 +770,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Fix error handling in auth module')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, issuePrefix: '#', dryRun: false })
 
       // Should now use Claude's message instead of falling back
       expect(git.executeGitCommand).toHaveBeenCalledWith(
@@ -736,7 +783,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Add user authentication with JWT')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-e', '-m', 'Add user authentication with JWT'],
@@ -750,7 +797,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.detectClaudeCli).mockResolvedValue(true)
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: true })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: true })
 
       expect(claude.launchClaude).not.toHaveBeenCalled()
     })
@@ -758,7 +805,7 @@ describe('CommitManager', () => {
     it('should log what would be executed in dry-run mode', async () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: true, issueNumber: 123 })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: true, issueNumber: 123 })
 
       expect(logger.info).toHaveBeenCalledWith('[DRY RUN] Would run: git add -A')
       expect(logger.info).toHaveBeenCalledWith(
@@ -773,7 +820,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.detectClaudeCli).mockResolvedValue(true)
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: true })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: true })
 
       // Verify no Claude or git commands were executed
       expect(claude.detectClaudeCli).not.toHaveBeenCalled()
@@ -806,7 +853,7 @@ describe('CommitManager', () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Fix bug in navigation')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issueNumber: 123, issuePrefix: '#', dryRun: false })
 
       const claudeCall = vi.mocked(claude.launchClaude).mock.calls[0]
       const prompt = claudeCall[0]
@@ -829,7 +876,7 @@ describe('CommitManager', () => {
         return ''
       })
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       const addIndex = callOrder.indexOf('add')
       const claudeIndex = callOrder.indexOf('claude')
@@ -844,7 +891,7 @@ describe('CommitManager', () => {
       )
 
       await expect(
-        manager.commitChanges(mockWorktreePath, { dryRun: false })
+        manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
       ).resolves.not.toThrow()
     })
   })
@@ -858,6 +905,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
       await manager.commitChanges(mockWorktreePath, {
+        issuePrefix: '#',
         skipVerify: true,
         noReview: true,
         dryRun: false,
@@ -873,6 +921,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
       await manager.commitChanges(mockWorktreePath, {
+        issuePrefix: '#',
         skipVerify: true,
         dryRun: false,
       })
@@ -887,6 +936,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
       await manager.commitChanges(mockWorktreePath, {
+        issuePrefix: '#',
         skipVerify: false,
         dryRun: false,
       })
@@ -900,7 +950,7 @@ describe('CommitManager', () => {
     it('should NOT include --no-verify flag when skipVerify is undefined', async () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-e', '-m', 'WIP: Auto-commit uncommitted changes'],
@@ -912,6 +962,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
       await manager.commitChanges(mockWorktreePath, {
+        issuePrefix: '#',
         skipVerify: true,
         dryRun: false,
       })
@@ -924,6 +975,7 @@ describe('CommitManager', () => {
     it('should log correct dry-run message when skipVerify is true', async () => {
 
       await manager.commitChanges(mockWorktreePath, {
+        issuePrefix: '#',
         skipVerify: true,
         dryRun: true,
       })
@@ -952,6 +1004,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
       await manager.commitChanges(mockWorktreePath, {
+        issuePrefix: '#',
         skipVerify: true,
         issueNumber: 123,
         dryRun: false,
@@ -969,6 +1022,7 @@ describe('CommitManager', () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
       await manager.commitChanges(mockWorktreePath, {
+        issuePrefix: '#',
         skipVerify: true,
         dryRun: false,
       })
@@ -989,7 +1043,7 @@ describe('CommitManager', () => {
       vi.mocked(prompt.promptCommitAction).mockResolvedValue('accept')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       expect(prompt.promptCommitAction).toHaveBeenCalledWith('WIP: Auto-commit uncommitted changes')
     })
@@ -998,7 +1052,7 @@ describe('CommitManager', () => {
       vi.mocked(prompt.promptCommitAction).mockResolvedValue('accept')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-m', 'WIP: Auto-commit uncommitted changes'],
@@ -1010,7 +1064,7 @@ describe('CommitManager', () => {
       vi.mocked(prompt.promptCommitAction).mockResolvedValue('edit')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-e', '-m', 'WIP: Auto-commit uncommitted changes'],
@@ -1022,7 +1076,7 @@ describe('CommitManager', () => {
       vi.mocked(prompt.promptCommitAction).mockResolvedValue('abort')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await expect(manager.commitChanges(mockWorktreePath, { dryRun: false })).rejects.toThrow(
+      await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })).rejects.toThrow(
         UserAbortedCommitError
       )
     })
@@ -1030,7 +1084,7 @@ describe('CommitManager', () => {
     it('should not call promptCommitAction when noReview=true', async () => {
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { noReview: true, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', noReview: true, dryRun: false })
 
       expect(prompt.promptCommitAction).not.toHaveBeenCalled()
     })
@@ -1049,7 +1103,7 @@ describe('CommitManager', () => {
       vi.mocked(prompt.promptCommitAction).mockResolvedValue('accept')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       expect(prompt.promptCommitAction).toHaveBeenCalledWith('Add user authentication')
     })
@@ -1058,7 +1112,7 @@ describe('CommitManager', () => {
       vi.mocked(prompt.promptCommitAction).mockResolvedValue('accept')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { skipVerify: true, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', skipVerify: true, dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-m', 'WIP: Auto-commit uncommitted changes', '--no-verify'],
@@ -1070,7 +1124,7 @@ describe('CommitManager', () => {
       vi.mocked(prompt.promptCommitAction).mockResolvedValue('edit')
       vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-      await manager.commitChanges(mockWorktreePath, { skipVerify: true, dryRun: false })
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', skipVerify: true, dryRun: false })
 
       expect(git.executeGitCommand).toHaveBeenCalledWith(
         ['commit', '-e', '-m', 'WIP: Auto-commit uncommitted changes', '--no-verify'],
@@ -1101,7 +1155,7 @@ describe('CommitManager', () => {
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
         vi.mocked(fsPromises.readFile).mockResolvedValue('Edited commit message\n\n# comment')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // Should write initial commit message file
         expect(fsPromises.writeFile).toHaveBeenCalled()
@@ -1125,7 +1179,7 @@ describe('CommitManager', () => {
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
         vi.mocked(fsPromises.readFile).mockResolvedValue('Line 1\n# comment\nLine 2')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // The final writeFile should have stripped comments
         const writeFileCalls = vi.mocked(fsPromises.writeFile).mock.calls
@@ -1137,7 +1191,7 @@ describe('CommitManager', () => {
         vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true)
         vi.mocked(fsPromises.readFile).mockResolvedValue('# only comments\n# here')
 
-        await expect(manager.commitChanges(mockWorktreePath, { dryRun: false }))
+        await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false }))
           .rejects.toThrow(UserAbortedCommitError)
       })
 
@@ -1145,7 +1199,7 @@ describe('CommitManager', () => {
         vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(false)
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // Should NOT use execa for VSCode
         expect(execaMock.execa).not.toHaveBeenCalled()
@@ -1161,7 +1215,7 @@ describe('CommitManager', () => {
         vi.mocked(prompt.promptCommitAction).mockResolvedValue('accept')
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // Accept flow should NOT use VSCode editor
         expect(execaMock.execa).not.toHaveBeenCalled()
@@ -1189,7 +1243,7 @@ describe('CommitManager', () => {
         vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true)
         vi.mocked(fsPromises.readFile).mockResolvedValue('# only comments')
 
-        await expect(manager.commitChanges(mockWorktreePath, { dryRun: false }))
+        await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false }))
           .rejects.toThrow()
 
         // Should still clean up
@@ -1206,7 +1260,7 @@ describe('CommitManager', () => {
         vi.mocked(vscode.isVSCodeAvailable).mockResolvedValue(true) // Even if CLI available
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // Should NOT use VSCode editor
         expect(execaMock.execa).not.toHaveBeenCalled()
@@ -1219,7 +1273,7 @@ describe('CommitManager', () => {
       it('should NOT call isVSCodeAvailable when not running in VSCode', async () => {
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         expect(vscode.isVSCodeAvailable).not.toHaveBeenCalled()
       })
@@ -1251,7 +1305,7 @@ describe('CommitManager', () => {
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
         vi.mocked(fsPromises.readFile).mockResolvedValue('Edited commit message\n\n# comment')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // Should write initial commit message file
         expect(fsPromises.writeFile).toHaveBeenCalled()
@@ -1278,7 +1332,7 @@ describe('CommitManager', () => {
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
         vi.mocked(fsPromises.readFile).mockResolvedValue('Test message')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // Should use Cursor, not VSCode
         expect(execaMock.execa).toHaveBeenCalledWith(
@@ -1301,7 +1355,7 @@ describe('CommitManager', () => {
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
         vi.mocked(fsPromises.readFile).mockResolvedValue('Test message')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // Should use VSCode instead
         expect(execaMock.execa).toHaveBeenCalledWith(
@@ -1316,7 +1370,7 @@ describe('CommitManager', () => {
         vi.mocked(vscode.isRunningInVSCode).mockReturnValue(false)
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // Should NOT use execa for editors
         expect(execaMock.execa).not.toHaveBeenCalled()
@@ -1344,7 +1398,7 @@ describe('CommitManager', () => {
         vi.mocked(vscode.isCursorAvailable).mockResolvedValue(true)
         vi.mocked(fsPromises.readFile).mockResolvedValue('# only comments\n# here')
 
-        await expect(manager.commitChanges(mockWorktreePath, { dryRun: false }))
+        await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false }))
           .rejects.toThrow(UserAbortedCommitError)
       })
 
@@ -1352,7 +1406,7 @@ describe('CommitManager', () => {
         vi.mocked(vscode.isCursorAvailable).mockResolvedValue(true)
         vi.mocked(fsPromises.readFile).mockResolvedValue('# only comments')
 
-        await expect(manager.commitChanges(mockWorktreePath, { dryRun: false }))
+        await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false }))
           .rejects.toThrow()
 
         // Should still clean up
@@ -1386,7 +1440,7 @@ describe('CommitManager', () => {
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
         vi.mocked(fsPromises.readFile).mockResolvedValue('Edited commit message\n\n# comment')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // Should write initial commit message file
         expect(fsPromises.writeFile).toHaveBeenCalled()
@@ -1415,7 +1469,7 @@ describe('CommitManager', () => {
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
         vi.mocked(fsPromises.readFile).mockResolvedValue('Test message')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // Should use Antigravity, not Cursor or VSCode
         expect(execaMock.execa).toHaveBeenCalledWith(
@@ -1444,7 +1498,7 @@ describe('CommitManager', () => {
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
         vi.mocked(fsPromises.readFile).mockResolvedValue('Test message')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // Should use Cursor instead
         expect(execaMock.execa).toHaveBeenCalledWith(
@@ -1462,7 +1516,7 @@ describe('CommitManager', () => {
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
         vi.mocked(fsPromises.readFile).mockResolvedValue('Test message')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // Should use VSCode instead
         expect(execaMock.execa).toHaveBeenCalledWith(
@@ -1478,7 +1532,7 @@ describe('CommitManager', () => {
         vi.mocked(vscode.isRunningInVSCode).mockReturnValue(false)
         vi.mocked(git.executeGitCommand).mockResolvedValue('')
 
-        await manager.commitChanges(mockWorktreePath, { dryRun: false })
+        await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
         // Should NOT use execa for editors
         expect(execaMock.execa).not.toHaveBeenCalled()
@@ -1506,7 +1560,7 @@ describe('CommitManager', () => {
         vi.mocked(vscode.isAntigravityAvailable).mockResolvedValue(true)
         vi.mocked(fsPromises.readFile).mockResolvedValue('# only comments\n# here')
 
-        await expect(manager.commitChanges(mockWorktreePath, { dryRun: false }))
+        await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false }))
           .rejects.toThrow(UserAbortedCommitError)
       })
 
@@ -1514,7 +1568,7 @@ describe('CommitManager', () => {
         vi.mocked(vscode.isAntigravityAvailable).mockResolvedValue(true)
         vi.mocked(fsPromises.readFile).mockResolvedValue('# only comments')
 
-        await expect(manager.commitChanges(mockWorktreePath, { dryRun: false }))
+        await expect(manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false }))
           .rejects.toThrow()
 
         // Should still clean up

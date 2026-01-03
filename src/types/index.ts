@@ -323,6 +323,7 @@ export interface ValidationResult {
 export interface CommitOptions {
 	dryRun?: boolean
 	issueNumber?: string | number  // For "Fixes #N" trailer
+	issuePrefix: string            // "#" for GitHub, "" for Linear
 	message?: string      // Custom message override
 	noReview?: boolean    // Skip user review of commit message
 	skipVerify?: boolean  // Skip pre-commit hooks (--no-verify flag)

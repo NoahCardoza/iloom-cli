@@ -30,6 +30,7 @@ import { LinearMarkupConverter } from '../utils/linear-markup-converter.js'
  */
 export class LinearIssueManagementProvider implements IssueManagementProvider {
 	readonly providerName = 'linear'
+	readonly issuePrefix = ''
 
 	/**
 	 * Fetch issue details using Linear SDK

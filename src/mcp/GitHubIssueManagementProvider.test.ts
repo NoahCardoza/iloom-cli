@@ -46,6 +46,12 @@ describe('GitHubIssueManagementProvider', () => {
 		provider = new GitHubIssueManagementProvider()
 	})
 
+	describe('issuePrefix', () => {
+		it('should return "#" for GitHub provider', () => {
+			expect(provider.issuePrefix).toBe('#')
+		})
+	})
+
 	describe('getIssue', () => {
 		it('returns comments with numeric IDs extracted from URLs', async () => {
 			const mockResponse = {
