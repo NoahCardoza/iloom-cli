@@ -187,6 +187,9 @@ export class FinishCommand {
 	 * Main entry point for finish command
 	 */
 	public async execute(input: FinishCommandInput): Promise<FinishResult | void> {
+		// Set ILOOM=1 so hooks know this is an iloom session
+		process.env.ILOOM = '1'
+
 		const isJsonMode = input.options.json === true
 
 		// Initialize result object for JSON mode

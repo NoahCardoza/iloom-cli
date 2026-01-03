@@ -99,6 +99,9 @@ export class RebaseCommand {
 	}
 
 	async execute(options: RebaseOptions = {}): Promise<void> {
+		// Set ILOOM=1 so hooks know this is an iloom session
+		process.env.ILOOM = '1'
+
 		// Step 1: Validate we're in a valid iloom worktree
 		let worktreePath: string
 		try {

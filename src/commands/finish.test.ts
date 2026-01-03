@@ -102,8 +102,12 @@ describe('FinishCommand', () => {
 	let mockResourceCleanup: ResourceCleanup
 	let mockProcessManager: ProcessManager
 	let mockBuildRunner: BuildRunner
+	let originalIloomEnv: string | undefined
 
 	beforeEach(() => {
+		// Save and clear ILOOM env for test isolation
+		originalIloomEnv = process.env.ILOOM
+		delete process.env.ILOOM
 		mockGitHubService = new GitHubService()
 		// Set IssueTracker interface properties
 		mockGitHubService.supportsPullRequests = true
@@ -187,6 +191,12 @@ describe('FinishCommand', () => {
 
 	afterEach(() => {
 		vi.clearAllMocks()
+		// Restore ILOOM env
+		if (originalIloomEnv !== undefined) {
+			process.env.ILOOM = originalIloomEnv
+		} else {
+			delete process.env.ILOOM
+		}
 	})
 
 	describe('dependency injection', () => {
@@ -404,6 +414,19 @@ describe('FinishCommand', () => {
 					number: 123,
 					originalInput: '123',
 				})
+			})
+
+			it('should set ILOOM=1 in process.env during execute', async () => {
+				// Verify ILOOM is not set before execute
+				expect(process.env.ILOOM).toBeUndefined()
+
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				// Verify ILOOM is set after execute
+				expect(process.env.ILOOM).toBe('1')
 			})
 
 			it('should execute complete workflow including merge steps', async () => {

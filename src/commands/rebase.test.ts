@@ -27,6 +27,7 @@ describe('RebaseCommand', () => {
 	let mockGitWorktreeManager: GitWorktreeManager
 	let mockSettingsManager: SettingsManager
 	let originalCwd: typeof process.cwd
+	let originalIloomEnv: string | undefined
 
 	// Helper to create mock worktree
 	const createMockWorktree = (overrides: Partial<GitWorktree> = {}): GitWorktree => ({
@@ -40,8 +41,10 @@ describe('RebaseCommand', () => {
 	})
 
 	beforeEach(() => {
-		// Save original cwd
+		// Save original cwd and ILOOM env
 		originalCwd = process.cwd
+		originalIloomEnv = process.env.ILOOM
+		delete process.env.ILOOM
 
 		// Create mock MergeManager
 		mockMergeManager = {
@@ -66,6 +69,12 @@ describe('RebaseCommand', () => {
 
 	afterEach(() => {
 		process.cwd = originalCwd
+		// Restore ILOOM env
+		if (originalIloomEnv !== undefined) {
+			process.env.ILOOM = originalIloomEnv
+		} else {
+			delete process.env.ILOOM
+		}
 	})
 
 	describe('WorktreeValidationError', () => {
@@ -198,6 +207,16 @@ describe('RebaseCommand', () => {
 			vi.mocked(getWorktreeRoot).mockResolvedValue('/test/worktree')
 			vi.mocked(mockGitWorktreeManager.listWorktrees).mockResolvedValue([worktree])
 			vi.mocked(mockGitWorktreeManager.isMainWorktree).mockResolvedValue(false)
+		})
+
+		it('sets ILOOM=1 in process.env during execute', async () => {
+			// Verify ILOOM is not set before execute
+			expect(process.env.ILOOM).toBeUndefined()
+
+			await command.execute()
+
+			// Verify ILOOM is set after execute
+			expect(process.env.ILOOM).toBe('1')
 		})
 
 		it('calls rebaseOnMain with worktree path', async () => {
