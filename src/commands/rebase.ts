@@ -2,6 +2,7 @@ import { logger } from '../utils/logger.js'
 import { MergeManager } from '../lib/MergeManager.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
+import { BuildRunner } from '../lib/BuildRunner.js'
 import { isValidGitRepo, getWorktreeRoot } from '../utils/git.js'
 import { installDependencies } from '../utils/package-manager.js'
 import type { MergeOptions } from '../types/index.js'
@@ -42,11 +43,13 @@ export class RebaseCommand {
 	private mergeManager: MergeManager
 	private gitWorktreeManager: GitWorktreeManager
 	private settingsManager: SettingsManager
+	private buildRunner: BuildRunner
 
-	constructor(mergeManager?: MergeManager, gitWorktreeManager?: GitWorktreeManager, settingsManager?: SettingsManager) {
+	constructor(mergeManager?: MergeManager, gitWorktreeManager?: GitWorktreeManager, settingsManager?: SettingsManager, buildRunner?: BuildRunner) {
 		this.mergeManager = mergeManager ?? new MergeManager()
 		this.gitWorktreeManager = gitWorktreeManager ?? new GitWorktreeManager()
 		this.settingsManager = settingsManager ?? new SettingsManager()
+		this.buildRunner = buildRunner ?? new BuildRunner()
 	}
 
 	/**
@@ -141,6 +144,37 @@ export class RebaseCommand {
 			}
 		} else {
 			logger.info('[DRY RUN] Would install dependencies')
+		}
+
+		// Run build for CLI projects after successful rebase
+		await this.runPostRebaseBuild(worktreePath, options)
+	}
+
+	/**
+	 * Run post-rebase build for CLI projects
+	 * Non-blocking: build failures are logged as warnings but don't fail the rebase
+	 */
+	private async runPostRebaseBuild(worktreePath: string, options: RebaseOptions): Promise<void> {
+		if (options.dryRun) {
+			logger.info('[DRY RUN] Would run post-rebase build for CLI projects')
+			return
+		}
+
+		try {
+			const buildResult = await this.buildRunner.runBuild(worktreePath, {
+				dryRun: options.dryRun ?? false,
+			})
+
+			if (buildResult.skipped) {
+				logger.debug(`Build skipped: ${buildResult.reason}`)
+			} else {
+				logger.success('Post-rebase build completed successfully')
+			}
+		} catch (error) {
+			// Log warning but don't fail - rebase succeeded, user can fix build manually
+			const message = error instanceof Error ? error.message : 'Unknown error'
+			logger.warn(`Post-rebase build failed: ${message}`)
+			logger.warn('Please run the build command manually')
 		}
 	}
 }

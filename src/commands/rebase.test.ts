@@ -3,12 +3,14 @@ import { RebaseCommand, WorktreeValidationError } from './rebase.js'
 import type { MergeManager } from '../lib/MergeManager.js'
 import type { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import type { SettingsManager } from '../lib/SettingsManager.js'
+import type { BuildRunner } from '../lib/BuildRunner.js'
 import type { GitWorktree } from '../types/worktree.js'
 
 // Mock dependencies
 vi.mock('../lib/MergeManager.js')
 vi.mock('../lib/GitWorktreeManager.js')
 vi.mock('../lib/SettingsManager.js')
+vi.mock('../lib/BuildRunner.js')
 vi.mock('../utils/git.js', () => ({
 	isValidGitRepo: vi.fn(),
 	getWorktreeRoot: vi.fn(),
@@ -26,6 +28,7 @@ describe('RebaseCommand', () => {
 	let mockMergeManager: MergeManager
 	let mockGitWorktreeManager: GitWorktreeManager
 	let mockSettingsManager: SettingsManager
+	let mockBuildRunner: BuildRunner
 	let originalCwd: typeof process.cwd
 	let originalIloomEnv: string | undefined
 
@@ -63,8 +66,18 @@ describe('RebaseCommand', () => {
 			getProtectedBranches: vi.fn().mockResolvedValue(['main', 'master', 'develop']),
 		} as unknown as SettingsManager
 
+		// Create mock BuildRunner
+		mockBuildRunner = {
+			runBuild: vi.fn().mockResolvedValue({
+				success: true,
+				skipped: true,
+				reason: 'Not a CLI project',
+				duration: 0,
+			}),
+		} as unknown as BuildRunner
+
 		// Create command with mocked dependencies
-		command = new RebaseCommand(mockMergeManager, mockGitWorktreeManager, mockSettingsManager)
+		command = new RebaseCommand(mockMergeManager, mockGitWorktreeManager, mockSettingsManager, mockBuildRunner)
 	})
 
 	afterEach(() => {
@@ -354,6 +367,142 @@ describe('RebaseCommand', () => {
 				dryRun: false,
 				force: false,
 			})
+		})
+	})
+
+	describe('post-rebase build', () => {
+		beforeEach(() => {
+			// Setup valid worktree context for all build tests
+			const worktree = createMockWorktree({ path: '/test/worktree' })
+			process.cwd = vi.fn().mockReturnValue('/test/worktree')
+			vi.mocked(isValidGitRepo).mockResolvedValue(true)
+			vi.mocked(getWorktreeRoot).mockResolvedValue('/test/worktree')
+			vi.mocked(mockGitWorktreeManager.listWorktrees).mockResolvedValue([worktree])
+			vi.mocked(mockGitWorktreeManager.isMainWorktree).mockResolvedValue(false)
+		})
+
+		it('runs build after successful rebase for CLI projects', async () => {
+			// Mock BuildRunner to indicate successful build
+			vi.mocked(mockBuildRunner.runBuild).mockResolvedValue({
+				success: true,
+				skipped: false,
+				duration: 1500,
+			})
+
+			await command.execute()
+
+			// Verify buildRunner.runBuild was called with correct parameters
+			expect(mockBuildRunner.runBuild).toHaveBeenCalledWith('/test/worktree', {
+				dryRun: false,
+			})
+		})
+
+		it('skips build when project is not a CLI project', async () => {
+			// Mock BuildRunner to indicate build was skipped
+			vi.mocked(mockBuildRunner.runBuild).mockResolvedValue({
+				success: true,
+				skipped: true,
+				reason: 'Project is not a CLI project (no bin field in package.json)',
+				duration: 50,
+			})
+
+			await command.execute()
+
+			expect(mockBuildRunner.runBuild).toHaveBeenCalledWith('/test/worktree', {
+				dryRun: false,
+			})
+		})
+
+		it('skips build in dry-run mode', async () => {
+			await command.execute({ dryRun: true })
+
+			// BuildRunner.runBuild should NOT be called in dry-run mode
+			// because the command exits early with a log message
+			expect(mockBuildRunner.runBuild).not.toHaveBeenCalled()
+		})
+
+		it('logs warning but does not fail when build fails', async () => {
+			// Mock BuildRunner to throw an error
+			vi.mocked(mockBuildRunner.runBuild).mockRejectedValue(
+				new Error('Build failed: TypeScript compilation errors')
+			)
+
+			// Should not throw - rebase succeeded, build failure is just a warning
+			await expect(command.execute()).resolves.toBeUndefined()
+
+			// Verify buildRunner.runBuild was called
+			expect(mockBuildRunner.runBuild).toHaveBeenCalledWith('/test/worktree', {
+				dryRun: false,
+			})
+		})
+
+		it('runs build after dependency installation', async () => {
+			const executionOrder: string[] = []
+
+			vi.mocked(installDependencies).mockImplementation(async () => {
+				executionOrder.push('install')
+			})
+
+			vi.mocked(mockBuildRunner.runBuild).mockImplementation(async () => {
+				executionOrder.push('build')
+				return {
+					success: true,
+					skipped: false,
+					duration: 1000,
+				}
+			})
+
+			await command.execute()
+
+			// Verify install happens before build
+			const installIndex = executionOrder.indexOf('install')
+			const buildIndex = executionOrder.indexOf('build')
+
+			expect(installIndex).toBeGreaterThanOrEqual(0)
+			expect(buildIndex).toBeGreaterThanOrEqual(0)
+			expect(installIndex).toBeLessThan(buildIndex)
+		})
+
+		it('does not run build when rebase fails', async () => {
+			// Mock rebaseOnMain to throw an error
+			vi.mocked(mockMergeManager.rebaseOnMain).mockRejectedValue(
+				new Error('Rebase failed: merge conflict')
+			)
+
+			await expect(command.execute()).rejects.toThrow('Rebase failed: merge conflict')
+
+			// BuildRunner should not be called if rebase fails
+			expect(mockBuildRunner.runBuild).not.toHaveBeenCalled()
+		})
+
+		it('runs build even when dependency installation fails', async () => {
+			// Mock dependency installation to fail
+			vi.mocked(installDependencies).mockRejectedValue(
+				new Error('npm install failed: lockfile out of date')
+			)
+
+			vi.mocked(mockBuildRunner.runBuild).mockResolvedValue({
+				success: true,
+				skipped: false,
+				duration: 1000,
+			})
+
+			// Should not throw - both installation and build failures are warnings
+			await expect(command.execute()).resolves.toBeUndefined()
+
+			// BuildRunner should still be called after dependency installation failure
+			expect(mockBuildRunner.runBuild).toHaveBeenCalledWith('/test/worktree', {
+				dryRun: false,
+			})
+		})
+
+		it('passes dryRun option to BuildRunner when provided', async () => {
+			// Note: In the current implementation, build is skipped entirely in dry-run mode
+			// This test documents that behavior
+			await command.execute({ dryRun: true })
+
+			// BuildRunner is not called in dry-run mode because the command returns early
+			expect(mockBuildRunner.runBuild).not.toHaveBeenCalled()
 		})
 	})
 })
