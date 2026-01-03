@@ -137,6 +137,7 @@ Command Reference
 | **Command** | **Alias** |  **Description** |
 | ------ | ----- | -----|
 | `il start` | `new` | Create loom, run analysis agents, and launch IDE. |
+| `il commit` | `c` | Commit all files with issue reference (`Refs #N` or `Fixes #N`). |
 | `il finish` | `dn` | Validate tests/lint, commit, handle conflicts, and merge/PR. |
 | `il cleanup` | `remove` | Safely remove a loom and its database branch without merging. |
 | `il list` |  | Show active looms and paths. |

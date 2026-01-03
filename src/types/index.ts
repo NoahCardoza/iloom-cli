@@ -322,11 +322,13 @@ export interface ValidationResult {
 // Commit management types
 export interface CommitOptions {
 	dryRun?: boolean
-	issueNumber?: string | number  // For "Fixes #N" trailer
+	issueNumber?: string | number  // For "Fixes #N" or "Refs #N" trailer
 	issuePrefix: string            // "#" for GitHub, "" for Linear
 	message?: string      // Custom message override
 	noReview?: boolean    // Skip user review of commit message
 	skipVerify?: boolean  // Skip pre-commit hooks (--no-verify flag)
+	skipVerifySilent?: boolean  // Skip without warning (for --wip-commit)
+	trailerType?: 'Refs' | 'Fixes'  // Trailer type: "Refs" references issue, "Fixes" closes it (default: 'Fixes' for backward compat)
 }
 
 /**

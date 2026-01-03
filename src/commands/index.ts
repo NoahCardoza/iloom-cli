@@ -46,3 +46,6 @@ export type { TestCommandInput } from './test.js'
 
 export { CompileCommand } from './compile.js'
 export type { CompileCommandInput } from './compile.js'
+
+export { CommitCommand } from './commit.js'
+export type { CommitCommandInput, CommitResult } from './commit.js'

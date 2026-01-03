@@ -51,8 +51,9 @@ export class CommitManager {
   /**
    * Stage all changes and commit with Claude-generated or simple message
    * Tries Claude first, falls back to simple message if Claude unavailable or fails
+   * Returns the commit message that was used
    */
-  async commitChanges(worktreePath: string, options: CommitOptions): Promise<void> {
+  async commitChanges(worktreePath: string, options: CommitOptions): Promise<{ message: string }> {
     // Step 1: Check dry-run mode
     if (options.dryRun) {
       getLogger().info('[DRY RUN] Would run: git add -A')
@@ -60,7 +61,7 @@ export class CommitManager {
       const fallbackMessage = this.generateFallbackMessage(options)
       const verifyFlag = options.skipVerify ? ' --no-verify' : ''
       getLogger().info(`[DRY RUN] Would commit with message${verifyFlag}: ${fallbackMessage}`)
-      return
+      return { message: fallbackMessage }
     }
 
     // Step 2: Stage all changes
@@ -72,7 +73,7 @@ export class CommitManager {
     // Skip Claude if custom message provided
     if (!options.message) {
       try {
-        message = await this.generateClaudeCommitMessage(worktreePath, options.issueNumber, options.issuePrefix)
+        message = await this.generateClaudeCommitMessage(worktreePath, options.issueNumber, options.issuePrefix, options.trailerType)
       } catch (error) {
         getLogger().debug('Claude commit message generation failed, using fallback', { error })
       }
@@ -81,8 +82,8 @@ export class CommitManager {
     // Fallback to simple message if Claude failed or unavailable
     message ??= this.generateFallbackMessage(options)
 
-    // Step 4: Log warning if --no-verify is configured
-    if (options.skipVerify) {
+    // Step 4: Log warning if --no-verify is configured (but not for silent skip like --wip-commit)
+    if (options.skipVerify && !options.skipVerifySilent) {
       getLogger().warn('Skipping pre-commit hooks (--no-verify configured in settings)')
     }
 
@@ -139,6 +140,7 @@ export class CommitManager {
           }
         }
       }
+      return { message }
     } catch (error) {
       // Re-throw UserAbortedCommitError as-is
       if (error instanceof UserAbortedCommitError) {
@@ -147,7 +149,7 @@ export class CommitManager {
       // Handle "nothing to commit" scenario gracefully
       if (error instanceof Error && error.message.includes('nothing to commit')) {
         getLogger().info('No changes to commit')
-        return
+        return { message: '' }
       }
       // Re-throw all other errors (including pre-commit hook failures)
       throw error
@@ -237,7 +239,8 @@ export class CommitManager {
 
     // Generate WIP message
     if (options.issueNumber) {
-      return `WIP: Auto-commit for issue ${options.issuePrefix}${options.issueNumber}\n\nFixes ${options.issuePrefix}${options.issueNumber}`
+      const trailer = options.trailerType ?? 'Fixes'
+      return `WIP: Auto-commit for issue ${options.issuePrefix}${options.issueNumber}\n\n${trailer} ${options.issuePrefix}${options.issueNumber}`
     } else {
       return 'WIP: Auto-commit uncommitted changes'
     }
@@ -296,14 +299,19 @@ export class CommitManager {
   private async generateClaudeCommitMessage(
     worktreePath: string,
     issueNumber: string | number | undefined,
-    issuePrefix: string
+    issuePrefix: string,
+    trailerType?: 'Refs' | 'Fixes'
   ): Promise<string | null> {
     const startTime = Date.now()
 
-    getLogger().info('Starting Claude commit message generation...', {
-      worktreePath: worktreePath.split('/').pop(), // Just show the folder name for privacy
-      issueNumber
-    })
+    if (getLogger().isDebugEnabled()) {
+      getLogger().debug('Claude commit message generation started', {
+        worktreePath: worktreePath.split('/').pop(), // Just show the folder name for privacy
+        issueNumber
+      })
+    } else {
+      getLogger().info('Generating commit message with Claude...')
+    }
 
     // Check if Claude CLI is available
     getLogger().debug('Checking Claude CLI availability...')
@@ -316,7 +324,7 @@ export class CommitManager {
 
     // Build XML-based structured prompt
     getLogger().debug('Building commit message prompt...')
-    const prompt = this.buildCommitMessagePrompt(issueNumber, issuePrefix)
+    const prompt = this.buildCommitMessagePrompt(issueNumber, issuePrefix, trailerType)
     getLogger().debug('Prompt built', { promptLength: prompt.length })
 
     // Debug log the actual prompt content for troubleshooting
@@ -326,7 +334,6 @@ export class CommitManager {
     })
 
     try {
-      getLogger().info('Calling Claude CLI for commit message generation...')
       const claudeStartTime = Date.now()
 
       // Debug log the Claude call parameters
@@ -375,25 +382,30 @@ export class CommitManager {
         return null
       }
 
-      // Append "Fixes #N" or "Fixes TEAM-123" trailer if issue number provided
+      // Append trailer (e.g., "Fixes #N" or "Refs #N") if issue number provided
       let finalMessage = sanitized
       if (issueNumber) {
-        const fixesRef = `Fixes ${issuePrefix}${issueNumber}`
-        // Add Fixes trailer if not already present
-        if (!finalMessage.includes(fixesRef)) {
-          finalMessage = `${finalMessage}\n\n${fixesRef}`
-          getLogger().debug(`Added "${fixesRef}" trailer to commit message`)
+        const trailer = trailerType ?? 'Fixes'
+        const trailerRef = `${trailer} ${issuePrefix}${issueNumber}`
+        // Add trailer if not already present
+        if (!finalMessage.includes(trailerRef)) {
+          finalMessage = `${finalMessage}\n\n${trailerRef}`
+          getLogger().debug(`Added "${trailerRef}" trailer to commit message`)
         } else {
-          getLogger().debug(`"${fixesRef}" already present in commit message`)
+          getLogger().debug(`"${trailerRef}" already present in commit message`)
         }
       }
 
       const totalDuration = Date.now() - startTime
-      getLogger().info('Claude commit message generated successfully', {
-        message: finalMessage,
-        totalDuration: `${totalDuration}ms`,
-        claudeApiDuration: `${claudeDuration}ms`
-      })
+      if (getLogger().isDebugEnabled()) {
+        getLogger().debug('Claude commit message generated', {
+          message: finalMessage,
+          totalDuration: `${totalDuration}ms`,
+          claudeApiDuration: `${claudeDuration}ms`
+        })
+      } else {
+        getLogger().info('Commit message generated')
+      }
 
       return finalMessage
     } catch (error) {
@@ -420,11 +432,16 @@ export class CommitManager {
    * Build structured XML prompt for commit message generation
    * Uses XML format for clear task definition and output expectations
    */
-  private buildCommitMessagePrompt(issueNumber: string | number | undefined, issuePrefix: string): string {
+  private buildCommitMessagePrompt(
+    issueNumber: string | number | undefined,
+    issuePrefix: string,
+    trailerType?: 'Refs' | 'Fixes'
+  ): string {
+    const trailer = trailerType ?? 'Fixes'
     const issueContext = issueNumber
       ? `\n<IssueContext>
 This commit is associated with issue ${issuePrefix}${issueNumber}.
-If the changes appear to resolve the issue, include "Fixes ${issuePrefix}${issueNumber}" at the end of the first line of commit message.
+${trailer === 'Fixes' ? 'If the changes appear to resolve the issue, include' : 'Include'} "${trailer} ${issuePrefix}${issueNumber}" at the end of the first line of commit message.
 </IssueContext>`
       : ''
 
@@ -435,7 +452,7 @@ Examine the staged changes in the git repository and generate a concise, meaning
 </Task>
 
 <Requirements>
-<Format>The first line must be a brief summary of the changes made as a full sentence. If it references an issue, include "Fixes ${examplePrefix}N" at the end of this line.
+<Format>The first line must be a brief summary of the changes made as a full sentence. If it references an issue, include "${trailer} ${examplePrefix}N" at the end of this line.
 
 Add 2 newlines, then add a bullet-point form description of the changes made, each change on a new line.</Format>
 <Mood>Use imperative mood (e.g., "Add feature" not "Added feature")</Mood>
@@ -443,7 +460,7 @@ Add 2 newlines, then add a bullet-point form description of the changes made, ea
 <Conciseness>Keep message under 72 characters for subject line when possible</Conciseness>
 <NoMeta>CRITICAL: Do NOT include ANY explanatory text, analysis, or meta-commentary. Output ONLY the raw commit message.</NoMeta>
 <Examples>
-Good: "Add user authentication with JWT tokens. Fixes ${examplePrefix}42
+Good: "Add user authentication with JWT tokens. ${trailer} ${examplePrefix}42
 
 - Implement login and registration endpoints
 - Secure routes with JWT middleware
@@ -519,6 +536,4 @@ Start your response immediately with the commit message text.
 
     return cleaned
   }
-
-
 }

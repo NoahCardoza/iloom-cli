@@ -49,7 +49,7 @@ export const WorkflowPermissionSchema = z.object({
 	noVerify: z
 		.boolean()
 		.optional()
-		.describe('Skip pre-commit hooks (--no-verify) when committing during finish workflow'),
+		.describe('Skip pre-commit hooks (--no-verify) when committing during commit and finish workflows'),
 	startIde: z
 		.boolean()
 		.default(true)
@@ -84,7 +84,7 @@ export const WorkflowPermissionSchemaNoDefaults = z.object({
 	noVerify: z
 		.boolean()
 		.optional()
-		.describe('Skip pre-commit hooks (--no-verify) when committing during finish workflow'),
+		.describe('Skip pre-commit hooks (--no-verify) when committing during commit and finish workflows'),
 	startIde: z
 		.boolean()
 		.optional()

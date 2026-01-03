@@ -579,6 +579,55 @@ program
   })
 
 program
+  .command('commit')
+  .alias('c')
+  .description('Commit all uncommitted files with issue reference')
+  .option('-m, --message <text>', 'Custom commit message (skip Claude generation)')
+  .option('--fixes', 'Use "Fixes #N" trailer instead of "Refs #N" (closes issue)')
+  .option('--no-review', 'Skip commit message review prompt')
+  .option('--json', 'Output result as JSON (implies --no-review)')
+  .option('--wip-commit', 'Quick WIP commit: skip validations and pre-commit hooks')
+  .action(async (options: { message?: string; fixes?: boolean; review?: boolean; json?: boolean; wipCommit?: boolean }) => {
+    const executeAction = async (): Promise<void> => {
+      try {
+        const { CommitCommand } = await import('./commands/commit.js')
+        const command = new CommitCommand()
+        // --json implies --no-review
+        const noReview = options.review === false || options.json === true
+        const result = await command.execute({
+          message: options.message,
+          fixes: options.fixes ?? false,
+          noReview,
+          json: options.json ?? false,
+          wipCommit: options.wipCommit ?? false,
+        })
+        if (options.json && result) {
+          console.log(JSON.stringify(result, null, 2))
+        }
+        process.exit(0)
+      } catch (error) {
+        // Handle UserAbortedCommitError with exit code 130
+        if (error instanceof UserAbortedCommitError) {
+          process.exit(130)
+        }
+        if (options.json) {
+          console.log(JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
+        } else {
+          logger.error(`Commit failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+        process.exit(1)
+      }
+    }
+    // Wrap in logger context for JSON mode
+    if (options.json) {
+      const jsonLogger = createStderrLogger()
+      await withLogger(jsonLogger, executeAction)
+    } else {
+      await executeAction()
+    }
+  })
+
+program
   .command('rebase')
   .description('Rebase current branch on main with Claude-assisted conflict resolution')
   .option('-f, --force', 'Skip confirmation prompts')

@@ -4,7 +4,7 @@ import * as git from '../utils/git.js'
 import * as claude from '../utils/claude.js'
 import * as prompt from '../utils/prompt.js'
 import * as vscode from '../utils/vscode.js'
-import { logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 import { UserAbortedCommitError } from '../types/index.js'
 
 // Mock dependencies
@@ -20,15 +20,19 @@ vi.mock('node:fs/promises', () => ({
 vi.mock('execa', () => ({
   execa: vi.fn().mockResolvedValue({ stdout: '', stderr: '' }),
 }))
-vi.mock('../utils/logger.js', () => ({
-  logger: {
+vi.mock('../utils/logger-context.js', () => {
+  const mockLogger = {
     info: vi.fn(),
     error: vi.fn(),
     debug: vi.fn(),
     warn: vi.fn(),
     success: vi.fn(),
-  },
-}))
+    isDebugEnabled: () => false,
+  }
+  return {
+    getLogger: () => mockLogger,
+  }
+})
 
 // Mock git status outputs for different scenarios
 const mockGitStatus = {
@@ -451,8 +455,8 @@ describe('CommitManager', () => {
 
       await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: true, issueNumber: 123 })
 
-      expect(logger.info).toHaveBeenCalledWith('[DRY RUN] Would run: git add -A')
-      expect(logger.info).toHaveBeenCalledWith(
+      expect(getLogger().info).toHaveBeenCalledWith('[DRY RUN] Would run: git add -A')
+      expect(getLogger().info).toHaveBeenCalledWith(
         expect.stringContaining('[DRY RUN] Would commit with message:')
       )
     })
@@ -807,11 +811,11 @@ describe('CommitManager', () => {
 
       await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: true, issueNumber: 123 })
 
-      expect(logger.info).toHaveBeenCalledWith('[DRY RUN] Would run: git add -A')
-      expect(logger.info).toHaveBeenCalledWith(
+      expect(getLogger().info).toHaveBeenCalledWith('[DRY RUN] Would run: git add -A')
+      expect(getLogger().info).toHaveBeenCalledWith(
         '[DRY RUN] Would generate commit message with Claude (if available)'
       )
-      expect(logger.info).toHaveBeenCalledWith(
+      expect(getLogger().info).toHaveBeenCalledWith(
         expect.stringContaining('[DRY RUN] Would commit with message:')
       )
     })
@@ -967,9 +971,22 @@ describe('CommitManager', () => {
         dryRun: false,
       })
 
-      expect(logger.warn).toHaveBeenCalledWith(
+      expect(getLogger().warn).toHaveBeenCalledWith(
         expect.stringContaining('Skipping pre-commit hooks')
       )
+    })
+
+    it('should not log warning when skipVerifySilent is true', async () => {
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, {
+        issuePrefix: '#',
+        skipVerify: true,
+        skipVerifySilent: true,
+        dryRun: false,
+      })
+
+      expect(getLogger().warn).not.toHaveBeenCalled()
     })
 
     it('should log correct dry-run message when skipVerify is true', async () => {
@@ -980,7 +997,7 @@ describe('CommitManager', () => {
         dryRun: true,
       })
 
-      expect(logger.info).toHaveBeenCalledWith(
+      expect(getLogger().info).toHaveBeenCalledWith(
         expect.stringContaining('[DRY RUN] Would commit with message --no-verify:')
       )
     })

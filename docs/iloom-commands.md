@@ -6,6 +6,7 @@ Complete documentation for all iloom CLI commands, options, and flags.
 
 - [Core Workflow Commands](#core-workflow-commands)
   - [il start](#il-start)
+  - [il commit](#il-commit)
   - [il finish](#il-finish)
   - [il rebase](#il-rebase)
   - [il cleanup](#il-cleanup)
@@ -112,6 +113,112 @@ il start 99 --no-child-loom
 - Creates isolated environment: Git worktree, database branch, unique port
 - All AI analysis is posted as issue comments for team visibility
 - Color codes the VS Code window for visual context switching
+
+---
+
+### il commit
+
+Commit all uncommitted files with an issue reference trailer.
+
+**Alias:** `c`
+
+**Usage:**
+```bash
+il commit [options]
+```
+
+**Must be run from within a loom directory.**
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `-m`, `--message <text>` | Custom commit message (skips Claude generation) |
+| `--fixes` | Use "Fixes #N" trailer instead of "Refs #N" (closes the issue) |
+| `--no-review` | Skip commit message review prompt |
+| `--json` | Output result as JSON (implies `--no-review`) |
+
+**Behavior:**
+
+1. Auto-detects issue number from current worktree path
+2. Stages all uncommitted files (`git add -A`)
+3. Generates commit message using Claude (or uses `-m` message if provided)
+4. Appends issue reference trailer:
+   - Default: `Refs #N` (references issue without closing)
+   - With `--fixes`: `Fixes #N` (closes the issue when merged)
+5. Prompts for review (unless `--no-review` or `--json`)
+6. Commits with the generated message
+
+**Trailer Behavior:**
+
+| Trailer | Effect | When to Use |
+|---------|--------|-------------|
+| `Refs #N` | References issue, keeps it open | Work-in-progress commits during development |
+| `Fixes #N` | Closes issue when commit is merged to default branch | Final commit that completes the issue |
+
+**Examples:**
+
+```bash
+# Basic usage (auto-detect issue, Refs trailer)
+il commit
+
+# With custom message
+il commit -m "Add authentication service"
+
+# Mark this commit as fixing the issue
+il commit --fixes
+
+# Skip review prompt
+il commit --no-review
+
+# JSON output for scripting (implies --no-review)
+il commit --json
+
+# Combine flags
+il commit -m "Final implementation" --fixes --no-review
+```
+
+**Example Commit Messages:**
+
+With Claude generation:
+```
+Add user authentication endpoints
+
+- Implement login endpoint with JWT tokens
+- Add password hashing with bcrypt
+- Create user registration flow
+
+Refs #425
+```
+
+With `--fixes` flag:
+```
+Add user authentication endpoints
+
+- Implement login endpoint with JWT tokens
+- Add password hashing with bcrypt
+- Create user registration flow
+
+Fixes #425
+```
+
+**JSON Output Format:**
+```json
+{
+  "success": true,
+  "commitHash": "a1b2c3d",
+  "message": "Add user authentication endpoints...",
+  "filesChanged": 5,
+  "issueNumber": "425",
+  "trailerType": "Refs"
+}
+```
+
+**Notes:**
+- Use `il commit` for intermediate commits during development
+- Use `il commit --fixes` or `il finish` when completing the issue
+- The `--json` flag is useful for CI/CD pipelines and scripting
+- If not in an issue/PR worktree, `--fixes` prints a warning and is ignored
 
 ---
 
