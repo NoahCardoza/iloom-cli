@@ -6,6 +6,12 @@ import deepmerge from 'deepmerge'
 import { logger } from '../utils/logger.js'
 
 /**
+ * Valid project capability values for Zod enum validation.
+ * When updating this constant, also update ProjectCapability type in src/types/loom.ts
+ */
+const PROJECT_CAPABILITIES = ['cli', 'web'] as const
+
+/**
  * Zod schema for agent settings
  */
 export const AgentSettingsSchema = z.object({
@@ -134,6 +140,10 @@ export const WorkflowsSettingsSchemaNoDefaults = z
  */
 export const CapabilitiesSettingsSchema = z
 	.object({
+		capabilities: z
+			.array(z.enum(PROJECT_CAPABILITIES))
+			.optional()
+			.describe('Explicitly declared project capabilities (auto-detected if not specified)'),
 		web: z
 			.object({
 				basePort: z
@@ -163,6 +173,10 @@ export const CapabilitiesSettingsSchema = z
  */
 export const CapabilitiesSettingsSchemaNoDefaults = z
 	.object({
+		capabilities: z
+			.array(z.enum(PROJECT_CAPABILITIES))
+			.optional()
+			.describe('Explicitly declared project capabilities (auto-detected if not specified)'),
 		web: z
 			.object({
 				basePort: z

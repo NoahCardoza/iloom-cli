@@ -3,6 +3,7 @@ import { MetadataManager } from './MetadataManager.js'
 import fs from 'fs-extra'
 import os from 'os'
 import path from 'path'
+import type { ProjectCapability } from '../types/loom.js'
 
 // Mock fs-extra
 vi.mock('fs-extra')
@@ -87,6 +88,7 @@ describe('MetadataManager', () => {
       projectPath: '/Users/jane/dev/main-repo',
       issueUrls: { '42': 'https://github.com/org/repo/issues/42' },
       prUrls: {},
+      capabilities: [] as ProjectCapability[],
     }
 
     beforeEach(() => {
@@ -131,6 +133,7 @@ describe('MetadataManager', () => {
         projectPath: '/Users/jane/dev/main-repo',
         issueUrls: { '42': 'https://github.com/org/repo/issues/42' },
         prUrls: {},
+        capabilities: [],
       })
 
       vi.useRealTimers()
@@ -216,6 +219,32 @@ describe('MetadataManager', () => {
       const writtenContent = JSON.parse(writeCall?.[1] as string)
       expect(writtenContent.parentLoom).toBeUndefined()
     })
+
+    it('should write capabilities array to metadata', async () => {
+      const inputWithCapabilities = {
+        ...metadataInput,
+        capabilities: ['cli', 'web'] as ProjectCapability[],
+      }
+
+      await manager.writeMetadata(worktreePath, inputWithCapabilities)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.capabilities).toEqual(['cli', 'web'])
+    })
+
+    it('should write empty capabilities array when no capabilities detected', async () => {
+      const inputWithEmptyCapabilities = {
+        ...metadataInput,
+        capabilities: [] as ProjectCapability[],
+      }
+
+      await manager.writeMetadata(worktreePath, inputWithEmptyCapabilities)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.capabilities).toEqual([])
+    })
   })
 
   describe('readMetadata', () => {
@@ -237,6 +266,7 @@ describe('MetadataManager', () => {
         projectPath: '/Users/jane/dev/main-repo',
         issueUrls: { '42': 'https://github.com/org/repo/issues/42' },
         prUrls: {},
+        capabilities: ['web'],
       })
       vi.mocked(fs.pathExists).mockResolvedValue(true)
       vi.mocked(fs.readFile).mockResolvedValue(mockContent)
@@ -258,6 +288,7 @@ describe('MetadataManager', () => {
         issueUrls: { '42': 'https://github.com/org/repo/issues/42' },
         prUrls: {},
         draftPrNumber: null,
+        capabilities: ['web'],
         parentLoom: null,
       })
     })
@@ -351,6 +382,7 @@ describe('MetadataManager', () => {
         issueUrls: {},
         prUrls: {},
         draftPrNumber: null,
+        capabilities: [],
         parentLoom: null,
       })
     })
@@ -470,6 +502,51 @@ describe('MetadataManager', () => {
 
       expect(result?.parentLoom).toBeNull()
     })
+
+    it('should return capabilities array when present in metadata file', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Loom with capabilities',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__feature',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+        sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+        capabilities: ['cli', 'web'],
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.capabilities).toEqual(['cli', 'web'])
+    })
+
+    it('should return empty capabilities array for legacy looms without capabilities field', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Legacy loom without capabilities',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__legacy',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+        // Note: no capabilities field
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.capabilities).toEqual([])
+    })
   })
 
   describe('listAllMetadata', () => {
@@ -516,6 +593,7 @@ describe('MetadataManager', () => {
             projectPath: '/Users/alice/main-project',
             issueUrls: { '1': 'https://github.com/org/repo/issues/1' },
             prUrls: {},
+            capabilities: ['cli'],
           })
         }
         return JSON.stringify({
@@ -533,6 +611,7 @@ describe('MetadataManager', () => {
           projectPath: '/Users/bob/main-project',
           issueUrls: { '2': 'https://github.com/org/repo/issues/2' },
           prUrls: {},
+          capabilities: ['web'],
         })
       })
 
@@ -554,6 +633,7 @@ describe('MetadataManager', () => {
         issueUrls: { '1': 'https://github.com/org/repo/issues/1' },
         prUrls: {},
         draftPrNumber: null,
+        capabilities: ['cli'],
         parentLoom: null,
       })
       expect(result[1]).toEqual({
@@ -571,6 +651,7 @@ describe('MetadataManager', () => {
         issueUrls: { '2': 'https://github.com/org/repo/issues/2' },
         prUrls: {},
         draftPrNumber: null,
+        capabilities: ['web'],
         parentLoom: null,
       })
     })
@@ -672,6 +753,7 @@ describe('MetadataManager', () => {
         issueUrls: {},
         prUrls: {},
         draftPrNumber: null,
+        capabilities: [],
         parentLoom: null,
       })
     })

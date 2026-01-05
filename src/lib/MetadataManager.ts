@@ -2,6 +2,7 @@ import path from 'path'
 import os from 'os'
 import fs from 'fs-extra'
 import { getLogger } from '../utils/logger-context.js'
+import type { ProjectCapability } from '../types/loom.js'
 
 /**
  * Schema for metadata JSON file
@@ -24,6 +25,7 @@ export interface MetadataFile {
   issueUrls?: Record<string, string> // Map of issue ID to URL in the issue tracker
   prUrls?: Record<string, string> // Map of PR number to URL in the issue tracker
   draftPrNumber?: number // Draft PR number if github-draft-pr mode was used
+  capabilities?: ProjectCapability[] // Detected project capabilities
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -52,6 +54,7 @@ export interface WriteMetadataInput {
   issueUrls: Record<string, string> // Map of issue ID to URL in the issue tracker
   prUrls: Record<string, string> // Map of PR number to URL in the issue tracker
   draftPrNumber?: number // Draft PR number for github-draft-pr mode
+  capabilities: ProjectCapability[] // Detected project capabilities (required for new looms)
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -79,6 +82,7 @@ export interface LoomMetadata {
   issueUrls: Record<string, string> // Map of issue ID to URL ({} for legacy looms)
   prUrls: Record<string, string> // Map of PR number to URL ({} for legacy looms)
   draftPrNumber: number | null // Draft PR number (null if not draft mode)
+  capabilities: ProjectCapability[] // Detected project capabilities (empty for legacy looms)
   parentLoom: {
     type: 'issue' | 'pr' | 'branch'
     identifier: string | number
@@ -104,6 +108,30 @@ export class MetadataManager {
 
   constructor() {
     this.loomsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'looms')
+  }
+
+  /**
+   * Convert MetadataFile to LoomMetadata with default values for optional fields
+   */
+  private toMetadata(data: MetadataFile): LoomMetadata {
+    return {
+      description: data.description,
+      created_at: data.created_at ?? null,
+      branchName: data.branchName ?? null,
+      worktreePath: data.worktreePath ?? null,
+      issueType: data.issueType ?? null,
+      issue_numbers: data.issue_numbers ?? [],
+      pr_numbers: data.pr_numbers ?? [],
+      issueTracker: data.issueTracker ?? null,
+      colorHex: data.colorHex ?? null,
+      sessionId: data.sessionId ?? null,
+      projectPath: data.projectPath ?? null,
+      issueUrls: data.issueUrls ?? {},
+      prUrls: data.prUrls ?? {},
+      draftPrNumber: data.draftPrNumber ?? null,
+      capabilities: data.capabilities ?? [],
+      parentLoom: data.parentLoom ?? null,
+    }
   }
 
   /**
@@ -177,6 +205,7 @@ export class MetadataManager {
         projectPath: input.projectPath,
         issueUrls: input.issueUrls,
         prUrls: input.prUrls,
+        capabilities: input.capabilities,
         ...(input.draftPrNumber && { draftPrNumber: input.draftPrNumber }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
@@ -217,23 +246,7 @@ export class MetadataManager {
         return null
       }
 
-      return {
-        description: data.description,
-        created_at: data.created_at ?? null,
-        branchName: data.branchName ?? null,
-        worktreePath: data.worktreePath ?? null,
-        issueType: data.issueType ?? null,
-        issue_numbers: data.issue_numbers ?? [],
-        pr_numbers: data.pr_numbers ?? [],
-        issueTracker: data.issueTracker ?? null,
-        colorHex: data.colorHex ?? null,
-        sessionId: data.sessionId ?? null,
-        projectPath: data.projectPath ?? null,
-        issueUrls: data.issueUrls ?? {},
-        prUrls: data.prUrls ?? {},
-        draftPrNumber: data.draftPrNumber ?? null,
-        parentLoom: data.parentLoom ?? null,
-      }
+      return this.toMetadata(data)
     } catch (error) {
       // Return null on any error (graceful degradation per spec)
       getLogger().debug(
@@ -279,23 +292,7 @@ export class MetadataManager {
             continue
           }
 
-          results.push({
-            description: data.description,
-            created_at: data.created_at ?? null,
-            branchName: data.branchName ?? null,
-            worktreePath: data.worktreePath ?? null,
-            issueType: data.issueType ?? null,
-            issue_numbers: data.issue_numbers ?? [],
-            pr_numbers: data.pr_numbers ?? [],
-            issueTracker: data.issueTracker ?? null,
-            colorHex: data.colorHex ?? null,
-            sessionId: data.sessionId ?? null,
-            projectPath: data.projectPath ?? null,
-            issueUrls: data.issueUrls ?? {},
-            prUrls: data.prUrls ?? {},
-            draftPrNumber: data.draftPrNumber ?? null,
-            parentLoom: data.parentLoom ?? null,
-          })
+          results.push(this.toMetadata(data))
         } catch (error) {
           // Skip individual files that fail to parse (graceful degradation)
           getLogger().debug(

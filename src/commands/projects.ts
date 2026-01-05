@@ -3,6 +3,8 @@ import os from 'os'
 import fs from 'fs-extra'
 import { getLogger } from '../utils/logger-context.js'
 import { MetadataManager, type LoomMetadata } from '../lib/MetadataManager.js'
+import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
+import type { ProjectCapability } from '../types/loom.js'
 
 /**
  * Project marker file structure (from FirstRunManager)
@@ -21,6 +23,7 @@ export interface ProjectOutput {
   projectPath: string
   projectName: string
   activeLooms: number
+  capabilities: ProjectCapability[]
 }
 
 /**
@@ -33,10 +36,12 @@ export interface ProjectOutput {
 export class ProjectsCommand {
   private readonly projectsDir: string
   private readonly metadataManager: MetadataManager
+  private readonly capabilityDetector: ProjectCapabilityDetector
 
-  constructor(metadataManager?: MetadataManager) {
+  constructor(metadataManager?: MetadataManager, capabilityDetector?: ProjectCapabilityDetector) {
     this.projectsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'projects')
     this.metadataManager = metadataManager ?? new MetadataManager()
+    this.capabilityDetector = capabilityDetector ?? new ProjectCapabilityDetector()
   }
 
   /**
@@ -79,11 +84,15 @@ export class ProjectsCommand {
           // Count active looms for this project
           const activeLooms = await this.countActiveLooms(marker.projectPath, allMetadata)
 
+          // Detect project capabilities
+          const { capabilities } = await this.capabilityDetector.detectCapabilities(marker.projectPath)
+
           results.push({
             configuredAt: marker.configuredAt,
             projectPath: marker.projectPath,
             projectName: marker.projectName,
             activeLooms,
+            capabilities,
           })
         } catch {
           // Skip invalid files (graceful degradation)

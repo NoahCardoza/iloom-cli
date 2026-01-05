@@ -22,9 +22,18 @@ vi.mock('../lib/MetadataManager.js', () => ({
   })),
 }))
 
+// Mock ProjectCapabilityDetector
+vi.mock('../lib/ProjectCapabilityDetector.js', () => ({
+  ProjectCapabilityDetector: vi.fn().mockImplementation(() => ({
+    detectCapabilities: vi.fn().mockResolvedValue({ capabilities: [], binEntries: {} }),
+  })),
+}))
+
 import fs from 'fs-extra'
 import { ProjectsCommand } from './projects.js'
 import { MetadataManager, type LoomMetadata } from '../lib/MetadataManager.js'
+import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
+import type { ProjectCapability } from '../types/loom.js'
 
 describe('ProjectsCommand', () => {
   const mockHomedir = '/home/user'
@@ -33,6 +42,11 @@ describe('ProjectsCommand', () => {
   // Helper to create a mock metadata manager
   const createMockMetadataManager = (metadata: LoomMetadata[] = []) => ({
     listAllMetadata: vi.fn().mockResolvedValue(metadata),
+  })
+
+  // Helper to create a mock capability detector
+  const createMockCapabilityDetector = (capabilities: ProjectCapability[] = []) => ({
+    detectCapabilities: vi.fn().mockResolvedValue({ capabilities, binEntries: {} }),
   })
 
   beforeEach(() => {
@@ -44,7 +58,10 @@ describe('ProjectsCommand', () => {
     it('returns empty array when projects directory does not exist', async () => {
       vi.mocked(fs.pathExists).mockResolvedValue(false)
 
-      const command = new ProjectsCommand(createMockMetadataManager() as unknown as MetadataManager)
+      const command = new ProjectsCommand(
+        createMockMetadataManager() as unknown as MetadataManager,
+        createMockCapabilityDetector() as unknown as ProjectCapabilityDetector
+      )
       const result = await command.execute()
 
       expect(result).toEqual([])
@@ -82,7 +99,10 @@ describe('ProjectsCommand', () => {
         throw new Error('File not found')
       })
 
-      const command = new ProjectsCommand(createMockMetadataManager() as unknown as MetadataManager)
+      const command = new ProjectsCommand(
+        createMockMetadataManager() as unknown as MetadataManager,
+        createMockCapabilityDetector() as unknown as ProjectCapabilityDetector
+      )
       const result = await command.execute()
 
       expect(result).toHaveLength(2)
@@ -91,12 +111,14 @@ describe('ProjectsCommand', () => {
         projectPath: '/Users/adam/Documents/Projects/project-a',
         projectName: 'project-a',
         activeLooms: 0,
+        capabilities: [],
       })
       expect(result[1]).toEqual({
         configuredAt: '2025-12-05T17:09:00.000Z',
         projectPath: '/Users/adam/Documents/Projects/project-b',
         projectName: 'project-b',
         activeLooms: 0,
+        capabilities: [],
       })
     })
 
@@ -131,7 +153,10 @@ describe('ProjectsCommand', () => {
         throw new Error('File not found')
       })
 
-      const command = new ProjectsCommand(createMockMetadataManager() as unknown as MetadataManager)
+      const command = new ProjectsCommand(
+        createMockMetadataManager() as unknown as MetadataManager,
+        createMockCapabilityDetector() as unknown as ProjectCapabilityDetector
+      )
       const result = await command.execute()
 
       expect(result).toHaveLength(1)
@@ -187,7 +212,10 @@ describe('ProjectsCommand', () => {
         },
       ]
 
-      const command = new ProjectsCommand(createMockMetadataManager(mockMetadata) as unknown as MetadataManager)
+      const command = new ProjectsCommand(
+        createMockMetadataManager(mockMetadata) as unknown as MetadataManager,
+        createMockCapabilityDetector() as unknown as ProjectCapabilityDetector
+      )
       const result = await command.execute()
 
       expect(result).toHaveLength(1)
@@ -243,7 +271,10 @@ describe('ProjectsCommand', () => {
         },
       ]
 
-      const command = new ProjectsCommand(createMockMetadataManager(mockMetadata) as unknown as MetadataManager)
+      const command = new ProjectsCommand(
+        createMockMetadataManager(mockMetadata) as unknown as MetadataManager,
+        createMockCapabilityDetector() as unknown as ProjectCapabilityDetector
+      )
       const result = await command.execute()
 
       expect(result).toHaveLength(1)
@@ -255,7 +286,10 @@ describe('ProjectsCommand', () => {
       vi.mocked(fs.pathExists).mockResolvedValue(true)
       vi.mocked(fs.readdir).mockRejectedValue(new Error('Permission denied'))
 
-      const command = new ProjectsCommand(createMockMetadataManager() as unknown as MetadataManager)
+      const command = new ProjectsCommand(
+        createMockMetadataManager() as unknown as MetadataManager,
+        createMockCapabilityDetector() as unknown as ProjectCapabilityDetector
+      )
       const result = await command.execute()
 
       expect(result).toEqual([])
@@ -280,7 +314,10 @@ describe('ProjectsCommand', () => {
         })
       )
 
-      const command = new ProjectsCommand(createMockMetadataManager() as unknown as MetadataManager)
+      const command = new ProjectsCommand(
+        createMockMetadataManager() as unknown as MetadataManager,
+        createMockCapabilityDetector() as unknown as ProjectCapabilityDetector
+      )
       const result = await command.execute()
 
       expect(result).toHaveLength(1)
@@ -316,7 +353,10 @@ describe('ProjectsCommand', () => {
         throw new Error('File not found')
       })
 
-      const command = new ProjectsCommand(createMockMetadataManager() as unknown as MetadataManager)
+      const command = new ProjectsCommand(
+        createMockMetadataManager() as unknown as MetadataManager,
+        createMockCapabilityDetector() as unknown as ProjectCapabilityDetector
+      )
       const result = await command.execute()
 
       expect(result).toHaveLength(1)
@@ -326,13 +366,85 @@ describe('ProjectsCommand', () => {
     it('accepts --json flag but always returns same output', async () => {
       vi.mocked(fs.pathExists).mockResolvedValue(false)
 
-      const command = new ProjectsCommand(createMockMetadataManager() as unknown as MetadataManager)
+      const command = new ProjectsCommand(
+        createMockMetadataManager() as unknown as MetadataManager,
+        createMockCapabilityDetector() as unknown as ProjectCapabilityDetector
+      )
       const resultWithJson = await command.execute({ json: true })
       const resultWithoutJson = await command.execute({ json: false })
       const resultNoOptions = await command.execute()
 
       expect(resultWithJson).toEqual(resultWithoutJson)
       expect(resultWithoutJson).toEqual(resultNoOptions)
+    })
+
+    it('includes detected capabilities for each project', async () => {
+      vi.mocked(fs.pathExists).mockImplementation(async (p) => {
+        const pathStr = p.toString()
+        if (pathStr === projectsDir) return true
+        if (pathStr === '/Users/adam/Documents/Projects/project-a') return true
+        return false
+      })
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readdir).mockResolvedValue(['project-a-marker'] as any)
+
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify({
+          configuredAt: '2025-12-05T22:59:58.488Z',
+          projectPath: '/Users/adam/Documents/Projects/project-a',
+          projectName: 'project-a',
+        })
+      )
+
+      const mockCapabilityDetector = {
+        detectCapabilities: vi.fn().mockResolvedValue({ capabilities: ['cli', 'web'], binEntries: {} }),
+      }
+
+      const command = new ProjectsCommand(
+        createMockMetadataManager() as unknown as MetadataManager,
+        mockCapabilityDetector as unknown as ProjectCapabilityDetector
+      )
+      const result = await command.execute()
+
+      expect(result).toHaveLength(1)
+      expect(result[0].capabilities).toEqual(['cli', 'web'])
+      expect(mockCapabilityDetector.detectCapabilities).toHaveBeenCalledWith(
+        '/Users/adam/Documents/Projects/project-a'
+      )
+    })
+
+    it('returns empty capabilities for projects without package.json', async () => {
+      vi.mocked(fs.pathExists).mockImplementation(async (p) => {
+        const pathStr = p.toString()
+        if (pathStr === projectsDir) return true
+        if (pathStr === '/Users/adam/Documents/Projects/project-a') return true
+        return false
+      })
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readdir).mockResolvedValue(['project-a-marker'] as any)
+
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify({
+          configuredAt: '2025-12-05T22:59:58.488Z',
+          projectPath: '/Users/adam/Documents/Projects/project-a',
+          projectName: 'project-a',
+        })
+      )
+
+      const mockCapabilityDetector = {
+        detectCapabilities: vi.fn().mockResolvedValue({ capabilities: [], binEntries: {} }),
+      }
+
+      const command = new ProjectsCommand(
+        createMockMetadataManager() as unknown as MetadataManager,
+        mockCapabilityDetector as unknown as ProjectCapabilityDetector
+      )
+      const result = await command.execute()
+
+      expect(result).toHaveLength(1)
+      expect(result[0].capabilities).toEqual([])
     })
   })
 })

@@ -383,6 +383,7 @@ export class LoomManager {
       projectPath: this.gitWorktree.workingDirectory,
       issueUrls,
       prUrls,
+      capabilities,
       ...(draftPrNumber && { draftPrNumber }),
       ...(input.parentLoom && { parentLoom: input.parentLoom }),
     }
@@ -1250,6 +1251,7 @@ export class LoomManager {
         projectPath: this.gitWorktree.workingDirectory,
         issueUrls,
         prUrls,
+        capabilities,
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
       await this.metadataManager.writeMetadata(worktreePath, metadataInput)
