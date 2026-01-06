@@ -7,6 +7,7 @@ import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager } from './MetadataManager.js'
 import { getLogger } from '../utils/logger-context.js'
 import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber, isBranchMergedIntoMain, checkRemoteBranchStatus, getMergeTargetBranch, findWorktreeForBranch, type RemoteBranchStatus } from '../utils/git.js'
+import { calculatePortFromIdentifier } from '../utils/port.js'
 
 import type {
 	ResourceCleanupOptions,
@@ -59,7 +60,10 @@ export class ResourceCleanup {
 
 		// Step 1: Terminate dev server if applicable
 		if (number !== undefined) {
-			const port = this.processManager.calculatePort(number)
+			// Load settings to get basePort
+			const settings = await this.settingsManager.loadSettings()
+			const basePort = settings?.capabilities?.web?.basePort ?? 3000
+			const port = calculatePortFromIdentifier(number, basePort)
 
 			if (options.dryRun) {
 				operations.push({

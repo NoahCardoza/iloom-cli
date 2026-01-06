@@ -8,7 +8,7 @@ import {
   formatEnvLine,
   validateEnvVariable,
 } from '../utils/env.js'
-import { calculatePortForBranch, extractNumericSuffix, wrapPort } from '../utils/port.js'
+import { calculatePortForBranch, calculatePortFromIdentifier } from '../utils/port.js'
 
 export class EnvironmentManager {
   private readonly backupSuffix: string = '.backup'
@@ -159,35 +159,18 @@ export class EnvironmentManager {
    * Implements:
    * - Issue/PR: 3000 + issue/PR number
    * - Branch: 3000 + deterministic hash offset (1-999)
+   * Delegates to calculatePortFromIdentifier for the core calculation.
    */
   calculatePort(options: PortAssignmentOptions): number {
     const basePort = options.basePort ?? 3000
 
     // Priority: issueNumber > prNumber > branchName > basePort only
     if (options.issueNumber !== undefined) {
-      // Try to parse as number for backward compatibility
-      const numericIssue = typeof options.issueNumber === 'number'
-        ? options.issueNumber
-        : parseInt(String(options.issueNumber), 10)
-
-      if (!isNaN(numericIssue) && String(numericIssue) === String(options.issueNumber)) {
-        // Purely numeric issue ID - use arithmetic port calculation with wrap-around
-        const port = basePort + numericIssue
-        return wrapPort(port, basePort)
-      }
-      // Alphanumeric ID - try to extract numeric suffix (e.g., MARK-324 -> 324)
-      const numericSuffix = extractNumericSuffix(String(options.issueNumber))
-      if (numericSuffix !== null) {
-        const port = basePort + numericSuffix
-        return wrapPort(port, basePort)
-      }
-      // No numeric suffix found - use hash-based calculation
-      return calculatePortForBranch(String(options.issueNumber), basePort)
+      return calculatePortFromIdentifier(options.issueNumber, basePort)
     }
 
     if (options.prNumber !== undefined) {
-      const port = basePort + options.prNumber
-      return wrapPort(port, basePort)
+      return calculatePortFromIdentifier(options.prNumber, basePort)
     }
 
     if (options.branchName !== undefined) {

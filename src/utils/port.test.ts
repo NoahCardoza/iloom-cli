@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { generatePortOffsetFromBranchName, calculatePortForBranch, extractNumericSuffix, wrapPort } from './port.js'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { generatePortOffsetFromBranchName, calculatePortForBranch, extractNumericSuffix, wrapPort, getWorkspacePort, calculatePortFromIdentifier } from './port.js'
 import fc from 'fast-check'
 
 describe('Port utilities', () => {
@@ -68,6 +68,60 @@ describe('Port utilities', () => {
 		it('should handle numbers without separator', () => {
 			expect(extractNumericSuffix('PROJ123')).toBe(123)
 			expect(extractNumericSuffix('ABC456')).toBe(456)
+		})
+	})
+
+	describe('calculatePortFromIdentifier', () => {
+		it('should handle numeric identifiers directly', () => {
+			expect(calculatePortFromIdentifier(42, 3000)).toBe(3042)
+			expect(calculatePortFromIdentifier(1, 3000)).toBe(3001)
+			expect(calculatePortFromIdentifier(999, 3000)).toBe(3999)
+			expect(calculatePortFromIdentifier(0, 3000)).toBe(3000)
+		})
+
+		it('should handle string numeric identifiers', () => {
+			expect(calculatePortFromIdentifier('42', 3000)).toBe(3042)
+			expect(calculatePortFromIdentifier('1', 3000)).toBe(3001)
+			expect(calculatePortFromIdentifier('999', 3000)).toBe(3999)
+		})
+
+		it('should handle alphanumeric identifiers with numeric suffix', () => {
+			expect(calculatePortFromIdentifier('MARK-324', 3000)).toBe(3324)
+			expect(calculatePortFromIdentifier('PROJECT-1', 3000)).toBe(3001)
+			expect(calculatePortFromIdentifier('ABC_DEF_789', 3000)).toBe(3789)
+		})
+
+		it('should use hash for pure string identifiers without numeric suffix', () => {
+			const port = calculatePortFromIdentifier('pure-text', 3000)
+			// Hash-based ports should be in range [3001, 3999]
+			expect(port).toBeGreaterThanOrEqual(3001)
+			expect(port).toBeLessThanOrEqual(3999)
+		})
+
+		it('should wrap ports that exceed 65535', () => {
+			// rawPort = 3000 + 70000 = 73000 > 65535
+			const port = calculatePortFromIdentifier(70000, 3000)
+			expect(port).toBeGreaterThanOrEqual(3001)
+			expect(port).toBeLessThanOrEqual(65535)
+		})
+
+		it('should respect custom basePort', () => {
+			expect(calculatePortFromIdentifier(42, 4000)).toBe(4042)
+			expect(calculatePortFromIdentifier('MARK-324', 5000)).toBe(5324)
+		})
+
+		it('should default to basePort 3000', () => {
+			expect(calculatePortFromIdentifier(42)).toBe(3042)
+		})
+
+		it('should be deterministic for same inputs', () => {
+			const port1 = calculatePortFromIdentifier('MARK-324', 3000)
+			const port2 = calculatePortFromIdentifier('MARK-324', 3000)
+			expect(port1).toBe(port2)
+
+			const port3 = calculatePortFromIdentifier('pure-text', 3000)
+			const port4 = calculatePortFromIdentifier('pure-text', 3000)
+			expect(port3).toBe(port4)
 		})
 	})
 
@@ -247,6 +301,173 @@ describe('Port utilities', () => {
 					}
 				})
 			)
+		})
+	})
+
+	describe('getWorkspacePort', () => {
+		const mockFileExists = vi.fn<(path: string) => Promise<boolean>>()
+		const mockReadFile = vi.fn<(path: string) => Promise<string>>()
+
+		beforeEach(() => {
+			vi.clearAllMocks()
+		})
+
+		it('should return PORT from env file when checkEnvFile is true', async () => {
+			// Mock finding .env.local with PORT
+			mockFileExists.mockImplementation(async (path) => {
+				return path.includes('.env.development.local')
+			})
+			mockReadFile.mockResolvedValue('PORT=4000\nOTHER=value')
+
+			const port = await getWorkspacePort(
+				{
+					worktreePath: '/path/to/worktree',
+					worktreeBranch: 'feat/issue-42',
+					checkEnvFile: true,
+				},
+				{
+					fileExists: mockFileExists,
+					readFile: mockReadFile,
+				}
+			)
+
+			expect(port).toBe(4000)
+		})
+
+		it('should NOT check env file by default (checkEnvFile: false)', async () => {
+			// Mock finding .env.local with PORT - but should be ignored
+			mockFileExists.mockImplementation(async (path) => {
+				return path.includes('.env.development.local')
+			})
+			mockReadFile.mockResolvedValue('PORT=4000\nOTHER=value')
+
+			const port = await getWorkspacePort(
+				{
+					worktreePath: '/path/to/worktree',
+					worktreeBranch: 'feat/issue-42',
+					// checkEnvFile defaults to false
+				},
+				{
+					fileExists: mockFileExists,
+					readFile: mockReadFile,
+				}
+			)
+
+			// Should calculate from issue number (42), not read from env
+			expect(port).toBe(3042)
+			// fileExists should never be called when checkEnvFile is false
+			expect(mockFileExists).not.toHaveBeenCalled()
+		})
+
+		it('should calculate port from PR pattern when PORT not in env', async () => {
+			// Mock no env files found
+			mockFileExists.mockResolvedValue(false)
+
+			const port = await getWorkspacePort(
+				{
+					worktreePath: '/path/to/project_pr_25',
+					worktreeBranch: 'pr-branch',
+				},
+				{
+					fileExists: mockFileExists,
+					readFile: mockReadFile,
+				}
+			)
+
+			expect(port).toBe(3025)
+		})
+
+		it('should calculate port from issue pattern when PORT not in env', async () => {
+			mockFileExists.mockResolvedValue(false)
+
+			const port = await getWorkspacePort(
+				{
+					worktreePath: '/path/to/issue-42-feature',
+					worktreeBranch: 'feat/issue-42-feature',
+				},
+				{
+					fileExists: mockFileExists,
+					readFile: mockReadFile,
+				}
+			)
+
+			expect(port).toBe(3042)
+		})
+
+		it('should use branch hash for branch-based workspaces without issue pattern', async () => {
+			mockFileExists.mockResolvedValue(false)
+
+			const port = await getWorkspacePort(
+				{
+					worktreePath: '/path/to/some-feature',
+					worktreeBranch: 'feat/some-feature',
+				},
+				{
+					fileExists: mockFileExists,
+					readFile: mockReadFile,
+				}
+			)
+
+			// Branch hash should produce port in range [3001, 3999]
+			expect(port).toBeGreaterThanOrEqual(3001)
+			expect(port).toBeLessThanOrEqual(3999)
+		})
+
+		it('should respect custom basePort setting', async () => {
+			mockFileExists.mockResolvedValue(false)
+
+			const port = await getWorkspacePort(
+				{
+					worktreePath: '/path/to/project_pr_25',
+					worktreeBranch: 'pr-branch',
+					basePort: 4000,
+				},
+				{
+					fileExists: mockFileExists,
+					readFile: mockReadFile,
+				}
+			)
+
+			expect(port).toBe(4025)
+		})
+
+		it('should handle alphanumeric issue IDs like MARK-324', async () => {
+			mockFileExists.mockResolvedValue(false)
+
+			// extractIssueNumber looks for issue-XXX patterns
+			const port = await getWorkspacePort(
+				{
+					worktreePath: '/path/to/issue-MARK-324__feature',
+					worktreeBranch: 'feat/issue-MARK-324__feature',
+				},
+				{
+					fileExists: mockFileExists,
+					readFile: mockReadFile,
+				}
+			)
+
+			// MARK-324 -> extracts 324 via extractNumericSuffix
+			expect(port).toBe(3324)
+		})
+
+		it('should wrap port when it exceeds 65535', async () => {
+			mockFileExists.mockResolvedValue(false)
+
+			const port = await getWorkspacePort(
+				{
+					worktreePath: '/path/to/issue-70000-feature',
+					worktreeBranch: 'feat/issue-70000-feature',
+					basePort: 3000,
+				},
+				{
+					fileExists: mockFileExists,
+					readFile: mockReadFile,
+				}
+			)
+
+			// rawPort = 3000 + 70000 = 73000 > 65535, should wrap
+			expect(port).toBeGreaterThanOrEqual(3001)
+			expect(port).toBeLessThanOrEqual(65535)
 		})
 	})
 })

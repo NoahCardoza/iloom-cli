@@ -1,12 +1,11 @@
 import path from 'path'
-import fs from 'fs-extra'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import { DevServerManager } from '../lib/DevServerManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { IdentifierParser } from '../utils/IdentifierParser.js'
-import { parseEnvFile, extractPort, findEnvFileContainingVariable, loadWorkspaceEnv, isNoEnvFilesFoundError } from '../utils/env.js'
-import { calculatePortForBranch, extractNumericSuffix } from '../utils/port.js'
+import { loadWorkspaceEnv, isNoEnvFilesFoundError } from '../utils/env.js'
+import { getWorkspacePort } from '../utils/port.js'
 import { extractIssueNumber } from '../utils/git.js'
 import { logger } from '../utils/logger.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
@@ -107,7 +106,14 @@ export class DevServerCommand {
 		}
 
 		// 5. Get port for workspace
-		const port = await this.getWorkspacePort(worktree.path)
+		const cliOverrides = extractSettingsOverrides()
+		const settingsForPort = await this.settingsManager.loadSettings(undefined, cliOverrides)
+		const port = await getWorkspacePort({
+			worktreePath: worktree.path,
+			worktreeBranch: worktree.branch,
+			basePort: settingsForPort.capabilities?.web?.basePort,
+			checkEnvFile: true,
+		})
 		const url = `http://localhost:${port}`
 
 		// 6. Check if server already running
@@ -305,87 +311,5 @@ export class DevServerCommand {
 			return `PR #${parsed.number}${autoLabel}`
 		}
 		return `branch "${parsed.branchName}"${autoLabel}`
-	}
-
-	/**
-	 * Get port for workspace - reads from dotenv-flow files or calculates based on workspace type
-	 */
-	private async getWorkspacePort(worktreePath: string): Promise<number> {
-		// Load base port from settings with CLI overrides
-		const cliOverrides = extractSettingsOverrides()
-		const settings = await this.settingsManager.loadSettings(undefined, cliOverrides)
-		const basePort = settings.capabilities?.web?.basePort ?? 3000
-
-		// Try to read PORT from any dotenv-flow file (as override)
-		const envFile = await findEnvFileContainingVariable(
-			worktreePath,
-			'PORT',
-			async (p) => fs.pathExists(p),
-			async (p, varName) => {
-				const content = await fs.readFile(p, 'utf8')
-				const envMap = parseEnvFile(content)
-				return envMap.get(varName) ?? null
-			}
-		)
-
-		if (envFile) {
-			const envPath = path.join(worktreePath, envFile)
-			const envContent = await fs.readFile(envPath, 'utf8')
-			const envMap = parseEnvFile(envContent)
-			const port = extractPort(envMap)
-
-			if (port) {
-				logger.debug(`Using PORT from ${envFile}: ${port}`)
-				return port
-			}
-		}
-
-		// PORT not in any dotenv-flow file, calculate based on workspace identifier
-		logger.debug('PORT not found in any dotenv-flow file, calculating from workspace identifier')
-
-		// Get worktree to determine type
-		const worktrees = await this.gitWorktreeManager.listWorktrees()
-		const worktree = worktrees.find(wt => wt.path === worktreePath)
-
-		if (!worktree) {
-			throw new Error(`Could not find worktree for path: ${worktreePath}`)
-		}
-
-		// Extract identifier from worktree path/branch
-		const dirName = path.basename(worktreePath)
-
-		// Check for PR pattern: _pr_N
-		const prPattern = /_pr_(\d+)$/
-		const prMatch = dirName.match(prPattern)
-		if (prMatch?.[1]) {
-			const prNumber = parseInt(prMatch[1], 10)
-			const port = basePort + prNumber
-			logger.debug(`Calculated PORT for PR #${prNumber}: ${port}`)
-			return port
-		}
-
-		// Check for issue pattern: issue-N
-		const issueId = extractIssueNumber(dirName) ?? extractIssueNumber(worktree.branch)
-		if (issueId !== null) {
-			const issueNumber = parseInt(issueId, 10)
-			if (!isNaN(issueNumber)) {
-				const port = basePort + issueNumber
-				logger.debug(`Calculated PORT for issue #${issueId}: ${port}`)
-				return port
-			}
-			// Try extracting numeric suffix for alphanumeric IDs like MARK-324
-			const numericSuffix = extractNumericSuffix(issueId)
-			if (numericSuffix !== null) {
-				const port = basePort + numericSuffix
-				logger.debug(`Calculated PORT for alphanumeric issue ${issueId}: ${port}`)
-				return port
-			}
-			// No numeric suffix found - fall through to branch-based hash
-		}
-
-		// Branch-based workspace - use deterministic hash
-		const port = calculatePortForBranch(worktree.branch, basePort)
-		logger.debug(`Calculated PORT for branch "${worktree.branch}": ${port}`)
-		return port
 	}
 }

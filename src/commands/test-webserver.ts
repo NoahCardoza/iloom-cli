@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger.js'
 import { ProcessManager } from '../lib/process/ProcessManager.js'
+import { SettingsManager } from '../lib/SettingsManager.js'
 
 export interface TestWebserverOptions {
 	kill?: boolean
@@ -18,10 +19,25 @@ export interface TestWebserverCommandInput {
  * safely terminate web servers when requested.
  */
 export class TestWebserverCommand {
-	private readonly processManager: ProcessManager
+	private readonly settingsManager: SettingsManager
+	private processManager: ProcessManager | null
 
-	constructor(processManager?: ProcessManager) {
-		this.processManager = processManager ?? new ProcessManager()
+	constructor(processManager?: ProcessManager, settingsManager?: SettingsManager) {
+		this.settingsManager = settingsManager ?? new SettingsManager()
+		this.processManager = processManager ?? null
+	}
+
+	/**
+	 * Get or create ProcessManager with correct basePort from settings
+	 */
+	private async getProcessManager(): Promise<ProcessManager> {
+		if (this.processManager) {
+			return this.processManager
+		}
+		const settings = await this.settingsManager.loadSettings()
+		const basePort = settings.capabilities?.web?.basePort ?? 3000
+		this.processManager = new ProcessManager(basePort)
+		return this.processManager
 	}
 
 	/**
@@ -35,12 +51,15 @@ export class TestWebserverCommand {
 			throw new Error('Issue number must be a positive integer for port calculation')
 		}
 
+		// Get ProcessManager (will load settings to get basePort if needed)
+		const processManager = await this.getProcessManager()
+
 		// Calculate port from issue number
-		const port = this.processManager.calculatePort(issueNumber)
+		const port = processManager.calculatePort(issueNumber)
 		logger.info(`Checking port ${port} (issue #${issueNumber})...`)
 
 		// Detect what's running on the port
-		const processInfo = await this.processManager.detectDevServer(port)
+		const processInfo = await processManager.detectDevServer(port)
 
 		if (!processInfo) {
 			logger.info(`No process found on port ${port}`)
@@ -69,13 +88,13 @@ export class TestWebserverCommand {
 			}
 
 			logger.info(`Terminating web server (PID ${processInfo.pid})...`)
-			const terminated = await this.processManager.terminateProcess(processInfo.pid)
+			const terminated = await processManager.terminateProcess(processInfo.pid)
 
 			if (terminated) {
 				logger.success(`Web server terminated successfully`)
 
 				// Verify port is now free
-				const isFree = await this.processManager.verifyPortFree(port)
+				const isFree = await processManager.verifyPortFree(port)
 				if (isFree) {
 					logger.success(`Port ${port} is now free`)
 				} else {

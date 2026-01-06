@@ -212,6 +212,18 @@ node      12345 user   23u  IPv4 0x123456      0t0  TCP *:3025 (LISTEN)`,
 			expect(processManager.calculatePort(999)).toBe(3999)
 			expect(processManager.calculatePort(0)).toBe(3000)
 		})
+
+		it('should use custom basePort when provided in constructor', () => {
+			const pmWithCustomBase = new ProcessManager(4000)
+			expect(pmWithCustomBase.calculatePort(25)).toBe(4025)
+			expect(pmWithCustomBase.calculatePort(1)).toBe(4001)
+			expect(pmWithCustomBase.calculatePort(0)).toBe(4000)
+		})
+
+		it('should default to basePort 3000 when not provided', () => {
+			const pmDefault = new ProcessManager()
+			expect(pmDefault.calculatePort(42)).toBe(3042)
+		})
 	})
 
 	describe('dev server validation', () => {
