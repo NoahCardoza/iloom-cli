@@ -518,7 +518,7 @@ Then ask: "Does this configuration look correct?"
 
 ### Phase 4: Choose Configuration File
 
-**Fork/Contributor Check:** If "GitHub Remote Configuration" shows both "origin" and "upstream" remotes (classic fork pattern), display: "It looks like you're working on a fork (origin + upstream remotes detected). For contributors, we recommend saving to settings.local.json to avoid including personal settings in PRs to upstream, but you can still choose shared if needed."
+**Fork/Contributor Check:** If "GitHub Remote Configuration" shows both "origin" and "upstream" remotes (classic fork pattern), display: "**FORK DETECTED**: You're working on a fork (origin + upstream remotes detected). **ALL configuration settings should be saved to settings.local.json** to avoid polluting the upstream repository with your personal settings. When you submit PRs to upstream, only your code changes should be included - not iloom configuration. The Local option below is strongly recommended."
 
 **CRITICAL: You MUST ask the user where to save the configuration. DO NOT make assumptions or decide for them.**
 
@@ -532,7 +532,7 @@ Ask the user: "Where should this configuration be saved?
 - **Recommend Project for**: Main branch, worktree prefix, base port (when standardized for the team)
 - **Recommend Local for**: Machine-specific overrides, personal preferences that differ from team defaults
 
-**Fork/Contributor Note:** For fork setups, recommend Local over Project to avoid including personal settings in PRs to upstream.
+**Fork/Contributor Note:** For fork setups, **ALL settings should go to Local (settings.local.json)**, not Project. This prevents your personal iloom configuration from being included in PRs to the upstream repository. Even settings like mainBranch or basePort should be stored locally in fork scenarios to keep your contributions clean.
 
 **DO NOT:**
 - Assume what the user wants based on the type of setting
