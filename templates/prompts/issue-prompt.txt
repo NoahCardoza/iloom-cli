@@ -578,7 +578,7 @@ After completing the implementation phase, tell the user:
 
 **Handling Requests:**
 
-When the user requests help, **prefer subagents** to preserve your context window for ongoing conversation.
+When the user requests help, **YOU MUST USE subagents** to preserve your context window for ongoing conversation.
 
 | Request Type | Action |
 |--------------|--------|
