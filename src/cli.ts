@@ -20,8 +20,8 @@ import { hasMultipleRemotes } from './utils/remote.js'
 import { getIdeConfig, isIdeAvailable, getInstallHint } from './utils/ide.js'
 import { fileURLToPath } from 'url'
 import { realpathSync } from 'fs'
-import { formatLoomsForJson } from './utils/loom-formatter.js'
-import { findMainWorktreePathWithSettings } from './utils/git.js'
+import { formatLoomsForJson, formatFinishedLoomForJson } from './utils/loom-formatter.js'
+import { findMainWorktreePathWithSettings, GitCommandError } from './utils/git.js'
 import { VersionMigrationManager } from './lib/VersionMigrationManager.js'
 
 // Get package.json for version
@@ -849,17 +849,46 @@ program
   .command('list')
   .description('Show active workspaces')
   .option('--json', 'Output as JSON')
-  .action(async (options: { json?: boolean }) => {
+  .option('--finished', 'Show only finished looms (sorted by finish time, latest first)')
+  .option('--all', 'Show both active and finished looms')
+  .action(async (options: { json?: boolean; finished?: boolean; all?: boolean }) => {
     try {
       const manager = new GitWorktreeManager()
       const metadataManager = new MetadataManager()
-      const worktrees = await manager.listWorktrees({ porcelain: true })
 
-      // Read metadata for all worktrees (spec section 3.2)
+      // Determine what to list based on flags
+      const showActive = !options.finished // Show active unless --finished is set
+      const showFinished = Boolean(options.finished) || Boolean(options.all)
+
+      // Get active worktrees if needed
+      let worktrees: ReturnType<typeof manager.listWorktrees> extends Promise<infer T> ? T : never = []
       const metadata = new Map<string, LoomMetadata | null>()
-      for (const worktree of worktrees) {
-        const loomMetadata = await metadataManager.readMetadata(worktree.path)
-        metadata.set(worktree.path, loomMetadata)
+
+      if (showActive) {
+        try {
+          worktrees = await manager.listWorktrees({ porcelain: true })
+          // Read metadata for all worktrees
+          for (const worktree of worktrees) {
+            const loomMetadata = await metadataManager.readMetadata(worktree.path)
+            metadata.set(worktree.path, loomMetadata)
+          }
+        } catch (error) {
+          // Handle "not a git repository" - just use empty array
+          // Check for GitCommandError with exit code 128 (git's "not a repository" exit code)
+          // or fallback to checking stderr for the specific "not a git repository" message
+          if (error instanceof GitCommandError &&
+              (error.exitCode === 128 || /fatal: not a git repository/i.test(error.stderr))) {
+            worktrees = []
+          } else {
+            throw error
+          }
+        }
+      }
+
+      // Get finished looms if needed
+      let finishedLooms: LoomMetadata[] = []
+      if (showFinished) {
+        finishedLooms = await metadataManager.listFinishedMetadata()
       }
 
       if (options.json) {
@@ -868,31 +897,78 @@ program
           mainWorktreePath = await findMainWorktreePathWithSettings()
         } catch {
           // Settings validation failed - continue without main worktree path
-          // (warning already logged by preAction hook)
         }
-        console.log(JSON.stringify(formatLoomsForJson(worktrees, mainWorktreePath, metadata), null, 2))
+
+        // Format active worktrees
+        const activeJson = showActive
+          ? formatLoomsForJson(worktrees, mainWorktreePath, metadata).map(loom => ({
+              ...loom,
+              status: 'active' as const,
+              finishedAt: null,
+            }))
+          : []
+
+        // Format finished looms
+        const finishedJson = finishedLooms.map(formatFinishedLoomForJson)
+
+        // Combine and output
+        const allLooms = [...activeJson, ...finishedJson]
+        console.log(JSON.stringify(allLooms, null, 2))
         return
       }
 
-      if (worktrees.length === 0) {
-        logger.info('No worktrees found')
+      // Text output
+      const hasActive = worktrees.length > 0
+      const hasFinished = finishedLooms.length > 0
+
+      if (!hasActive && !hasFinished) {
+        if (options.finished) {
+          logger.info('No finished looms found')
+        } else if (options.all) {
+          logger.info('No looms found')
+        } else {
+          logger.info('No worktrees found')
+        }
         return
       }
 
-      logger.info('Active workspaces:')
-      for (const worktree of worktrees) {
-        const formatted = manager.formatWorktree(worktree)
-        const loomMetadata = metadata.get(worktree.path)
-        logger.info(`  ${formatted.title}`)
-        if (loomMetadata?.description) {
-          logger.info(`    Description: ${loomMetadata.description}`)
+      // Show active workspaces
+      if (showActive && hasActive) {
+        logger.info('Active workspaces:')
+        for (const worktree of worktrees) {
+          const formatted = manager.formatWorktree(worktree)
+          const loomMetadata = metadata.get(worktree.path)
+          logger.info(`  ${formatted.title}`)
+          if (loomMetadata?.description) {
+            logger.info(`    Description: ${loomMetadata.description}`)
+          }
+          logger.info(`    Path: ${formatted.path}`)
+          logger.info(`    Commit: ${formatted.commit}`)
         }
-        logger.info(`    Path: ${formatted.path}`)
-        logger.info(`    Commit: ${formatted.commit}`)
+      }
+
+      // Show finished looms
+      if (showFinished && hasFinished) {
+        if (showActive && hasActive) {
+          logger.info('') // Add blank line between sections
+        }
+        logger.info('Finished looms:')
+        for (const loom of finishedLooms) {
+          logger.info(`  ${loom.branchName ?? 'unknown'}`)
+          if (loom.description) {
+            logger.info(`    Description: ${loom.description}`)
+          }
+          if (loom.finishedAt) {
+            logger.info(`    Finished: ${new Date(loom.finishedAt).toLocaleString()}`)
+          }
+        }
       }
     } catch (error) {
       // Handle "not a git repository" gracefully
-      if (error instanceof Error && error.message.includes('not a git repository')) {
+      // Check for GitCommandError with exit code 128 (git's "not a repository" exit code)
+      // or fallback to checking stderr for the specific "not a git repository" message
+      if (error instanceof GitCommandError &&
+          (error.exitCode === 128 || /fatal: not a git repository/i.test(error.stderr))) {
         if (options.json) {
           console.log('[]')
         } else {

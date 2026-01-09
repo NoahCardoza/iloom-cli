@@ -3,6 +3,7 @@ import { MergeManager } from './MergeManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager } from './MetadataManager.js'
 import * as git from '../utils/git.js'
+import { GitCommandError } from '../utils/git.js'
 import * as claude from '../utils/claude.js'
 
 // Mock dependencies
@@ -726,7 +727,11 @@ describe('MergeManager', () => {
 
 		it('should handle git command failures with clear messages', async () => {
 			// Mock: git command fails with stderr
-			const gitError = new Error('Git command failed: fatal: not a git repository')
+			const gitError = new GitCommandError(
+				'Git command failed: fatal: not a git repository',
+				128,
+				'fatal: not a git repository'
+			)
 			vi.mocked(git.executeGitCommand).mockRejectedValueOnce(gitError)
 
 			// Should throw an error (main branch check fails with git error)

@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { formatLoomForJson, formatLoomsForJson } from './loom-formatter.js'
+import {
+  formatLoomForJson,
+  formatLoomsForJson,
+  formatFinishedLoomForJson,
+} from './loom-formatter.js'
 import type { GitWorktree } from '../types/worktree.js'
+import type { LoomMetadata } from '../lib/MetadataManager.js'
 
 describe('formatLoomForJson', () => {
   /**
@@ -811,6 +816,491 @@ describe('formatLoomsForJson', () => {
       // All should have isMainWorktree: false when not provided
       expect(result[0].isMainWorktree).toBe(false)
       expect(result[1].isMainWorktree).toBe(false)
+    })
+  })
+})
+
+describe('formatFinishedLoomForJson', () => {
+  /**
+   * Factory to create realistic LoomMetadata objects for finished looms
+   */
+  const createFinishedMetadata = (overrides: Partial<LoomMetadata> = {}): LoomMetadata => ({
+    description: 'Add JSON formatter support',
+    created_at: '2024-01-15T10:30:00.000Z',
+    branchName: 'issue-269__json-formatter',
+    worktreePath: '/Users/adam/Documents/Projects/iloom-cli-looms/issue-269__json-formatter',
+    issueType: 'issue',
+    issue_numbers: ['269'],
+    pr_numbers: [],
+    issueTracker: 'github',
+    colorHex: '#dcebff',
+    sessionId: 'session-abc123',
+    projectPath: '/Users/adam/Documents/Projects/iloom-cli',
+    issueUrls: { '269': 'https://github.com/owner/repo/issues/269' },
+    prUrls: {},
+    draftPrNumber: null,
+    capabilities: [],
+    parentLoom: null,
+    status: 'finished',
+    finishedAt: '2024-01-20T15:45:00.000Z',
+    ...overrides,
+  })
+
+  describe('field mapping', () => {
+    it('should correctly format finished loom with all fields populated', () => {
+      const metadata = createFinishedMetadata()
+      const result = formatFinishedLoomForJson(metadata)
+
+      expect(result).toEqual({
+        name: 'issue-269__json-formatter',
+        worktreePath: null,
+        branch: 'issue-269__json-formatter',
+        type: 'issue',
+        issue_numbers: ['269'],
+        pr_numbers: [],
+        isMainWorktree: false,
+        description: 'Add JSON formatter support',
+        created_at: '2024-01-15T10:30:00.000Z',
+        issueTracker: 'github',
+        colorHex: '#dcebff',
+        projectPath: '/Users/adam/Documents/Projects/iloom-cli',
+        issueUrls: { '269': 'https://github.com/owner/repo/issues/269' },
+        prUrls: {},
+        status: 'finished',
+        finishedAt: '2024-01-20T15:45:00.000Z',
+      })
+    })
+
+    it('should use branchName for name field', () => {
+      const metadata = createFinishedMetadata({
+        branchName: 'issue-PROJ-123__feature-work',
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.name).toBe('issue-PROJ-123__feature-work')
+    })
+
+    it('should fallback to worktreePath for name when branchName is null', () => {
+      const metadata = createFinishedMetadata({
+        branchName: null,
+        worktreePath: '/Users/dev/projects/myapp-looms/orphan-branch',
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.name).toBe('/Users/dev/projects/myapp-looms/orphan-branch')
+    })
+
+    it('should fallback to "unknown" for name when both branchName and worktreePath are null', () => {
+      const metadata = createFinishedMetadata({
+        branchName: null,
+        worktreePath: null,
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.name).toBe('unknown')
+    })
+
+    it('should always set worktreePath to null for finished looms', () => {
+      const metadata = createFinishedMetadata({
+        worktreePath: '/some/path/that/should/be/ignored',
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.worktreePath).toBeNull()
+    })
+
+    it('should always set isMainWorktree to false for finished looms', () => {
+      const metadata = createFinishedMetadata()
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.isMainWorktree).toBe(false)
+    })
+  })
+
+  describe('type detection and issue/pr numbers', () => {
+    it('should format finished issue loom correctly', () => {
+      const metadata = createFinishedMetadata({
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.type).toBe('issue')
+      expect(result.issue_numbers).toEqual(['42'])
+      expect(result.pr_numbers).toEqual([])
+    })
+
+    it('should format finished PR loom correctly', () => {
+      const metadata = createFinishedMetadata({
+        branchName: 'issue-254__dotenv-flow',
+        issueType: 'pr',
+        issue_numbers: [],
+        pr_numbers: ['255'],
+        prUrls: { '255': 'https://github.com/owner/repo/pull/255' },
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.type).toBe('pr')
+      expect(result.issue_numbers).toEqual([])
+      expect(result.pr_numbers).toEqual(['255'])
+      expect(result.prUrls).toEqual({ '255': 'https://github.com/owner/repo/pull/255' })
+    })
+
+    it('should format finished branch loom correctly', () => {
+      const metadata = createFinishedMetadata({
+        branchName: 'feat/new-feature',
+        issueType: 'branch',
+        issue_numbers: [],
+        pr_numbers: [],
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.type).toBe('branch')
+      expect(result.issue_numbers).toEqual([])
+      expect(result.pr_numbers).toEqual([])
+    })
+
+    it('should default to branch type when issueType is null', () => {
+      const metadata = createFinishedMetadata({
+        issueType: null,
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.type).toBe('branch')
+    })
+
+    it('should handle Linear-style alphanumeric issue numbers', () => {
+      const metadata = createFinishedMetadata({
+        branchName: 'issue-PROJ-123__implement-feature',
+        issueType: 'issue',
+        issue_numbers: ['PROJ-123'],
+        issueUrls: { 'PROJ-123': 'https://linear.app/org/issue/PROJ-123' },
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.issue_numbers).toEqual(['PROJ-123'])
+      expect(result.issueUrls).toEqual({ 'PROJ-123': 'https://linear.app/org/issue/PROJ-123' })
+    })
+
+    it('should handle multiple issue numbers', () => {
+      const metadata = createFinishedMetadata({
+        issueType: 'issue',
+        issue_numbers: ['42', 'PROJ-123', '999'],
+        issueUrls: {
+          '42': 'https://github.com/owner/repo/issues/42',
+          'PROJ-123': 'https://linear.app/org/issue/PROJ-123',
+          '999': 'https://github.com/owner/repo/issues/999',
+        },
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.issue_numbers).toEqual(['42', 'PROJ-123', '999'])
+      expect(result.issueUrls).toEqual({
+        '42': 'https://github.com/owner/repo/issues/42',
+        'PROJ-123': 'https://linear.app/org/issue/PROJ-123',
+        '999': 'https://github.com/owner/repo/issues/999',
+      })
+    })
+
+    it('should handle multiple PR numbers', () => {
+      const metadata = createFinishedMetadata({
+        issueType: 'pr',
+        issue_numbers: [],
+        pr_numbers: ['100', '101'],
+        prUrls: {
+          '100': 'https://github.com/owner/repo/pull/100',
+          '101': 'https://github.com/owner/repo/pull/101',
+        },
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.pr_numbers).toEqual(['100', '101'])
+      expect(result.prUrls).toEqual({
+        '100': 'https://github.com/owner/repo/pull/100',
+        '101': 'https://github.com/owner/repo/pull/101',
+      })
+    })
+  })
+
+  describe('optional field handling', () => {
+    it('should handle null description field', () => {
+      const metadata = createFinishedMetadata({
+        description: null as string | null,
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.description).toBeNull()
+    })
+
+    it('should handle null created_at', () => {
+      const metadata = createFinishedMetadata({
+        created_at: null,
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.created_at).toBeNull()
+    })
+
+    it('should handle null issueTracker', () => {
+      const metadata = createFinishedMetadata({
+        issueTracker: null,
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.issueTracker).toBeNull()
+    })
+
+    it('should handle null colorHex', () => {
+      const metadata = createFinishedMetadata({
+        colorHex: null,
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.colorHex).toBeNull()
+    })
+
+    it('should handle null projectPath', () => {
+      const metadata = createFinishedMetadata({
+        projectPath: null,
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.projectPath).toBeNull()
+    })
+
+    it('should handle empty issueUrls and prUrls', () => {
+      const metadata = createFinishedMetadata({
+        issueUrls: {},
+        prUrls: {},
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.issueUrls).toEqual({})
+      expect(result.prUrls).toEqual({})
+    })
+
+    it('should handle undefined status field with default "finished"', () => {
+      const metadata = createFinishedMetadata({
+        status: undefined,
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.status).toBe('finished')
+    })
+
+    it('should handle null finishedAt', () => {
+      const metadata = createFinishedMetadata({
+        finishedAt: null,
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.finishedAt).toBeNull()
+    })
+
+    it('should handle undefined finishedAt', () => {
+      const metadata = createFinishedMetadata({
+        finishedAt: undefined,
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.finishedAt).toBeNull()
+    })
+  })
+
+  describe('edge cases and legacy metadata', () => {
+    it('should handle minimal legacy metadata with only required fields', () => {
+      const metadata: LoomMetadata = {
+        description: 'Legacy loom',
+        created_at: null,
+        branchName: 'old-branch',
+        worktreePath: null,
+        issueType: null,
+        issue_numbers: [],
+        pr_numbers: [],
+        issueTracker: null,
+        colorHex: null,
+        sessionId: null,
+        projectPath: null,
+        issueUrls: {},
+        prUrls: {},
+        draftPrNumber: null,
+        capabilities: [],
+        parentLoom: null,
+        status: 'finished',
+        finishedAt: null,
+      }
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result).toEqual({
+        name: 'old-branch',
+        worktreePath: null,
+        branch: 'old-branch',
+        type: 'branch',
+        issue_numbers: [],
+        pr_numbers: [],
+        isMainWorktree: false,
+        description: 'Legacy loom',
+        created_at: null,
+        issueTracker: null,
+        colorHex: null,
+        projectPath: null,
+        issueUrls: {},
+        prUrls: {},
+        status: 'finished',
+        finishedAt: null,
+      })
+    })
+
+    it('should handle empty issue_numbers and pr_numbers arrays', () => {
+      const metadata = createFinishedMetadata({
+        issue_numbers: [],
+        pr_numbers: [],
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.issue_numbers).toEqual([])
+      expect(result.pr_numbers).toEqual([])
+    })
+
+    it('should handle branch names with special characters', () => {
+      const metadata = createFinishedMetadata({
+        branchName: 'feat/add-feature@v2.0-beta',
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.branch).toBe('feat/add-feature@v2.0-beta')
+      expect(result.name).toBe('feat/add-feature@v2.0-beta')
+    })
+
+    it('should handle very long branch names', () => {
+      const longSlug = 'a'.repeat(200)
+      const branchName = `issue-42__${longSlug}`
+      const metadata = createFinishedMetadata({
+        branchName,
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.branch).toBe(branchName)
+      expect(result.name).toBe(branchName)
+    })
+
+    it('should handle finished loom with active status', () => {
+      const metadata = createFinishedMetadata({
+        status: 'active',
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.status).toBe('active')
+    })
+
+    it('should preserve exact status value from metadata', () => {
+      const metadata = createFinishedMetadata({
+        status: 'finished',
+      })
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.status).toBe('finished')
+    })
+  })
+
+  describe('realistic finished loom scenarios', () => {
+    it('should format finished issue loom from iloom-cli project', () => {
+      const metadata: LoomMetadata = {
+        description: 'Add JSON formatter support to il list command',
+        created_at: '2024-01-15T10:30:00.000Z',
+        branchName: 'issue-269__json-formatter',
+        worktreePath: '/Users/adam/Documents/Projects/iloom-cli-looms/issue-269__json-formatter',
+        issueType: 'issue',
+        issue_numbers: ['269'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#dcebff',
+        sessionId: 'session-abc123',
+        projectPath: '/Users/adam/Documents/Projects/iloom-cli',
+        issueUrls: { '269': 'https://github.com/acreeger/iloom-cli/issues/269' },
+        prUrls: {},
+        draftPrNumber: null,
+        capabilities: ['typescript', 'node'],
+        parentLoom: null,
+        status: 'finished',
+        finishedAt: '2024-01-20T15:45:00.000Z',
+      }
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result).toEqual({
+        name: 'issue-269__json-formatter',
+        worktreePath: null,
+        branch: 'issue-269__json-formatter',
+        type: 'issue',
+        issue_numbers: ['269'],
+        pr_numbers: [],
+        isMainWorktree: false,
+        description: 'Add JSON formatter support to il list command',
+        created_at: '2024-01-15T10:30:00.000Z',
+        issueTracker: 'github',
+        colorHex: '#dcebff',
+        projectPath: '/Users/adam/Documents/Projects/iloom-cli',
+        issueUrls: { '269': 'https://github.com/acreeger/iloom-cli/issues/269' },
+        prUrls: {},
+        status: 'finished',
+        finishedAt: '2024-01-20T15:45:00.000Z',
+      })
+    })
+
+    it('should format finished PR loom', () => {
+      const metadata: LoomMetadata = {
+        description: 'Implement dotenv-flow integration',
+        created_at: '2024-01-10T08:00:00.000Z',
+        branchName: 'issue-254__dotenv-flow',
+        worktreePath: '/Users/adam/Documents/Projects/iloom-cli-looms/issue-254__dotenv-flow_pr_255',
+        issueType: 'pr',
+        issue_numbers: [],
+        pr_numbers: ['255'],
+        issueTracker: 'github',
+        colorHex: '#ffe0b2',
+        sessionId: 'session-def456',
+        projectPath: '/Users/adam/Documents/Projects/iloom-cli',
+        issueUrls: {},
+        prUrls: { '255': 'https://github.com/acreeger/iloom-cli/pull/255' },
+        draftPrNumber: null,
+        capabilities: ['typescript', 'node'],
+        parentLoom: null,
+        status: 'finished',
+        finishedAt: '2024-01-18T12:30:00.000Z',
+      }
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.type).toBe('pr')
+      expect(result.pr_numbers).toEqual(['255'])
+      expect(result.prUrls).toEqual({ '255': 'https://github.com/acreeger/iloom-cli/pull/255' })
+      expect(result.status).toBe('finished')
+    })
+
+    it('should format finished Linear-style issue loom', () => {
+      const metadata: LoomMetadata = {
+        description: 'Implement new reporting feature',
+        created_at: '2024-01-12T14:20:00.000Z',
+        branchName: 'issue-ILOOM-42__reporting-feature',
+        worktreePath: '/Users/adam/Documents/Projects/iloom-cli-looms/issue-ILOOM-42__reporting-feature',
+        issueType: 'issue',
+        issue_numbers: ['ILOOM-42'],
+        pr_numbers: [],
+        issueTracker: 'linear',
+        colorHex: '#c9f0ff',
+        sessionId: 'session-ghi789',
+        projectPath: '/Users/adam/Documents/Projects/iloom-cli',
+        issueUrls: { 'ILOOM-42': 'https://linear.app/company/issue/ILOOM-42' },
+        prUrls: {},
+        draftPrNumber: null,
+        capabilities: ['typescript'],
+        parentLoom: null,
+        status: 'finished',
+        finishedAt: '2024-01-22T09:15:00.000Z',
+      }
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.issue_numbers).toEqual(['ILOOM-42'])
+      expect(result.issueUrls).toEqual({ 'ILOOM-42': 'https://linear.app/company/issue/ILOOM-42' })
+      expect(result.issueTracker).toBe('linear')
+    })
+
+    it('should format finished branch loom without issue tracking', () => {
+      const metadata: LoomMetadata = {
+        description: 'Experimental feature branch',
+        created_at: '2024-01-08T16:45:00.000Z',
+        branchName: 'feat/experimental-feature',
+        worktreePath: '/Users/adam/Documents/Projects/iloom-cli-looms/feat-experimental-feature',
+        issueType: 'branch',
+        issue_numbers: [],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#e1bee7',
+        sessionId: 'session-jkl012',
+        projectPath: '/Users/adam/Documents/Projects/iloom-cli',
+        issueUrls: {},
+        prUrls: {},
+        draftPrNumber: null,
+        capabilities: ['typescript'],
+        parentLoom: null,
+        status: 'finished',
+        finishedAt: '2024-01-25T11:00:00.000Z',
+      }
+      const result = formatFinishedLoomForJson(metadata)
+      expect(result.type).toBe('branch')
+      expect(result.issue_numbers).toEqual([])
+      expect(result.pr_numbers).toEqual([])
+      expect(result.branch).toBe('feat/experimental-feature')
     })
   })
 })

@@ -423,6 +423,8 @@ il list [options]
 | Flag | Description |
 |------|-------------|
 | `--json` | Output as JSON |
+| `--finished` | Show only finished looms |
+| `--all` | Show both active and finished looms |
 
 **Output includes:**
 - Issue/PR number and title
@@ -432,12 +434,22 @@ il list [options]
 - CLI binary name (for CLI projects)
 - Database branch name (if configured)
 - Current status (active, has uncommitted changes, etc.)
+- Finish time (for finished looms with `--finished` or `--all`)
 
 **Examples:**
 
 ```bash
-# List all looms
+# List all active looms (default)
 il list
+
+# List only finished looms
+il list --finished
+
+# List both active and finished looms
+il list --all
+
+# Output as JSON
+il list --json
 
 # Output example:
 # Active Looms:

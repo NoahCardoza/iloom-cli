@@ -68,6 +68,8 @@ export interface WriteMetadataInput {
  * Result of reading metadata for a worktree
  */
 export interface LoomMetadata {
+  status?: 'active' | 'finished'
+  finishedAt?: string | null
   description: string
   created_at: string | null
   branchName: string | null
@@ -105,9 +107,11 @@ export interface LoomMetadata {
  */
 export class MetadataManager {
   private readonly loomsDir: string
+  private readonly finishedDir: string
 
   constructor() {
     this.loomsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'looms')
+    this.finishedDir = path.join(this.loomsDir, 'finished')
   }
 
   /**
@@ -337,5 +341,124 @@ export class MetadataManager {
         `Failed to delete metadata for worktree: ${error instanceof Error ? error.message : String(error)}`
       )
     }
+  }
+
+  /**
+   * Archive metadata for a finished worktree
+   *
+   * Moves the metadata file to the finished/ subdirectory and adds
+   * status: 'finished' and finishedAt timestamp fields.
+   *
+   * Idempotent: silently succeeds if source file doesn't exist
+   * Non-fatal: logs warning on errors but doesn't throw
+   *
+   * @param worktreePath - Absolute path to the worktree
+   */
+  async archiveMetadata(worktreePath: string): Promise<void> {
+    try {
+      const filename = this.slugifyPath(worktreePath)
+      const sourcePath = path.join(this.loomsDir, filename)
+
+      // Check if source file exists - silently return if not (idempotent)
+      if (!(await fs.pathExists(sourcePath))) {
+        getLogger().debug(`No metadata file to archive for worktree: ${worktreePath}`)
+        return
+      }
+
+      // Read existing metadata
+      const content = await fs.readFile(sourcePath, 'utf8')
+      const data: MetadataFile = JSON.parse(content)
+
+      // Add finished status and timestamp
+      const finishedData = {
+        ...data,
+        status: 'finished' as const,
+        finishedAt: new Date().toISOString(),
+      }
+
+      // Ensure finished directory exists
+      await fs.ensureDir(this.finishedDir, { mode: 0o755 })
+
+      // Write to finished subdirectory
+      const destPath = path.join(this.finishedDir, filename)
+      await fs.writeFile(destPath, JSON.stringify(finishedData, null, 2), { mode: 0o644 })
+
+      // Delete original file
+      await fs.unlink(sourcePath)
+
+      getLogger().debug(`Metadata archived for worktree: ${worktreePath}`)
+    } catch (error) {
+      // Log warning but don't throw - archiving is supplementary
+      getLogger().warn(
+        `Failed to archive metadata for worktree: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+  }
+
+  /**
+   * List all finished loom metadata files
+   *
+   * Returns an array of LoomMetadata objects for all finished looms
+   * in the finished/ subdirectory, sorted by finishedAt in descending order
+   * (most recently finished first).
+   *
+   * @returns Array of LoomMetadata objects from finished files, sorted by finishedAt desc
+   */
+  async listFinishedMetadata(): Promise<LoomMetadata[]> {
+    const results: LoomMetadata[] = []
+
+    try {
+      // Check if finished directory exists
+      if (!(await fs.pathExists(this.finishedDir))) {
+        return results
+      }
+
+      // Read all files in finished directory
+      const files = await fs.readdir(this.finishedDir)
+
+      // Filter to only .json files and read each
+      for (const file of files) {
+        if (!file.endsWith('.json')) {
+          continue
+        }
+
+        try {
+          const filePath = path.join(this.finishedDir, file)
+          const content = await fs.readFile(filePath, 'utf8')
+          const data = JSON.parse(content) as MetadataFile & { status?: string; finishedAt?: string }
+
+          // Skip files without required description field
+          if (!data.description) {
+            continue
+          }
+
+          const metadata = this.toMetadata(data)
+          // Add finished-specific fields
+          metadata.status = (data.status as 'active' | 'finished') ?? 'finished'
+          metadata.finishedAt = data.finishedAt ?? null
+
+          results.push(metadata)
+        } catch (error) {
+          // Skip individual files that fail to parse (graceful degradation)
+          getLogger().warn(
+            `Skipping finished metadata file ${file}: ${error instanceof Error ? error.message : String(error)}`
+          )
+        }
+      }
+
+      // Sort by finishedAt descending (most recently finished first)
+      results.sort((a, b) => {
+        const aTime = a.finishedAt ? new Date(a.finishedAt).getTime() : 0
+        const bTime = b.finishedAt ? new Date(b.finishedAt).getTime() : 0
+        return bTime - aTime
+      })
+    } catch (error) {
+      // Log error but return empty array (graceful degradation)
+      getLogger().warn(
+        `Could not list finished metadata files: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+
+    return results
   }
 }

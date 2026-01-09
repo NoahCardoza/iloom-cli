@@ -6,8 +6,23 @@ import { MetadataManager } from '../lib/MetadataManager.js'
 import { logger } from './logger.js'
 
 /**
+ * Custom error class for Git command failures
+ * Preserves exit code and stderr for precise error handling
+ */
+export class GitCommandError extends Error {
+  constructor(
+    message: string,
+    public readonly exitCode: number | undefined,
+    public readonly stderr: string
+  ) {
+    super(message)
+    this.name = 'GitCommandError'
+  }
+}
+
+/**
  * Execute a Git command and return the stdout result
- * Throws an error if the command fails
+ * Throws a GitCommandError if the command fails
  */
 export async function executeGitCommand(
   args: string[],
@@ -28,7 +43,11 @@ export async function executeGitCommand(
   } catch (error) {
     const execaError = error as ExecaError
     const stderr = execaError.stderr ?? execaError.message ?? 'Unknown Git error'
-    throw new Error(`Git command failed: ${stderr}`)
+    throw new GitCommandError(
+      `Git command failed: ${stderr}`,
+      execaError.exitCode,
+      stderr
+    )
   }
 }
 
@@ -369,11 +388,13 @@ export async function getRepoRoot(path: string = process.cwd()): Promise<string 
 
     return repoRoot
   } catch(error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
     // "not a git repository" is expected when running outside a git repo - use debug level
-    if (errorMessage.includes('not a git repository')) {
+    // Check for GitCommandError with exit code 128 or the specific stderr message
+    if (error instanceof GitCommandError &&
+        (error.exitCode === 128 || /fatal: not a git repository/i.test(error.stderr))) {
       logger.info(`Note: No git repository detected: ${path}`)
     } else {
+      const errorMessage = error instanceof Error ? error.message : String(error)
       logger.warn(`Failed to determine repo root from git-common-dir: ${path}`, errorMessage)
     }
     return null

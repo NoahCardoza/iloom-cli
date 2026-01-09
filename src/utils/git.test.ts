@@ -1054,7 +1054,12 @@ describe('Git Utility Regression Tests', () => {
     })
 
     it('should return false on git command errors', async () => {
-      vi.mocked(execa).mockRejectedValueOnce(new Error('fatal: not a git repository'))
+      // Mock an ExecaError-like object (what execa actually throws)
+      const execaError = Object.assign(new Error('fatal: not a git repository'), {
+        exitCode: 128,
+        stderr: 'fatal: not a git repository',
+      })
+      vi.mocked(execa).mockRejectedValueOnce(execaError)
 
       const result = await isFileGitignored('.vscode/settings.json')
 

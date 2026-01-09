@@ -21,6 +21,7 @@ vi.mock('./MetadataManager.js', () => ({
 		writeMetadata: vi.fn().mockResolvedValue(undefined),
 		readMetadata: vi.fn().mockResolvedValue(null),
 		deleteMetadata: vi.fn().mockResolvedValue(undefined),
+		archiveMetadata: vi.fn().mockResolvedValue(undefined),
 		slugifyPath: vi.fn((path: string) => path.replace(/\//g, '___') + '.json'),
 	})),
 }))

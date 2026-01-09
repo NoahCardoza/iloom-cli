@@ -20,6 +20,8 @@ export interface LoomJsonOutput {
   projectPath?: string | null
   issueUrls?: Record<string, string>
   prUrls?: Record<string, string>
+  status?: 'active' | 'finished'
+  finishedAt?: string | null
 }
 
 /**
@@ -150,4 +152,35 @@ export function formatLoomsForJson(
   metadata?: Map<string, LoomMetadata | null>
 ): LoomJsonOutput[] {
   return worktrees.map(wt => formatLoomForJson(wt, mainWorktreePath, metadata?.get(wt.path)))
+}
+
+/**
+ * Format finished loom metadata to JSON schema
+ *
+ * Finished looms don't have an associated worktree, so we derive values from metadata.
+ *
+ * @param metadata - The finished loom metadata
+ */
+export function formatFinishedLoomForJson(metadata: LoomMetadata): LoomJsonOutput {
+  // Use metadata values for type, default to 'branch' if not set
+  const loomType = metadata.issueType ?? 'branch'
+
+  return {
+    name: metadata.branchName ?? metadata.worktreePath ?? 'unknown',
+    worktreePath: null, // Finished looms no longer have a worktree
+    branch: metadata.branchName,
+    type: loomType,
+    issue_numbers: metadata.issue_numbers,
+    pr_numbers: metadata.pr_numbers,
+    isMainWorktree: false, // Finished looms are never the main worktree
+    description: metadata.description ?? null,
+    created_at: metadata.created_at ?? null,
+    issueTracker: metadata.issueTracker ?? null,
+    colorHex: metadata.colorHex ?? null,
+    projectPath: metadata.projectPath ?? null,
+    issueUrls: metadata.issueUrls ?? {},
+    prUrls: metadata.prUrls ?? {},
+    status: metadata.status ?? 'finished',
+    finishedAt: metadata.finishedAt ?? null,
+  }
 }

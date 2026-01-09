@@ -860,4 +860,213 @@ describe('MetadataManager', () => {
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Permission denied'))
     })
   })
+
+  describe('archiveMetadata', () => {
+    const worktreePath = '/Users/jane/dev/repo'
+    const expectedFilename = '___Users___jane___dev___repo.json'
+    const expectedFinishedDir = '/Users/testuser/.config/iloom-ai/looms/finished'
+
+    it('should move metadata file to finished subdirectory with status fields', async () => {
+      const mockDate = new Date('2024-01-20T15:30:00.000Z')
+      vi.setSystemTime(mockDate)
+
+      const originalContent = JSON.stringify({
+        description: 'Original loom',
+        created_at: '2024-01-15T10:00:00.000Z',
+        version: 1,
+        branchName: 'issue-42__feature',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#ff0000',
+      })
+
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(originalContent)
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+      vi.mocked(fs.unlink).mockResolvedValue(undefined)
+
+      await manager.archiveMetadata(worktreePath)
+
+      // Verify finished directory was created
+      expect(fs.ensureDir).toHaveBeenCalledWith(expectedFinishedDir, { mode: 0o755 })
+
+      // Verify file was written to finished directory with status fields
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        path.join(expectedFinishedDir, expectedFilename),
+        expect.any(String),
+        { mode: 0o644 }
+      )
+
+      // Verify the written content has status and finishedAt
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.status).toBe('finished')
+      expect(writtenContent.finishedAt).toBe('2024-01-20T15:30:00.000Z')
+      expect(writtenContent.description).toBe('Original loom')
+      expect(writtenContent.branchName).toBe('issue-42__feature')
+
+      // Verify original file was deleted
+      expect(fs.unlink).toHaveBeenCalledWith(
+        path.join(expectedLoomsDir, expectedFilename)
+      )
+
+      vi.useRealTimers()
+    })
+
+    it('should not throw if source file does not exist (idempotent)', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(false)
+
+      await expect(manager.archiveMetadata(worktreePath)).resolves.not.toThrow()
+      expect(fs.readFile).not.toHaveBeenCalled()
+      expect(fs.writeFile).not.toHaveBeenCalled()
+    })
+
+    it('should log warning on error but not throw', async () => {
+      const { logger } = await import('../utils/logger.js')
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockRejectedValue(new Error('Read error'))
+
+      await expect(manager.archiveMetadata(worktreePath)).resolves.not.toThrow()
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Read error'))
+    })
+  })
+
+  describe('listFinishedMetadata', () => {
+    it('should return empty array when finished directory does not exist', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(false)
+
+      const result = await manager.listFinishedMetadata()
+
+      expect(result).toEqual([])
+      expect(fs.readdir).not.toHaveBeenCalled()
+    })
+
+    it('should return finished looms sorted by finishedAt descending', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockResolvedValue([
+        'loom1.json',
+        'loom2.json',
+        'loom3.json',
+      ] as unknown as string[])
+
+      vi.mocked(fs.readFile).mockImplementation(async (filePath) => {
+        const pathStr = String(filePath)
+        if (pathStr.includes('loom1')) {
+          return JSON.stringify({
+            description: 'First finished',
+            status: 'finished',
+            finishedAt: '2024-01-15T10:00:00.000Z', // Earliest
+            branchName: 'issue-1__feat',
+          })
+        }
+        if (pathStr.includes('loom2')) {
+          return JSON.stringify({
+            description: 'Second finished',
+            status: 'finished',
+            finishedAt: '2024-01-20T10:00:00.000Z', // Latest
+            branchName: 'issue-2__fix',
+          })
+        }
+        return JSON.stringify({
+          description: 'Third finished',
+          status: 'finished',
+          finishedAt: '2024-01-18T10:00:00.000Z', // Middle
+          branchName: 'issue-3__docs',
+        })
+      })
+
+      const result = await manager.listFinishedMetadata()
+
+      expect(result).toHaveLength(3)
+      // Should be sorted by finishedAt descending (latest first)
+      expect(result[0].description).toBe('Second finished')
+      expect(result[1].description).toBe('Third finished')
+      expect(result[2].description).toBe('First finished')
+    })
+
+    it('should return metadata with status and finishedAt fields', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockResolvedValue(['finished-loom.json'] as unknown as string[])
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+        description: 'Finished loom',
+        created_at: '2024-01-15T10:00:00.000Z',
+        version: 1,
+        branchName: 'issue-42__feature',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#ff0000',
+        status: 'finished',
+        finishedAt: '2024-01-20T15:00:00.000Z',
+      }))
+
+      const result = await manager.listFinishedMetadata()
+
+      expect(result).toHaveLength(1)
+      expect(result[0].status).toBe('finished')
+      expect(result[0].finishedAt).toBe('2024-01-20T15:00:00.000Z')
+      expect(result[0].branchName).toBe('issue-42__feature')
+    })
+
+    it('should skip files without description field', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockResolvedValue([
+        'valid.json',
+        'no-desc.json',
+      ] as unknown as string[])
+
+      vi.mocked(fs.readFile).mockImplementation(async (filePath) => {
+        const pathStr = String(filePath)
+        if (pathStr.includes('no-desc')) {
+          return JSON.stringify({ status: 'finished', finishedAt: '2024-01-20T10:00:00.000Z' })
+        }
+        return JSON.stringify({
+          description: 'Valid finished loom',
+          status: 'finished',
+          finishedAt: '2024-01-20T10:00:00.000Z',
+        })
+      })
+
+      const result = await manager.listFinishedMetadata()
+
+      expect(result).toHaveLength(1)
+      expect(result[0].description).toBe('Valid finished loom')
+    })
+
+    it('should skip non-JSON files', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockResolvedValue([
+        'loom.json',
+        'readme.txt',
+        '.DS_Store',
+      ] as unknown as string[])
+
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+        description: 'Finished loom',
+        status: 'finished',
+        finishedAt: '2024-01-20T10:00:00.000Z',
+      }))
+
+      const result = await manager.listFinishedMetadata()
+
+      expect(result).toHaveLength(1)
+      expect(fs.readFile).toHaveBeenCalledTimes(1)
+    })
+
+    it('should handle readdir error gracefully', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readdir).mockRejectedValue(new Error('Permission denied'))
+
+      const result = await manager.listFinishedMetadata()
+
+      expect(result).toEqual([])
+    })
+  })
 })
