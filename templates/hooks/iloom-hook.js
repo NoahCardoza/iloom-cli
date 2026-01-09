@@ -141,6 +141,9 @@ function mapEventToStatus(eventName, notificationType) {
       // Other notification types - not relevant, skip
       return null;
 
+    case 'UserPromptSubmit':
+      return 'user_prompt_submit';  // Special marker for additionalContext output
+
     default:
       // Other events (SessionStart, SubagentStop, etc.) - not relevant, skip
       return null;
@@ -231,6 +234,29 @@ async function main() {
     // Skip events we don't care about
     if (status === null) {
       debug('Event not relevant, skipping');
+      process.exit(0);
+    }
+
+    // Special handling for UserPromptSubmit - output JSON additionalContext instead of broadcasting
+    if (status === 'user_prompt_submit') {
+      const reminder = `**REMINDER**: You MUST USE subagents to preserve your context window for ongoing conversation.
+
+| Request Type | Action |
+|--------------|--------|
+| Trivial (quick answer, single-line fix) | Handle directly |
+| Bug investigation / analysis | \`@agent-iloom-issue-analyzer\` → present findings → offer to fix |
+| Code changes | \`@agent-iloom-issue-implementer\` |
+| New features / complex changes | \`@agent-iloom-issue-analyze-and-plan\` → if approved, \`@agent-iloom-issue-implementer\` |
+| Deep questions (how/why something works) | \`@agent-iloom-issue-analyzer\` |`;
+
+      const output = {
+        hookSpecificOutput: {
+          hookEventName: 'UserPromptSubmit',
+          additionalContext: reminder
+        }
+      };
+      console.log(JSON.stringify(output));
+      debug('UserPromptSubmit: output additionalContext reminder');
       process.exit(0);
     }
 

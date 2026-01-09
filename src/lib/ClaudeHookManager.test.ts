@@ -333,13 +333,36 @@ describe('ClaudeHookManager', () => {
 				'SubagentStop',
 				'PermissionRequest',
 				'SessionStart',
-				'SessionEnd'
+				'SessionEnd',
+				'UserPromptSubmit'
 			]
 
 			for (const event of requiredEvents) {
 				expect(settings.hooks[event]).toBeDefined()
 				expect(settings.hooks[event]).toHaveLength(1)
 			}
+		})
+
+		it('should register UserPromptSubmit hook for subagent delegation reminders', async () => {
+			vi.mocked(fs.pathExists).mockImplementation(async (p) => {
+				return p.toString().includes('iloom-hook.js')
+			})
+			vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+			vi.mocked(fs.copyFile).mockResolvedValue(undefined)
+			vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+			vi.mocked(fs.rename).mockResolvedValue(undefined)
+
+			await hookManager.installHooks()
+
+			const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+			const content = writeCall[1] as string
+			const settings = JSON.parse(content)
+
+			// UserPromptSubmit hook should be registered
+			expect(settings.hooks.UserPromptSubmit).toBeDefined()
+			expect(settings.hooks.UserPromptSubmit).toHaveLength(1)
+			expect(settings.hooks.UserPromptSubmit[0].hooks[0].type).toBe('command')
+			expect(settings.hooks.UserPromptSubmit[0].hooks[0].command).toContain('iloom-hook.js')
 		})
 
 		it('should set PermissionRequest with matcher and timeout', async () => {

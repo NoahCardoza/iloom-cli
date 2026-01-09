@@ -276,6 +276,9 @@ export class ClaudeHookManager {
 			],
 			SessionEnd: [
 				{ hooks: [{ type: 'command', command: hookCommand }] }
+			],
+			UserPromptSubmit: [
+				{ hooks: [{ type: 'command', command: hookCommand }] }
 			]
 		}
 	}
