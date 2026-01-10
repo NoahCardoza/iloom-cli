@@ -200,6 +200,8 @@ export interface CleanupOptions {
   dryRun?: boolean
   /** Output result as JSON */
   json?: boolean
+  /** Wait specified milliseconds before cleanup execution */
+  defer?: number
 }
 
 export interface ListOptions {

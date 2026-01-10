@@ -1221,4 +1221,58 @@ describe('CleanupCommand', () => {
       })
     })
   })
+
+  describe('Defer Flag Tests', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+      mockGitWorktreeManager = new GitWorktreeManager() as vi.Mocked<GitWorktreeManager>
+      mockGitWorktreeManager.listWorktrees = vi.fn().mockResolvedValue([])
+      command = new CleanupCommand(mockGitWorktreeManager)
+    })
+
+    it('should wait specified milliseconds before executing cleanup', async () => {
+      // Use a very short delay for testing (real timers)
+      await command.execute({
+        options: { list: true, defer: 10 }
+      })
+
+      // Verify the waiting message was logged
+      expect(logger.info).toHaveBeenCalledWith('Waiting 10ms before cleanup...')
+      // Verify cleanup eventually ran
+      expect(logger.info).toHaveBeenCalledWith('Cleanup mode: list')
+    })
+
+    it('should work with --force flag and defer', async () => {
+      await command.execute({
+        options: { all: true, force: true, defer: 10 }
+      })
+
+      // Verify defer message was logged
+      expect(logger.info).toHaveBeenCalledWith('Waiting 10ms before cleanup...')
+      // Verify all mode executed
+      expect(logger.info).toHaveBeenCalledWith('Cleanup mode: all')
+    })
+
+    it('should not delay when defer is not specified', async () => {
+      await command.execute({
+        options: { list: true }
+      })
+
+      // Should NOT have logged the waiting message
+      expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('Waiting'))
+      // But should have completed the cleanup
+      expect(logger.info).toHaveBeenCalledWith('Cleanup mode: list')
+    })
+
+    it('should fail fast on validation errors before deferring', async () => {
+      // Use invalid option combination - error should occur immediately, no waiting
+      await expect(command.execute({
+        identifier: 'my-branch',
+        options: { list: true, defer: 100 }  // list + identifier is invalid
+      })).rejects.toThrow('Cannot use --list with a specific identifier')
+
+      // Should NOT have logged the waiting message since validation failed first
+      expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('Waiting'))
+    })
+  })
 })

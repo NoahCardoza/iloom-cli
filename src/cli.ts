@@ -809,6 +809,7 @@ program
   .option('-f, --force', 'Skip confirmations and force removal')
   .option('--dry-run', 'Show what would be done without doing it')
   .option('--json', 'Output result as JSON')
+  .option('--defer <ms>', 'Wait specified milliseconds before cleanup', parseInt)
   .action(async (identifier?: string, options?: CleanupOptions) => {
     const executeAction = async (): Promise<void> => {
       try {

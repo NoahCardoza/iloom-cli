@@ -163,17 +163,23 @@ export class CleanupCommand {
     // Step 1: Parse input and determine mode
     const parsed = this.parseInput(input)
 
-    // Step 2: Validate option combinations
+    // Step 2: Validate option combinations (fail fast before any delay)
     this.validateInput(parsed)
 
     // Note: JSON mode auto-skips routine confirmations (programmatic use can't interact)
     // Safety checks still require --force to bypass (ResourceCleanup.validateWorktreeSafety throws errors)
 
-    // Step 2.5: Check for child looms AFTER parsing input
+    // Step 3: Check for child looms AFTER parsing input
     // This ensures we only block when cleaning the CURRENT loom (parent), not a child
     await this.checkForChildLooms(parsed)
 
-    // Step 3: Execute based on mode
+    // Step 4: Handle deferred execution (after all validation passes)
+    if (input.options.defer) {
+      getLogger().info(`Waiting ${input.options.defer}ms before cleanup...`)
+      await new Promise(resolve => globalThis.setTimeout(resolve, input.options.defer))
+    }
+
+    // Step 5: Execute based on mode
     getLogger().info(`Cleanup mode: ${parsed.mode}`)
 
     if (parsed.mode === 'single') {
