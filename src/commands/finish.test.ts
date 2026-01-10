@@ -2689,6 +2689,36 @@ describe('FinishCommand', () => {
 				)
 			})
 
+			it('should skip cleanup when --no-cleanup flag is set (cleanup: false)', async () => {
+				await command.execute({
+					identifier: '123',
+					options: { cleanup: false },
+				})
+
+				// Verify cleanup was NOT called when --no-cleanup flag is set
+				expect(mockResourceCleanup.cleanupWorktree).not.toHaveBeenCalled()
+			})
+
+			it('should perform cleanup when --cleanup flag is set (cleanup: true)', async () => {
+				await command.execute({
+					identifier: '123',
+					options: { cleanup: true },
+				})
+
+				// Verify cleanup was called when --cleanup flag is explicitly set
+				expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalled()
+			})
+
+			it('should perform cleanup by default when no cleanup flag is set (cleanup: undefined)', async () => {
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				// Verify cleanup is called by default (undefined means cleanup)
+				expect(mockResourceCleanup.cleanupWorktree).toHaveBeenCalled()
+			})
+
 			it('should handle partial cleanup failures gracefully without throwing', async () => {
 				// Mock partial cleanup failure
 				vi.mocked(mockResourceCleanup.cleanupWorktree).mockResolvedValue({

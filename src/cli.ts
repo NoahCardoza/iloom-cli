@@ -539,8 +539,8 @@ program
   .option('--pr <number>', 'Treat input as PR number', parseFloat)
   .option('--skip-build', 'Skip post-merge build verification')
   .option('--no-browser', 'Skip opening PR in browser (github-pr mode only)')
-  .option('--cleanup', 'Clean up worktree after PR creation (github-pr mode only)')
-  .option('--no-cleanup', 'Keep worktree after PR creation (github-pr mode only)')
+  .option('--cleanup', 'Clean up worktree after finishing (default in local mode)')
+  .option('--no-cleanup', 'Keep worktree after finishing')
   .option('--json', 'Output result as JSON')
   .action(async (identifier: string | undefined, options: FinishOptions) => {
     const executeAction = async (): Promise<void> => {

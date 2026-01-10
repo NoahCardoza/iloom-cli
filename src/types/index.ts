@@ -179,7 +179,7 @@ export interface FinishOptions {
   pr?: number         // --pr <number> - Treat input as PR number
   skipBuild?: boolean // --skip-build - Skip post-merge build verification
   noBrowser?: boolean // --no-browser - Skip opening PR in browser (github-pr mode only)
-  cleanup?: boolean   // --cleanup / --no-cleanup - Control worktree cleanup after PR creation
+  cleanup?: boolean   // --cleanup / --no-cleanup - Control worktree cleanup after finishing
   json?: boolean      // --json - Output result as JSON
 }
 

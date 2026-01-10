@@ -868,8 +868,15 @@ export class FinishCommand {
 		// Step 5.7: Generate session summary (non-blocking, preview-only in dry-run)
 		await this.generateSessionSummaryIfConfigured(parsed, worktree, options)
 
-		// Step 6: Post-merge cleanup
-		await this.performPostMergeCleanup(parsed, options, worktree, result)
+		// Step 6: Post-merge cleanup (respects --cleanup / --no-cleanup flags)
+		if (options.cleanup === false) {
+			// Explicit --no-cleanup flag: keep worktree
+			getLogger().info('Worktree kept active (--no-cleanup flag)')
+			getLogger().info(`To cleanup later: il cleanup ${parsed.originalInput}`)
+		} else {
+			// Default behavior (cleanup=true or undefined): perform cleanup
+			await this.performPostMergeCleanup(parsed, options, worktree, result)
+		}
 	}
 
 	/**

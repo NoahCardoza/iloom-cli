@@ -244,8 +244,8 @@ il finish [options]
 | `--pr` | Treat input as PR number |
 | `--skip-build` | Skip post-merge build verification |
 | `--no-browser` | Skip opening PR in browser (github-pr mode only) |
-| `--cleanup` | Clean up worktree after PR creation (github-pr mode only) |
-| `--no-cleanup` | Keep worktree after PR creation (github-pr mode only) |
+| `--cleanup` | Clean up worktree after finishing (default in local mode) |
+| `--no-cleanup` | Keep worktree after finishing (default in github-pr and github-draft-pr modes)|
 
 **Merge Behavior Modes:**
 
