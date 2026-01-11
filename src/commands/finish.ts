@@ -868,6 +868,13 @@ export class FinishCommand {
 		// Step 5.7: Generate session summary (non-blocking, preview-only in dry-run)
 		await this.generateSessionSummaryIfConfigured(parsed, worktree, options)
 
+		// Step 5.8: Archive metadata BEFORE cleanup decision (ensures it runs even with --no-cleanup)
+		const { MetadataManager } = await import('../lib/MetadataManager.js')
+		const metadataManager = new MetadataManager()
+		if (!options.dryRun) {
+			await metadataManager.archiveMetadata(worktree.path)
+		}
+
 		// Step 6: Post-merge cleanup (respects --cleanup / --no-cleanup flags)
 		if (options.cleanup === false) {
 			// Explicit --no-cleanup flag: keep worktree
@@ -905,6 +912,13 @@ export class FinishCommand {
 					'Cannot cleanup PR with uncommitted changes. ' +
 					'Commit or stash changes, then run again with --force to cleanup anyway.'
 				)
+			}
+
+			// Archive metadata BEFORE cleanup (ensures it runs regardless of cleanup flags)
+			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			const metadataManager = new MetadataManager()
+			if (!options.dryRun) {
+				await metadataManager.archiveMetadata(worktree.path)
 			}
 
 			// Call cleanup directly with deleteBranch: true
@@ -1077,6 +1091,13 @@ export class FinishCommand {
 			// Step 4.5: Generate session summary (non-blocking, preview-only in dry-run)
 			// Post to the PR instead of the original issue
 			await this.generateSessionSummaryIfConfigured(parsed, worktree, options, prResult.number)
+
+			// Step 4.6: Archive metadata BEFORE cleanup prompt (ensures it runs even with --no-cleanup)
+			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			const metadataManager = new MetadataManager()
+			if (!options.dryRun) {
+				await metadataManager.archiveMetadata(worktree.path)
+			}
 
 			// Step 5: Interactive cleanup prompt (unless flags override)
 			await this.handlePRCleanupPrompt(parsed, options, worktree, finishResult)

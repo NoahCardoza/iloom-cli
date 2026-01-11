@@ -228,12 +228,6 @@ export class ResourceCleanup {
 					success: true,
 					message: `Worktree removed: ${worktree.path}`,
 				})
-
-				// Step 4.5: Archive metadata file after worktree removal
-				// Moves file to finished/ subdirectory with status and finishedAt fields
-				// This is idempotent - silently succeeds if file doesn't exist
-				await this.metadataManager.archiveMetadata(worktree.path)
-				getLogger().debug(`Metadata file archived for: ${worktree.path}`)
 			} catch (error) {
 				const err = error instanceof Error ? error : new Error('Unknown error')
 				errors.push(err)
