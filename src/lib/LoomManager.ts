@@ -219,7 +219,7 @@ export class LoomManager {
           '--allow-empty',
           '--no-verify',
           '-m',
-          `${PLACEHOLDER_COMMIT_PREFIX} Temporary commit for draft PR (will be removed on finish) - issue #${input.identifier}`
+          `${PLACEHOLDER_COMMIT_PREFIX} Temporary commit for draft PR (will be removed on finish)`
         ],
         { cwd: worktreePath }
       )

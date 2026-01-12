@@ -1082,7 +1082,7 @@ export async function getMergeTargetBranch(
  * Created during il start to enable draft PR creation (GitHub requires at least one commit ahead of base).
  * Removed during il finish before the final push to maintain clean commit history.
  */
-export const PLACEHOLDER_COMMIT_PREFIX = '[iloom-temp]'
+export const PLACEHOLDER_COMMIT_PREFIX = '[iloom]'
 
 /**
  * Check if HEAD commit is a placeholder commit
