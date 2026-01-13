@@ -389,7 +389,6 @@ Only execute if workflow plan determined NEEDS_ANALYSIS AND complexity is COMPLE
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
 2. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
-   - Use `recap.add_entry` to log significant technical findings (type: "insight" for dependencies/constraints, type: "risk" for problems identified)
 {{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's issue comment output
@@ -469,8 +468,7 @@ Execute combined analyze-and-plan agent:
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
 3. Upon completion:
    a. Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
-   b. Use `recap.add_entry` to log key technical discoveries (type: "insight") and design decisions (type: "decision")
-   c. **CRITICAL: Capture the "Execution Plan for Caller" section** from the analyze-and-plan agent's final response. This section contains the execution instructions for STEP 4. Store this for use in the Implementation Phase.
+   b. **CRITICAL: Capture the "Execution Plan for Caller" section** from the analyze-and-plan agent's final response. This section contains the execution instructions for STEP 4. Store this for use in the Implementation Phase.
 {{#if INTERACTIVE_MODE}}
 3.5. Extract and validate assumptions (batched validation):
    - Read the agent's issue comment output
@@ -512,8 +510,7 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
 2. Upon completion:
    a. Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
-   b. Use `recap.add_entry` to log key architectural decisions (e.g., type: "decision", content: "Chose approach A over B due to X constraint")
-   c. **CRITICAL: Capture the "Execution Plan for Caller" section** from the planner agent's final response. This section contains the execution instructions for STEP 4. Store this for use in the Implementation Phase.
+   b. **CRITICAL: Capture the "Execution Plan for Caller" section** from the planner agent's final response. This section contains the execution instructions for STEP 4. Store this for use in the Implementation Phase.
 {{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's issue comment output

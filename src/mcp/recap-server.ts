@@ -168,7 +168,8 @@ server.registerTool(
 	'add_entry',
 	{
 		title: 'Add Entry',
-		description: 'Append an entry to the recap',
+		description:
+			'Append an entry to the recap. If an entry with the same type and content already exists, it will be skipped.',
 		inputSchema: {
 			type: z
 				.enum(['decision', 'insight', 'risk', 'assumption', 'other'])
@@ -178,21 +179,34 @@ server.registerTool(
 		outputSchema: {
 			id: z.string(),
 			timestamp: z.string(),
+			skipped: z.boolean(),
 		},
 	},
 	async ({ type, content }) => {
 		const filePath = getRecapFilePath()
 		const recap = await readRecapFile(filePath)
+		recap.entries ??= []
+
+		// Deduplication: skip if entry with same type and content exists
+		const existingEntry = recap.entries.find((e) => e.type === type && e.content === content)
+
+		if (existingEntry) {
+			const result = { id: existingEntry.id, timestamp: existingEntry.timestamp, skipped: true }
+			return {
+				content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+				structuredContent: result,
+			}
+		}
+
 		const entry: RecapEntry = {
 			id: randomUUID(),
 			timestamp: new Date().toISOString(),
 			type,
 			content,
 		}
-		recap.entries ??= []
 		recap.entries.push(entry)
 		await writeRecapFile(filePath, recap)
-		const result = { id: entry.id, timestamp: entry.timestamp }
+		const result = { id: entry.id, timestamp: entry.timestamp, skipped: false }
 		return {
 			content: [{ type: 'text' as const, text: JSON.stringify(result) }],
 			structuredContent: result,

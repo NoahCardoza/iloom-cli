@@ -348,7 +348,6 @@ Execute combined analyze-and-plan agent:
    - Instruct the agent: "Before making assumptions, document any assumptions clearly in question tables with your own answers."
    - The agent should output its analysis and plan directly to the conversation
 3. Display the analysis and plan results to the user
-   - Use `recap.add_entry` to log key technical discoveries (type: "insight") and design decisions (type: "decision")
 {{#if INTERACTIVE_MODE}}
 3.5. Extract and validate assumptions (batched validation):
    - Read the agent's output
@@ -392,7 +391,6 @@ Execute combined analyze-and-plan agent:
    - Instruct the agent: "Before making assumptions, document any assumptions clearly in question tables with your own answers."
    - The agent should output its analysis directly to the conversation
 2. Display the analysis results to the user
-   - Use `recap.add_entry` to log significant technical findings (type: "insight" for dependencies/constraints, type: "risk" for problems identified)
 {{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's output
@@ -437,7 +435,6 @@ Execute combined analyze-and-plan agent:
    - Instruct the agent: "Before making assumptions, document any assumptions clearly in question tables with your own answers."
    - The agent should output its plan directly to the conversation
 2. Display the implementation plan to the user
-   - Use `recap.add_entry` to log key architectural decisions (e.g., type: "decision", content: "Chose approach A over B due to X constraint")
 {{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's output

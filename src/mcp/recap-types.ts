@@ -72,6 +72,7 @@ export interface AddEntryInput {
 export interface AddEntryOutput {
 	id: string
 	timestamp: string
+	skipped: boolean
 }
 
 /** Output for set_goal tool */
