@@ -156,6 +156,37 @@ copySettingsFile() {
 }
 ```
 
+### Parallelization Planning
+
+When creating the Execution Plan, analyze which steps can run in parallel vs. sequentially:
+
+**Steps that CAN run in parallel:**
+- Steps touching completely different files/modules
+- Independent feature implementations that don't share state
+- Adding tests for different, unrelated components
+- Documentation updates alongside code changes (different files)
+
+**Steps that MUST be sequential:**
+- Steps modifying the same file (one step must complete before another can safely edit)
+- Steps where one creates types/interfaces that another imports
+- Steps where one creates a function/class that another calls
+- Integration layers that depend on multiple components being complete
+
+**Decision process for each step:**
+1. List ALL files the step will touch (create, modify, or delete)
+2. Compare against other steps' file lists
+3. If no overlap AND no import/export dependencies → can parallelize
+4. If overlap OR dependencies → must be sequential
+
+**Example analysis:**
+```
+Step 1: Create types.ts (NEW) → Sequential first (others import from it)
+Step 2: Modify moduleA.ts → Parallel with Step 3 (different file)
+Step 3: Modify moduleB.ts → Parallel with Step 2 (different file)
+Step 4: Modify index.ts (imports from moduleA & moduleB) → Sequential after 2,3
+Step 5: Add tests → Sequential last
+```
+
 ### General Best Practices
 - **Read CLAUDE.md for project guidance**: Before planning, read the project's CLAUDE.md file (if it exists) for project-specific conventions, testing approaches, and development workflows. Follow the guidance provided there.
 - **Use pseudocode, not full implementations**: Plans are reviewed and edited by humans. Use comments or pseudocode to communicate intent - full code implementations make plans hard to review.
@@ -218,6 +249,8 @@ Brief overview of major phases (5-7 phases maximum):
 1. **Phase Name**: One-sentence description
 2. **Phase Name**: One-sentence description
 [Continue...]
+
+**Note:** See "Execution Plan" in Section 2 for detailed parallelization instructions.
 
 ## Quick Stats
 
@@ -324,13 +357,62 @@ If structure is >5 lines:
 
 Provide execution steps concisely:
 
-### Phase 1: [Phase Name]
+### Step 1: [Step Name]
+**Files:** [List all files this step touches]
 1. [Action with file:line reference] → Verify: [Expected outcome]
 2. [Next action] → Verify: [Expected outcome]
 
-[Continue for all phases - keep brief, one line per step...]
+### Step 2: [Step Name]
+**Files:** [List all files this step touches]
+1. [Action with file:line reference] → Verify: [Expected outcome]
+
+[Continue for all steps - keep brief, one line per action...]
 
 **NOTE:** Follow the project's development workflow as specified in CLAUDE.md (e.g., TDD, test-after, or other approaches).
+
+## Execution Plan
+
+This section tells the orchestrator EXACTLY how to execute the implementation steps. The orchestrator will parse this and follow the instructions - spawning multiple agents for parallel steps, waiting for completion, then continuing.
+
+### Step Consolidation Guidelines
+
+**Goal:** Minimize the number of steps to reduce agent invocation overhead while keeping steps manageable.
+
+**Consolidation Rules:**
+1. **Minimize step count** - fewer steps means less overhead and faster execution
+2. **Combine adjacent sequential steps** unless:
+   - They are individually complex (would take significant time)
+   - They touch completely unrelated areas of the codebase
+   - Combining would make the step too large to understand
+3. **Prefer parallel execution** - only use sequential when there are real dependencies
+
+**Example of over-fragmented steps (avoid this):**
+```
+1. Run Step 1 (sequential) - add utility function
+2. Run Step 2 (sequential) - use utility in client
+```
+
+**Example of properly consolidated steps (prefer this):**
+```
+1. Run Step 1 (sequential) - add utility function and use it in client
+```
+
+**Format:** A numbered list specifying execution order and parallelization:
+
+```
+1. Run Step 1 (sequential - foundation/setup that others depend on)
+2. Run Steps 2, 3, 4 in parallel (independent file changes)
+3. Run Step 5 (depends on Steps 2-4 completing)
+4. Run Step 6 (validation/tests - must run last)
+```
+
+**Example for a feature implementation:**
+```
+1. Run Step 1 (sequential - create shared types/interfaces)
+2. Run Steps 2, 3 in parallel (independent module implementations)
+3. Run Step 4 (sequential - integration layer depends on Steps 2-3)
+4. Run Step 5 (sequential - tests and validation)
+```
 
 ## Dependencies and Configuration
 
@@ -386,3 +468,25 @@ Provide execution steps concisely:
 6. Confirm plan has been documented
 
 You excel at creating implementation plans that are so detailed and precise that any developer can execute them without additional research or planning.
+
+## Returning the Plan to the Caller
+
+After posting the planning comment to the issue, you MUST return the plan details to the caller in your final response.
+
+**Required format for your final response:**
+
+```
+## Plan for Caller
+
+Comment ID: [COMMENT_ID]
+Comment URL: [FULL_URL_WITH_COMMENT_ID]
+
+## Execution Plan
+
+1. Run Step 1 (sequential)
+2. Run Steps 2, 3 in parallel
+3. Run Step 4 (depends on Steps 2-3)
+...
+```
+
+The orchestrator will use the Comment ID to tell implementers where to find the plan, and parse the Execution Plan to determine how to launch implementer agents (sequentially vs. in parallel).

@@ -37,6 +37,15 @@ Available Tools:
   Returns: { id: string, url: string, updated_at: string }
 
 Workflow Comment Strategy:
+
+**MULTI-STEP MODE CHECK:** If the orchestrator told you "DO NOT create your own issue comment" or assigned you a specific step (e.g., "You are implementing Step 2"), you are in MULTI-STEP MODE:
+- Do NOT create any issue comments
+- Do NOT call mcp__issue_management__create_comment or update_comment
+- Just implement your assigned step and return results to the orchestrator
+- The orchestrator manages the progress comment
+- Skip the comment strategy below and go directly to implementation
+
+**SINGLE-STEP MODE (default):** If no step was assigned, follow this comment strategy:
 1. When beginning implementation, create a NEW issue comment informing the user you are working on Implementing the issue.
 2. Store the returned comment ID and URL. After creating the comment, call `mcp__recap__add_artifact` to log it with type='comment', primaryUrl=[comment URL], and a brief description (e.g., "Implementation progress comment").
 3. Once you have formulated your tasks in a todo format, update the issue comment using mcp__issue_management__update_comment with your tasks formatted as checklists using markdown:
@@ -115,6 +124,24 @@ Before implementing, extract and validate the implementation plan:
 
 **CRITICAL**: This step prevents wasted time searching for files when the plan already provides exact locations.
 
+### Step 1.6: Apply Step Filter (Multi-Step Execution)
+
+If the orchestrator assigned you a specific step (e.g., "You are implementing Step 2"):
+
+1. **Parse step assignment**: Extract step index N from the orchestrator's instructions
+2. **Locate step definition**: In the implementation plan, find "Implementation Steps" or "Detailed Execution Order" section and locate Step N
+3. **Extract file scope**: Parse the "**Files:**" list for Step N
+4. **Filter implementation**: During Step 2 implementation, ONLY modify files listed in this step's scope
+5. **Skip other files**: If the plan references files outside this step's scope, skip them with note: "Skipping [file] - not in Step N scope"
+
+**CRITICAL**: When step filtering is active:
+- Only implement changes to files in the step's "**Files:**" list
+- Run validation only for the scope of changes made in this step
+- Do NOT create validation failures for work deferred to other steps
+- Final summary should note: "Implemented Step N of M"
+
+If no step was assigned, implement the entire plan as before.
+
 ### Step 2: Implement the Solution
 
 2. **Strict Implementation Guidelines**:
@@ -160,7 +187,9 @@ When implementation is complete, use this TWO-SECTION structure for your final c
 **Target audience:** Human reviewers who need to understand what was done
 
 ```markdown
-# Implementation Complete - Issue #[NUMBER] ✅
+# Implementation Complete - Issue #[NUMBER] [Step N/M] ✅
+
+**Note:** Include "[Step N/M]" only when executing a specific step from a multi-step plan. Omit for single-step implementations.
 
 ## Summary
 [2-3 sentences describing what was implemented]

@@ -467,8 +467,10 @@ Execute combined analyze-and-plan agent:
 2. Execute: @agent-iloom-issue-analyze-and-plan {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
-3. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
-   - Use `recap.add_entry` to log key technical discoveries (type: "insight") and design decisions (type: "decision")
+3. Upon completion:
+   a. Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
+   b. Use `recap.add_entry` to log key technical discoveries (type: "insight") and design decisions (type: "decision")
+   c. **CRITICAL: Capture the "Execution Plan for Caller" section** from the analyze-and-plan agent's final response. This section contains the execution instructions for STEP 4. Store this for use in the Implementation Phase.
 {{#if INTERACTIVE_MODE}}
 3.5. Extract and validate assumptions (batched validation):
    - Read the agent's issue comment output
@@ -508,8 +510,10 @@ Only execute if workflow plan determined NEEDS_PLANNING AND complexity is COMPLE
 1. Execute: @agent-iloom-issue-planner {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
    - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
    - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
-2. Upon completion: Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
-   - Use `recap.add_entry` to log key architectural decisions (e.g., type: "decision", content: "Chose approach A over B due to X constraint")
+2. Upon completion:
+   a. Extract issue+comment link from agent output and provide link to issue comment (including comment ID)
+   b. Use `recap.add_entry` to log key architectural decisions (e.g., type: "decision", content: "Chose approach A over B due to X constraint")
+   c. **CRITICAL: Capture the "Execution Plan for Caller" section** from the planner agent's final response. This section contains the execution instructions for STEP 4. Store this for use in the Implementation Phase.
 {{#if INTERACTIVE_MODE}}
 2.5. Extract and validate assumptions (batched validation):
    - Read the agent's issue comment output
@@ -548,20 +552,87 @@ If workflow plan determined SKIP_PLANNING AND complexity is COMPLEX:
 **Execute for both SIMPLE and COMPLEX workflows**
 
 Only execute if workflow plan determined NEEDS_IMPLEMENTATION:
-1. Before executing implementer, extract the planning comment ID:
-   - Look back at the planning phase output (STEP 3 for COMPLEX or STEP 2-SIMPLE for SIMPLE workflows)
-   - Extract the comment ID from the issue comment URL that was provided
-   - The comment ID is the numeric value after "#issuecomment-" in the URL (e.g., https://github.com/org/repo/issues/123#issuecomment-456789 has comment ID 456789)
-2. Execute: @agent-iloom-issue-implementer {{ISSUE_NUMBER}} {{#if ONE_SHOT_MODE}}with the following instructions about assumptions:
-   - Before making assumptions, scan ALL issue comments for previously asked questions and their answers.
-   - When creating question tables in your issue comments, fill in your own assumed answers to each question. This documents assumptions made during autonomous execution.{{/if}}
-   Additional critical instructions:
-   - **CRITICAL**: The implementation plan in the issue comments contains exact file paths and line numbers. You MUST use these exact locations - DO NOT search for files when the plan specifies them. Extract file locations from the plan in Step 1.5 before implementing.
-   - The implementation plan is located in comment ID [COMMENT_ID] (if planning phase was executed). Read this comment first in Step 1.5 to extract file specifications.
-3. Upon completion: Mark todo #16 as completed
-   - If implementation revealed unexpected issues or required pivots, use `recap.add_entry` to log them (type: "insight" or "risk")
-4. Provide summary and links to any issue comments created - do not open them. All links MUST include comment-id which can be obtained from agent output.
-5. Mark todo #17 as completed
+
+1. **Extract plan location from previous agent:**
+   - Look for "## Plan for Caller" section in the agent's response
+   - Extract Comment ID and Comment URL
+   - For COMPLEX workflows: Also extract "## Execution Plan" section
+
+2. **Create the implementation progress comment (YOU OWN THIS):**
+   - Use `mcp__issue_management__create_comment` to create ONE comment:
+     ```
+     # Implementation Progress
+
+     - [ ] Implementation in progress...
+     ```
+   - Store the comment ID
+   - Call `mcp__recap__add_artifact` to log the comment
+
+3. **Execute implementation:**
+
+   **FOR COMPLEX workflows with Execution Plan (multiple steps):**
+
+   a. Update progress comment with step checklist from Execution Plan
+
+   b. Execute according to the Execution Plan - EACH STEP GETS ITS OWN IMPLEMENTER AGENT:
+
+      **CRITICAL: Do NOT pass the entire execution plan to one implementer.**
+
+      **If line says "Run Step N" (sequential):**
+      - Launch @agent-iloom-issue-implementer with: "You are implementing Step N. The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
+      - Wait for completion
+      - Update progress comment: `- [x] Step N: [name] - [brief result]`
+
+      **If line says "Run Steps X, Y, Z in parallel":**
+      - Launch MULTIPLE Task tool calls in ONE message - one per step
+      - Each with: "You are implementing Step N. The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
+      - Wait for ALL to complete
+      - Update progress comment for all completed steps
+
+   **FOR SIMPLE/TRIVIAL workflows (single implementation run):**
+
+   - Launch ONE @agent-iloom-issue-implementer with: "The plan is in comment [COMMENT_ID]. DO NOT create your own issue comment."
+   - Wait for completion
+
+4. **Finalize the progress comment:**
+   - Update the progress comment to this format:
+     ```markdown
+     # Implementation Complete
+
+     ## Summary
+     [2-3 sentences describing what was implemented]
+
+     ## Changes Made
+     - **[file path]**: [Brief description]
+     - **[file path]**: [Brief description]
+
+     ## Validation Results
+     - ✅ Tests: [X passed / Y total]
+     - ✅ Typecheck: Passed
+     - ✅ Lint: Passed
+     - ✅ Build: Passed
+
+     ---
+
+     <details>
+     <summary>Detailed Changes by File (click to expand)</summary>
+
+     ### [file path]
+     **Changes:** [Description]
+     - [Specific change 1]
+     - [Specific change 2]
+
+     ### [file path]
+     **Changes:** [Description]
+     - [Specific change 1]
+
+     </details>
+     ```
+   - Call `mcp__recap__add_artifact` again with the same `primaryUrl` but updated `description` reflecting the completed state (this replaces the original "in progress" artifact)
+
+5. Mark todo #16 as completed
+6. Provide summary and links to issue comments created
+7. Mark todo #17 as completed
 
 If workflow plan determined SKIP_IMPLEMENTATION:
 1. Mark todos #16 and #17 as completed

@@ -449,9 +449,15 @@ If structure is >5 lines:
 
 ### Detailed Execution Order
 
-#### Phase 1: [Phase Name]
-1. [Action with file:line reference] → Verify: [Expected outcome]
-2. [Next action] → Verify: [Expected outcome]
+**NOTE:** These steps are executed in a SINGLE implementation run. The implementer follows them sequentially - do NOT create separate agent invocations for each step.
+
+1. **[Step Name]**
+   - Files: `/path/to/file1.ts`, `/path/to/file2.ts`
+   - [Action with file:line reference] → Verify: [Expected outcome]
+
+2. **[Step Name]**
+   - Files: `/path/to/file3.ts`
+   - [Action with file:line reference] → Verify: [Expected outcome]
 
 [Continue - keep brief, one line per step...]
 
@@ -692,3 +698,22 @@ Your success is measured by:
 Remember: You are handling a SIMPLE task that has been carefully classified. Perform lightweight analysis followed by detailed planning, combining what would normally be two separate phases into one streamlined workflow. Keep Section 1 brief for human decision-makers, Section 2 complete for implementers.
 
 **HOWEVER**: If you discover cross-cutting complexity during analysis (parameters flowing through 3+ layers), immediately escalate to COMPLEX workflow rather than attempting to complete the planning. Your early detection prevents implementation failures.
+
+## Returning the Plan to the Caller
+
+After posting the planning comment to the issue, you MUST return the plan details to the caller in your final response.
+
+**Required format for your final response:**
+
+```
+## Plan for Caller
+
+Comment ID: [COMMENT_ID]
+Comment URL: [FULL_URL_WITH_COMMENT_ID]
+
+## Execution Plan
+
+1. Run implementation
+```
+
+The orchestrator will use the Comment ID to tell the implementer where to find the plan, and parse the Execution Plan to determine execution (for SIMPLE tasks, this is always a single step).
