@@ -436,3 +436,57 @@ export async function getRepoInfo(): Promise<RepoInfo> {
 		name: result.name,
 	}
 }
+
+// GitHub Sub-Issue Operations
+
+/**
+ * Get the GraphQL node ID for a GitHub issue
+ * Required for sub-issue API which uses node IDs, not issue numbers
+ * @param issueNumber - The issue number
+ * @param repo - Optional repo in "owner/repo" format
+ * @returns GraphQL node ID (e.g., "I_kwDOPvp_cc7...")
+ */
+export async function getIssueNodeId(
+	issueNumber: number,
+	repo?: string
+): Promise<string> {
+	logger.debug('Fetching GitHub issue node ID', { issueNumber, repo })
+
+	const args = ['issue', 'view', String(issueNumber), '--json', 'id']
+	if (repo) {
+		args.push('--repo', repo)
+	}
+
+	const result = await executeGhCommand<{ id: string }>(args)
+	return result.id
+}
+
+/**
+ * Link a child issue to a parent issue using GitHub's sub-issue API
+ * Requires GraphQL-Features: sub_issues header
+ * @param parentNodeId - GraphQL node ID of the parent issue
+ * @param childNodeId - GraphQL node ID of the child issue
+ */
+export async function addSubIssue(
+	parentNodeId: string,
+	childNodeId: string
+): Promise<void> {
+	logger.debug('Linking child issue to parent', { parentNodeId, childNodeId })
+
+	const mutation = `
+		mutation addSubIssue($parentId: ID!, $subIssueId: ID!) {
+			addSubIssue(input: { issueId: $parentId, subIssueId: $subIssueId }) {
+				issue { id }
+				subIssue { id }
+			}
+		}
+	`
+
+	await executeGhCommand([
+		'api', 'graphql',
+		'-H', 'GraphQL-Features: sub_issues',
+		'-f', `query=${mutation}`,
+		'-F', `parentId=${parentNodeId}`,
+		'-F', `subIssueId=${childNodeId}`,
+	])
+}

@@ -10,6 +10,7 @@ import type {
 	CreateCommentInput,
 	UpdateCommentInput,
 	CreateIssueInput,
+	CreateChildIssueInput,
 	CreateIssueResult,
 	IssueResult,
 	CommentDetailResult,
@@ -22,6 +23,7 @@ import {
 	updateLinearComment,
 	fetchLinearIssueComments,
 	createLinearIssue,
+	createLinearChildIssue,
 } from '../utils/linear.js'
 import { LinearMarkupConverter } from '../utils/linear-markup-converter.js'
 
@@ -177,6 +179,39 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 		}
 
 		const result = await createLinearIssue(title, body, effectiveTeamKey, labels)
+
+		return {
+			id: result.identifier,
+			url: result.url,
+		}
+	}
+
+	/**
+	 * Create a child issue linked to a parent issue
+	 * Linear supports atomic creation with parentId field
+	 */
+	async createChildIssue(input: CreateChildIssueInput): Promise<CreateIssueResult> {
+		const { parentId, title, body, labels, teamKey } = input
+
+		// Fetch parent issue to get UUID (parentId in input is identifier like "ENG-123")
+		const parentIssue = await fetchLinearIssue(parentId)
+
+		// Extract team key from parent identifier if not provided
+		const match = parentId.match(/^([A-Z]{2,})-\d+$/i)
+		const effectiveTeamKey = teamKey ?? match?.[1]?.toUpperCase() ?? process.env.LINEAR_TEAM_KEY ?? this.cachedTeamKey
+
+		if (!effectiveTeamKey) {
+			throw new Error('teamKey is required for Linear child issue creation. Provide teamKey parameter or use a parent identifier with team prefix.')
+		}
+
+		// Create child issue with parent's UUID
+		const result = await createLinearChildIssue(
+			title,
+			body,
+			effectiveTeamKey,
+			parentIssue.id, // UUID, not identifier
+			labels
+		)
 
 		return {
 			id: result.identifier,

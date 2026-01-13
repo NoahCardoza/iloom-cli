@@ -225,6 +225,70 @@ export async function createLinearIssue(
 }
 
 /**
+ * Create a child issue linked to a parent issue
+ * Linear supports atomic creation with parentId field
+ * @param title - Issue title
+ * @param body - Issue description (markdown)
+ * @param teamKey - Team key (e.g., "ENG")
+ * @param parentId - Parent issue UUID (from issue.id, not identifier)
+ * @param labels - Optional label names to apply
+ * @returns Created issue identifier and URL
+ * @throws LinearServiceError on creation failure
+ */
+export async function createLinearChildIssue(
+  title: string,
+  body: string,
+  teamKey: string,
+  parentId: string,
+  _labels?: string[],
+): Promise<{ identifier: string; url: string }> {
+  try {
+    logger.debug(`Creating Linear child issue in team ${teamKey}: ${title}`)
+    const client = createLinearClient()
+
+    // Get team by key
+    const teams = await client.teams()
+    const team = teams.nodes.find((t) => t.key === teamKey)
+
+    if (!team) {
+      throw new LinearServiceError('NOT_FOUND', `Linear team ${teamKey} not found`)
+    }
+
+    // Create issue with parentId for atomic parent-child relationship
+    const issueInput: { teamId: string; title: string; description?: string; parentId: string } = {
+      teamId: team.id,
+      title,
+      parentId, // UUID of parent issue
+    }
+
+    if (body) {
+      issueInput.description = body
+    }
+
+    const payload = await client.createIssue(issueInput)
+
+    const issue = await payload.issue
+
+    if (!issue) {
+      throw new LinearServiceError('CLI_ERROR', 'Failed to create Linear child issue')
+    }
+
+    // Construct URL
+    const url = issue.url ?? buildLinearIssueUrl(issue.identifier, title)
+
+    return {
+      identifier: issue.identifier,
+      url,
+    }
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'createLinearChildIssue')
+  }
+}
+
+/**
  * Create a comment on a Linear issue
  * @param identifier - Linear issue identifier (e.g., "ENG-123")
  * @param body - Comment body (markdown)

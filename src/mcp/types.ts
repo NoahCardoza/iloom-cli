@@ -65,6 +65,17 @@ export interface CreateIssueInput {
 }
 
 /**
+ * Input schema for creating a child issue linked to a parent issue
+ */
+export interface CreateChildIssueInput {
+	parentId: string // Parent issue identifier (GitHub issue number or Linear identifier like "ENG-123")
+	title: string // Child issue title
+	body: string // Child issue body/description (markdown supported)
+	labels?: string[] | undefined // Optional labels to apply
+	teamKey?: string | undefined // Linear only - falls back to parent's team. Ignored for GitHub.
+}
+
+/**
  * Output schema for issue creation
  */
 export interface CreateIssueResult {
@@ -170,4 +181,11 @@ export interface IssueManagementProvider {
 	 * Create a new issue
 	 */
 	createIssue(input: CreateIssueInput): Promise<CreateIssueResult>
+
+	/**
+	 * Create a child issue linked to a parent issue
+	 * For GitHub: creates issue and links via sub-issue API (two API calls)
+	 * For Linear: creates issue atomically with parent relationship
+	 */
+	createChildIssue(input: CreateChildIssueInput): Promise<CreateIssueResult>
 }

@@ -17,6 +17,7 @@ import type {
 	CreateCommentInput,
 	UpdateCommentInput,
 	CreateIssueInput,
+	CreateChildIssueInput,
 } from './types.js'
 
 // Validate required environment variables
@@ -356,6 +357,57 @@ server.registerTool(
 				error instanceof Error ? error.message : 'Unknown error'
 			console.error(`Failed to create issue: ${errorMessage}`)
 			throw new Error(`Failed to create issue: ${errorMessage}`)
+		}
+	}
+)
+
+// Register create_child_issue tool
+server.registerTool(
+	'create_child_issue',
+	{
+		title: 'Create Child Issue',
+		description:
+			'Create a new child issue linked to a parent issue. ' +
+			'For GitHub: creates issue and links via sub-issue API (requires two API calls). ' +
+			'For Linear: creates issue atomically with parent relationship. ' +
+			'The parentId should be the parent issue identifier (GitHub issue number or Linear identifier like "ENG-123").',
+		inputSchema: {
+			parentId: z.string().describe('Parent issue identifier (GitHub issue number or Linear identifier like "ENG-123")'),
+			title: z.string().describe('The child issue title'),
+			body: z.string().describe('The child issue body/description (markdown supported)'),
+			labels: z.array(z.string()).optional().describe('Optional labels to apply to the child issue'),
+			teamKey: z.string().optional().describe('Team key for Linear (e.g., "ENG"). Falls back to parent team. Ignored for GitHub.'),
+		},
+		outputSchema: {
+			id: z.string().describe('Issue identifier'),
+			url: z.string().describe('Issue URL'),
+			number: z.number().optional().describe('Issue number (GitHub only)'),
+		},
+	},
+	async ({ parentId, title, body, labels, teamKey }: CreateChildIssueInput) => {
+		console.error(`Creating child issue for parent ${parentId}: ${title}`)
+
+		try {
+			const provider = IssueManagementProviderFactory.create(
+				process.env.ISSUE_PROVIDER as IssueProvider
+			)
+			const result = await provider.createChildIssue({ parentId, title, body, labels, teamKey })
+
+			console.error(`Child issue created successfully: ${result.id} at ${result.url}`)
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify(result),
+					},
+				],
+				structuredContent: result as unknown as { [x: string]: unknown },
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to create child issue: ${errorMessage}`)
+			throw new Error(`Failed to create child issue: ${errorMessage}`)
 		}
 	}
 )

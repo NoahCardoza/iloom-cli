@@ -8,9 +8,11 @@ vi.mock('../utils/github.js', () => ({
 	updateIssueComment: vi.fn(),
 	createPRComment: vi.fn(),
 	createIssue: vi.fn(),
+	getIssueNodeId: vi.fn(),
+	addSubIssue: vi.fn(),
 }))
 
-import { executeGhCommand, createIssue } from '../utils/github.js'
+import { executeGhCommand, createIssue, getIssueNodeId, addSubIssue } from '../utils/github.js'
 
 describe('extractNumericIdFromUrl', () => {
 	it('extracts numeric ID from valid GitHub issue comment URL', () => {
@@ -274,6 +276,135 @@ describe('GitHubIssueManagementProvider', () => {
 
 			expect(createIssue).toHaveBeenCalledWith('Issue with teamKey', 'Body', { labels: undefined })
 			expect(result.id).toBe('101')
+		})
+	})
+
+	describe('createChildIssue', () => {
+		it('should create child issue and link to parent', async () => {
+			// Mock getIssueNodeId for parent
+			vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_kwDOPvp_cc6PARENT')
+			// Mock createIssue to return child issue
+			vi.mocked(createIssue).mockResolvedValueOnce({
+				number: 124,
+				url: 'https://github.com/owner/repo/issues/124',
+			})
+			// Mock getIssueNodeId for child
+			vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_kwDOPvp_cc6CHILD')
+			// Mock addSubIssue GraphQL mutation
+			vi.mocked(addSubIssue).mockResolvedValueOnce(undefined)
+
+			const result = await provider.createChildIssue({
+				parentId: '123',
+				title: 'Child Issue',
+				body: 'Child issue description',
+			})
+
+			// Verify parent node ID was fetched
+			expect(getIssueNodeId).toHaveBeenNthCalledWith(1, 123)
+			// Verify child issue was created
+			expect(createIssue).toHaveBeenCalledWith('Child Issue', 'Child issue description', { labels: undefined })
+			// Verify child node ID was fetched
+			expect(getIssueNodeId).toHaveBeenNthCalledWith(2, 124)
+			// Verify sub-issue link was created
+			expect(addSubIssue).toHaveBeenCalledWith('I_kwDOPvp_cc6PARENT', 'I_kwDOPvp_cc6CHILD')
+			// Verify result
+			expect(result.id).toBe('124')
+			expect(result.url).toBe('https://github.com/owner/repo/issues/124')
+			expect(result.number).toBe(124)
+		})
+
+		it('should create child issue with labels', async () => {
+			vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_kwDOPvp_cc6PARENT')
+			vi.mocked(createIssue).mockResolvedValueOnce({
+				number: 125,
+				url: 'https://github.com/owner/repo/issues/125',
+			})
+			vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_kwDOPvp_cc6CHILD')
+			vi.mocked(addSubIssue).mockResolvedValueOnce(undefined)
+
+			const result = await provider.createChildIssue({
+				parentId: '123',
+				title: 'Labeled Child',
+				body: 'Body with labels',
+				labels: ['bug', 'priority:high'],
+			})
+
+			expect(createIssue).toHaveBeenCalledWith('Labeled Child', 'Body with labels', {
+				labels: ['bug', 'priority:high'],
+			})
+			expect(result.id).toBe('125')
+		})
+
+		it('should throw error when parent issue number is invalid', async () => {
+			await expect(
+				provider.createChildIssue({
+					parentId: 'invalid',
+					title: 'Child Issue',
+					body: 'Body',
+				})
+			).rejects.toThrow('Invalid GitHub parent issue number: invalid. GitHub issue IDs must be numeric.')
+
+			expect(getIssueNodeId).not.toHaveBeenCalled()
+			expect(createIssue).not.toHaveBeenCalled()
+		})
+
+		it('should throw error when parent issue not found', async () => {
+			vi.mocked(getIssueNodeId).mockRejectedValueOnce(new Error('Could not find issue 999'))
+
+			await expect(
+				provider.createChildIssue({
+					parentId: '999',
+					title: 'Child Issue',
+					body: 'Body',
+				})
+			).rejects.toThrow('Could not find issue 999')
+
+			expect(getIssueNodeId).toHaveBeenCalledWith(999)
+			expect(createIssue).not.toHaveBeenCalled()
+		})
+
+		it('should throw error when addSubIssue mutation fails', async () => {
+			// Note: Child issue will exist but not be linked if this fails
+			vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_kwDOPvp_cc6PARENT')
+			vi.mocked(createIssue).mockResolvedValueOnce({
+				number: 126,
+				url: 'https://github.com/owner/repo/issues/126',
+			})
+			vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_kwDOPvp_cc6CHILD')
+			vi.mocked(addSubIssue).mockRejectedValueOnce(new Error('GraphQL mutation failed'))
+
+			await expect(
+				provider.createChildIssue({
+					parentId: '123',
+					title: 'Child Issue',
+					body: 'Body',
+				})
+			).rejects.toThrow('GraphQL mutation failed')
+
+			// All steps before addSubIssue should have been called
+			expect(getIssueNodeId).toHaveBeenCalledTimes(2)
+			expect(createIssue).toHaveBeenCalled()
+			expect(addSubIssue).toHaveBeenCalled()
+		})
+
+		it('should ignore teamKey parameter', async () => {
+			vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_kwDOPvp_cc6PARENT')
+			vi.mocked(createIssue).mockResolvedValueOnce({
+				number: 127,
+				url: 'https://github.com/owner/repo/issues/127',
+			})
+			vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_kwDOPvp_cc6CHILD')
+			vi.mocked(addSubIssue).mockResolvedValueOnce(undefined)
+
+			const result = await provider.createChildIssue({
+				parentId: '123',
+				title: 'Child with teamKey',
+				body: 'Body',
+				teamKey: 'ENG', // Should be ignored for GitHub
+			})
+
+			expect(createIssue).toHaveBeenCalledWith('Child with teamKey', 'Body', { labels: undefined })
+			expect(result.id).toBe('127')
 		})
 	})
 })

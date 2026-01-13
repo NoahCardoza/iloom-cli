@@ -12,6 +12,7 @@ vi.mock('../utils/linear.js', async (importOriginal) => {
 		updateLinearComment: vi.fn(),
 		fetchLinearIssueComments: vi.fn(),
 		createLinearIssue: vi.fn(),
+		createLinearChildIssue: vi.fn(),
 	}
 })
 
@@ -23,6 +24,7 @@ import {
 	updateLinearComment,
 	fetchLinearIssueComments,
 	createLinearIssue,
+	createLinearChildIssue,
 } from '../utils/linear.js'
 
 describe('LinearIssueManagementProvider', () => {
@@ -193,7 +195,8 @@ describe('LinearIssueManagementProvider', () => {
 				id: 'new-comment-uuid',
 				body: 'New comment',
 				createdAt: '2024-01-01T00:00:00Z',
-				user: { name: 'alice' },
+				updatedAt: '2024-01-01T00:00:00Z',
+				url: 'https://linear.app/comment/new-comment-uuid',
 			}
 
 			vi.mocked(createLinearComment).mockResolvedValue(mockResult)
@@ -214,7 +217,8 @@ describe('LinearIssueManagementProvider', () => {
 				id: 'new-comment-uuid',
 				body: 'Converted comment',
 				createdAt: '2024-01-01T00:00:00Z',
-				user: { name: 'alice' },
+				updatedAt: '2024-01-01T00:00:00Z',
+				url: 'https://linear.app/comment/new-comment-uuid',
 			}
 
 			vi.mocked(createLinearComment).mockResolvedValue(mockResult)
@@ -250,7 +254,8 @@ describe('LinearIssueManagementProvider', () => {
 				id: 'new-comment-uuid',
 				body: 'Regular comment',
 				createdAt: '2024-01-01T00:00:00Z',
-				user: { name: 'alice' },
+				updatedAt: '2024-01-01T00:00:00Z',
+				url: 'https://linear.app/comment/new-comment-uuid',
 			}
 
 			vi.mocked(createLinearComment).mockResolvedValue(mockResult)
@@ -274,7 +279,8 @@ describe('LinearIssueManagementProvider', () => {
 				id: 'comment-uuid',
 				body: 'Updated comment',
 				createdAt: '2024-01-01T00:00:00Z',
-				user: { name: 'alice' },
+				updatedAt: '2024-01-02T00:00:00Z',
+				url: 'https://linear.app/comment/comment-uuid',
 			}
 
 			vi.mocked(updateLinearComment).mockResolvedValue(mockResult)
@@ -294,7 +300,8 @@ describe('LinearIssueManagementProvider', () => {
 				id: 'comment-uuid',
 				body: 'Updated with converted HTML',
 				createdAt: '2024-01-01T00:00:00Z',
-				user: { name: 'alice' },
+				updatedAt: '2024-01-02T00:00:00Z',
+				url: 'https://linear.app/comment/comment-uuid',
 			}
 
 			vi.mocked(updateLinearComment).mockResolvedValue(mockResult)
@@ -328,7 +335,8 @@ New content here
 				id: 'comment-uuid',
 				body: 'Regular update',
 				createdAt: '2024-01-01T00:00:00Z',
-				user: { name: 'alice' },
+				updatedAt: '2024-01-02T00:00:00Z',
+				url: 'https://linear.app/comment/comment-uuid',
 			}
 
 			vi.mocked(updateLinearComment).mockResolvedValue(mockResult)
@@ -391,6 +399,154 @@ New content here
 			).rejects.toThrow('teamKey is required for Linear issue creation')
 
 			expect(createLinearIssue).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('createChildIssue', () => {
+		it('should create child issue with parentId', async () => {
+			// Mock fetchLinearIssue to return parent with UUID
+			vi.mocked(fetchLinearIssue).mockResolvedValueOnce({
+				id: 'parent-uuid-123',
+				identifier: 'ENG-123',
+				title: 'Parent Issue',
+				state: 'In Progress',
+				url: 'https://linear.app/issue/ENG-123',
+				createdAt: '2024-01-01T00:00:00Z',
+				updatedAt: '2024-01-02T00:00:00Z',
+			})
+			// Mock createLinearChildIssue to return child issue
+			vi.mocked(createLinearChildIssue).mockResolvedValueOnce({
+				identifier: 'ENG-124',
+				url: 'https://linear.app/issue/ENG-124/child-issue',
+			})
+
+			const result = await provider.createChildIssue({
+				parentId: 'ENG-123',
+				title: 'Child Issue',
+				body: 'Child issue description',
+				teamKey: 'ENG',
+			})
+
+			// Verify parent issue was fetched
+			expect(fetchLinearIssue).toHaveBeenCalledWith('ENG-123')
+			// Verify createLinearChildIssue was called with parent's UUID (not identifier)
+			expect(createLinearChildIssue).toHaveBeenCalledWith(
+				'Child Issue',
+				'Child issue description',
+				'ENG',
+				'parent-uuid-123', // UUID, not identifier
+				undefined
+			)
+			// Verify result
+			expect(result.id).toBe('ENG-124')
+			expect(result.url).toBe('https://linear.app/issue/ENG-124/child-issue')
+			expect(result.number).toBeUndefined() // Linear doesn't use numeric issue numbers
+		})
+
+		it('should create child issue with labels', async () => {
+			vi.mocked(fetchLinearIssue).mockResolvedValueOnce({
+				id: 'parent-uuid-123',
+				identifier: 'ENG-123',
+				title: 'Parent Issue',
+				state: 'In Progress',
+				url: 'https://linear.app/issue/ENG-123',
+				createdAt: '2024-01-01T00:00:00Z',
+				updatedAt: '2024-01-02T00:00:00Z',
+			})
+			vi.mocked(createLinearChildIssue).mockResolvedValueOnce({
+				identifier: 'ENG-125',
+				url: 'https://linear.app/issue/ENG-125/labeled-child',
+			})
+
+			const result = await provider.createChildIssue({
+				parentId: 'ENG-123',
+				title: 'Labeled Child Issue',
+				body: 'Body with labels',
+				teamKey: 'ENG',
+				labels: ['bug', 'priority:high'],
+			})
+
+			expect(createLinearChildIssue).toHaveBeenCalledWith(
+				'Labeled Child Issue',
+				'Body with labels',
+				'ENG',
+				'parent-uuid-123',
+				['bug', 'priority:high']
+			)
+			expect(result.id).toBe('ENG-125')
+		})
+
+		it('should throw error when parent issue not found', async () => {
+			vi.mocked(fetchLinearIssue).mockRejectedValueOnce(new Error('Issue ENG-999 not found'))
+
+			await expect(
+				provider.createChildIssue({
+					parentId: 'ENG-999',
+					title: 'Child Issue',
+					body: 'Body',
+					teamKey: 'ENG',
+				})
+			).rejects.toThrow('Issue ENG-999 not found')
+
+			expect(fetchLinearIssue).toHaveBeenCalledWith('ENG-999')
+			expect(createLinearChildIssue).not.toHaveBeenCalled()
+		})
+
+		it('should use teamKey from parent issue identifier when not provided', async () => {
+			vi.mocked(fetchLinearIssue).mockResolvedValueOnce({
+				id: 'parent-uuid-123',
+				identifier: 'ENG-123',
+				title: 'Parent Issue',
+				state: 'In Progress',
+				url: 'https://linear.app/issue/ENG-123',
+				createdAt: '2024-01-01T00:00:00Z',
+				updatedAt: '2024-01-02T00:00:00Z',
+			})
+			vi.mocked(createLinearChildIssue).mockResolvedValueOnce({
+				identifier: 'ENG-126',
+				url: 'https://linear.app/issue/ENG-126/child-no-team',
+			})
+
+			const result = await provider.createChildIssue({
+				parentId: 'ENG-123',
+				title: 'Child without explicit teamKey',
+				body: 'Body',
+				// teamKey not provided - should extract "ENG" from parent identifier
+			})
+
+			// Team key should be extracted from parent identifier "ENG-123" -> "ENG"
+			expect(createLinearChildIssue).toHaveBeenCalledWith(
+				'Child without explicit teamKey',
+				'Body',
+				'ENG',
+				'parent-uuid-123',
+				undefined
+			)
+			expect(result.id).toBe('ENG-126')
+		})
+
+		it('should throw error when teamKey cannot be determined', async () => {
+			vi.mocked(fetchLinearIssue).mockResolvedValueOnce({
+				id: 'parent-uuid-123',
+				identifier: 'X-1', // Single letter prefix - won't match regex
+				title: 'Parent Issue',
+				state: 'In Progress',
+				url: 'https://linear.app/issue/X-1',
+				createdAt: '2024-01-01T00:00:00Z',
+				updatedAt: '2024-01-02T00:00:00Z',
+			})
+
+			await expect(
+				provider.createChildIssue({
+					parentId: 'X-1', // Won't match team key regex (requires 2+ letters)
+					title: 'Child Issue',
+					body: 'Body',
+					// teamKey not provided and can't be extracted
+				})
+			).rejects.toThrow('teamKey is required for Linear child issue creation')
+
+			expect(fetchLinearIssue).toHaveBeenCalledWith('X-1')
+			expect(createLinearChildIssue).not.toHaveBeenCalled()
 		})
 	})
 })
