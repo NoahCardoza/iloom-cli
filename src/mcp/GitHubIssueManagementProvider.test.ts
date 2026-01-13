@@ -131,6 +131,96 @@ describe('GitHubIssueManagementProvider', () => {
 				'Cannot extract comment ID from URL'
 			)
 		})
+
+		it('passes --repo flag when repo parameter is provided', async () => {
+			const mockResponse = {
+				number: 456,
+				title: 'External Issue',
+				body: 'Issue from another repo',
+				state: 'OPEN',
+				url: 'https://github.com/other-owner/other-repo/issues/456',
+				author: { login: 'testuser' },
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			await provider.getIssue({ number: '456', repo: 'other-owner/other-repo', includeComments: false })
+
+			expect(executeGhCommand).toHaveBeenCalledWith([
+				'issue',
+				'view',
+				'456',
+				'--json',
+				'body,title,labels,assignees,milestone,author,state,number,url',
+				'--repo',
+				'other-owner/other-repo',
+			])
+		})
+
+		it('does not pass --repo flag when repo parameter is undefined', async () => {
+			const mockResponse = {
+				number: 789,
+				title: 'Local Issue',
+				body: 'Issue from current repo',
+				state: 'OPEN',
+				url: 'https://github.com/owner/repo/issues/789',
+				author: { login: 'testuser' },
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			await provider.getIssue({ number: '789', includeComments: false })
+
+			expect(executeGhCommand).toHaveBeenCalledWith([
+				'issue',
+				'view',
+				'789',
+				'--json',
+				'body,title,labels,assignees,milestone,author,state,number,url',
+			])
+		})
+	})
+
+	describe('getComment', () => {
+		it('uses explicit repo path when repo parameter is provided', async () => {
+			const mockResponse = {
+				id: 123456,
+				body: 'Comment body',
+				user: { login: 'commenter' },
+				created_at: '2025-01-01T00:00:00Z',
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			await provider.getComment({ commentId: '123456', number: '1', repo: 'other-owner/other-repo' })
+
+			expect(executeGhCommand).toHaveBeenCalledWith([
+				'api',
+				'repos/other-owner/other-repo/issues/comments/123456',
+				'--jq',
+				'{id: .id, body: .body, user: .user, created_at: .created_at, updated_at: .updated_at, html_url: .html_url, reactions: .reactions}',
+			])
+		})
+
+		it('uses :owner/:repo placeholder when repo parameter is undefined', async () => {
+			const mockResponse = {
+				id: 789012,
+				body: 'Local comment body',
+				user: { login: 'localcommenter' },
+				created_at: '2025-01-02T00:00:00Z',
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			await provider.getComment({ commentId: '789012', number: '2' })
+
+			expect(executeGhCommand).toHaveBeenCalledWith([
+				'api',
+				'repos/:owner/:repo/issues/comments/789012',
+				'--jq',
+				'{id: .id, body: .body, user: .user, created_at: .created_at, updated_at: .updated_at, html_url: .html_url, reactions: .reactions}',
+			])
+		})
 	})
 
 	describe('createIssue', () => {

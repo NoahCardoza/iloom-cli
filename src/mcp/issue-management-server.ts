@@ -83,6 +83,13 @@ server.registerTool(
 				.boolean()
 				.optional()
 				.describe('Whether to include comments (default: true)'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
 		},
 		outputSchema: {
 			// Core validated fields
@@ -117,14 +124,14 @@ server.registerTool(
 			).optional().describe('Issue comments with flexible author structure'),
 		},
 	},
-	async ({ number, includeComments }: GetIssueInput) => {
-		console.error(`Fetching issue ${number}`)
+	async ({ number, includeComments, repo }: GetIssueInput) => {
+		console.error(`Fetching issue ${number}${repo ? ` from ${repo}` : ''}`)
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
 				process.env.ISSUE_PROVIDER as IssueProvider
 			)
-			const result = await provider.getIssue({ number, includeComments })
+			const result = await provider.getIssue({ number, includeComments, repo })
 
 			console.error(`Issue fetched successfully: ${result.number} - ${result.title}`)
 
@@ -156,6 +163,13 @@ server.registerTool(
 		inputSchema: {
 			commentId: z.string().describe('The comment identifier to fetch'),
 			number: z.string().describe('The issue or PR identifier (context for providers that need it)'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
 		},
 		outputSchema: {
 			id: z.string().describe('Comment identifier'),
@@ -167,14 +181,14 @@ server.registerTool(
 			updated_at: z.string().optional().describe('Comment last updated timestamp'),
 		},
 	},
-	async ({ commentId, number }: GetCommentInput) => {
-		console.error(`Fetching comment ${commentId} from issue ${number}`)
+	async ({ commentId, number, repo }: GetCommentInput) => {
+		console.error(`Fetching comment ${commentId} from issue ${number}${repo ? ` in ${repo}` : ''}`)
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
 				process.env.ISSUE_PROVIDER as IssueProvider
 			)
-			const result = await provider.getComment({ commentId, number })
+			const result = await provider.getComment({ commentId, number, repo })
 
 			console.error(`Comment fetched successfully: ${result.id}`)
 

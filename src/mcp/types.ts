@@ -24,6 +24,7 @@ export interface McpServerEnvironment {
 export interface GetIssueInput {
 	number: string // Issue identifier (GitHub uses numbers, Linear uses UUIDs, etc.)
 	includeComments?: boolean | undefined // Whether to include comments (default: true)
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
 }
 
 /**
@@ -32,6 +33,7 @@ export interface GetIssueInput {
 export interface GetCommentInput {
 	commentId: string // Comment identifier to fetch
 	number: string // Issue or PR identifier (context for providers that need it)
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
 }
 
 /**

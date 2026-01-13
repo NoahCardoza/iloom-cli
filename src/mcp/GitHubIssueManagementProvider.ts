@@ -74,7 +74,7 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 	 * Normalizes GitHub-specific fields to provider-agnostic format
 	 */
 	async getIssue(input: GetIssueInput): Promise<IssueResult> {
-		const { number, includeComments = true } = input
+		const { number, includeComments = true, repo } = input
 
 		// Convert string ID to number for GitHub CLI
 		const issueNumber = parseInt(number, 10)
@@ -108,13 +108,20 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 			}>
 		}
 
-		const raw = await executeGhCommand<GitHubIssueResponse>([
+		const args = [
 			'issue',
 			'view',
 			String(issueNumber),
 			'--json',
 			fields,
-		])
+		]
+
+		// Add --repo flag if repo is provided (gh CLI handles both owner/repo and URL formats)
+		if (repo) {
+			args.push('--repo', repo)
+		}
+
+		const raw = await executeGhCommand<GitHubIssueResponse>(args)
 
 		// Normalize to IssueResult with core fields + passthrough
 		const result: IssueResult = {
@@ -164,7 +171,7 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 	 * Normalizes author to FlexibleAuthor format
 	 */
 	async getComment(input: GetCommentInput): Promise<CommentDetailResult> {
-		const { commentId } = input
+		const { commentId, repo } = input
 		// Note: GitHub doesn't need the issue number parameter - comment IDs are globally unique
 		// But we accept it for interface compatibility with other providers
 
@@ -185,10 +192,15 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 			reactions?: Record<string, unknown>
 		}
 
+		// Use explicit repo path if provided, otherwise use :owner/:repo placeholder
+		const apiPath = repo
+			? `repos/${repo}/issues/comments/${numericCommentId}`
+			: `repos/:owner/:repo/issues/comments/${numericCommentId}`
+
 		// Use gh api to fetch specific comment
 		const raw = await executeGhCommand<GitHubCommentResponse>([
 			'api',
-			`repos/:owner/:repo/issues/comments/${numericCommentId}`,
+			apiPath,
 			'--jq',
 			'{id: .id, body: .body, user: .user, created_at: .created_at, updated_at: .updated_at, html_url: .html_url, reactions: .reactions}',
 		])
