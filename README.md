@@ -387,12 +387,155 @@ Integrations
 
 ### Issue Trackers
 
-iloom supports the tools you already use. Unless you use JIRA.
+iloom supports multiple issue tracking providers to fit your team's workflow.
 
 | **Provider** | **Setup** | **Notes** |
 |--------------|-----------|-----------|
 | **GitHub**   | `gh auth login` | Default. Supports Issues and Pull Requests automatically. |
 | **Linear**   | `il init` | Requires API token. Supports full read/write on Linear issues. |
+| **Jira**     | Configure in `.iloom/settings.json` | Atlassian Cloud. Requires API token. See [Jira Setup](#jira-setup) below. |
+
+### Version Control Providers
+
+Choose which platform hosts your pull requests and code reviews.
+
+| **Provider** | **Setup** | **Notes** |
+|--------------|-----------|-----------|
+| **GitHub**   | `gh auth login` | Default. Integrated with GitHub Issues. |
+| **BitBucket** | Configure in `.iloom/settings.json` | Atlassian Cloud. Requires app password. See [BitBucket Setup](#bitbucket-setup) below. |
+
+### Jira Setup
+
+To use Jira as your issue tracker, add this configuration:
+
+**.iloom/settings.json (Committed)**
+```json
+{
+  "issueManagement": {
+    "provider": "jira",
+    "jira": {
+      "host": "https://yourcompany.atlassian.net",
+      "username": "your.email@company.com",
+      "projectKey": "PROJ",
+      "boardId": "123",
+      "transitionMappings": {
+        "In Review": "Start Review"
+      }
+    }
+  }
+}
+```
+
+**.iloom/settings.local.json (Gitignored - Never commit this file)**
+```json
+{
+  "issueManagement": {
+    "jira": {
+      "apiToken": "your-jira-api-token-here"
+    }
+  }
+}
+```
+
+**Generate a Jira API Token:**
+1. Visit https://id.atlassian.com/manage-profile/security/api-tokens
+2. Click "Create API token"
+3. Copy the token to `.iloom/settings.local.json`
+
+**Configuration Options:**
+- `host`: Your Jira Cloud instance URL
+- `username`: Your Jira email address
+- `apiToken`: API token (store in settings.local.json only!)
+- `projectKey`: Jira project key (e.g., "PROJ", "ENG")
+- `boardId`: (Optional) Board ID for sprint/workflow operations
+- `transitionMappings`: (Optional) Map iloom states to your Jira workflow transition names
+
+### BitBucket Setup
+
+To use BitBucket for pull requests, add this configuration:
+
+**.iloom/settings.json (Committed)**
+```json
+{
+  "versionControl": {
+    "provider": "bitbucket",
+    "bitbucket": {
+      "username": "your-bitbucket-username",
+      "workspace": "your-workspace",
+      "repoSlug": "your-repo"
+    }
+  },
+  "mergeBehavior": {
+    "mode": "bitbucket-pr"
+  }
+}
+```
+
+**.iloom/settings.local.json (Gitignored - Never commit this file)**
+```json
+{
+  "versionControl": {
+    "bitbucket": {
+      "appPassword": "your-bitbucket-app-password"
+    }
+  }
+}
+```
+
+**Generate a BitBucket App Password:**
+1. Visit https://bitbucket.org/account/settings/app-passwords/
+2. Click "Create app password"
+3. Grant permissions: `repository:read`, `repository:write`, `pullrequest:read`, `pullrequest:write`
+4. Copy the password to `.iloom/settings.local.json`
+
+**Configuration Options:**
+- `username`: Your BitBucket username
+- `appPassword`: App password (store in settings.local.json only!)
+- `workspace`: (Optional) BitBucket workspace, auto-detected from git remote if not provided
+- `repoSlug`: (Optional) Repository slug, auto-detected from git remote if not provided
+
+### Jira + BitBucket Together
+
+Use Jira for issues and BitBucket for pull requests:
+
+**.iloom/settings.json**
+```json
+{
+  "issueManagement": {
+    "provider": "jira",
+    "jira": {
+      "host": "https://yourcompany.atlassian.net",
+      "username": "your.email@company.com",
+      "projectKey": "PROJ"
+    }
+  },
+  "versionControl": {
+    "provider": "bitbucket",
+    "bitbucket": {
+      "username": "your-bitbucket-username"
+    }
+  },
+  "mergeBehavior": {
+    "mode": "bitbucket-pr"
+  }
+}
+```
+
+**.iloom/settings.local.json**
+```json
+{
+  "issueManagement": {
+    "jira": {
+      "apiToken": "your-jira-api-token"
+    }
+  },
+  "versionControl": {
+    "bitbucket": {
+      "appPassword": "your-bitbucket-app-password"
+    }
+  }
+}
+```
 
 
 ### IDE Support
