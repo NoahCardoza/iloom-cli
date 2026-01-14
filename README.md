@@ -90,17 +90,21 @@ When you run il start, iloom orchestrates specialized AI agents. Each has a spec
 
 ### 1. The Agents
 
-Instead of a single generic prompt, iloom uses a pipeline of agents:
+Instead of a single generic prompt, iloom uses a pipeline of specialized agents:
 
-*   **Enhancer (iloom-issue-enhancer):** Expands brief one-liners into detailed requirements.
-    
-*   **Evaluator (iloom-issue-complexity-evaluator):** Determines the workflow approach:
-    
+*   **Enhancer:** Expands brief one-liners into detailed requirements with acceptance criteria.
+
+*   **Evaluator:** Assesses complexity and routes to the appropriate workflow:
+
     *   **Simple:** Combines analysis and planning into one step for efficiency.
-        
-    *   **Complex:** Separates deep root-cause analysis from detailed implementation planning.
-        
-*   **Implementer:** Executes the plan using the context established in the previous steps.
+
+    *   **Complex:** Separates deep analysis from detailed planning for thorough coverage.
+
+*   **Analyzer:** Explores the problem space before any code is written. This agent investigates the codebase to understand existing patterns, examines third-party library APIs and capabilities, and researches technical approaches. The result is a comprehensive analysis that informs the planning phase—leading to significantly better implementation plans than jumping straight to code.
+
+*   **Planner:** Creates an execution plan with parallelization analysis—identifying which steps can run concurrently vs. sequentially. Plans reference specific files and line numbers, making them actionable and precise.
+
+*   **Implementer:** Executes the plan using the context established in the previous steps. For complex tasks, multiple implementers can run in parallel on independent steps.
     
 
 ### 2. Interactive Control
