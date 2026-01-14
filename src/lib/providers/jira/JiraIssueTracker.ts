@@ -301,12 +301,23 @@ ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''
 		issueType?: string
 		status?: string
 	} {
+		// Extract description - handle ADF format or plain string
+		let description = ''
+		if (jiraIssue.fields.description) {
+			if (typeof jiraIssue.fields.description === 'string') {
+				description = jiraIssue.fields.description
+			} else {
+				// It's an ADF object, extract text
+				description = this.extractTextFromADF(jiraIssue.fields.description)
+			}
+		}
+
 		return {
 			id: jiraIssue.id,
 			key: jiraIssue.key,
 			number: jiraIssue.key,
 			title: jiraIssue.fields.summary,
-			body: jiraIssue.fields.description ?? '',
+			body: description,
 			state: jiraIssue.fields.status.name.toLowerCase() as 'open' | 'closed',
 			labels: jiraIssue.fields.labels,
 			assignees: jiraIssue.fields.assignee 

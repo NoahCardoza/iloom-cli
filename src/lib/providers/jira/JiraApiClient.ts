@@ -21,7 +21,7 @@ export interface JiraIssue {
 	key: string
 	fields: {
 		summary: string
-		description: string | null
+		description: string | null | unknown // Can be string, ADF object, or null
 		status: {
 			name: string
 		}
@@ -60,7 +60,7 @@ export interface JiraComment {
 		emailAddress: string
 		accountId: string
 	}
-	body: string
+	body: string | unknown // Can be string or ADF object
 	created: string
 	updated: string
 	[key: string]: unknown
