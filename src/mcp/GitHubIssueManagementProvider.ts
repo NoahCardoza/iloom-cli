@@ -274,10 +274,10 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 	 * Create a new issue
 	 */
 	async createIssue(input: CreateIssueInput): Promise<CreateIssueResult> {
-		const { title, body, labels } = input
+		const { title, body, labels, repo } = input
 		// teamKey is ignored for GitHub
 
-		const result = await createIssue(title, body, { labels })
+		const result = await createIssue(title, body, { labels, repo })
 
 		// Ensure number is numeric
 		const issueNumber = typeof result.number === 'number'
@@ -296,7 +296,7 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 	 * GitHub requires two-step process: create issue, then link via GraphQL
 	 */
 	async createChildIssue(input: CreateChildIssueInput): Promise<CreateIssueResult> {
-		const { parentId, title, body, labels } = input
+		const { parentId, title, body, labels, repo } = input
 		// teamKey is ignored for GitHub
 
 		// Convert parent identifier to number
@@ -306,16 +306,16 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 		}
 
 		// Step 1: Get parent issue's GraphQL node ID
-		const parentNodeId = await getIssueNodeId(parentNumber)
+		const parentNodeId = await getIssueNodeId(parentNumber, repo)
 
 		// Step 2: Create the child issue
-		const childResult = await createIssue(title, body, { labels })
+		const childResult = await createIssue(title, body, { labels, repo })
 		const childNumber = typeof childResult.number === 'number'
 			? childResult.number
 			: parseInt(String(childResult.number), 10)
 
 		// Step 3: Get child issue's GraphQL node ID
-		const childNodeId = await getIssueNodeId(childNumber)
+		const childNodeId = await getIssueNodeId(childNumber, repo)
 
 		// Step 4: Link child to parent via GraphQL mutation
 		await addSubIssue(parentNodeId, childNodeId)

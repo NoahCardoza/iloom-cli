@@ -62,6 +62,7 @@ export interface CreateIssueInput {
 	body: string // Issue body/description (markdown supported)
 	labels?: string[] | undefined // Optional labels to apply
 	teamKey?: string | undefined // Required for Linear, ignored for GitHub
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
 }
 
 /**
@@ -73,6 +74,7 @@ export interface CreateChildIssueInput {
 	body: string // Child issue body/description (markdown supported)
 	labels?: string[] | undefined // Optional labels to apply
 	teamKey?: string | undefined // Linear only - falls back to parent's team. Ignored for GitHub.
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
 }
 
 /**

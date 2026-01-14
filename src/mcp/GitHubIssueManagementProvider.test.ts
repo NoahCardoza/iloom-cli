@@ -237,7 +237,7 @@ describe('GitHubIssueManagementProvider', () => {
 				body: 'Issue description',
 			})
 
-			expect(createIssue).toHaveBeenCalledWith('New Issue', 'Issue description', { labels: undefined })
+			expect(createIssue).toHaveBeenCalledWith('New Issue', 'Issue description', { labels: undefined, repo: undefined })
 			expect(result.id).toBe('456')
 			expect(result.url).toBe('https://github.com/owner/repo/issues/456')
 			expect(result.number).toBe(456)
@@ -257,6 +257,7 @@ describe('GitHubIssueManagementProvider', () => {
 
 			expect(createIssue).toHaveBeenCalledWith('Labeled Issue', 'Issue with labels', {
 				labels: ['bug', 'priority:high'],
+				repo: undefined,
 			})
 			expect(result.id).toBe('789')
 			expect(result.number).toBe(789)
@@ -274,8 +275,48 @@ describe('GitHubIssueManagementProvider', () => {
 				teamKey: 'ENG', // Should be ignored for GitHub
 			})
 
-			expect(createIssue).toHaveBeenCalledWith('Issue with teamKey', 'Body', { labels: undefined })
+			expect(createIssue).toHaveBeenCalledWith('Issue with teamKey', 'Body', { labels: undefined, repo: undefined })
 			expect(result.id).toBe('101')
+		})
+
+		it('should pass repo parameter to createIssue when provided', async () => {
+			vi.mocked(createIssue).mockResolvedValueOnce({
+				number: 42,
+				url: 'https://github.com/other-owner/other-repo/issues/42',
+			})
+
+			const result = await provider.createIssue({
+				title: 'Issue in another repo',
+				body: 'Body',
+				repo: 'other-owner/other-repo',
+			})
+
+			expect(createIssue).toHaveBeenCalledWith('Issue in another repo', 'Body', {
+				labels: undefined,
+				repo: 'other-owner/other-repo',
+			})
+			expect(result.id).toBe('42')
+			expect(result.url).toBe('https://github.com/other-owner/other-repo/issues/42')
+		})
+
+		it('should pass repo parameter with labels when both are provided', async () => {
+			vi.mocked(createIssue).mockResolvedValueOnce({
+				number: 55,
+				url: 'https://github.com/other-owner/other-repo/issues/55',
+			})
+
+			const result = await provider.createIssue({
+				title: 'Labeled issue in another repo',
+				body: 'Body with labels',
+				labels: ['enhancement'],
+				repo: 'other-owner/other-repo',
+			})
+
+			expect(createIssue).toHaveBeenCalledWith('Labeled issue in another repo', 'Body with labels', {
+				labels: ['enhancement'],
+				repo: 'other-owner/other-repo',
+			})
+			expect(result.id).toBe('55')
 		})
 	})
 
@@ -300,11 +341,11 @@ describe('GitHubIssueManagementProvider', () => {
 			})
 
 			// Verify parent node ID was fetched
-			expect(getIssueNodeId).toHaveBeenNthCalledWith(1, 123)
+			expect(getIssueNodeId).toHaveBeenNthCalledWith(1, 123, undefined)
 			// Verify child issue was created
-			expect(createIssue).toHaveBeenCalledWith('Child Issue', 'Child issue description', { labels: undefined })
+			expect(createIssue).toHaveBeenCalledWith('Child Issue', 'Child issue description', { labels: undefined, repo: undefined })
 			// Verify child node ID was fetched
-			expect(getIssueNodeId).toHaveBeenNthCalledWith(2, 124)
+			expect(getIssueNodeId).toHaveBeenNthCalledWith(2, 124, undefined)
 			// Verify sub-issue link was created
 			expect(addSubIssue).toHaveBeenCalledWith('I_kwDOPvp_cc6PARENT', 'I_kwDOPvp_cc6CHILD')
 			// Verify result
@@ -331,6 +372,7 @@ describe('GitHubIssueManagementProvider', () => {
 
 			expect(createIssue).toHaveBeenCalledWith('Labeled Child', 'Body with labels', {
 				labels: ['bug', 'priority:high'],
+				repo: undefined,
 			})
 			expect(result.id).toBe('125')
 		})
@@ -359,7 +401,7 @@ describe('GitHubIssueManagementProvider', () => {
 				})
 			).rejects.toThrow('Could not find issue 999')
 
-			expect(getIssueNodeId).toHaveBeenCalledWith(999)
+			expect(getIssueNodeId).toHaveBeenCalledWith(999, undefined)
 			expect(createIssue).not.toHaveBeenCalled()
 		})
 
@@ -403,8 +445,65 @@ describe('GitHubIssueManagementProvider', () => {
 				teamKey: 'ENG', // Should be ignored for GitHub
 			})
 
-			expect(createIssue).toHaveBeenCalledWith('Child with teamKey', 'Body', { labels: undefined })
+			expect(createIssue).toHaveBeenCalledWith('Child with teamKey', 'Body', { labels: undefined, repo: undefined })
 			expect(result.id).toBe('127')
+		})
+
+		it('should pass repo parameter to getIssueNodeId and createIssue when provided', async () => {
+			vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_kwDOOther_cc6PARENT')
+			vi.mocked(createIssue).mockResolvedValueOnce({
+				number: 50,
+				url: 'https://github.com/other-owner/other-repo/issues/50',
+			})
+			vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_kwDOOther_cc6CHILD')
+			vi.mocked(addSubIssue).mockResolvedValueOnce(undefined)
+
+			const result = await provider.createChildIssue({
+				parentId: '100',
+				title: 'Child in another repo',
+				body: 'Child body',
+				repo: 'other-owner/other-repo',
+			})
+
+			// Verify repo is passed to getIssueNodeId for parent
+			expect(getIssueNodeId).toHaveBeenNthCalledWith(1, 100, 'other-owner/other-repo')
+			// Verify repo is passed to createIssue
+			expect(createIssue).toHaveBeenCalledWith('Child in another repo', 'Child body', {
+				labels: undefined,
+				repo: 'other-owner/other-repo',
+			})
+			// Verify repo is passed to getIssueNodeId for child
+			expect(getIssueNodeId).toHaveBeenNthCalledWith(2, 50, 'other-owner/other-repo')
+			// Verify sub-issue link was created
+			expect(addSubIssue).toHaveBeenCalledWith('I_kwDOOther_cc6PARENT', 'I_kwDOOther_cc6CHILD')
+			// Verify result
+			expect(result.id).toBe('50')
+			expect(result.url).toBe('https://github.com/other-owner/other-repo/issues/50')
+		})
+
+		it('should pass repo parameter with labels when both are provided', async () => {
+			vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_kwDOOther_cc6PARENT2')
+			vi.mocked(createIssue).mockResolvedValueOnce({
+				number: 60,
+				url: 'https://github.com/other-owner/other-repo/issues/60',
+			})
+			vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_kwDOOther_cc6CHILD2')
+			vi.mocked(addSubIssue).mockResolvedValueOnce(undefined)
+
+			const result = await provider.createChildIssue({
+				parentId: '200',
+				title: 'Labeled child in another repo',
+				body: 'Child body with labels',
+				labels: ['bug', 'urgent'],
+				repo: 'other-owner/other-repo',
+			})
+
+			expect(getIssueNodeId).toHaveBeenNthCalledWith(1, 200, 'other-owner/other-repo')
+			expect(createIssue).toHaveBeenCalledWith('Labeled child in another repo', 'Child body with labels', {
+				labels: ['bug', 'urgent'],
+				repo: 'other-owner/other-repo',
+			})
+			expect(result.id).toBe('60')
 		})
 	})
 })

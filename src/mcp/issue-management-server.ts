@@ -325,6 +325,13 @@ server.registerTool(
 			body: z.string().describe('The issue body/description (markdown supported)'),
 			labels: z.array(z.string()).optional().describe('Optional labels to apply to the issue'),
 			teamKey: z.string().optional().describe('Team key for Linear (e.g., "ENG"). Falls back to settings or team extracted from previous get_issue call. Ignored for GitHub.'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
 		},
 		outputSchema: {
 			id: z.string().describe('Issue identifier'),
@@ -332,14 +339,14 @@ server.registerTool(
 			number: z.number().optional().describe('Issue number (GitHub only)'),
 		},
 	},
-	async ({ title, body, labels, teamKey }: CreateIssueInput) => {
-		console.error(`Creating issue: ${title}`)
+	async ({ title, body, labels, teamKey, repo }: CreateIssueInput) => {
+		console.error(`Creating issue: ${title}${repo ? ` in ${repo}` : ''}`)
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
 				process.env.ISSUE_PROVIDER as IssueProvider
 			)
-			const result = await provider.createIssue({ title, body, labels, teamKey })
+			const result = await provider.createIssue({ title, body, labels, teamKey, repo })
 
 			console.error(`Issue created successfully: ${result.id} at ${result.url}`)
 
@@ -377,6 +384,13 @@ server.registerTool(
 			body: z.string().describe('The child issue body/description (markdown supported)'),
 			labels: z.array(z.string()).optional().describe('Optional labels to apply to the child issue'),
 			teamKey: z.string().optional().describe('Team key for Linear (e.g., "ENG"). Falls back to parent team. Ignored for GitHub.'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
 		},
 		outputSchema: {
 			id: z.string().describe('Issue identifier'),
@@ -384,14 +398,14 @@ server.registerTool(
 			number: z.number().optional().describe('Issue number (GitHub only)'),
 		},
 	},
-	async ({ parentId, title, body, labels, teamKey }: CreateChildIssueInput) => {
-		console.error(`Creating child issue for parent ${parentId}: ${title}`)
+	async ({ parentId, title, body, labels, teamKey, repo }: CreateChildIssueInput) => {
+		console.error(`Creating child issue for parent ${parentId}: ${title}${repo ? ` in ${repo}` : ''}`)
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
 				process.env.ISSUE_PROVIDER as IssueProvider
 			)
-			const result = await provider.createChildIssue({ parentId, title, body, labels, teamKey })
+			const result = await provider.createChildIssue({ parentId, title, body, labels, teamKey, repo })
 
 			console.error(`Child issue created successfully: ${result.id} at ${result.url}`)
 
