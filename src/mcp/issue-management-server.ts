@@ -104,7 +104,7 @@ server.registerTool(
 			body: z.string().describe('Issue body/description'),
 			state: z.string().describe('Issue state (open, closed, etc.)'),
 			url: z.string().describe('Issue URL'),
-			provider: z.enum(['github', 'linear']).describe('Issue management provider'),
+			provider: z.enum(['github', 'linear', 'jira']).describe('Issue management provider'),
 
 			// Flexible author - core fields + passthrough
 			author: flexibleAuthorSchema.nullable().describe(
