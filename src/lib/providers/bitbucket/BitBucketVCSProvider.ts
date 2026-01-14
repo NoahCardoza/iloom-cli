@@ -1,0 +1,203 @@
+// BitBucketVCSProvider - Implements VersionControlProvider for BitBucket
+// Provides PR/VCS operations via BitBucket REST API
+
+import type { VersionControlProvider, ExistingPR } from '../../VersionControlProvider.js'
+import type { PullRequest } from '../../../types/index.js'
+import { BitBucketApiClient, type BitBucketConfig, type BitBucketPullRequest } from './BitBucketApiClient.js'
+import { getLogger } from '../../../utils/logger-context.js'
+import { parseGitRemotes } from '../../../utils/remote.js'
+
+/**
+ * BitBucket-specific configuration
+ * Extends BitBucketConfig with username, appPassword, workspace, and repoSlug
+ */
+export type BitBucketVCSConfig = BitBucketConfig
+
+/**
+ * BitBucketVCSProvider implements VersionControlProvider for BitBucket
+ * 
+ * Key differences from GitHub:
+ * - Uses workspace/repository slug instead of owner/repo
+ * - PR states are different (OPEN, MERGED, DECLINED, SUPERSEDED)
+ * - No native draft PR support
+ */
+export class BitBucketVCSProvider implements VersionControlProvider {
+	readonly providerName = 'bitbucket'
+	readonly supportsForks = true
+	readonly supportsDraftPRs = false // BitBucket doesn't have draft PRs
+
+	private readonly client: BitBucketApiClient
+
+	constructor(config: BitBucketVCSConfig) {
+		this.client = new BitBucketApiClient(config)
+	}
+
+	/**
+	 * Check if a PR already exists for the given branch
+	 */
+	async checkForExistingPR(branchName: string, cwd?: string): Promise<ExistingPR | null> {
+		try {
+			// Get workspace and repo slug from config or detect from git remote
+			const { workspace, repoSlug } = await this.getWorkspaceAndRepo(cwd)
+
+			const prs = await this.client.listPullRequests(workspace, repoSlug, branchName)
+			
+			if (prs.length > 0 && prs[0]) {
+				const pr = prs[0]
+				return {
+					number: pr.id,
+					url: pr.links.html.href,
+				}
+			}
+
+			return null
+		} catch (error) {
+			getLogger().debug('Error checking for existing PR', { error })
+			return null
+		}
+	}
+
+	/**
+	 * Create a pull request
+	 */
+	async createPR(
+		branchName: string,
+		title: string,
+		body: string,
+		baseBranch: string,
+		cwd?: string
+	): Promise<string> {
+		const { workspace, repoSlug } = await this.getWorkspaceAndRepo(cwd)
+
+		getLogger().debug('Creating BitBucket PR', { workspace, repoSlug, branchName, title })
+
+		const pr = await this.client.createPullRequest(
+			workspace,
+			repoSlug,
+			title,
+			body,
+			branchName,
+			baseBranch
+		)
+
+		return pr.links.html.href
+	}
+
+	/**
+	 * Fetch PR details
+	 */
+	async fetchPR(prNumber: number, cwd?: string): Promise<PullRequest> {
+		const { workspace, repoSlug } = await this.getWorkspaceAndRepo(cwd)
+
+		const bbPR = await this.client.getPullRequest(workspace, repoSlug, prNumber)
+		return this.mapBitBucketPRToPullRequest(bbPR)
+	}
+
+	/**
+	 * Get PR URL
+	 */
+	async getPRUrl(prNumber: number, cwd?: string): Promise<string> {
+		const { workspace, repoSlug } = await this.getWorkspaceAndRepo(cwd)
+
+		const bbPR = await this.client.getPullRequest(workspace, repoSlug, prNumber)
+		return bbPR.links.html.href
+	}
+
+	/**
+	 * Create a comment on a PR
+	 */
+	async createPRComment(prNumber: number, body: string, cwd?: string): Promise<void> {
+		const { workspace, repoSlug } = await this.getWorkspaceAndRepo(cwd)
+
+		getLogger().debug('Creating BitBucket PR comment', { workspace, repoSlug, prNumber })
+
+		await this.client.addPRComment(workspace, repoSlug, prNumber, body)
+	}
+
+	/**
+	 * Detect repository from git remote
+	 */
+	async detectRepository(cwd?: string): Promise<{ owner: string; repo: string } | null> {
+		try {
+			const remotes = await parseGitRemotes(cwd)
+			
+			// Look for bitbucket.org remote
+			const bbRemote = remotes.find(r => 
+				r.url.includes('bitbucket.org')
+			)
+
+			if (!bbRemote) {
+				return null
+			}
+
+			// BitBucket URLs: https://bitbucket.org/workspace/repo.git
+			// or git@bitbucket.org:workspace/repo.git
+			return {
+				owner: bbRemote.owner, // workspace
+				repo: bbRemote.repo,
+			}
+		} catch (error) {
+			getLogger().error('Failed to detect BitBucket repository', { error })
+			return null
+		}
+	}
+
+	/**
+	 * Get target remote for PR operations
+	 */
+	async getTargetRemote(_cwd?: string): Promise<string> {
+		// For BitBucket, we typically use 'origin'
+		// Fork workflows are less common in BitBucket
+		return 'origin'
+	}
+
+	/**
+	 * Get workspace and repository slug from config or git remote
+	 */
+	private async getWorkspaceAndRepo(cwd?: string): Promise<{ workspace: string; repoSlug: string }> {
+		let workspace = this.client.getWorkspace()
+		let repoSlug = this.client.getRepoSlug()
+
+		// If not configured, try to detect from git remote
+		if (!workspace || !repoSlug) {
+			const detected = await this.detectRepository(cwd)
+			if (!detected) {
+				throw new Error(
+					'Could not determine BitBucket workspace/repository. ' +
+					'Either configure them in settings or ensure git remote points to bitbucket.org'
+				)
+			}
+
+			workspace = workspace ?? detected.owner
+			repoSlug = repoSlug ?? detected.repo
+		}
+
+		return { workspace, repoSlug }
+	}
+
+	/**
+	 * Map BitBucket PR to generic PullRequest type
+	 */
+	private mapBitBucketPRToPullRequest(bbPR: BitBucketPullRequest): PullRequest {
+		// Map BitBucket states to generic states
+		let state: 'open' | 'closed' | 'merged'
+		if (bbPR.state === 'OPEN') {
+			state = 'open'
+		} else if (bbPR.state === 'MERGED') {
+			state = 'merged'
+		} else {
+			state = 'closed' // DECLINED or SUPERSEDED
+		}
+
+		return {
+			number: bbPR.id,
+			title: bbPR.title,
+			body: bbPR.description,
+			state,
+			branch: bbPR.source.branch.name,
+			baseBranch: bbPR.destination.branch.name,
+			url: bbPR.links.html.href,
+			isDraft: false, // BitBucket doesn't have draft PRs
+		}
+	}
+}
