@@ -5,6 +5,7 @@
 import type { IssueManagementProvider, IssueProvider } from './types.js'
 import { GitHubIssueManagementProvider } from './GitHubIssueManagementProvider.js'
 import { LinearIssueManagementProvider } from './LinearIssueManagementProvider.js'
+import { JiraIssueManagementProvider } from './JiraIssueManagementProvider.js'
 
 /**
  * Factory class for creating issue management providers
@@ -19,6 +20,8 @@ export class IssueManagementProviderFactory {
 				return new GitHubIssueManagementProvider()
 			case 'linear':
 				return new LinearIssueManagementProvider()
+			case 'jira':
+				return new JiraIssueManagementProvider()
 			default:
 				throw new Error(`Unsupported issue management provider: ${provider}`)
 		}

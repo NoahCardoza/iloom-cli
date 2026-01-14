@@ -96,10 +96,29 @@ export async function generateIssueManagementMcpConfig(
 			contextType: contextType ?? 'auto-detect',
 		})
 	} else if (provider === 'jira') {
-		// Jira configuration - for now, Jira doesn't use MCP server
-		// The JiraIssueTracker is used directly in commands
-		logger.debug('Jira issue management (no MCP config needed)', {
+		// Jira configuration - pass credentials via environment variables
+		const jiraSettings = settings?.issueManagement?.jira
+
+		if (jiraSettings?.host) {
+			envVars.JIRA_HOST = jiraSettings.host
+		}
+		if (jiraSettings?.username) {
+			envVars.JIRA_USERNAME = jiraSettings.username
+		}
+		if (jiraSettings?.apiToken) {
+			envVars.JIRA_API_TOKEN = jiraSettings.apiToken
+		}
+		if (jiraSettings?.projectKey) {
+			envVars.JIRA_PROJECT_KEY = jiraSettings.projectKey
+		}
+		if (jiraSettings?.transitionMappings) {
+			envVars.JIRA_TRANSITION_MAPPINGS = JSON.stringify(jiraSettings.transitionMappings)
+		}
+
+		logger.debug('Generated MCP config for Jira issue management', {
 			provider,
+			hasApiToken: !!jiraSettings?.apiToken,
+			projectKey: jiraSettings?.projectKey,
 			contextType: contextType ?? 'auto-detect',
 		})
 	}

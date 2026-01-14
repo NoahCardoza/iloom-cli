@@ -27,8 +27,8 @@ function validateEnvironment(): IssueProvider {
 		process.exit(1)
 	}
 
-	if (provider !== 'github' && provider !== 'linear') {
-		console.error(`Invalid ISSUE_PROVIDER: ${provider}. Must be 'github' or 'linear'`)
+	if (provider !== 'github' && provider !== 'linear' && provider !== 'jira') {
+		console.error(`Invalid ISSUE_PROVIDER: ${provider}. Must be 'github', 'linear', or 'jira'`)
 		process.exit(1)
 	}
 
@@ -49,6 +49,19 @@ function validateEnvironment(): IssueProvider {
 	if (provider === 'linear') {
 		if (!process.env.LINEAR_API_TOKEN) {
 			console.error('Missing required environment variable for Linear provider: LINEAR_API_TOKEN')
+			process.exit(1)
+		}
+	}
+
+	// Jira requires host, username, API token, and project key
+	if (provider === 'jira') {
+		const required = ['JIRA_HOST', 'JIRA_USERNAME', 'JIRA_API_TOKEN', 'JIRA_PROJECT_KEY']
+		const missing = required.filter((key) => !process.env[key])
+
+		if (missing.length > 0) {
+			console.error(
+				`Missing required environment variables for Jira provider: ${missing.join(', ')}`
+			)
 			process.exit(1)
 		}
 	}

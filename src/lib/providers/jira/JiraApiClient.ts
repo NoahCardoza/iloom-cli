@@ -174,6 +174,13 @@ export class JiraApiClient {
 	}
 
 	/**
+	 * Make a PUT request to Jira API
+	 */
+	private async put<T>(endpoint: string, body: unknown): Promise<T> {
+		return this.request<T>('PUT', endpoint, body)
+	}
+
+	/**
 	 * Fetch an issue by key (e.g., "PROJ-123")
 	 */
 	async getIssue(issueKey: string): Promise<JiraIssue> {
@@ -185,6 +192,37 @@ export class JiraApiClient {
 	 */
 	async addComment(issueKey: string, body: string): Promise<JiraComment> {
 		return this.post<JiraComment>(`/issue/${issueKey}/comment`, {
+			body: {
+				type: 'doc',
+				version: 1,
+				content: [
+					{
+						type: 'paragraph',
+						content: [
+							{
+								type: 'text',
+								text: body,
+							},
+						],
+					},
+				],
+			},
+		})
+	}
+
+	/**
+	 * Get all comments for an issue
+	 */
+	async getComments(issueKey: string): Promise<JiraComment[]> {
+		const response = await this.get<{ comments: JiraComment[] }>(`/issue/${issueKey}/comment`)
+		return response.comments
+	}
+
+	/**
+	 * Update a comment on an issue
+	 */
+	async updateComment(issueKey: string, commentId: string, body: string): Promise<JiraComment> {
+		return this.put<JiraComment>(`/issue/${issueKey}/comment/${commentId}`, {
 			body: {
 				type: 'doc',
 				version: 1,

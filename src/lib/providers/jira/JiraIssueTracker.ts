@@ -188,10 +188,122 @@ ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''
 	}
 
 	/**
+	 * Get issue details (alias for fetchIssue for MCP compatibility)
+	 */
+	async getIssue(identifier: string | number): Promise<Issue> {
+		return this.fetchIssue(identifier)
+	}
+
+	/**
+	 * Get all comments for an issue
+	 */
+	async getComments(identifier: string | number): Promise<Array<{
+		id: string
+		body: string
+		author: { displayName: string; emailAddress: string; accountId: string }
+		createdAt: string
+		updatedAt: string
+	}>> {
+		const issueKey = String(identifier)
+		getLogger().debug('Fetching Jira comments', { issueKey })
+
+		const comments = await this.client.getComments(issueKey)
+		
+		// Map to expected format
+		return comments.map(comment => ({
+			id: comment.id,
+			body: this.extractTextFromADF(comment.body),
+			author: comment.author,
+			createdAt: comment.created,
+			updatedAt: comment.updated,
+		}))
+	}
+
+	/**
+	 * Add a comment to an issue
+	 */
+	async addComment(identifier: string | number, body: string): Promise<{ id: string }> {
+		const issueKey = String(identifier)
+		getLogger().debug('Adding Jira comment', { issueKey })
+
+		const comment = await this.client.addComment(issueKey, body)
+		return { id: comment.id }
+	}
+
+	/**
+	 * Update an existing comment
+	 */
+	async updateComment(identifier: string | number, commentId: string, body: string): Promise<void> {
+		const issueKey = String(identifier)
+		getLogger().debug('Updating Jira comment', { issueKey, commentId })
+
+		await this.client.updateComment(issueKey, commentId, body)
+	}
+
+	/**
+	 * Get configuration (for MCP provider)
+	 */
+	getConfig(): JiraTrackerConfig {
+		return this.config
+	}
+
+	/**
+	 * Extract plain text from Atlassian Document Format (ADF)
+	 * This is a simplified extraction - handles basic text content
+	 */
+	private extractTextFromADF(adf: unknown): string {
+		if (typeof adf === 'string') {
+			return adf
+		}
+
+		if (!adf || typeof adf !== 'object' || !('content' in adf)) {
+			return ''
+		}
+
+		const adfObj = adf as { content?: unknown[] }
+		const extractText = (node: unknown): string => {
+			if (!node || typeof node !== 'object') {
+				return ''
+			}
+
+			const nodeObj = node as { type?: string; text?: string; content?: unknown[] }
+			
+			if (nodeObj.type === 'text') {
+				return nodeObj.text ?? ''
+			}
+
+			if (nodeObj.content && Array.isArray(nodeObj.content)) {
+				return nodeObj.content.map(extractText).join('')
+			}
+
+			return ''
+		}
+
+		return (adfObj.content ?? []).map(extractText).join('\n')
+	}
+
+	/**
 	 * Map Jira API issue to generic Issue type
 	 */
-	private mapJiraIssueToIssue(jiraIssue: JiraIssue): Issue {
+	private mapJiraIssueToIssue(jiraIssue: JiraIssue): Issue & {
+		id?: string
+		key?: string
+		author?: {
+			displayName: string
+			emailAddress: string
+			accountId: string
+		}
+		assignee?: {
+			displayName: string
+			emailAddress: string
+			accountId: string
+		} | null
+		issueType?: string
+		status?: string
+	} {
 		return {
+			id: jiraIssue.id,
+			key: jiraIssue.key,
 			number: jiraIssue.key,
 			title: jiraIssue.fields.summary,
 			body: jiraIssue.fields.description ?? '',
@@ -200,7 +312,11 @@ ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''
 			assignees: jiraIssue.fields.assignee 
 				? [jiraIssue.fields.assignee.displayName]
 				: [],
+			assignee: jiraIssue.fields.assignee,
+			author: jiraIssue.fields.reporter,
 			url: `${this.config.host}/browse/${jiraIssue.key}`,
+			issueType: jiraIssue.fields.issuetype.name,
+			status: jiraIssue.fields.status.name,
 		}
 	}
 
