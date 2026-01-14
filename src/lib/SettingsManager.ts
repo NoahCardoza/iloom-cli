@@ -314,7 +314,7 @@ export const IloomSettingsSchema = z.object({
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
 		.object({
-			provider: z.enum(['github', 'linear']).optional().default('github').describe('Issue tracker provider (github, linear)'),
+			provider: z.enum(['github', 'linear', 'jira']).optional().default('github').describe('Issue tracker provider (github, linear, jira)'),
 			github: z
 				.object({
 					remote: z
@@ -339,16 +339,70 @@ export const IloomSettingsSchema = z.object({
 						.describe('Linear API token (lin_api_...). SECURITY: Store in settings.local.json only, never commit to source control.'),
 				})
 				.optional(),
+			jira: z
+				.object({
+					host: z
+						.string()
+						.min(1, 'Jira host cannot be empty')
+						.describe('Jira instance URL (e.g., "https://yourcompany.atlassian.net")'),
+					username: z
+						.string()
+						.min(1, 'Jira username/email cannot be empty')
+						.describe('Jira username or email address'),
+					apiToken: z
+						.string()
+						.optional()
+						.describe('Jira API token. SECURITY: Store in settings.local.json only, never commit to source control. Generate at: https://id.atlassian.com/manage-profile/security/api-tokens'),
+					projectKey: z
+						.string()
+						.min(1, 'Project key cannot be empty')
+						.describe('Jira project key (e.g., "PROJ", "ENG")'),
+					boardId: z
+						.string()
+						.optional()
+						.describe('Jira board ID for sprint/workflow operations (optional)'),
+					transitionMappings: z
+						.record(z.string(), z.string())
+						.optional()
+						.describe('Map iloom states to Jira transition names (e.g., {"In Review": "Start Review"})'),
+				})
+				.optional(),
 		})
 		.optional()
 		.describe('Issue management configuration'),
+	versionControl: z
+		.object({
+			provider: z.enum(['github', 'bitbucket']).optional().default('github').describe('Version control provider (github, bitbucket)'),
+			bitbucket: z
+				.object({
+					username: z
+						.string()
+						.min(1, 'BitBucket username cannot be empty')
+						.describe('BitBucket username'),
+					appPassword: z
+						.string()
+						.optional()
+						.describe('BitBucket app password. SECURITY: Store in settings.local.json only, never commit to source control. Generate at: https://bitbucket.org/account/settings/app-passwords/'),
+					workspace: z
+						.string()
+						.optional()
+						.describe('BitBucket workspace (optional, auto-detected from git remote if not provided)'),
+					repoSlug: z
+						.string()
+						.optional()
+						.describe('BitBucket repository slug (optional, auto-detected from git remote if not provided)'),
+				})
+				.optional(),
+		})
+		.optional()
+		.describe('Version control provider configuration'),
 	mergeBehavior: z
 		.object({
-			mode: z.enum(['local', 'github-pr', 'github-draft-pr']).default('local'),
+			mode: z.enum(['local', 'github-pr', 'github-draft-pr', 'bitbucket-pr']).default('local'),
 			remote: z.string().optional(),
 		})
 		.optional()
-		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), or github-draft-pr (create draft PR at start, mark ready on finish)'),
+		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), github-draft-pr (create draft PR at start, mark ready on finish), or bitbucket-pr (create BitBucket PR)'),
 	ide: z
 		.object({
 			type: z
@@ -489,7 +543,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 	databaseProviders: DatabaseProvidersSettingsSchema.describe('Database provider configurations'),
 	issueManagement: z
 		.object({
-			provider: z.enum(['github', 'linear']).optional().describe('Issue tracker provider (github, linear)'),
+			provider: z.enum(['github', 'linear', 'jira']).optional().describe('Issue tracker provider (github, linear, jira)'),
 			github: z
 				.object({
 					remote: z
@@ -514,16 +568,70 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 						.describe('Linear API token (lin_api_...). SECURITY: Store in settings.local.json only, never commit to source control.'),
 				})
 				.optional(),
+			jira: z
+				.object({
+					host: z
+						.string()
+						.min(1, 'Jira host cannot be empty')
+						.describe('Jira instance URL (e.g., "https://yourcompany.atlassian.net")'),
+					username: z
+						.string()
+						.min(1, 'Jira username/email cannot be empty')
+						.describe('Jira username or email address'),
+					apiToken: z
+						.string()
+						.optional()
+						.describe('Jira API token. SECURITY: Store in settings.local.json only, never commit to source control. Generate at: https://id.atlassian.com/manage-profile/security/api-tokens'),
+					projectKey: z
+						.string()
+						.min(1, 'Project key cannot be empty')
+						.describe('Jira project key (e.g., "PROJ", "ENG")'),
+					boardId: z
+						.string()
+						.optional()
+						.describe('Jira board ID for sprint/workflow operations (optional)'),
+					transitionMappings: z
+						.record(z.string(), z.string())
+						.optional()
+						.describe('Map iloom states to Jira transition names (e.g., {"In Review": "Start Review"})'),
+				})
+				.optional(),
 		})
 		.optional()
 		.describe('Issue management configuration'),
+	versionControl: z
+		.object({
+			provider: z.enum(['github', 'bitbucket']).optional().describe('Version control provider (github, bitbucket)'),
+			bitbucket: z
+				.object({
+					username: z
+						.string()
+						.min(1, 'BitBucket username cannot be empty')
+						.describe('BitBucket username'),
+					appPassword: z
+						.string()
+						.optional()
+						.describe('BitBucket app password. SECURITY: Store in settings.local.json only, never commit to source control. Generate at: https://bitbucket.org/account/settings/app-passwords/'),
+					workspace: z
+						.string()
+						.optional()
+						.describe('BitBucket workspace (optional, auto-detected from git remote if not provided)'),
+					repoSlug: z
+						.string()
+						.optional()
+						.describe('BitBucket repository slug (optional, auto-detected from git remote if not provided)'),
+				})
+				.optional(),
+		})
+		.optional()
+		.describe('Version control provider configuration'),
 	mergeBehavior: z
 		.object({
-			mode: z.enum(['local', 'github-pr', 'github-draft-pr']).optional(),
+			mode: z.enum(['local', 'github-pr', 'github-draft-pr', 'bitbucket-pr']).optional(),
 			remote: z.string().optional(),
 		})
 		.optional()
-		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), or github-draft-pr (create draft PR at start, mark ready on finish)'),
+		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), github-draft-pr (create draft PR at start, mark ready on finish), or bitbucket-pr (create BitBucket PR)'),
 	ide: z
 		.object({
 			type: z
