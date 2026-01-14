@@ -18,7 +18,7 @@ import type { LoomMetadata } from '../lib/MetadataManager.js'
 export async function generateIssueManagementMcpConfig(
 	contextType?: 'issue' | 'pr',
 	repo?: string,
-	provider: 'github' | 'linear' = 'github',
+	provider: 'github' | 'linear' | 'jira' = 'github',
 	settings?: IloomSettings,
 	draftPrNumber?: number
 ): Promise<Record<string, unknown>[]> {
@@ -74,7 +74,7 @@ export async function generateIssueManagementMcpConfig(
 			githubEventName: githubEventName ?? 'auto-detect',
 			draftPrNumber: draftPrNumber ?? undefined,
 		})
-	} else {
+	} else if (provider === 'linear') {
 		// Linear needs API token passed through
 		const apiToken = settings?.issueManagement?.linear?.apiToken ?? process.env.LINEAR_API_TOKEN
 
@@ -93,6 +93,13 @@ export async function generateIssueManagementMcpConfig(
 			provider,
 			hasApiToken: !!apiToken,
 			hasTeamKey: !!teamKey,
+			contextType: contextType ?? 'auto-detect',
+		})
+	} else if (provider === 'jira') {
+		// Jira configuration - for now, Jira doesn't use MCP server
+		// The JiraIssueTracker is used directly in commands
+		logger.debug('Jira issue management (no MCP config needed)', {
+			provider,
 			contextType: contextType ?? 'auto-detect',
 		})
 	}
