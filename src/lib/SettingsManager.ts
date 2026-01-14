@@ -379,10 +379,10 @@ export const IloomSettingsSchema = z.object({
 						.string()
 						.min(1, 'BitBucket username cannot be empty')
 						.describe('BitBucket username'),
-					appPassword: z
+					apiToken: z
 						.string()
 						.optional()
-						.describe('BitBucket app password. SECURITY: Store in settings.local.json only, never commit to source control. Generate at: https://bitbucket.org/account/settings/app-passwords/'),
+						.describe('BitBucket API token. SECURITY: Store in settings.local.json only, never commit to source control. Generate at: https://bitbucket.org/account/settings/app-passwords/ (Note: App passwords deprecated Sep 2025, use API tokens)'),
 					workspace: z
 						.string()
 						.optional()
@@ -608,10 +608,10 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 						.string()
 						.min(1, 'BitBucket username cannot be empty')
 						.describe('BitBucket username'),
-					appPassword: z
+					apiToken: z
 						.string()
 						.optional()
-						.describe('BitBucket app password. SECURITY: Store in settings.local.json only, never commit to source control. Generate at: https://bitbucket.org/account/settings/app-passwords/'),
+						.describe('BitBucket API token. SECURITY: Store in settings.local.json only, never commit to source control. Generate at: https://bitbucket.org/account/settings/app-passwords/ (Note: App passwords deprecated Sep 2025, use API tokens)'),
 					workspace: z
 						.string()
 						.optional()

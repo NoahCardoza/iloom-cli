@@ -402,7 +402,7 @@ Choose which platform hosts your pull requests and code reviews.
 | **Provider** | **Setup** | **Notes** |
 |--------------|-----------|-----------|
 | **GitHub**   | `gh auth login` | Default. Integrated with GitHub Issues. |
-| **BitBucket** | Configure in `.iloom/settings.json` | Atlassian Cloud. Requires app password. See [BitBucket Setup](#bitbucket-setup) below. |
+| **BitBucket** | Configure in `.iloom/settings.json` | Atlassian Cloud. Requires API token. See [BitBucket Setup](#bitbucket-setup) below. |
 
 ### Jira Setup
 
@@ -476,21 +476,21 @@ To use BitBucket for pull requests, add this configuration:
 {
   "versionControl": {
     "bitbucket": {
-      "appPassword": "your-bitbucket-app-password"
+      "apiToken": "your-bitbucket-api-token"
     }
   }
 }
 ```
 
-**Generate a BitBucket App Password:**
+**Generate a BitBucket API Token:**
 1. Visit https://bitbucket.org/account/settings/app-passwords/
-2. Click "Create app password"
+2. Click "Create API token" (Note: App passwords were deprecated September 2025)
 3. Grant permissions: `repository:read`, `repository:write`, `pullrequest:read`, `pullrequest:write`
-4. Copy the password to `.iloom/settings.local.json`
+4. Copy the token to `.iloom/settings.local.json`
 
 **Configuration Options:**
 - `username`: Your BitBucket username
-- `appPassword`: App password (store in settings.local.json only!)
+- `apiToken`: API token (store in settings.local.json only!)
 - `workspace`: (Optional) BitBucket workspace, auto-detected from git remote if not provided
 - `repoSlug`: (Optional) Repository slug, auto-detected from git remote if not provided
 
@@ -531,7 +531,7 @@ Use Jira for issues and BitBucket for pull requests:
   },
   "versionControl": {
     "bitbucket": {
-      "appPassword": "your-bitbucket-app-password"
+      "apiToken": "your-bitbucket-api-token"
     }
   }
 }

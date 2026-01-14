@@ -9,7 +9,7 @@ import { getLogger } from '../../../utils/logger-context.js'
  */
 export interface BitBucketConfig {
 	username: string
-	appPassword: string // App password from BitBucket settings
+	apiToken: string // API token from BitBucket settings
 	workspace?: string // Optional, can be auto-detected from git remote
 	repoSlug?: string // Optional, can be auto-detected from git remote
 }
@@ -67,8 +67,11 @@ export interface BitBucketRepository {
 /**
  * BitBucketApiClient provides low-level REST API access to BitBucket
  * 
- * Authentication: Basic Auth with username and app password
+ * Authentication: Basic Auth with username and API token
  * API Reference: https://developer.atlassian.com/cloud/bitbucket/rest/intro/
+ * 
+ * Note: As of September 9, 2025, BitBucket app passwords can no longer be created.
+ * Use API tokens with scopes instead. All existing app passwords will be disabled on June 9, 2026.
  */
 export class BitBucketApiClient {
 	private readonly baseUrl = 'https://api.bitbucket.org/2.0'
@@ -77,8 +80,8 @@ export class BitBucketApiClient {
 	private readonly repoSlug: string | undefined
 
 	constructor(config: BitBucketConfig) {
-		// Create Basic Auth header
-		const credentials = Buffer.from(`${config.username}:${config.appPassword}`).toString('base64')
+		// Create Basic Auth header with API token
+		const credentials = Buffer.from(`${config.username}:${config.apiToken}`).toString('base64')
 		this.authHeader = `Basic ${credentials}`
 		
 		this.workspace = config.workspace

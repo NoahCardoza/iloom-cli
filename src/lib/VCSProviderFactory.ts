@@ -45,13 +45,13 @@ export class VCSProviderFactory {
 				if (!bbSettings?.username) {
 					throw new Error('BitBucket username is required. Configure versionControl.bitbucket.username in .iloom/settings.json')
 				}
-				if (!bbSettings?.appPassword) {
-					throw new Error('BitBucket app password is required. Configure versionControl.bitbucket.appPassword in .iloom/settings.local.json')
+				if (!bbSettings?.apiToken) {
+					throw new Error('BitBucket API token is required. Configure versionControl.bitbucket.apiToken in .iloom/settings.local.json')
 				}
 
 				const bbConfig: BitBucketVCSConfig = {
 					username: bbSettings.username,
-					appPassword: bbSettings.appPassword,
+					apiToken: bbSettings.apiToken,
 				}
 
 				if (bbSettings.workspace) {
