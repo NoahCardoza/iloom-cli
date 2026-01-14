@@ -5,6 +5,7 @@ import type { IssueTracker } from '../../IssueTracker.js'
 import type { Issue, IssueTrackerInputDetection } from '../../../types/index.js'
 import { JiraApiClient, type JiraConfig, type JiraIssue, type JiraTransition } from './JiraApiClient.js'
 import { getLogger } from '../../../utils/logger-context.js'
+import { adfToMarkdown } from './AdfMarkdownConverter.js'
 
 /**
  * Jira-specific configuration
@@ -21,7 +22,7 @@ export interface JiraTrackerConfig extends JiraConfig {
  * - Issue identifiers are strings (e.g., "PROJ-123")
  * - No issue prefix (unlike GitHub's "#")
  * - State changes require workflow transitions (not direct status updates)
- * - Comments use Jira Wiki Markup (not Markdown)
+ * - Content uses Atlassian Document Format (ADF), converted to/from Markdown
  */
 export class JiraIssueTracker implements IssueTracker {
 	readonly providerName = 'jira'
@@ -212,7 +213,7 @@ ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''
 		// Map to expected format
 		return comments.map(comment => ({
 			id: comment.id,
-			body: this.extractTextFromADF(comment.body),
+			body: adfToMarkdown(comment.body),
 			author: comment.author,
 			createdAt: comment.created,
 			updatedAt: comment.updated,
@@ -248,41 +249,6 @@ ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''
 	}
 
 	/**
-	 * Extract plain text from Atlassian Document Format (ADF)
-	 * This is a simplified extraction - handles basic text content
-	 */
-	private extractTextFromADF(adf: unknown): string {
-		if (typeof adf === 'string') {
-			return adf
-		}
-
-		if (!adf || typeof adf !== 'object' || !('content' in adf)) {
-			return ''
-		}
-
-		const adfObj = adf as { content?: unknown[] }
-		const extractText = (node: unknown): string => {
-			if (!node || typeof node !== 'object') {
-				return ''
-			}
-
-			const nodeObj = node as { type?: string; text?: string; content?: unknown[] }
-			
-			if (nodeObj.type === 'text') {
-				return nodeObj.text ?? ''
-			}
-
-			if (nodeObj.content && Array.isArray(nodeObj.content)) {
-				return nodeObj.content.map(extractText).join('')
-			}
-
-			return ''
-		}
-
-		return (adfObj.content ?? []).map(extractText).join('\n')
-	}
-
-	/**
 	 * Map Jira API issue to generic Issue type
 	 */
 	private mapJiraIssueToIssue(jiraIssue: JiraIssue): Issue & {
@@ -302,15 +268,7 @@ ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''
 		status?: string
 	} {
 		// Extract description - handle ADF format or plain string
-		let description = ''
-		if (jiraIssue.fields.description) {
-			if (typeof jiraIssue.fields.description === 'string') {
-				description = jiraIssue.fields.description
-			} else {
-				// It's an ADF object, extract text
-				description = this.extractTextFromADF(jiraIssue.fields.description)
-			}
-		}
+		const description = adfToMarkdown(jiraIssue.fields.description)
 
 		return {
 			id: jiraIssue.id,

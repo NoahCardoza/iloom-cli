@@ -3,6 +3,7 @@
 
 import https from 'node:https'
 import { getLogger } from '../../../utils/logger-context.js'
+import { markdownToAdf } from './AdfMarkdownConverter.js'
 
 /**
  * Jira API configuration
@@ -189,24 +190,11 @@ export class JiraApiClient {
 
 	/**
 	 * Add a comment to an issue
+	 * Accepts Markdown content which is converted to ADF for Jira
 	 */
 	async addComment(issueKey: string, body: string): Promise<JiraComment> {
 		return this.post<JiraComment>(`/issue/${issueKey}/comment`, {
-			body: {
-				type: 'doc',
-				version: 1,
-				content: [
-					{
-						type: 'paragraph',
-						content: [
-							{
-								type: 'text',
-								text: body,
-							},
-						],
-					},
-				],
-			},
+			body: markdownToAdf(body),
 		})
 	}
 
@@ -220,24 +208,11 @@ export class JiraApiClient {
 
 	/**
 	 * Update a comment on an issue
+	 * Accepts Markdown content which is converted to ADF for Jira
 	 */
 	async updateComment(issueKey: string, commentId: string, body: string): Promise<JiraComment> {
 		return this.put<JiraComment>(`/issue/${issueKey}/comment/${commentId}`, {
-			body: {
-				type: 'doc',
-				version: 1,
-				content: [
-					{
-						type: 'paragraph',
-						content: [
-							{
-								type: 'text',
-								text: body,
-							},
-						],
-					},
-				],
-			},
+			body: markdownToAdf(body),
 		})
 	}
 
@@ -262,6 +237,7 @@ export class JiraApiClient {
 
 	/**
 	 * Create a new issue
+	 * Accepts Markdown description which is converted to ADF for Jira
 	 */
 	async createIssue(projectKey: string, summary: string, description: string, issueType = 'Task'): Promise<JiraIssue> {
 		return this.post<JiraIssue>('/issue', {
@@ -270,21 +246,7 @@ export class JiraApiClient {
 					key: projectKey,
 				},
 				summary,
-				description: {
-					type: 'doc',
-					version: 1,
-					content: [
-						{
-							type: 'paragraph',
-							content: [
-								{
-									type: 'text',
-									text: description,
-								},
-							],
-						},
-					],
-				},
+				description: markdownToAdf(description),
 				issuetype: {
 					name: issueType,
 				},
