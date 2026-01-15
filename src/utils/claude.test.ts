@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { execa, type ExecaReturnValue } from 'execa'
 import { existsSync } from 'node:fs'
-import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow, generateDeterministicSessionId } from './claude.js'
+import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow, generateDeterministicSessionId, generateRandomSessionId } from './claude.js'
 import { logger } from './logger.js'
 
 const mockLogger = {
@@ -87,6 +87,35 @@ describe('claude utils', () => {
 			const sessionId = generateDeterministicSessionId(longPath)
 
 			expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+		})
+	})
+
+	describe('generateRandomSessionId', () => {
+		it('should generate a valid UUID v4 format', () => {
+			const sessionId = generateRandomSessionId()
+
+			// Verify UUID v4 format: 8-4-4-4-12 hex characters with version 4 marker
+			expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+		})
+
+		it('should generate unique UUIDs on each call', () => {
+			const sessionId1 = generateRandomSessionId()
+			const sessionId2 = generateRandomSessionId()
+			const sessionId3 = generateRandomSessionId()
+
+			expect(sessionId1).not.toBe(sessionId2)
+			expect(sessionId2).not.toBe(sessionId3)
+			expect(sessionId1).not.toBe(sessionId3)
+		})
+
+		it('should generate multiple unique UUIDs in rapid succession', () => {
+			const sessionIds = new Set<string>()
+			for (let i = 0; i < 100; i++) {
+				sessionIds.add(generateRandomSessionId())
+			}
+
+			// All 100 generated UUIDs should be unique
+			expect(sessionIds.size).toBe(100)
 		})
 	})
 

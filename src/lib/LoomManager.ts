@@ -12,7 +12,7 @@ import { VSCodeIntegration } from './VSCodeIntegration.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager, type WriteMetadataInput } from './MetadataManager.js'
 import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit, extractPRNumber } from '../utils/git.js'
-import { generateDeterministicSessionId } from '../utils/claude.js'
+import { generateRandomSessionId } from '../utils/claude.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName, selectDistinctColor, hexToRgb, type ColorData } from '../utils/color.js'
 import { detectDarkMode } from '../utils/terminal.js'
@@ -351,8 +351,9 @@ export class LoomManager {
     }
     const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []
 
-    // Generate deterministic session ID for Claude Code resume support
-    const sessionId = generateDeterministicSessionId(worktreePath)
+    // Generate random session ID for Claude Code resume support
+    // Each loom gets a unique session ID, enabling fresh Claude sessions
+    const sessionId = generateRandomSessionId()
 
     // Build issueUrls/prUrls based on workflow type
     // For PR workflows, construct issue URL by replacing /pull/N with /issues/M
@@ -1222,8 +1223,9 @@ export class LoomManager {
       }
       const pr_numbers: string[] = input.type === 'pr' ? [String(input.identifier)] : []
 
-      // Generate deterministic session ID for Claude Code resume support
-      const sessionId = generateDeterministicSessionId(worktreePath)
+      // Generate random session ID for Claude Code resume support
+      // Each loom gets a unique session ID, enabling fresh Claude sessions
+      const sessionId = generateRandomSessionId()
 
       // Build issueUrls/prUrls based on workflow type
       // For PR workflows, construct issue URL by replacing /pull/N with /issues/M

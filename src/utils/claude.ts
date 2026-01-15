@@ -1,7 +1,7 @@
 import { execa } from 'execa'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { logger } from './logger.js'
 import { getLogger } from './logger-context.js'
 import { openTerminalWindow } from './terminal.js'
@@ -41,6 +41,15 @@ export function generateDeterministicSessionId(worktreePath: string): string {
 	// Format as UUID string
 	const hex = Buffer.from(bytes).toString('hex')
 	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
+}
+
+/**
+ * Generate a random UUID v4 for session ID
+ * Uses crypto.randomUUID() for cryptographically secure random UUID generation
+ * Used to create unique session IDs for each loom, enabling fresh Claude sessions
+ */
+export function generateRandomSessionId(): string {
+	return randomUUID()
 }
 
 export interface ClaudeCliOptions {

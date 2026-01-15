@@ -17,6 +17,7 @@ vi.mock('../lib/MetadataManager.js', () => ({
 			issue_numbers: ['123'],
 			databaseBranchName: null,
 			parentLoomBranch: null,
+			sessionId: '12345678-1234-4567-8901-123456789012', // Required for spin command
 		}),
 		getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
 	})),
@@ -1653,7 +1654,7 @@ describe('IgniteCommand', () => {
 	})
 
 	describe('Session ID for Claude Code resume support', () => {
-		it('should generate deterministic sessionId from workspace path', async () => {
+		it('should use sessionId from loom metadata', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const workspacePath = '/path/to/feat/issue-305__session-id'
@@ -1663,20 +1664,63 @@ describe('IgniteCommand', () => {
 			try {
 				await command.execute()
 
-				// Verify launchClaude was called with sessionId
+				// Verify launchClaude was called with sessionId from metadata
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('sessionId')
 
-				// sessionId should be a valid UUID v5 format
+				// sessionId should match the mocked metadata value
 				const sessionId = launchClaudeCall[1].sessionId as string
-				expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+				expect(sessionId).toBe('12345678-1234-4567-8901-123456789012')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
 			}
 		})
 
-		it('should produce same sessionId for same workspace path', async () => {
+		it('should throw error when sessionId is missing from metadata', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Get MetadataManager and reset its mock to return metadata without sessionId
+			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/test-branch',
+					worktreePath: '/path/to/workspace',
+					issueType: 'issue',
+					issue_numbers: ['123'],
+					databaseBranchName: null,
+					parentLoomBranch: null,
+					// sessionId intentionally omitted to test error handling
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}) as never)
+
+			// Create a new command that will use the modified mock
+			const commandWithNoSessionId = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager
+			)
+
+			const workspacePath = '/path/to/feat/issue-305__no-session'
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue(workspacePath)
+
+			try {
+				await expect(commandWithNoSessionId.execute()).rejects.toThrow(
+					'No session ID found in loom metadata. This loom may need to be recreated with `il start`.'
+				)
+
+				// Verify launchClaude was NOT called
+				expect(launchClaudeSpy).not.toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should use same sessionId for repeated executions in same loom', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			const workspacePath = '/path/to/feat/issue-305__session-id'
@@ -1692,33 +1736,9 @@ describe('IgniteCommand', () => {
 				await command.execute()
 				const sessionId2 = launchClaudeSpy.mock.calls[0][1].sessionId as string
 
-				// Same workspace path should produce same sessionId
+				// Same loom should use same sessionId (from metadata)
 				expect(sessionId1).toBe(sessionId2)
-			} finally {
-				process.cwd = originalCwd
-				launchClaudeSpy.mockRestore()
-			}
-		})
-
-		it('should produce different sessionId for different workspace paths', async () => {
-			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
-			const originalCwd = process.cwd
-
-			try {
-				// First execution with workspace1
-				process.cwd = vi.fn().mockReturnValue('/path/to/workspace1')
-				await command.execute()
-				const sessionId1 = launchClaudeSpy.mock.calls[0][1].sessionId as string
-
-				launchClaudeSpy.mockClear()
-
-				// Second execution with workspace2
-				process.cwd = vi.fn().mockReturnValue('/path/to/workspace2')
-				await command.execute()
-				const sessionId2 = launchClaudeSpy.mock.calls[0][1].sessionId as string
-
-				// Different workspace paths should produce different sessionIds
-				expect(sessionId1).not.toBe(sessionId2)
+				expect(sessionId1).toBe('12345678-1234-4567-8901-123456789012')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()

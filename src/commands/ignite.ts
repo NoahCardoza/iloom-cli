@@ -2,7 +2,7 @@ import path from 'path'
 import { logger } from '../utils/logger.js'
 import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
-import { launchClaude, ClaudeCliOptions, generateDeterministicSessionId } from '../utils/claude.js'
+import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables } from '../lib/PromptTemplateManager.js'
 import { generateIssueManagementMcpConfig, generateRecapMcpConfig } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
@@ -127,15 +127,12 @@ export class IgniteCommand {
 			}
 
 			// Step 4: Build Claude CLI options
-			// Use session ID from metadata if available, otherwise generate deterministically
-			let sessionId: string
-			if (metadata?.sessionId) {
-				sessionId = metadata.sessionId
-				logger.debug('Using session ID from metadata', { sessionId })
-			} else {
-				sessionId = generateDeterministicSessionId(context.workspacePath)
-				logger.debug('Generated session ID (no metadata found)', { sessionId, workspacePath: context.workspacePath })
+			// Session ID must come from loom metadata - no fallback generation
+			const sessionId = metadata?.sessionId
+			if (!sessionId) {
+				throw new Error('No session ID found in loom metadata. This loom may need to be recreated with `il start`.')
 			}
+			logger.debug('Using session ID from metadata', { sessionId })
 
 			const claudeOptions: ClaudeCliOptions = {
 				headless: false, // Enable stdio: 'inherit' for current terminal
