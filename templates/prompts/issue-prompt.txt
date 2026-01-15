@@ -340,7 +340,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
 {{/if}}
 3. Extract complexity classification from evaluator output:
    - Search the evaluator's output for the "Complexity Assessment" section
-   - Extract: Classification (TRIVIAL/SIMPLE/COMPLEX), Metrics (files, LOC, breaking changes, DB migrations, risk level), and Reasoning
+   - Extract: Classification (TRIVIAL/SIMPLE/COMPLEX), Metrics (files, LOC, breaking changes, DB migrations, risk level, architectural signals), and Reasoning
    - The evaluator uses deterministic format - parse exactly as specified
 4. Display complexity assessment to user:
    Display the extracted assessment in this format:
@@ -352,6 +352,7 @@ Only execute if workflow plan determined NEEDS_COMPLEXITY_EVAL:
    - Breaking changes: [Yes/No]
    - Database migrations: [Yes/No]
    - Risk level: [Low/Medium/High]
+   - Architectural signals: [None / List of triggered signals]
 
    Reasoning: [reasoning text from evaluator]
    ```

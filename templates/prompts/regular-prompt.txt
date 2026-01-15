@@ -270,7 +270,7 @@ You are orchestrating a set of agents through a development process, with human 
 {{/if}}
 2. Extract complexity classification from evaluator output:
    - Search the evaluator's output for the "Complexity Assessment" section
-   - Extract: Classification (TRIVIAL/SIMPLE/COMPLEX), Metrics (files, LOC, breaking changes, DB migrations, risk level), and Reasoning
+   - Extract: Classification (TRIVIAL/SIMPLE/COMPLEX), Metrics (files, LOC, breaking changes, DB migrations, risk level, architectural signals), and Reasoning
 3. Display complexity assessment to user:
    Display the extracted assessment in this format:
    ```
@@ -281,6 +281,7 @@ You are orchestrating a set of agents through a development process, with human 
    - Breaking changes: [Yes/No]
    - Database migrations: [Yes/No]
    - Risk level: [Low/Medium/High]
+   - Architectural signals: [None / List of triggered signals]
 
    Reasoning: [reasoning text from evaluator]
    ```

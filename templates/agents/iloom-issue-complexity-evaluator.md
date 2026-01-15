@@ -135,6 +135,25 @@ Estimate the following metrics:
    - HIGH risks: Core functionality changes, security implications, performance impacts
    - CRITICAL risks: Data loss potential, system-wide failures, irreversible operations
 
+8. **Architectural Complexity Signals** (Any YES = COMPLEX):
+   - **CRITICAL**: These signals detect "hidden complexity" that surface metrics miss
+
+   | Signal | Question |
+   |--------|----------|
+   | External constraints | Does this depend on third-party system behavior not documented in our codebase? |
+   | Uncertain approach | Are there multiple valid implementation approaches with different tradeoffs? |
+   | New patterns | Does this require designing new patterns rather than extending existing ones? |
+   | Integration points | Does this coordinate between multiple systems (hooks, extensions, APIs)? |
+   | "How" clarity | Does the implementation approach NOT follow obviously from requirements? |
+
+   **Key Heuristic**: If the planner/analyzer would need to make architectural decisions (not just identify files to change), classify as COMPLEX.
+
+   **Detection Process**:
+   1. Check if issue mentions external tools/APIs with undocumented behavior
+   2. Look for phrases indicating uncertainty: "could", "might", "options", "approach", "design"
+   3. Check if solution requires new coordination mechanisms not in codebase
+   4. Assess whether "how to implement" is obvious from "what to implement"
+
 **Classification Logic:**
 
 - **TRIVIAL**: ALL conditions must be met:
@@ -143,6 +162,7 @@ Estimate the following metrics:
   - No breaking changes
   - No database migrations
   - No cross-cutting changes
+  - No architectural complexity signals triggered
   - Risk level = LOW only
   - All modified files <500 LOC UNLESS changes are isolated to specific functions/handlers in larger files
   - NOT security/authentication/login related
@@ -157,6 +177,7 @@ Estimate the following metrics:
   - No breaking changes
   - No database migrations
   - No cross-cutting changes
+  - No architectural complexity signals triggered
   - Risk level ≤ MEDIUM
   - **All modified files <500 LOC OR well-architected**
 
@@ -164,8 +185,9 @@ Estimate the following metrics:
   - Any modified file >1000 LOC
   - Any modified file 500-1000 LOC with poor architecture quality
   - Multiple modified files >500 LOC (cumulative cognitive load)
+  - **Any Architectural Complexity Signal answered YES**
 
-**IMPORTANT**: Cross-cutting changes and large/poorly-architected files automatically trigger COMPLEX classification regardless of other metrics. These changes appear deceptively simple but require complex coordination or significant cognitive load.
+**IMPORTANT**: Cross-cutting changes, architectural complexity signals, and large/poorly-architected files automatically trigger COMPLEX classification regardless of other metrics. These changes appear deceptively simple but require complex coordination, architectural decisions, or significant cognitive load.
 
 <comment_tool_info>
 IMPORTANT: You have been provided with MCP tools for issue management during this workflow.
@@ -251,6 +273,7 @@ await mcp__recap__add_artifact({
 - Database migrations: [Yes/No]
 - Cross-cutting changes: [Yes/No]
 - File architecture quality: [Good/Poor - include largest file size if >500 LOC]
+- Architectural signals triggered: [None / List of triggered signals]
 - Overall risk level: [Low/Medium/High]
 
 **Reasoning**: [1-2 sentence explanation of why this classification was chosen]
