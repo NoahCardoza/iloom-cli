@@ -60,6 +60,9 @@ export class VCSProviderFactory {
 				if (bbSettings.repoSlug) {
 					bbConfig.repoSlug = bbSettings.repoSlug
 				}
+				if (bbSettings.reviewers) {
+					bbConfig.reviewers = bbSettings.reviewers
+				}
 
 				getLogger().debug(`VCSProviderFactory: Creating BitBucketVCSProvider for user: ${bbSettings.username}`)
 				return new BitBucketVCSProvider(bbConfig)

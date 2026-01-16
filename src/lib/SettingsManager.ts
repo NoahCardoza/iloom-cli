@@ -391,6 +391,10 @@ export const IloomSettingsSchema = z.object({
 						.string()
 						.optional()
 						.describe('BitBucket repository slug (optional, auto-detected from git remote if not provided)'),
+				reviewers: z
+					.array(z.string().email('Reviewer must be a valid email address'))
+					.optional()
+					.describe('List of email addresses to add as PR reviewers. Emails are resolved to Bitbucket account IDs at PR creation time.'),
 				})
 				.optional(),
 		})
@@ -621,6 +625,10 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 						.string()
 						.optional()
 						.describe('BitBucket repository slug (optional, auto-detected from git remote if not provided)'),
+				reviewers: z
+					.array(z.string().email('Reviewer must be a valid email address'))
+					.optional()
+					.describe('List of email addresses to add as PR reviewers. Emails are resolved to Bitbucket account IDs at PR creation time.'),
 				})
 				.optional(),
 		})

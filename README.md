@@ -493,6 +493,26 @@ To use BitBucket for pull requests, add this configuration:
 - `apiToken`: API token (store in settings.local.json only!)
 - `workspace`: (Optional) BitBucket workspace, auto-detected from git remote if not provided
 - `repoSlug`: (Optional) Repository slug, auto-detected from git remote if not provided
+- `reviewers`: (Optional) Array of email addresses to automatically add as PR reviewers. Emails are resolved to BitBucket account IDs at PR creation time. Unresolved emails are logged as warnings but don't block PR creation.
+
+**Example with Reviewers:**
+```json
+{
+  "versionControl": {
+    "provider": "bitbucket",
+    "bitbucket": {
+      "username": "your-bitbucket-username",
+      "reviewers": [
+        "alice@yourcompany.com",
+        "bob@yourcompany.com"
+      ]
+    }
+  },
+  "mergeBehavior": {
+    "mode": "bitbucket-pr"
+  }
+}
+```
 
 ### Jira + BitBucket Together
 

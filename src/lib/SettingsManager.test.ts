@@ -2612,6 +2612,112 @@ const error: { code?: string; message: string } = {
 		})
 	})
 
+	describe('bitbucket reviewers configuration', () => {
+		it('should accept valid email addresses in reviewers array', async () => {
+			const projectRoot = '/test/project'
+			const validSettings = {
+				versionControl: {
+					provider: 'bitbucket',
+					bitbucket: {
+						username: 'testuser',
+						apiToken: 'test-token',
+						reviewers: ['alice@example.com', 'bob@company.org'],
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(validSettings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.versionControl?.bitbucket?.reviewers).toEqual(['alice@example.com', 'bob@company.org'])
+		})
+
+		it('should reject invalid email addresses in reviewers array', async () => {
+			const projectRoot = '/test/project'
+			const invalidSettings = {
+				versionControl: {
+					provider: 'bitbucket',
+					bitbucket: {
+						username: 'testuser',
+						apiToken: 'test-token',
+						reviewers: ['not-an-email', 'alice@example.com'],
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(invalidSettings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
+				/Reviewer must be a valid email address/
+			)
+		})
+
+		it('should allow empty reviewers array', async () => {
+			const projectRoot = '/test/project'
+			const validSettings = {
+				versionControl: {
+					provider: 'bitbucket',
+					bitbucket: {
+						username: 'testuser',
+						apiToken: 'test-token',
+						reviewers: [],
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(validSettings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.versionControl?.bitbucket?.reviewers).toEqual([])
+		})
+
+		it('should allow missing reviewers field', async () => {
+			const projectRoot = '/test/project'
+			const validSettings = {
+				versionControl: {
+					provider: 'bitbucket',
+					bitbucket: {
+						username: 'testuser',
+						apiToken: 'test-token',
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(validSettings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.versionControl?.bitbucket?.reviewers).toBeUndefined()
+		})
+	})
+
 	describe('getSpinModel', () => {
 		it('should return opus by default when spin not configured', () => {
 			const settings = { sourceEnvOnStart: false }

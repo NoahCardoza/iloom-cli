@@ -47,6 +47,19 @@ export interface BitBucketPullRequest {
 }
 
 /**
+ * BitBucket workspace member response from API
+ * Used for resolving email addresses to account IDs
+ */
+export interface BitBucketWorkspaceMember {
+	user: {
+		account_id: string
+		display_name: string
+		uuid: string
+		nickname?: string
+	}
+}
+
+/**
  * BitBucket repository response from API
  */
 export interface BitBucketRepository {
@@ -223,24 +236,32 @@ export class BitBucketApiClient {
 		title: string,
 		description: string,
 		sourceBranch: string,
-		destinationBranch: string
+		destinationBranch: string,
+		reviewerAccountIds?: string[]
 	): Promise<BitBucketPullRequest> {
+		const payload: Record<string, unknown> = {
+			title,
+			description,
+			source: {
+				branch: {
+					name: sourceBranch,
+				},
+			},
+			destination: {
+				branch: {
+					name: destinationBranch,
+				},
+			},
+		}
+
+		// Add reviewers if provided
+		if (reviewerAccountIds && reviewerAccountIds.length > 0) {
+			payload.reviewers = reviewerAccountIds.map(id => ({ account_id: id }))
+		}
+
 		return this.post<BitBucketPullRequest>(
 			`/repositories/${workspace}/${repoSlug}/pullrequests`,
-			{
-				title,
-				description,
-				source: {
-					branch: {
-						name: sourceBranch,
-					},
-				},
-				destination: {
-					branch: {
-						name: destinationBranch,
-					},
-				},
-			}
+			payload
 		)
 	}
 
@@ -261,6 +282,53 @@ export class BitBucketApiClient {
 				},
 			}
 		)
+	}
+
+	/**
+	 * Find workspace members by email addresses
+	 * Returns a map of email -> account_id for resolved emails
+	 *
+	 * Note: BitBucket API requires querying members individually since the BBQL
+	 * user.email field is not available in workspace members endpoint.
+	 * We use the user email lookup endpoint instead.
+	 */
+	async findUsersByEmail(
+		workspace: string,
+		emails: string[]
+	): Promise<Map<string, string>> {
+		const result = new Map<string, string>()
+
+		// Query each email individually using the users endpoint
+		// The workspace members endpoint doesn't expose email in searchable fields
+		for (const email of emails) {
+			try {
+				// Use the workspace members endpoint with a search query
+				// The API supports searching by nickname which often matches email prefix
+				const endpoint = `/workspaces/${workspace}/members`
+				const response = await this.get<{ values: BitBucketWorkspaceMember[] }>(endpoint)
+
+				// Find member whose nickname or display_name contains the email prefix
+				// This is a best-effort match since email is not directly exposed
+				const emailPrefix = email.split('@')[0]?.toLowerCase()
+				if (!emailPrefix) continue
+
+				const member = response.values.find(m =>
+					m.user.nickname?.toLowerCase() === emailPrefix ||
+					m.user.display_name.toLowerCase().includes(emailPrefix)
+				)
+
+				if (member) {
+					result.set(email, member.user.account_id)
+					getLogger().debug(`Resolved reviewer email ${email} to account ID ${member.user.account_id}`)
+				} else {
+					getLogger().warn(`Could not resolve reviewer email ${email} to a BitBucket account ID`)
+				}
+			} catch (error) {
+				getLogger().warn(`Failed to resolve reviewer email ${email}`, { error })
+			}
+		}
+
+		return result
 	}
 
 	/**

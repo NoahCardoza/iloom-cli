@@ -11,7 +11,9 @@ import { parseGitRemotes } from '../../../utils/remote.js'
  * BitBucket-specific configuration
  * Extends BitBucketConfig with username, appPassword, workspace, and repoSlug
  */
-export type BitBucketVCSConfig = BitBucketConfig
+export interface BitBucketVCSConfig extends BitBucketConfig {
+	reviewers?: string[] // Email addresses of reviewers to add to PRs
+}
 
 /**
  * BitBucketVCSProvider implements VersionControlProvider for BitBucket
@@ -27,9 +29,13 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 	readonly supportsDraftPRs = false // BitBucket doesn't have draft PRs
 
 	private readonly client: BitBucketApiClient
+	private readonly reviewerEmails?: string[]
 
 	constructor(config: BitBucketVCSConfig) {
 		this.client = new BitBucketApiClient(config)
+		if (config.reviewers) {
+			this.reviewerEmails = config.reviewers
+		}
 	}
 
 	/**
@@ -73,13 +79,20 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 		getLogger().info(`Creating BitBucket PR in ${workspace}/${repoSlug}`)
 		getLogger().debug('PR details', { branchName, title, baseBranch })
 
+		// Resolve reviewer emails to account IDs if configured
+		let reviewerIds: string[] | undefined
+		if (this.reviewerEmails && this.reviewerEmails.length > 0) {
+			reviewerIds = await this.resolveReviewerEmails(workspace, this.reviewerEmails)
+		}
+
 		const pr = await this.client.createPullRequest(
 			workspace,
 			repoSlug,
 			title,
 			body,
 			branchName,
-			baseBranch
+			baseBranch,
+			reviewerIds
 		)
 
 		// Validate the response structure
@@ -185,6 +198,41 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 		}
 
 		return { workspace, repoSlug }
+	}
+
+	/**
+	 * Resolve reviewer email addresses to BitBucket account IDs
+	 * Warns for any emails that cannot be resolved but continues with partial list
+	 */
+	private async resolveReviewerEmails(workspace: string, emails: string[]): Promise<string[]> {
+		getLogger().debug(`Resolving ${emails.length} reviewer email(s) to BitBucket account IDs`)
+
+		const emailToAccountId = await this.client.findUsersByEmail(workspace, emails)
+
+		const resolvedIds: string[] = []
+		const unresolvedEmails: string[] = []
+
+		for (const email of emails) {
+			const accountId = emailToAccountId.get(email)
+			if (accountId) {
+				resolvedIds.push(accountId)
+			} else {
+				unresolvedEmails.push(email)
+			}
+		}
+
+		if (unresolvedEmails.length > 0) {
+			getLogger().warn(
+				`Could not resolve ${unresolvedEmails.length} reviewer email(s) to BitBucket account IDs: ${unresolvedEmails.join(', ')}. ` +
+				`These reviewers will not be added to the PR.`
+			)
+		}
+
+		if (resolvedIds.length > 0) {
+			getLogger().info(`Resolved ${resolvedIds.length} reviewer(s) for PR`)
+		}
+
+		return resolvedIds
 	}
 
 	/**
