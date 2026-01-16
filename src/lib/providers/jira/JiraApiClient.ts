@@ -193,8 +193,10 @@ export class JiraApiClient {
 	 * Accepts Markdown content which is converted to ADF for Jira
 	 */
 	async addComment(issueKey: string, body: string): Promise<JiraComment> {
+		const adfBody = markdownToAdf(body);
+		getLogger().debug('Adding comment to Jira issue', { issueKey, body, adfBody })
 		return this.post<JiraComment>(`/issue/${issueKey}/comment`, {
-			body: markdownToAdf(body),
+			body: adfBody
 		})
 	}
 
