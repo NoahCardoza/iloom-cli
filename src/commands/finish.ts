@@ -249,7 +249,6 @@ export class FinishCommand {
 		if (!worktree) {
 			throw new Error('No worktree found')
 		}
-
 		// Step 4: Branch based on input type
 		if (parsed.type === 'pr') {
 			// Fetch PR to get current state
@@ -346,6 +345,19 @@ export class FinishCommand {
 			result.branchName = parsed.branchName
 		}
 
+		// For issue types, get original issue key from metadata (preserves case for Jira/Linear IDs)
+		if (result.type === 'issue' && result.number !== undefined) {
+			const worktree = await this.gitWorktreeManager.findWorktreeForIssue(result.number)
+			if (worktree) {
+				const { MetadataManager } = await import('../lib/MetadataManager.js')
+				const metadataManager = new MetadataManager()
+				const metadata = await metadataManager.readMetadata(worktree.path)
+				if (metadata?.issue_numbers?.[0]) {
+					result.number = metadata.issue_numbers[0]
+				}
+			}
+		}
+
 		return result
 	}
 
@@ -372,16 +384,24 @@ export class FinishCommand {
 			}
 		}
 
+		// Read metadata to get original issue key (preserves case for Jira/Linear IDs)
+		// process.cwd() is the worktree path when auto-detecting
+		const { MetadataManager } = await import('../lib/MetadataManager.js')
+		const metadataManager = new MetadataManager()
+		const metadata = await metadataManager.readMetadata(process.cwd())
+
 		// Check for issue pattern in directory or branch name
 		const issueNumber = extractIssueNumber(currentDir)
 
 		if (issueNumber !== null) {
+			// Use issue key from metadata if available (original case), otherwise use extracted (lowercase)
+			const originalIssueKey = metadata?.issue_numbers?.[0] ?? issueNumber
 			getLogger().debug(
-				`Auto-detected issue #${issueNumber} from directory: ${currentDir}`
+				`Auto-detected issue #${originalIssueKey} from directory: ${currentDir}`
 			)
 			return {
 				type: 'issue',
-				number: issueNumber,
+				number: originalIssueKey,
 				originalInput: currentDir,
 				autoDetected: true,
 			}
@@ -401,12 +421,14 @@ export class FinishCommand {
 		// Try to extract issue from branch name
 		const branchIssueNumber = extractIssueNumber(currentBranch)
 		if (branchIssueNumber !== null) {
+			// Use issue key from metadata if available (original case), otherwise use extracted (lowercase)
+			const originalIssueKey = metadata?.issue_numbers?.[0] ?? branchIssueNumber
 			getLogger().debug(
-				`Auto-detected issue #${branchIssueNumber} from branch: ${currentBranch}`
+				`Auto-detected issue #${originalIssueKey} from branch: ${currentBranch}`
 			)
 			return {
 				type: 'issue',
-				number: branchIssueNumber,
+				number: originalIssueKey,
 				originalInput: currentBranch,
 				autoDetected: true,
 			}
@@ -673,6 +695,7 @@ export class FinishCommand {
 					}
 
 					// Only add issueNumber if it's an issue
+					// Note: parsed.number already has correct case from parseInput() metadata lookup
 					if (parsed.type === 'issue' && parsed.number) {
 						commitOptions.issueNumber = parsed.number
 					}
@@ -1153,14 +1176,7 @@ export class FinishCommand {
 		}
 
 		// Step 2: Generate PR title from issue if available
-		// Read metadata to get original issue key (preserves case for Jira/Linear IDs)
-		const { MetadataManager } = await import('../lib/MetadataManager.js')
-		const metadataManager = new MetadataManager()
-		const metadata = await metadataManager.readMetadata(worktree.path)
-
-		// Use issue key from metadata (original case) or fall back to parsed.number (may be lowercase)
-		const issueKey = metadata?.issue_numbers?.[0] ?? parsed.number
-
+		// Note: parsed.number already has correct case from parseInput() metadata lookup
 		let prTitle = `Work from ${worktree.branch}`
 		if (parsed.type === 'issue' && parsed.number) {
 			try {
@@ -1169,7 +1185,7 @@ export class FinishCommand {
 				// Apply ticket prefix if enabled (default: true)
 				const usePrefix = settings.mergeBehavior?.prTitlePrefix;
 				if (usePrefix) {
-					prTitle = `${issueKey}: ${issue.title}`
+					prTitle = `${parsed.number}: ${issue.title}`
 				} else {
 					prTitle = issue.title
 				}
