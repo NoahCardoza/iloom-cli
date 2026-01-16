@@ -191,11 +191,15 @@ export async function launchClaude(
 	if (sessionId) {
 		args.push('--session-id', sessionId)
 	}
+	const isDebugMode = logger.isDebugEnabled()
+
+	if (isDebugMode) {
+		args.push('--debug') // Enable debug mode for more detailed logs
+	}
 
 	try {
 		if (headless) {
 			// Headless mode: capture and return output
-			const isDebugMode = logger.isDebugEnabled()
 
 			// Set up execa options based on debug mode
 			const execaOptions = {
