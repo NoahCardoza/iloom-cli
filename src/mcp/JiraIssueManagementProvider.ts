@@ -36,6 +36,50 @@ function normalizeAuthor(author: { displayName?: string; emailAddress?: string; 
 		...(author.accountId && { accountId: author.accountId }),
 	}
 }
+/**
+ * Extract Jira configuration from settings (for cli usage) or environment variables (in mcp server)
+ */
+const getJiraTrackerConfig = (settings: IloomSettings): JiraTrackerConfig => {
+	const jiraSettings = settings.issueManagement?.jira
+
+	if (jiraSettings?.host && jiraSettings?.username && jiraSettings?.apiToken && jiraSettings?.projectKey) {
+			const config: JiraTrackerConfig = {
+			host: jiraSettings.host,
+			username: jiraSettings.username,
+			apiToken: jiraSettings.apiToken,
+			projectKey: jiraSettings.projectKey,
+		}
+
+		if (jiraSettings.transitionMappings) {
+			config.transitionMappings = jiraSettings.transitionMappings
+		}
+
+		return config;
+	}
+
+	if (process.env.JIRA_HOST && process.env.JIRA_USERNAME && process.env.JIRA_API_TOKEN && process.env.JIRA_PROJECT_KEY) {
+		const config: JiraTrackerConfig = {
+			host: process.env.JIRA_HOST,
+			username: process.env.JIRA_USERNAME,
+			apiToken: process.env.JIRA_API_TOKEN,
+			projectKey: process.env.JIRA_PROJECT_KEY,
+		}
+
+		if (process.env.JIRA_TRANSITION_MAPPINGS) {
+			try {
+				config.transitionMappings = JSON.parse(process.env.JIRA_TRANSITION_MAPPINGS)
+			} catch {
+				throw new Error('Invalid JSON in JIRA_TRANSITION_MAPPINGS environment variable')
+			}
+		}
+
+		return config
+	}
+
+	throw new Error(
+		'Missing required Jira settings: issueManagement.jira.{host, username, apiToken, projectKey} or corresponding environment variables'
+	)	
+}
 
 /**
  * Jira-specific implementation of IssueManagementProvider
@@ -46,24 +90,7 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 	private tracker: JiraIssueTracker
 
 	constructor(settings: IloomSettings) {
-		const jiraSettings = settings.issueManagement?.jira
-
-		if (!jiraSettings?.host || !jiraSettings?.username || !jiraSettings?.apiToken || !jiraSettings?.projectKey) {
-			throw new Error(
-				'Missing required Jira settings: issueManagement.jira.{host, username, apiToken, projectKey}'
-			)
-		}
-
-		const config: JiraTrackerConfig = {
-			host: jiraSettings.host,
-			username: jiraSettings.username,
-			apiToken: jiraSettings.apiToken,
-			projectKey: jiraSettings.projectKey,
-		}
-
-		if (jiraSettings.transitionMappings) {
-			config.transitionMappings = jiraSettings.transitionMappings
-		}
+		const config = getJiraTrackerConfig(settings);
 
 		this.tracker = new JiraIssueTracker(config)
 	}
