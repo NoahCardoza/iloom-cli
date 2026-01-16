@@ -10,6 +10,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { IssueManagementProviderFactory } from './IssueManagementProviderFactory.js'
+import { SettingsManager } from '../lib/SettingsManager.js'
+import type { IloomSettings } from '../lib/SettingsManager.js'
 import type {
 	IssueProvider,
 	GetIssueInput,
@@ -18,6 +20,9 @@ import type {
 	UpdateCommentInput,
 	CreateIssueInput,
 } from './types.js'
+
+// Module-level settings loaded at startup
+let settings: IloomSettings | undefined
 
 // Validate required environment variables
 function validateEnvironment(): IssueProvider {
@@ -135,7 +140,8 @@ server.registerTool(
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
 			)
 			const result = await provider.getIssue({ number, includeComments })
 
@@ -185,7 +191,8 @@ server.registerTool(
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
 			)
 			const result = await provider.getComment({ commentId, number })
 
@@ -234,7 +241,8 @@ server.registerTool(
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
 			)
 			const result = await provider.createComment({ number, body, type })
 
@@ -283,7 +291,8 @@ server.registerTool(
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
 			)
 			const result = await provider.updateComment({ commentId, number, body })
 
@@ -335,7 +344,8 @@ server.registerTool(
 
 		try {
 			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
 			)
 			const result = await provider.createIssue({ title, body, labels, teamKey })
 
@@ -362,6 +372,11 @@ server.registerTool(
 // Main server startup
 async function main(): Promise<void> {
 	console.error('Starting Issue Management MCP Server...')
+
+	// Load settings for providers that need them
+	const settingsManager = new SettingsManager()
+	settings = await settingsManager.loadSettings()
+	console.error('Settings loaded')
 
 	// Validate environment and get provider
 	const provider = validateEnvironment()

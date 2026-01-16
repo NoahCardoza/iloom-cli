@@ -69,7 +69,9 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 	): Promise<string> {
 		const { workspace, repoSlug } = await this.getWorkspaceAndRepo(cwd)
 
-		getLogger().debug('Creating BitBucket PR', { workspace, repoSlug, branchName, title })
+		// Log the target repository so users can verify it's correct
+		getLogger().info(`Creating BitBucket PR in ${workspace}/${repoSlug}`)
+		getLogger().debug('PR details', { branchName, title, baseBranch })
 
 		const pr = await this.client.createPullRequest(
 			workspace,
@@ -80,6 +82,16 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 			baseBranch
 		)
 
+		// Validate the response structure
+		if (!pr?.id || !pr?.links?.html?.href) {
+			getLogger().error('Invalid BitBucket API response', { pr })
+			throw new Error(
+				`BitBucket API returned invalid PR response. ` +
+				`Expected PR with id and links.html.href, got: ${JSON.stringify(pr)}`
+			)
+		}
+
+		getLogger().info(`BitBucket PR #${pr.id} created successfully`)
 		return pr.links.html.href
 	}
 

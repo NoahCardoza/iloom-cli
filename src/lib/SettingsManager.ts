@@ -400,6 +400,7 @@ export const IloomSettingsSchema = z.object({
 		.object({
 			mode: z.enum(['local', 'github-pr', 'github-draft-pr', 'bitbucket-pr']).default('local'),
 			remote: z.string().optional(),
+			prTitlePrefix: z.boolean().default(true).optional().describe('Prefix PR titles with the issue number (e.g., "QLH-123: Title"). Default: true'),
 		})
 		.optional()
 		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), github-draft-pr (create draft PR at start, mark ready on finish), or bitbucket-pr (create BitBucket PR)'),
@@ -629,6 +630,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.object({
 			mode: z.enum(['local', 'github-pr', 'github-draft-pr', 'bitbucket-pr']).optional(),
 			remote: z.string().optional(),
+			prTitlePrefix: z.boolean().optional(),
 		})
 		.optional()
 		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), github-draft-pr (create draft PR at start, mark ready on finish), or bitbucket-pr (create BitBucket PR)'),

@@ -400,7 +400,7 @@ export class SessionSummaryService {
 	): Promise<void> {
 		// Get the issue management provider from settings
 		const providerType = (settings.issueManagement?.provider ?? 'github') as IssueProvider
-		const provider = IssueManagementProviderFactory.create(providerType)
+		const provider = IssueManagementProviderFactory.create(providerType, settings)
 
 		// Apply attribution if configured
 		const finalSummary = await this.applyAttributionWithSettings(summary, settings, worktreePath)

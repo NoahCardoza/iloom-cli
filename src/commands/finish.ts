@@ -219,6 +219,7 @@ export class FinishCommand {
 		// We need repo info if:
 		// 1. Merge mode is github-pr (for creating PRs on GitHub, even with Linear issues)
 		// 2. Provider is GitHub (for GitHub issue operations)
+		// Note: bitbucket-pr mode handles repo detection internally via BitBucketVCSProvider
 		const needsRepo =
 			settings.mergeBehavior?.mode === 'github-pr' || settings.mergeBehavior?.mode === 'github-draft-pr' || this.issueTracker.providerName === 'github'
 		if (needsRepo && (await hasMultipleRemotes())) {
@@ -599,101 +600,107 @@ export class FinishCommand {
 		worktree: GitWorktree,
 		result: FinishResult
 	): Promise<void> {
-		// Step 1: Rebase branch on main FIRST (Issue #344)
-		// This ensures validation runs against the rebased code (with latest main changes)
-		getLogger().info('Rebasing branch on main...')
-
+		// Define merge options early so they're available for all code paths
 		const mergeOptions: MergeOptions = {
 			dryRun: options.dryRun ?? false,
 			force: options.force ?? false,
 		}
 
-		await this.mergeManager.rebaseOnMain(worktree.path, mergeOptions)
-		getLogger().success('Branch rebased successfully')
-		result.operations.push({
-			type: 'rebase',
-			message: 'Branch rebased on main',
-			success: true,
-		})
-
-		// Step 2: Run pre-merge validations AFTER rebase (Issue #344)
-		// Validates code with latest main changes integrated
-		if (!options.dryRun) {
-			getLogger().info('Running pre-merge validations...')
-
-			await this.validationRunner.runValidations(worktree.path, {
-				dryRun: options.dryRun ?? false,
-			})
-			getLogger().success('All validations passed')
-			result.operations.push({
-				type: 'validation',
-				message: 'Pre-merge validations passed',
-				success: true,
-			})
+		// Skip rebase/validation/commit steps if --skip-to-pr flag is set (debug mode)
+		if (options.skipToPr) {
+			getLogger().info('Skipping rebase/validation/commit (--skip-to-pr flag)')
 		} else {
-			getLogger().info('[DRY RUN] Would run pre-merge validations')
+			// Step 1: Rebase branch on main FIRST (Issue #344)
+			// This ensures validation runs against the rebased code (with latest main changes)
+			getLogger().info('Rebasing branch on main...')
+
+			await this.mergeManager.rebaseOnMain(worktree.path, mergeOptions)
+			getLogger().success('Branch rebased successfully')
 			result.operations.push({
-				type: 'validation',
-				message: 'Would run pre-merge validations (dry-run)',
+				type: 'rebase',
+				message: 'Branch rebased on main',
 				success: true,
 			})
-		}
 
-		// Step 3: Detect uncommitted changes AFTER validation passes
-		const gitStatus = await this.commitManager.detectUncommittedChanges(worktree.path)
+			// Step 2: Run pre-merge validations AFTER rebase (Issue #344)
+			// Validates code with latest main changes integrated
+			if (!options.dryRun) {
+				getLogger().info('Running pre-merge validations...')
 
-		// Step 4: Commit changes only if validation passed AND changes exist
-		if (gitStatus.hasUncommittedChanges) {
-			if (options.dryRun) {
-				getLogger().info('[DRY RUN] Would auto-commit uncommitted changes (validation passed)')
+				await this.validationRunner.runValidations(worktree.path, {
+					dryRun: options.dryRun ?? false,
+				})
+				getLogger().success('All validations passed')
 				result.operations.push({
-					type: 'commit',
-					message: 'Would auto-commit uncommitted changes (dry-run)',
+					type: 'validation',
+					message: 'Pre-merge validations passed',
 					success: true,
 				})
 			} else {
-				getLogger().info('Validation passed, auto-committing uncommitted changes...')
+				getLogger().info('[DRY RUN] Would run pre-merge validations')
+				result.operations.push({
+					type: 'validation',
+					message: 'Would run pre-merge validations (dry-run)',
+					success: true,
+				})
+			}
 
-				// Load settings to get skipVerify configuration and issuePrefix
-				const settings = await this.settingsManager.loadSettings(worktree.path)
-				const skipVerify = settings.workflows?.issue?.noVerify ?? false
-				const providerType = settings.issueManagement?.provider ?? 'github'
-				const issuePrefix = IssueManagementProviderFactory.create(providerType).issuePrefix
+			// Step 3: Detect uncommitted changes AFTER validation passes
+			const gitStatus = await this.commitManager.detectUncommittedChanges(worktree.path)
 
-				const commitOptions: CommitOptions = {
-					dryRun: options.dryRun ?? false,
-					skipVerify,
-					issuePrefix,
-				}
-
-				// Only add issueNumber if it's an issue
-				if (parsed.type === 'issue' && parsed.number) {
-					commitOptions.issueNumber = parsed.number
-				}
-
-				try {
-					await this.commitManager.commitChanges(worktree.path, commitOptions)
-					getLogger().success('Changes committed successfully')
+			// Step 4: Commit changes only if validation passed AND changes exist
+			if (gitStatus.hasUncommittedChanges) {
+				if (options.dryRun) {
+					getLogger().info('[DRY RUN] Would auto-commit uncommitted changes (validation passed)')
 					result.operations.push({
 						type: 'commit',
-						message: 'Changes committed successfully',
+						message: 'Would auto-commit uncommitted changes (dry-run)',
 						success: true,
 					})
-				} catch (error) {
-					if (error instanceof UserAbortedCommitError) {
-						getLogger().info('Commit aborted by user')
+				} else {
+					getLogger().info('Validation passed, auto-committing uncommitted changes...')
+
+					// Load settings to get skipVerify configuration and issuePrefix
+					const settings = await this.settingsManager.loadSettings(worktree.path)
+					const skipVerify = settings.workflows?.issue?.noVerify ?? false
+					const providerType = settings.issueManagement?.provider ?? 'github'
+					const issuePrefix = IssueManagementProviderFactory.create(providerType, settings).issuePrefix
+
+					const commitOptions: CommitOptions = {
+						dryRun: options.dryRun ?? false,
+						skipVerify,
+						issuePrefix,
+					}
+
+					// Only add issueNumber if it's an issue
+					if (parsed.type === 'issue' && parsed.number) {
+						commitOptions.issueNumber = parsed.number
+					}
+
+					try {
+						await this.commitManager.commitChanges(worktree.path, commitOptions)
+						getLogger().success('Changes committed successfully')
 						result.operations.push({
 							type: 'commit',
-							message: 'Commit aborted by user',
-							success: false,
+							message: 'Changes committed successfully',
+							success: true,
 						})
-						throw error  // Propagate to CLI for non-zero exit
+					} catch (error) {
+						if (error instanceof UserAbortedCommitError) {
+							getLogger().info('Commit aborted by user')
+							result.operations.push({
+								type: 'commit',
+								message: 'Commit aborted by user',
+								success: false,
+							})
+							throw error  // Propagate to CLI for non-zero exit
+						}
+						throw error  // Re-throw other errors
 					}
-					throw error  // Re-throw other errors
 				}
+			} else {
+				getLogger().debug('No uncommitted changes found')
 			}
-		} else {
-			getLogger().debug('No uncommitted changes found')
 		}
 
 		// Step 5: Check merge mode from settings and branch workflow
@@ -839,6 +846,23 @@ export class FinishCommand {
 			return
 		}
 
+		if (mergeBehavior.mode === 'bitbucket-pr') {
+			// For BitBucket, we use the VCS provider layer - NOT the issue tracker
+			// This allows Jira/Linear issues to create PRs in BitBucket
+			const { VCSProviderFactory } = await import('../lib/VCSProviderFactory.js')
+			const vcsProvider = VCSProviderFactory.create(settings)
+
+			if (!vcsProvider || vcsProvider.providerName !== 'bitbucket') {
+				throw new Error(
+					`The 'bitbucket-pr' merge mode requires BitBucket VCS configuration. ` +
+					`Add versionControl.provider: 'bitbucket' to your settings.`
+				)
+			}
+
+			await this.executeBitBucketPRWorkflow(parsed, options, worktree, settings, vcsProvider, result)
+			return
+		}
+
 		// Step 6: Perform fast-forward merge
 		getLogger().info('Performing fast-forward merge...')
 		await this.mergeManager.performFastForwardMerge(worktree.branch, worktree.path, mergeOptions)
@@ -956,7 +980,7 @@ export class FinishCommand {
 					const settings = await this.settingsManager.loadSettings(worktree.path)
 					const skipVerify = settings.workflows?.pr?.noVerify ?? false
 					const providerType = settings.issueManagement?.provider ?? 'github'
-					const issuePrefix = IssueManagementProviderFactory.create(providerType).issuePrefix
+					const issuePrefix = IssueManagementProviderFactory.create(providerType, settings).issuePrefix
 
 					try {
 						await this.commitManager.commitChanges(worktree.path, {
@@ -1100,6 +1124,122 @@ export class FinishCommand {
 			}
 
 			// Step 5: Interactive cleanup prompt (unless flags override)
+			await this.handlePRCleanupPrompt(parsed, options, worktree, finishResult)
+		}
+	}
+
+	/**
+	 * Execute workflow for BitBucket PR creation (bitbucket-pr merge mode)
+	 * Validates → Commits → Pushes → Creates PR → Prompts for cleanup
+	 *
+	 * Unlike GitHub PR workflow, this uses the VersionControlProvider abstraction
+	 * instead of PRManager, allowing it to work with any issue tracker (Jira, Linear, etc.)
+	 */
+	private async executeBitBucketPRWorkflow(
+		parsed: ParsedFinishInput,
+		options: FinishOptions,
+		worktree: GitWorktree,
+		settings: import('../lib/SettingsManager.js').IloomSettings,
+		vcsProvider: import('../lib/VersionControlProvider.js').VersionControlProvider,
+		finishResult: FinishResult
+	): Promise<void> {
+		// Step 1: Push branch to origin
+		if (options.dryRun) {
+			getLogger().info('[DRY RUN] Would push branch to origin')
+		} else {
+			getLogger().info('Pushing branch to origin...')
+			await pushBranchToRemote(worktree.branch, worktree.path, { dryRun: false })
+			getLogger().success('Branch pushed successfully')
+		}
+
+		// Step 2: Generate PR title from issue if available
+		// Read metadata to get original issue key (preserves case for Jira/Linear IDs)
+		const { MetadataManager } = await import('../lib/MetadataManager.js')
+		const metadataManager = new MetadataManager()
+		const metadata = await metadataManager.readMetadata(worktree.path)
+
+		// Use issue key from metadata (original case) or fall back to parsed.number (may be lowercase)
+		const issueKey = metadata?.issue_numbers?.[0] ?? parsed.number
+
+		let prTitle = `Work from ${worktree.branch}`
+		if (parsed.type === 'issue' && parsed.number) {
+			try {
+				const issue = await this.issueTracker.fetchIssue(parsed.number)
+
+				// Apply ticket prefix if enabled (default: true)
+				const usePrefix = settings.mergeBehavior?.prTitlePrefix;
+				if (usePrefix) {
+					prTitle = `${issueKey}: ${issue.title}`
+				} else {
+					prTitle = issue.title
+				}
+			} catch (error) {
+				getLogger().debug('Could not fetch issue title, using branch name', { error })
+			}
+		}
+
+		// Step 3: Get base branch (respects parent loom metadata for child looms)
+		const baseBranch = await getMergeTargetBranch(worktree.path)
+
+		// Step 4: Check for existing PR or create new one
+		if (options.dryRun) {
+			getLogger().info('[DRY RUN] Would create BitBucket PR')
+			getLogger().info(`  Title: ${prTitle}`)
+			getLogger().info(`  Base: ${baseBranch}`)
+			finishResult.operations.push({
+				type: 'pr-creation',
+				message: 'Would create BitBucket PR (dry-run)',
+				success: true,
+			})
+		} else {
+			// Check for existing PR first
+			const existingPR = await vcsProvider.checkForExistingPR(worktree.branch, worktree.path)
+
+			if (existingPR) {
+				getLogger().success(`Existing pull request: ${existingPR.url}`)
+				finishResult.prUrl = existingPR.url
+				finishResult.operations.push({
+					type: 'pr-creation',
+					message: 'Found existing pull request',
+					success: true,
+				})
+			} else {
+				// Generate PR body using Claude (same as GitHub workflow)
+				const { PRManager } = await import('../lib/PRManager.js')
+				const prManager = new PRManager(settings)
+				const prBody = await prManager.generatePRBody(
+					parsed.type === 'issue' ? parsed.number : undefined,
+					worktree.path
+				)
+
+				// Create new PR
+				const prUrl = await vcsProvider.createPR(
+					worktree.branch,
+					prTitle,
+					prBody,
+					baseBranch,
+					worktree.path
+				)
+				getLogger().success(`Pull request created: ${prUrl}`)
+				finishResult.prUrl = prUrl
+				finishResult.operations.push({
+					type: 'pr-creation',
+					message: 'Pull request created',
+					success: true,
+				})
+			}
+
+			// Generate session summary - posts to the ISSUE (Jira/Linear), not the PR
+			// For BitBucket workflows, the issue tracker (Jira/Linear) doesn't support PR comments,
+			// so we post to the issue where the knowledge capture belongs
+			await this.generateSessionSummaryIfConfigured(parsed, worktree, options)
+
+			// Archive metadata BEFORE cleanup prompt (ensures it runs even with --no-cleanup)
+			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			const metadataManager = new MetadataManager()
+			await metadataManager.archiveMetadata(worktree.path)
+
+			// Interactive cleanup prompt (unless flags override)
 			await this.handlePRCleanupPrompt(parsed, options, worktree, finishResult)
 		}
 	}

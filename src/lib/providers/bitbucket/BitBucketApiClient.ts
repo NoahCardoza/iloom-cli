@@ -187,16 +187,27 @@ export class BitBucketApiClient {
 
 	/**
 	 * List open pull requests for a branch
+	 *
+	 * Note: BitBucket uses BBQL (BitBucket Query Language) for filtering.
+	 * The q parameter must use the format: q=source.branch.name="branch-name"
+	 * When using BBQL, we include state filter in the query to ensure it's applied.
+	 * See: https://developer.atlassian.com/cloud/bitbucket/rest/intro/#filtering
 	 */
 	async listPullRequests(
 		workspace: string,
 		repoSlug: string,
 		sourceBranch?: string
 	): Promise<BitBucketPullRequest[]> {
-		let endpoint = `/repositories/${workspace}/${repoSlug}/pullrequests?state=OPEN`
-		
+		let endpoint = `/repositories/${workspace}/${repoSlug}/pullrequests`
+
 		if (sourceBranch) {
-			endpoint += `&source.branch.name=${encodeURIComponent(sourceBranch)}`
+			// Use BBQL query syntax for filtering by source branch AND state
+			// Include state="OPEN" in the query to exclude DECLINED/MERGED/SUPERSEDED PRs
+			const query = `state="OPEN" AND source.branch.name="${sourceBranch}"`
+			endpoint += `?q=${encodeURIComponent(query)}`
+		} else {
+			// No branch filter, just filter by state
+			endpoint += `?state=OPEN`
 		}
 
 		const response = await this.get<{ values: BitBucketPullRequest[] }>(endpoint)

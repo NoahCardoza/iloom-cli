@@ -20,6 +20,8 @@ import type {
 import { JiraIssueTracker } from '../lib/providers/jira/JiraIssueTracker.js'
 import type { JiraTrackerConfig } from '../lib/providers/jira/JiraIssueTracker.js'
 import type { Issue } from '../types/index.js'
+import { SettingsManager } from '../lib/SettingsManager.js'
+import type { IloomSettings } from '../lib/SettingsManager.js'
 
 /**
  * Normalize Jira author to FlexibleAuthor format
@@ -43,36 +45,36 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 	readonly issuePrefix = ''
 	private tracker: JiraIssueTracker
 
-	constructor() {
-		// Read configuration from environment variables
-		const host = process.env.JIRA_HOST
-		const username = process.env.JIRA_USERNAME
-		const apiToken = process.env.JIRA_API_TOKEN
-		const projectKey = process.env.JIRA_PROJECT_KEY
+	constructor(settings: IloomSettings) {
+		const jiraSettings = settings.issueManagement?.jira
 
-		if (!host || !username || !apiToken || !projectKey) {
+		if (!jiraSettings?.host || !jiraSettings?.username || !jiraSettings?.apiToken || !jiraSettings?.projectKey) {
 			throw new Error(
-				'Missing required Jira environment variables: JIRA_HOST, JIRA_USERNAME, JIRA_API_TOKEN, JIRA_PROJECT_KEY'
+				'Missing required Jira settings: issueManagement.jira.{host, username, apiToken, projectKey}'
 			)
 		}
 
 		const config: JiraTrackerConfig = {
-			host,
-			username,
-			apiToken,
-			projectKey,
+			host: jiraSettings.host,
+			username: jiraSettings.username,
+			apiToken: jiraSettings.apiToken,
+			projectKey: jiraSettings.projectKey,
 		}
 
-		// Parse transition mappings if provided
-		if (process.env.JIRA_TRANSITION_MAPPINGS) {
-			try {
-				config.transitionMappings = JSON.parse(process.env.JIRA_TRANSITION_MAPPINGS)
-			} catch (error) {
-				console.error('Failed to parse JIRA_TRANSITION_MAPPINGS:', error)
-			}
+		if (jiraSettings.transitionMappings) {
+			config.transitionMappings = jiraSettings.transitionMappings
 		}
 
 		this.tracker = new JiraIssueTracker(config)
+	}
+
+	/**
+	 * Static factory for convenience when settings aren't pre-loaded
+	 */
+	static async create(): Promise<JiraIssueManagementProvider> {
+		const settingsManager = new SettingsManager()
+		const settings = await settingsManager.loadSettings()
+		return new JiraIssueManagementProvider(settings)
 	}
 
 	/**
