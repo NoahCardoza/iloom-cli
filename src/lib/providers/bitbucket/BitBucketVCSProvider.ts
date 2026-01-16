@@ -83,6 +83,19 @@ export class BitBucketVCSProvider implements VersionControlProvider {
 		let reviewerIds: string[] | undefined
 		if (this.reviewerUsernames && this.reviewerUsernames.length > 0) {
 			reviewerIds = await this.resolveReviewerUsernames(workspace, this.reviewerUsernames)
+
+			// Filter out the current user from reviewers (BitBucket doesn't allow PR author as reviewer)
+			if (reviewerIds.length > 0) {
+				const currentUser = await this.client.getCurrentUser()
+				const originalCount = reviewerIds.length
+				reviewerIds = reviewerIds.filter(id => id !== currentUser.account_id)
+
+				if (reviewerIds.length < originalCount) {
+					getLogger().debug(
+						`Removed current user (${currentUser.display_name}) from reviewers list - PR author cannot be a reviewer`
+					)
+				}
+			}
 		}
 
 		const pr = await this.client.createPullRequest(

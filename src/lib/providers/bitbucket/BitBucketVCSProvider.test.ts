@@ -9,6 +9,7 @@ vi.mock('./BitBucketApiClient.js', () => ({
 		getRepoSlug: vi.fn().mockReturnValue('test-repo'),
 		createPullRequest: vi.fn(),
 		findUsersByUsername: vi.fn(),
+		getCurrentUser: vi.fn(),
 		listPullRequests: vi.fn(),
 		getPullRequest: vi.fn(),
 		addPRComment: vi.fn(),
@@ -37,6 +38,7 @@ describe('BitBucketVCSProvider', () => {
 		getRepoSlug: ReturnType<typeof vi.fn>
 		createPullRequest: ReturnType<typeof vi.fn>
 		findUsersByUsername: ReturnType<typeof vi.fn>
+		getCurrentUser: ReturnType<typeof vi.fn>
 		listPullRequests: ReturnType<typeof vi.fn>
 		getPullRequest: ReturnType<typeof vi.fn>
 		addPRComment: ReturnType<typeof vi.fn>
@@ -50,6 +52,11 @@ describe('BitBucketVCSProvider', () => {
 			getRepoSlug: vi.fn().mockReturnValue('test-repo'),
 			createPullRequest: vi.fn(),
 			findUsersByUsername: vi.fn(),
+			getCurrentUser: vi.fn().mockResolvedValue({
+				account_id: 'acc-current-user',
+				display_name: 'Current User',
+				nickname: 'currentuser',
+			}),
 			listPullRequests: vi.fn(),
 			getPullRequest: vi.fn(),
 			addPRComment: vi.fn(),
@@ -233,6 +240,112 @@ describe('BitBucketVCSProvider', () => {
 				'feature',
 				'main',
 				undefined
+			)
+		})
+
+		it('should filter out the current user from reviewers list', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+				reviewers: ['alice', 'currentuser'], // currentuser is the PR author
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			// Current user has account_id 'acc-current-user' (set in beforeEach)
+			mockClient.findUsersByUsername.mockResolvedValue(
+				new Map([
+					['alice', 'acc-alice'],
+					['currentuser', 'acc-current-user'], // Same as current user
+				])
+			)
+
+			mockClient.createPullRequest.mockResolvedValue({
+				id: 123,
+				title: 'Test PR',
+				links: { html: { href: 'https://bitbucket.org/test/pr/123' } },
+			})
+
+			await provider.createPR('feature', 'Test PR', 'Test body', 'main')
+
+			// getCurrentUser should be called to get the current user's account ID
+			expect(mockClient.getCurrentUser).toHaveBeenCalled()
+
+			// createPullRequest should be called with only alice (current user filtered out)
+			expect(mockClient.createPullRequest).toHaveBeenCalledWith(
+				'test-workspace',
+				'test-repo',
+				'Test PR',
+				'Test body',
+				'feature',
+				'main',
+				['acc-alice']
+			)
+		})
+
+		it('should pass all reviewers when current user is not in the list', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+				reviewers: ['alice', 'bob'],
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.findUsersByUsername.mockResolvedValue(
+				new Map([
+					['alice', 'acc-alice'],
+					['bob', 'acc-bob'],
+				])
+			)
+
+			mockClient.createPullRequest.mockResolvedValue({
+				id: 123,
+				title: 'Test PR',
+				links: { html: { href: 'https://bitbucket.org/test/pr/123' } },
+			})
+
+			await provider.createPR('feature', 'Test PR', 'Test body', 'main')
+
+			// All reviewers should be passed (none filtered)
+			expect(mockClient.createPullRequest).toHaveBeenCalledWith(
+				'test-workspace',
+				'test-repo',
+				'Test PR',
+				'Test body',
+				'feature',
+				'main',
+				['acc-alice', 'acc-bob']
+			)
+		})
+
+		it('should pass empty array when current user is the only reviewer', async () => {
+			const config: BitBucketVCSConfig = {
+				username: 'testuser',
+				apiToken: 'test-token',
+				reviewers: ['currentuser'],
+			}
+			provider = new BitBucketVCSProvider(config)
+
+			mockClient.findUsersByUsername.mockResolvedValue(
+				new Map([['currentuser', 'acc-current-user']])
+			)
+
+			mockClient.createPullRequest.mockResolvedValue({
+				id: 123,
+				title: 'Test PR',
+				links: { html: { href: 'https://bitbucket.org/test/pr/123' } },
+			})
+
+			await provider.createPR('feature', 'Test PR', 'Test body', 'main')
+
+			// createPullRequest should be called with empty array (current user filtered out)
+			expect(mockClient.createPullRequest).toHaveBeenCalledWith(
+				'test-workspace',
+				'test-repo',
+				'Test PR',
+				'Test body',
+				'feature',
+				'main',
+				[]
 			)
 		})
 	})

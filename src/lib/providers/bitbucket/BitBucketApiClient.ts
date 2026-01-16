@@ -80,6 +80,15 @@ export interface BitBucketRepository {
 interface BitBucketWorkspaceMembersResponse { values: BitBucketWorkspaceMember[]; next?: string }
 
 /**
+ * BitBucket current user response from /user endpoint
+ */
+export interface BitBucketCurrentUser {
+	account_id: string
+	display_name: string
+	nickname?: string
+}
+
+/**
  * BitBucketApiClient provides low-level REST API access to BitBucket
  * 
  * Authentication: Basic Auth with username and API token
@@ -347,11 +356,18 @@ export class BitBucketApiClient {
 	}
 
 	/**
+	 * Get the currently authenticated user
+	 */
+	async getCurrentUser(): Promise<BitBucketCurrentUser> {
+		return this.get<BitBucketCurrentUser>('/user')
+	}
+
+	/**
 	 * Test connection to BitBucket API
 	 */
 	async testConnection(): Promise<boolean> {
 		try {
-			await this.get('/user')
+			await this.getCurrentUser()
 			return true
 		} catch (error) {
 			getLogger().error('BitBucket connection test failed', { error })

@@ -365,6 +365,72 @@ describe('BitBucketApiClient', () => {
 		})
 	})
 
+	describe('getCurrentUser', () => {
+		it('should return current user data from /user endpoint', async () => {
+			const https = await import('node:https')
+
+			vi.mocked(https.default.request).mockImplementation((options, callback) => {
+				const mockResponse = {
+					statusCode: 200,
+					on: vi.fn((event, handler) => {
+						if (event === 'data') {
+							handler(JSON.stringify({
+								account_id: 'acc-current-user',
+								display_name: 'Current User',
+								nickname: 'currentuser',
+							}))
+						}
+						if (event === 'end') {
+							handler()
+						}
+						return mockResponse
+					}),
+				}
+				// @ts-expect-error - Mock callback
+				callback(mockResponse)
+				return {
+					on: vi.fn(),
+					write: vi.fn(),
+					end: vi.fn(),
+				}
+			})
+
+			const user = await client.getCurrentUser()
+
+			expect(user.account_id).toBe('acc-current-user')
+			expect(user.display_name).toBe('Current User')
+			expect(user.nickname).toBe('currentuser')
+		})
+
+		it('should throw on API error', async () => {
+			const https = await import('node:https')
+
+			vi.mocked(https.default.request).mockImplementation((options, callback) => {
+				const mockResponse = {
+					statusCode: 401,
+					on: vi.fn((event, handler) => {
+						if (event === 'data') {
+							handler(JSON.stringify({ error: { message: 'Unauthorized' } }))
+						}
+						if (event === 'end') {
+							handler()
+						}
+						return mockResponse
+					}),
+				}
+				// @ts-expect-error - Mock callback
+				callback(mockResponse)
+				return {
+					on: vi.fn(),
+					write: vi.fn(),
+					end: vi.fn(),
+				}
+			})
+
+			await expect(client.getCurrentUser()).rejects.toThrow('BitBucket API error')
+		})
+	})
+
 	describe('getWorkspace', () => {
 		it('should return configured workspace', () => {
 			expect(client.getWorkspace()).toBe('test-workspace')
