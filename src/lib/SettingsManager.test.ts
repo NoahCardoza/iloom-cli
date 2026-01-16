@@ -2613,7 +2613,7 @@ const error: { code?: string; message: string } = {
 	})
 
 	describe('bitbucket reviewers configuration', () => {
-		it('should accept valid email addresses in reviewers array', async () => {
+		it('should accept valid usernames in reviewers array', async () => {
 			const projectRoot = '/test/project'
 			const validSettings = {
 				versionControl: {
@@ -2621,7 +2621,7 @@ const error: { code?: string; message: string } = {
 					bitbucket: {
 						username: 'testuser',
 						apiToken: 'test-token',
-						reviewers: ['alice@example.com', 'bob@company.org'],
+						reviewers: ['alice', 'bob_smith'],
 					},
 				},
 			}
@@ -2636,34 +2636,7 @@ const error: { code?: string; message: string } = {
 				.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result.versionControl?.bitbucket?.reviewers).toEqual(['alice@example.com', 'bob@company.org'])
-		})
-
-		it('should reject invalid email addresses in reviewers array', async () => {
-			const projectRoot = '/test/project'
-			const invalidSettings = {
-				versionControl: {
-					provider: 'bitbucket',
-					bitbucket: {
-						username: 'testuser',
-						apiToken: 'test-token',
-						reviewers: ['not-an-email', 'alice@example.com'],
-					},
-				},
-			}
-
-			const error: { code?: string; message: string } = {
-				code: 'ENOENT',
-				message: 'ENOENT: no such file or directory',
-			}
-			vi.mocked(readFile)
-				.mockRejectedValueOnce(error) // global settings
-				.mockResolvedValueOnce(JSON.stringify(invalidSettings)) // settings.json
-				.mockRejectedValueOnce(error) // settings.local.json
-
-			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow(
-				/Reviewer must be a valid email address/
-			)
+			expect(result.versionControl?.bitbucket?.reviewers).toEqual(['alice', 'bob_smith'])
 		})
 
 		it('should allow empty reviewers array', async () => {

@@ -493,7 +493,7 @@ To use BitBucket for pull requests, add this configuration:
 - `apiToken`: API token (store in settings.local.json only!)
 - `workspace`: (Optional) BitBucket workspace, auto-detected from git remote if not provided
 - `repoSlug`: (Optional) Repository slug, auto-detected from git remote if not provided
-- `reviewers`: (Optional) Array of email addresses to automatically add as PR reviewers. Emails are resolved to BitBucket account IDs at PR creation time. Unresolved emails are logged as warnings but don't block PR creation.
+- `reviewers`: (Optional) Array of BitBucket usernames to automatically add as PR reviewers. Usernames are resolved to BitBucket account IDs at PR creation time. Unresolved usernames are logged as warnings but don't block PR creation.
 
 **Example with Reviewers:**
 ```json
@@ -503,8 +503,8 @@ To use BitBucket for pull requests, add this configuration:
     "bitbucket": {
       "username": "your-bitbucket-username",
       "reviewers": [
-        "alice@yourcompany.com",
-        "bob@yourcompany.com"
+        "alice.jones",
+        "bob.smith"
       ]
     }
   },

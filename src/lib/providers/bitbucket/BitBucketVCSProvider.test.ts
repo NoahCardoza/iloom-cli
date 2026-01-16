@@ -8,7 +8,7 @@ vi.mock('./BitBucketApiClient.js', () => ({
 		getWorkspace: vi.fn().mockReturnValue('test-workspace'),
 		getRepoSlug: vi.fn().mockReturnValue('test-repo'),
 		createPullRequest: vi.fn(),
-		findUsersByEmail: vi.fn(),
+		findUsersByUsername: vi.fn(),
 		listPullRequests: vi.fn(),
 		getPullRequest: vi.fn(),
 		addPRComment: vi.fn(),
@@ -36,7 +36,7 @@ describe('BitBucketVCSProvider', () => {
 		getWorkspace: ReturnType<typeof vi.fn>
 		getRepoSlug: ReturnType<typeof vi.fn>
 		createPullRequest: ReturnType<typeof vi.fn>
-		findUsersByEmail: ReturnType<typeof vi.fn>
+		findUsersByUsername: ReturnType<typeof vi.fn>
 		listPullRequests: ReturnType<typeof vi.fn>
 		getPullRequest: ReturnType<typeof vi.fn>
 		addPRComment: ReturnType<typeof vi.fn>
@@ -49,7 +49,7 @@ describe('BitBucketVCSProvider', () => {
 			getWorkspace: vi.fn().mockReturnValue('test-workspace'),
 			getRepoSlug: vi.fn().mockReturnValue('test-repo'),
 			createPullRequest: vi.fn(),
-			findUsersByEmail: vi.fn(),
+			findUsersByUsername: vi.fn(),
 			listPullRequests: vi.fn(),
 			getPullRequest: vi.fn(),
 			addPRComment: vi.fn(),
@@ -58,19 +58,19 @@ describe('BitBucketVCSProvider', () => {
 	})
 
 	describe('createPR with reviewers', () => {
-		it('should resolve reviewer emails and pass account IDs to createPullRequest', async () => {
+		it('should resolve reviewer usernames and pass account IDs to createPullRequest', async () => {
 			const config: BitBucketVCSConfig = {
 				username: 'testuser',
 				apiToken: 'test-token',
-				reviewers: ['alice@example.com', 'bob@example.com'],
+				reviewers: ['alice', 'bob'],
 			}
 			provider = new BitBucketVCSProvider(config)
 
-			// Mock email resolution
-			mockClient.findUsersByEmail.mockResolvedValue(
+			// Mock username resolution
+			mockClient.findUsersByUsername.mockResolvedValue(
 				new Map([
-					['alice@example.com', 'acc-alice'],
-					['bob@example.com', 'acc-bob'],
+					['alice', 'acc-alice'],
+					['bob', 'acc-bob'],
 				])
 			)
 
@@ -90,10 +90,10 @@ describe('BitBucketVCSProvider', () => {
 
 			const url = await provider.createPR('feature', 'Test PR', 'Test body', 'main')
 
-			// Verify findUsersByEmail was called with the configured emails
-			expect(mockClient.findUsersByEmail).toHaveBeenCalledWith(
+			// Verify findUsersByUsername was called with the configured usernames
+			expect(mockClient.findUsersByUsername).toHaveBeenCalledWith(
 				'test-workspace',
-				['alice@example.com', 'bob@example.com']
+				['alice', 'bob']
 			)
 
 			// Verify createPullRequest was called with resolved account IDs
@@ -110,17 +110,17 @@ describe('BitBucketVCSProvider', () => {
 			expect(url).toBe('https://bitbucket.org/test/pr/123')
 		})
 
-		it('should continue with partial reviewers when some emails cannot be resolved', async () => {
+		it('should continue with partial reviewers when some usernames cannot be resolved', async () => {
 			const config: BitBucketVCSConfig = {
 				username: 'testuser',
 				apiToken: 'test-token',
-				reviewers: ['alice@example.com', 'unknown@example.com'],
+				reviewers: ['alice', 'unknown_user'],
 			}
 			provider = new BitBucketVCSProvider(config)
 
 			// Only alice resolves
-			mockClient.findUsersByEmail.mockResolvedValue(
-				new Map([['alice@example.com', 'acc-alice']])
+			mockClient.findUsersByUsername.mockResolvedValue(
+				new Map([['alice', 'acc-alice']])
 			)
 
 			mockClient.createPullRequest.mockResolvedValue({
@@ -143,16 +143,16 @@ describe('BitBucketVCSProvider', () => {
 			)
 		})
 
-		it('should not pass reviewers when no emails can be resolved', async () => {
+		it('should not pass reviewers when no usernames can be resolved', async () => {
 			const config: BitBucketVCSConfig = {
 				username: 'testuser',
 				apiToken: 'test-token',
-				reviewers: ['unknown@example.com'],
+				reviewers: ['unknown_user'],
 			}
 			provider = new BitBucketVCSProvider(config)
 
-			// No emails resolve
-			mockClient.findUsersByEmail.mockResolvedValue(new Map())
+			// No usernames resolve
+			mockClient.findUsersByUsername.mockResolvedValue(new Map())
 
 			mockClient.createPullRequest.mockResolvedValue({
 				id: 123,
@@ -190,8 +190,8 @@ describe('BitBucketVCSProvider', () => {
 
 			await provider.createPR('feature', 'Test PR', 'Test body', 'main')
 
-			// findUsersByEmail should not be called
-			expect(mockClient.findUsersByEmail).not.toHaveBeenCalled()
+			// findUsersByUsername should not be called
+			expect(mockClient.findUsersByUsername).not.toHaveBeenCalled()
 
 			// createPullRequest should be called without reviewers
 			expect(mockClient.createPullRequest).toHaveBeenCalledWith(
@@ -221,8 +221,8 @@ describe('BitBucketVCSProvider', () => {
 
 			await provider.createPR('feature', 'Test PR', 'Test body', 'main')
 
-			// findUsersByEmail should not be called
-			expect(mockClient.findUsersByEmail).not.toHaveBeenCalled()
+			// findUsersByUsername should not be called
+			expect(mockClient.findUsersByUsername).not.toHaveBeenCalled()
 
 			// createPullRequest should be called without reviewers
 			expect(mockClient.createPullRequest).toHaveBeenCalledWith(

@@ -171,8 +171,8 @@ describe('BitBucketApiClient', () => {
 		})
 	})
 
-	describe('findUsersByEmail', () => {
-		it('should return map of email to account_id for matched users', async () => {
+	describe('findUsersByUsername', () => {
+		it('should return map of username to account_id for matched users', async () => {
 			const https = await import('node:https')
 
 			vi.mocked(https.default.request).mockImplementation((options, callback) => {
@@ -202,10 +202,10 @@ describe('BitBucketApiClient', () => {
 				}
 			})
 
-			const result = await client.findUsersByEmail('workspace', ['alice@example.com', 'bob@example.com'])
+			const result = await client.findUsersByUsername('workspace', ['alice', 'bob'])
 
-			expect(result.get('alice@example.com')).toBe('acc-1')
-			expect(result.get('bob@example.com')).toBe('acc-2')
+			expect(result.get('alice')).toBe('acc-1')
+			expect(result.get('bob')).toBe('acc-2')
 		})
 
 		it('should return empty map when no users match', async () => {
@@ -237,12 +237,12 @@ describe('BitBucketApiClient', () => {
 				}
 			})
 
-			const result = await client.findUsersByEmail('workspace', ['alice@example.com'])
+			const result = await client.findUsersByUsername('workspace', ['alice'])
 
 			expect(result.size).toBe(0)
 		})
 
-		it('should handle API errors gracefully', async () => {
+		it('should handle API errors by throwing', async () => {
 			const https = await import('node:https')
 
 			vi.mocked(https.default.request).mockImplementation((options, callback) => {
@@ -267,9 +267,101 @@ describe('BitBucketApiClient', () => {
 				}
 			})
 
-			// Should not throw, just return empty map
-			const result = await client.findUsersByEmail('workspace', ['alice@example.com'])
-			expect(result.size).toBe(0)
+			// Should throw on API error
+			await expect(client.findUsersByUsername('workspace', ['alice'])).rejects.toThrow('BitBucket API error')
+		})
+
+		it('should handle pagination when fetching workspace members', async () => {
+			const https = await import('node:https')
+			let requestCount = 0
+			const requestPaths: string[] = []
+
+			vi.mocked(https.default.request).mockImplementation((options, callback) => {
+				requestCount++
+				// Capture the path used in each request to verify no URL duplication
+				requestPaths.push((options as { path: string }).path)
+				const mockResponse = {
+					statusCode: 200,
+					on: vi.fn((event, handler) => {
+						if (event === 'data') {
+							// First request returns first page with 'next' URL
+							if (requestCount === 1) {
+								handler(JSON.stringify({
+									values: [
+										{ user: { account_id: 'acc-1', display_name: 'Alice Test', uuid: 'uuid-1', nickname: 'alice' } },
+									],
+									next: 'https://api.bitbucket.org/2.0/workspaces/workspace/members?page=2',
+								}))
+							} else {
+								// Second request returns second page without 'next'
+								handler(JSON.stringify({
+									values: [
+										{ user: { account_id: 'acc-2', display_name: 'Bob Example', uuid: 'uuid-2', nickname: 'bob' } },
+									],
+								}))
+							}
+						}
+						if (event === 'end') {
+							handler()
+						}
+						return mockResponse
+					}),
+				}
+				// @ts-expect-error - Mock callback
+				callback(mockResponse)
+				return {
+					on: vi.fn(),
+					write: vi.fn(),
+					end: vi.fn(),
+				}
+			})
+
+			const result = await client.findUsersByUsername('workspace', ['alice', 'bob'])
+
+			// Should have made 2 requests (one for each page)
+			expect(requestCount).toBe(2)
+			// Should have found both users from different pages
+			expect(result.get('alice')).toBe('acc-1')
+			expect(result.get('bob')).toBe('acc-2')
+			// Verify no URL path duplication (bug fix verification)
+			// First request should be the initial endpoint
+			expect(requestPaths[0]).toBe('/2.0/workspaces/workspace/members')
+			// Second request should be the pagination path (not /2.0/2.0/...)
+			expect(requestPaths[1]).toBe('/2.0/workspaces/workspace/members?page=2')
+		})
+
+		it('should match by display_name when nickname does not match', async () => {
+			const https = await import('node:https')
+
+			vi.mocked(https.default.request).mockImplementation((options, callback) => {
+				const mockResponse = {
+					statusCode: 200,
+					on: vi.fn((event, handler) => {
+						if (event === 'data') {
+							handler(JSON.stringify({
+								values: [
+									{ user: { account_id: 'acc-1', display_name: 'alice', uuid: 'uuid-1', nickname: 'alice123' } },
+								],
+							}))
+						}
+						if (event === 'end') {
+							handler()
+						}
+						return mockResponse
+					}),
+				}
+				// @ts-expect-error - Mock callback
+				callback(mockResponse)
+				return {
+					on: vi.fn(),
+					write: vi.fn(),
+					end: vi.fn(),
+				}
+			})
+
+			const result = await client.findUsersByUsername('workspace', ['alice'])
+
+			expect(result.get('alice')).toBe('acc-1')
 		})
 	})
 

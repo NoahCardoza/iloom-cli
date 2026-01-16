@@ -48,7 +48,7 @@ export interface BitBucketPullRequest {
 
 /**
  * BitBucket workspace member response from API
- * Used for resolving email addresses to account IDs
+ * Used for resolving usernames to account IDs
  */
 export interface BitBucketWorkspaceMember {
 	user: {
@@ -76,6 +76,8 @@ export interface BitBucketRepository {
 	}
 	[key: string]: unknown
 }
+
+interface BitBucketWorkspaceMembersResponse { values: BitBucketWorkspaceMember[]; next?: string }
 
 /**
  * BitBucketApiClient provides low-level REST API access to BitBucket
@@ -109,7 +111,10 @@ export class BitBucketApiClient {
 		endpoint: string,
 		body?: unknown
 	): Promise<T> {
-		const url = new URL(`${this.baseUrl}${endpoint}`)
+		// If endpoint is already a full URL, use it directly; otherwise prepend baseUrl
+		const url = endpoint.startsWith('http://') || endpoint.startsWith('https://')
+			? new URL(endpoint)
+			: new URL(`${this.baseUrl}${endpoint}`)
 		getLogger().debug(`BitBucket API ${method} request`, { url: url.toString() })
 
 		return new Promise((resolve, reject) => {
@@ -285,50 +290,60 @@ export class BitBucketApiClient {
 	}
 
 	/**
-	 * Find workspace members by email addresses
-	 * Returns a map of email -> account_id for resolved emails
-	 *
-	 * Note: BitBucket API requires querying members individually since the BBQL
-	 * user.email field is not available in workspace members endpoint.
-	 * We use the user email lookup endpoint instead.
+	 * Find workspace members by usernames
+	 * Returns a map of username -> account_id for resolved users
+	 * Handles pagination to fetch all workspace members
 	 */
-	async findUsersByEmail(
+	async findUsersByUsername(
 		workspace: string,
-		emails: string[]
+		usernames: string[]
 	): Promise<Map<string, string>> {
 		const result = new Map<string, string>()
 
-		// Query each email individually using the users endpoint
-		// The workspace members endpoint doesn't expose email in searchable fields
-		for (const email of emails) {
-			try {
-				// Use the workspace members endpoint with a search query
-				// The API supports searching by nickname which often matches email prefix
-				const endpoint = `/workspaces/${workspace}/members`
-				const response = await this.get<{ values: BitBucketWorkspaceMember[] }>(endpoint)
+		// Fetch all workspace members with pagination
+		const allMembers = await this.getAllWorkspaceMembers(workspace)
 
-				// Find member whose nickname or display_name contains the email prefix
-				// This is a best-effort match since email is not directly exposed
-				const emailPrefix = email.split('@')[0]?.toLowerCase()
-				if (!emailPrefix) continue
+		getLogger().debug(`Resolving ${usernames.length} usernames against ${allMembers.length} workspace members`, { allMembers})
 
-				const member = response.values.find(m =>
-					m.user.nickname?.toLowerCase() === emailPrefix ||
-					m.user.display_name.toLowerCase().includes(emailPrefix)
-				)
+		// Match usernames against fetched members
+		for (const username of usernames) {
+			const usernameLower = username.toLowerCase()
+			const member = allMembers.find(m =>
+				m.user.nickname?.toLowerCase() === usernameLower ||
+				m.user.display_name.toLowerCase() === usernameLower
+			)
 
-				if (member) {
-					result.set(email, member.user.account_id)
-					getLogger().debug(`Resolved reviewer email ${email} to account ID ${member.user.account_id}`)
-				} else {
-					getLogger().warn(`Could not resolve reviewer email ${email} to a BitBucket account ID`)
-				}
-			} catch (error) {
-				getLogger().warn(`Failed to resolve reviewer email ${email}`, { error })
+			if (member) {
+				result.set(username, member.user.account_id)
+				getLogger().debug(`Resolved reviewer ${username} to account ID ${member.user.account_id}`)
+			} else {
+				getLogger().warn(`Could not resolve reviewer ${username} to a BitBucket account ID`)
 			}
 		}
 
 		return result
+	}
+
+	/**
+	 * Fetch all workspace members with pagination
+	 */
+	private async getAllWorkspaceMembers(workspace: string): Promise<BitBucketWorkspaceMember[]> {
+		const allMembers: BitBucketWorkspaceMember[] = []
+		let nextUrl: string | null = `/workspaces/${workspace}/members`
+
+		while (nextUrl) {
+			const response: BitBucketWorkspaceMembersResponse =
+				await this.get(nextUrl)
+
+			allMembers.push(...response.values)
+
+			// BitBucket pagination uses 'next' field with full URL
+			// Use it directly since request() now handles full URLs
+			nextUrl = response.next ?? null
+		}
+
+		getLogger().debug(`Fetched ${allMembers.length} workspace members from BitBucket`)
+		return allMembers
 	}
 
 	/**
