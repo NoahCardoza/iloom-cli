@@ -21,7 +21,8 @@ import { getIdeConfig, isIdeAvailable, getInstallHint } from './utils/ide.js'
 import { fileURLToPath } from 'url'
 import { realpathSync } from 'fs'
 import { formatLoomsForJson, formatFinishedLoomForJson } from './utils/loom-formatter.js'
-import { findMainWorktreePathWithSettings, GitCommandError } from './utils/git.js'
+import { findMainWorktreePathWithSettings, GitCommandError, isValidGitRepo } from './utils/git.js'
+import fs from 'fs-extra'
 import { VersionMigrationManager } from './lib/VersionMigrationManager.js'
 
 // Get package.json for version
@@ -885,24 +886,56 @@ program
       // Get active worktrees if needed
       let worktrees: ReturnType<typeof manager.listWorktrees> extends Promise<infer T> ? T : never = []
       const metadata = new Map<string, LoomMetadata | null>()
+      // Global active looms (from metadata, not git worktrees) - used when --global is set
+      let globalActiveLooms: LoomMetadata[] = []
 
       if (showActive) {
-        try {
-          worktrees = await manager.listWorktrees({ porcelain: true })
-          // Read metadata for all worktrees
-          for (const worktree of worktrees) {
-            const loomMetadata = await metadataManager.readMetadata(worktree.path)
-            metadata.set(worktree.path, loomMetadata)
+        if (options.global) {
+          // When --global is set, use MetadataManager.listAllMetadata() to get looms from ALL projects
+          // This is necessary because GitWorktreeManager.listWorktrees() only returns worktrees
+          // from the current git repository, not from other projects
+          const allMetadata = await metadataManager.listAllMetadata()
+
+          // Filter to only include looms where worktree path exists and is a valid git repo
+          for (const loom of allMetadata) {
+            if (!loom.worktreePath) {
+              continue // Skip looms without worktree path (legacy)
+            }
+
+            // Check if worktree path exists on disk
+            const pathExists = await fs.pathExists(loom.worktreePath)
+            if (!pathExists) {
+              continue // Skip stale metadata (worktree was deleted)
+            }
+
+            // Verify it's still a valid git repository
+            const isValid = await isValidGitRepo(loom.worktreePath)
+            if (!isValid) {
+              continue // Skip corrupted worktrees
+            }
+
+            globalActiveLooms.push(loom)
+            metadata.set(loom.worktreePath, loom)
           }
-        } catch (error) {
-          // Handle "not a git repository" - just use empty array
-          // Check for GitCommandError with exit code 128 (git's "not a repository" exit code)
-          // or fallback to checking stderr for the specific "not a git repository" message
-          if (error instanceof GitCommandError &&
-              (error.exitCode === 128 || /fatal: not a git repository/i.test(error.stderr))) {
-            worktrees = []
-          } else {
-            throw error
+        } else {
+          // Non-global mode: use git worktree list (current repo only)
+          try {
+            worktrees = await manager.listWorktrees({ porcelain: true })
+            // Read metadata for all worktrees
+            for (const worktree of worktrees) {
+              const loomMetadata = await metadataManager.readMetadata(worktree.path)
+              metadata.set(worktree.path, loomMetadata)
+            }
+          } catch (error) {
+            // Handle "not a git repository" - just use empty array
+            // Check for GitCommandError with exit code 128 (git's "not a repository" exit code)
+            // or fallback to checking stderr for the specific "not a git repository" message
+            if (error instanceof GitCommandError &&
+                (error.exitCode === 128 || /fatal: not a git repository/i.test(error.stderr))) {
+              worktrees = []
+            } else {
+              throw error
+            }
           }
         }
       }
@@ -914,7 +947,9 @@ program
       }
 
       // Filter by current project for text output (include looms with null projectPath for legacy support)
+      // When --global is set, globalActiveLooms is used instead of worktrees, and no project filtering is applied
       let filteredWorktrees = worktrees
+      let filteredGlobalActiveLooms = globalActiveLooms
       let filteredFinishedLooms = finishedLooms
       if (currentProjectPath) {
         filteredWorktrees = worktrees.filter(wt => {
@@ -934,17 +969,42 @@ program
           // Settings validation failed - continue without main worktree path
         }
 
-        // Format active worktrees
-        let activeJson = showActive
-          ? formatLoomsForJson(worktrees, mainWorktreePath, metadata).map(loom => ({
+        // Format active looms
+        let activeJson: ReturnType<typeof formatLoomsForJson> extends (infer T)[] ? (T & { status: 'active'; finishedAt: null })[] : never = []
+        if (showActive) {
+          if (options.global) {
+            // Format global active looms from metadata (similar to finished looms format)
+            activeJson = globalActiveLooms.map(loom => ({
+              name: loom.branchName ?? loom.worktreePath ?? 'unknown',
+              worktreePath: loom.worktreePath,
+              branch: loom.branchName,
+              type: loom.issueType ?? 'branch',
+              issue_numbers: loom.issue_numbers,
+              pr_numbers: loom.pr_numbers,
+              isMainWorktree: false, // Global looms from other projects are never the main worktree
+              description: loom.description ?? null,
+              created_at: loom.created_at ?? null,
+              issueTracker: loom.issueTracker ?? null,
+              colorHex: loom.colorHex ?? null,
+              projectPath: loom.projectPath ?? null,
+              issueUrls: loom.issueUrls ?? {},
+              prUrls: loom.prUrls ?? {},
+              status: 'active' as const,
+              finishedAt: null,
+            }))
+          } else {
+            // Format worktrees from current repo
+            activeJson = formatLoomsForJson(worktrees, mainWorktreePath, metadata).map(loom => ({
               ...loom,
               status: 'active' as const,
               finishedAt: null,
             }))
-          : []
+          }
+        }
 
         // Filter active looms by project (include looms with null/undefined projectPath for legacy support)
-        if (currentProjectPath) {
+        // Skip filtering when --global is set (the whole point is to see all projects)
+        if (currentProjectPath && !options.global) {
           activeJson = activeJson.filter(loom =>
             loom.projectPath == null || loom.projectPath === currentProjectPath
           )
@@ -967,7 +1027,8 @@ program
       }
 
       // Text output - use filtered arrays
-      const hasActive = filteredWorktrees.length > 0
+      // For active looms, use globalActiveLooms when --global is set, otherwise use worktrees
+      const hasActive = options.global ? filteredGlobalActiveLooms.length > 0 : filteredWorktrees.length > 0
       const hasFinished = filteredFinishedLooms.length > 0
 
       if (!hasActive && !hasFinished) {
@@ -984,15 +1045,32 @@ program
       // Show active workspaces
       if (showActive && hasActive) {
         logger.info('Active workspaces:')
-        for (const worktree of filteredWorktrees) {
-          const formatted = manager.formatWorktree(worktree)
-          const loomMetadata = metadata.get(worktree.path)
-          logger.info(`  ${formatted.title}`)
-          if (loomMetadata?.description) {
-            logger.info(`    Description: ${loomMetadata.description}`)
+        if (options.global) {
+          // Global mode: display from metadata
+          for (const loom of filteredGlobalActiveLooms) {
+            logger.info(`  ${loom.branchName ?? 'unknown'}`)
+            if (loom.description) {
+              logger.info(`    Description: ${loom.description}`)
+            }
+            if (loom.worktreePath) {
+              logger.info(`    Path: ${loom.worktreePath}`)
+            }
+            if (loom.projectPath) {
+              logger.info(`    Project: ${loom.projectPath}`)
+            }
           }
-          logger.info(`    Path: ${formatted.path}`)
-          logger.info(`    Commit: ${formatted.commit}`)
+        } else {
+          // Non-global mode: display from git worktrees
+          for (const worktree of filteredWorktrees) {
+            const formatted = manager.formatWorktree(worktree)
+            const loomMetadata = metadata.get(worktree.path)
+            logger.info(`  ${formatted.title}`)
+            if (loomMetadata?.description) {
+              logger.info(`    Description: ${loomMetadata.description}`)
+            }
+            logger.info(`    Path: ${formatted.path}`)
+            logger.info(`    Commit: ${formatted.commit}`)
+          }
         }
       }
 
