@@ -682,6 +682,7 @@ describe('formatLoomsForJson', () => {
         projectPath: null,
         issueUrls: {},
         prUrls: {},
+        capabilities: [],
       })
 
       // Issue worktree
@@ -700,6 +701,7 @@ describe('formatLoomsForJson', () => {
         projectPath: null,
         issueUrls: {},
         prUrls: {},
+        capabilities: [],
       })
 
       // PR worktree
@@ -718,6 +720,7 @@ describe('formatLoomsForJson', () => {
         projectPath: null,
         issueUrls: {},
         prUrls: {},
+        capabilities: [],
       })
 
       // Linear-style issue
@@ -736,6 +739,7 @@ describe('formatLoomsForJson', () => {
         projectPath: null,
         issueUrls: {},
         prUrls: {},
+        capabilities: [],
       })
     })
 
@@ -868,6 +872,7 @@ describe('formatFinishedLoomForJson', () => {
         prUrls: {},
         status: 'finished',
         finishedAt: '2024-01-20T15:45:00.000Z',
+        capabilities: [],
       })
     })
 
@@ -1012,12 +1017,12 @@ describe('formatFinishedLoomForJson', () => {
   })
 
   describe('optional field handling', () => {
-    it('should handle null description field', () => {
+    it('should handle empty description field', () => {
       const metadata = createFinishedMetadata({
-        description: null as string | null,
+        description: '',
       })
       const result = formatFinishedLoomForJson(metadata)
-      expect(result.description).toBeNull()
+      expect(result.description).toBe('')
     })
 
     it('should handle null created_at', () => {
@@ -1127,6 +1132,7 @@ describe('formatFinishedLoomForJson', () => {
         prUrls: {},
         status: 'finished',
         finishedAt: null,
+        capabilities: [],
       })
     })
 
@@ -1194,7 +1200,7 @@ describe('formatFinishedLoomForJson', () => {
         issueUrls: { '269': 'https://github.com/acreeger/iloom-cli/issues/269' },
         prUrls: {},
         draftPrNumber: null,
-        capabilities: ['typescript', 'node'],
+        capabilities: ['cli'],
         parentLoom: null,
         status: 'finished',
         finishedAt: '2024-01-20T15:45:00.000Z',
@@ -1217,6 +1223,7 @@ describe('formatFinishedLoomForJson', () => {
         prUrls: {},
         status: 'finished',
         finishedAt: '2024-01-20T15:45:00.000Z',
+        capabilities: ['cli'],
       })
     })
 
@@ -1236,7 +1243,7 @@ describe('formatFinishedLoomForJson', () => {
         issueUrls: {},
         prUrls: { '255': 'https://github.com/acreeger/iloom-cli/pull/255' },
         draftPrNumber: null,
-        capabilities: ['typescript', 'node'],
+        capabilities: ['cli'],
         parentLoom: null,
         status: 'finished',
         finishedAt: '2024-01-18T12:30:00.000Z',
@@ -1264,7 +1271,7 @@ describe('formatFinishedLoomForJson', () => {
         issueUrls: { 'ILOOM-42': 'https://linear.app/company/issue/ILOOM-42' },
         prUrls: {},
         draftPrNumber: null,
-        capabilities: ['typescript'],
+        capabilities: ['cli'],
         parentLoom: null,
         status: 'finished',
         finishedAt: '2024-01-22T09:15:00.000Z',
@@ -1291,7 +1298,7 @@ describe('formatFinishedLoomForJson', () => {
         issueUrls: {},
         prUrls: {},
         draftPrNumber: null,
-        capabilities: ['typescript'],
+        capabilities: ['cli'],
         parentLoom: null,
         status: 'finished',
         finishedAt: '2024-01-25T11:00:00.000Z',

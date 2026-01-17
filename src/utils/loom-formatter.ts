@@ -1,6 +1,7 @@
 import { extractIssueNumber } from './git.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
+import type { ProjectCapability } from '../types/loom.js'
 
 /**
  * JSON output schema for il list --json
@@ -20,6 +21,7 @@ export interface LoomJsonOutput {
   projectPath?: string | null
   issueUrls?: Record<string, string>
   prUrls?: Record<string, string>
+  capabilities?: ProjectCapability[]
   status?: 'active' | 'finished'
   finishedAt?: string | null
 }
@@ -136,6 +138,7 @@ export function formatLoomForJson(
     projectPath: metadata?.projectPath ?? null,
     issueUrls: metadata?.issueUrls ?? {},
     prUrls: metadata?.prUrls ?? {},
+    capabilities: metadata?.capabilities ?? [],
   }
 }
 
@@ -180,6 +183,7 @@ export function formatFinishedLoomForJson(metadata: LoomMetadata): LoomJsonOutpu
     projectPath: metadata.projectPath ?? null,
     issueUrls: metadata.issueUrls ?? {},
     prUrls: metadata.prUrls ?? {},
+    capabilities: metadata.capabilities ?? [],
     status: metadata.status ?? 'finished',
     finishedAt: metadata.finishedAt ?? null,
   }
