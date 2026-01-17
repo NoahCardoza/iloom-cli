@@ -193,6 +193,16 @@ export class LinearService implements IssueTracker {
   }
 
   /**
+   * Move a Linear issue to "In Review" state
+   * @param identifier - Linear issue identifier
+   * @throws LinearServiceError if state update fails
+   */
+  public async moveIssueToReadyForReview(identifier: string | number): Promise<void> {
+    getLogger().info(`Moving Linear issue ${identifier} to In Review`)
+    await updateLinearIssueState(String(identifier), 'In Review')
+  }
+
+  /**
    * Extract issue context for AI prompts
    * @param entity - Issue (Linear doesn't have PRs)
    * @returns Formatted context string

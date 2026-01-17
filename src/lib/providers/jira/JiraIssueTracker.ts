@@ -173,6 +173,39 @@ export class JiraIssueTracker implements IssueTracker {
 	}
 
 	/**
+	 * Move issue to "Ready for Review" state
+	 * Uses configured transition mapping or default transition name
+	 */
+	async moveIssueToReadyForReview(identifier: string | number): Promise<void> {
+		const issueKey = String(identifier)
+		getLogger().debug('Moving Jira issue to Ready for Review', { issueKey })
+
+		// Get available transitions
+		const transitions = await this.client.getTransitions(issueKey)
+
+		// Look for the transition in config mapping or use default names
+		const transitionName = this.config.transitionMappings?.['Ready for Review']
+			?? this.findTransitionByName(transitions, ['Ready for Review', 'In Review', 'Code Review', 'Review'])
+
+		if (!transitionName) {
+			throw new Error(
+				`Could not find "Ready for Review" transition for ${issueKey}. ` +
+				`Available transitions: ${transitions.map(t => t.name).join(', ')}. ` +
+				`Configure custom mapping in settings.json: issueManagement.jira.transitionMappings`
+			)
+		}
+
+		// Find transition ID
+		const transition = transitions.find(t => t.name === transitionName)
+		if (!transition) {
+			throw new Error(`Transition "${transitionName}" not found`)
+		}
+
+		await this.client.transitionIssue(issueKey, transition.id)
+		getLogger().info('Issue transitioned to Ready for Review', { issueKey, transition: transitionName })
+	}
+
+	/**
 	 * Extract context from issue for AI prompts
 	 */
 	extractContext(entity: Issue): string {

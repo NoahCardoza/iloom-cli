@@ -1130,6 +1130,21 @@ export class FinishCommand {
 					message: `Pull request created`,
 					success: true,
 				})
+
+				// Move issue to Ready for Review state
+				if (parsed.type === 'issue' && parsed.number) {
+					try {
+						if (this.issueTracker.moveIssueToReadyForReview) {
+							await this.issueTracker.moveIssueToReadyForReview(parsed.number)
+							getLogger().info('Issue moved to Ready for Review')
+						}
+					} catch (error) {
+						getLogger().warn(
+							`Failed to move issue to Ready for Review: ${error instanceof Error ? error.message : 'Unknown error'}`,
+							error
+						)
+					}
+				}
 			}
 
 			// Set PR URL in result
@@ -1243,6 +1258,21 @@ export class FinishCommand {
 					message: 'Pull request created',
 					success: true,
 				})
+
+				// Move issue to Ready for Review state
+				if (parsed.type === 'issue' && parsed.number) {
+					try {
+						if (this.issueTracker.moveIssueToReadyForReview) {
+							await this.issueTracker.moveIssueToReadyForReview(parsed.number)
+							getLogger().info('Issue moved to Ready for Review')
+						}
+					} catch (error) {
+						getLogger().warn(
+							`Failed to move issue to Ready for Review: ${error instanceof Error ? error.message : 'Unknown error'}`,
+							error
+						)
+					}
+				}
 			}
 
 			// Generate session summary - posts to the ISSUE (Jira/Linear), not the PR

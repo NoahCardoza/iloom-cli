@@ -40,6 +40,7 @@ export interface IssueTracker {
 
 	// Status management - optional, check provider capabilities before calling
 	moveIssueToInProgress?(identifier: string | number): Promise<void>
+	moveIssueToReadyForReview?(identifier: string | number): Promise<void>
 
 	// Context extraction - formats issue/PR for AI prompts
 	extractContext(entity: Issue | PullRequest): string
