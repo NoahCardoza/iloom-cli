@@ -134,7 +134,7 @@ export class CommitCommand {
 		// Step 6: Load settings to get issue prefix
 		const settings = await this.settingsManager.loadSettings(worktreePath)
 		const providerType = settings.issueManagement?.provider ?? 'github'
-		const issuePrefix = IssueManagementProviderFactory.create(providerType).issuePrefix
+		const issuePrefix = IssueManagementProviderFactory.create(providerType, settings).issuePrefix
 
 		// Determine whether to skip pre-commit hooks:
 		// - With --wip-commit: always skip hooks (quick WIP commit)
