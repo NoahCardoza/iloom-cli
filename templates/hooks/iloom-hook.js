@@ -36,8 +36,8 @@ const net = require('net');
 const path = require('path');
 
 // Debug logging - writes to /tmp/iloom-hook.log
-// Set ILOOM_HOOK_DEBUG=0 to disable (enabled by default for now)
-const DEBUG = process.env.ILOOM_HOOK_DEBUG !== '0';
+// Set ILOOM_HOOK_DEBUG=1 to enable logging
+const DEBUG = process.env.ILOOM_HOOK_DEBUG === '1';
 const LOG_FILE = '/tmp/iloom-hook.log';
 
 function debug(message, data = {}) {
