@@ -852,10 +852,31 @@ program
   .option('--json', 'Output as JSON')
   .option('--finished', 'Show only finished looms (sorted by finish time, latest first)')
   .option('--all', 'Show both active and finished looms')
-  .action(async (options: { json?: boolean; finished?: boolean; all?: boolean }) => {
+  .option('--global', 'Show looms from all projects (default: current project only)')
+  .action(async (options: { json?: boolean; finished?: boolean; all?: boolean; global?: boolean }) => {
     try {
       const manager = new GitWorktreeManager()
       const metadataManager = new MetadataManager()
+
+      // Get current project path for filtering (unless --global is set)
+      let currentProjectPath: string | null = null
+      if (!options.global) {
+        try {
+          currentProjectPath = await findMainWorktreePathWithSettings()
+        } catch (error) {
+          // Only catch expected errors (not in a git repo or settings validation failed)
+          // For these cases, we show all looms since we can't determine the current project
+          if (error instanceof GitCommandError &&
+              (error.exitCode === 128 || /fatal: not a git repository/i.test(error.stderr))) {
+            currentProjectPath = null
+          } else if (error instanceof Error && error.message.includes('Invalid settings')) {
+            // Settings validation failure - show all looms
+            currentProjectPath = null
+          } else {
+            throw error
+          }
+        }
+      }
 
       // Determine what to list based on flags
       const showActive = !options.finished // Show active unless --finished is set
@@ -892,6 +913,19 @@ program
         finishedLooms = await metadataManager.listFinishedMetadata()
       }
 
+      // Filter by current project for text output (include looms with null projectPath for legacy support)
+      let filteredWorktrees = worktrees
+      let filteredFinishedLooms = finishedLooms
+      if (currentProjectPath) {
+        filteredWorktrees = worktrees.filter(wt => {
+          const loomMetadata = metadata.get(wt.path)
+          return loomMetadata?.projectPath == null || loomMetadata?.projectPath === currentProjectPath
+        })
+        filteredFinishedLooms = finishedLooms.filter(loom =>
+          loom.projectPath == null || loom.projectPath === currentProjectPath
+        )
+      }
+
       if (options.json) {
         let mainWorktreePath: string | undefined
         try {
@@ -901,7 +935,7 @@ program
         }
 
         // Format active worktrees
-        const activeJson = showActive
+        let activeJson = showActive
           ? formatLoomsForJson(worktrees, mainWorktreePath, metadata).map(loom => ({
               ...loom,
               status: 'active' as const,
@@ -909,8 +943,22 @@ program
             }))
           : []
 
+        // Filter active looms by project (include looms with null/undefined projectPath for legacy support)
+        if (currentProjectPath) {
+          activeJson = activeJson.filter(loom =>
+            loom.projectPath == null || loom.projectPath === currentProjectPath
+          )
+        }
+
         // Format finished looms
-        const finishedJson = finishedLooms.map(formatFinishedLoomForJson)
+        let finishedJson = finishedLooms.map(formatFinishedLoomForJson)
+
+        // Filter finished looms by project (include looms with null/undefined projectPath for legacy support)
+        if (currentProjectPath) {
+          finishedJson = finishedJson.filter(loom =>
+            loom.projectPath == null || loom.projectPath === currentProjectPath
+          )
+        }
 
         // Combine and output
         const allLooms = [...activeJson, ...finishedJson]
@@ -918,9 +966,9 @@ program
         return
       }
 
-      // Text output
-      const hasActive = worktrees.length > 0
-      const hasFinished = finishedLooms.length > 0
+      // Text output - use filtered arrays
+      const hasActive = filteredWorktrees.length > 0
+      const hasFinished = filteredFinishedLooms.length > 0
 
       if (!hasActive && !hasFinished) {
         if (options.finished) {
@@ -936,7 +984,7 @@ program
       // Show active workspaces
       if (showActive && hasActive) {
         logger.info('Active workspaces:')
-        for (const worktree of worktrees) {
+        for (const worktree of filteredWorktrees) {
           const formatted = manager.formatWorktree(worktree)
           const loomMetadata = metadata.get(worktree.path)
           logger.info(`  ${formatted.title}`)
@@ -954,7 +1002,7 @@ program
           logger.info('') // Add blank line between sections
         }
         logger.info('Finished looms:')
-        for (const loom of finishedLooms) {
+        for (const loom of filteredFinishedLooms) {
           logger.info(`  ${loom.branchName ?? 'unknown'}`)
           if (loom.description) {
             logger.info(`    Description: ${loom.description}`)
