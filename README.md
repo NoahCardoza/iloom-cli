@@ -562,9 +562,28 @@ Use Jira for issues and BitBucket for pull requests:
 iloom creates isolated workspace settings for your editor. Color synchronization (visual context) only works best VS Code-based editors.
 
 *   **Supported:** VS Code, Cursor, Windsurf, Antigravity, WebStorm, IntelliJ, Sublime Text.
-    
+
 *   **Config:** Set your preference via `il init` or `il start --set ide.type=cursor`.
-    
+
+### Git Operation Settings
+
+Configure git operation timeouts for projects with long-running pre-commit hooks.
+
+**.iloom/settings.json**
+```json
+{
+  "git": {
+    "commitTimeout": 120000
+  }
+}
+```
+
+| Setting | Default | Range | Description |
+|---------|---------|-------|-------------|
+| `git.commitTimeout` | 60000 (60s) | 1000-600000 | Timeout in milliseconds for git commit operations. Increase if pre-commit hooks (linting, tests, type checking) exceed the default timeout. |
+
+**When to increase:** If you see timeout errors during `il commit` or `il finish`, your pre-commit hooks are taking longer than the default 60 seconds. Set a higher value based on your typical hook duration.
+
 
 Advanced Features
 -----------------

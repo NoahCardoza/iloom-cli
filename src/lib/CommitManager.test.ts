@@ -1593,4 +1593,73 @@ describe('CommitManager', () => {
       })
     })
   })
+
+  describe('Commit Timeout Configuration', () => {
+    beforeEach(() => {
+      vi.mocked(claude.detectClaudeCli).mockResolvedValue(false)
+      vi.mocked(prompt.promptCommitAction).mockResolvedValue('accept')
+    })
+
+    it('should pass custom timeout to executeGitCommand when timeout option is provided', async () => {
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, {
+        issuePrefix: '#',
+        noReview: true,
+        timeout: 120000,
+        dryRun: false,
+      })
+
+      expect(git.executeGitCommand).toHaveBeenCalledWith(
+        ['commit', '-m', 'WIP: Auto-commit uncommitted changes'],
+        { cwd: mockWorktreePath, timeout: 120000 }
+      )
+    })
+
+    it('should not include timeout in options when timeout is undefined', async () => {
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, {
+        issuePrefix: '#',
+        noReview: true,
+        dryRun: false,
+      })
+
+      expect(git.executeGitCommand).toHaveBeenCalledWith(
+        ['commit', '-m', 'WIP: Auto-commit uncommitted changes'],
+        { cwd: mockWorktreePath, timeout: undefined }
+      )
+    })
+
+    it('should pass timeout to interactive editor commit', async () => {
+      vi.mocked(prompt.promptCommitAction).mockResolvedValue('edit')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, {
+        issuePrefix: '#',
+        timeout: 180000,
+        dryRun: false,
+      })
+
+      expect(git.executeGitCommand).toHaveBeenCalledWith(
+        ['commit', '-e', '-m', 'WIP: Auto-commit uncommitted changes'],
+        { cwd: mockWorktreePath, stdio: 'inherit', timeout: 180000 }
+      )
+    })
+
+    it('should use 300000ms fallback when timeout not provided for interactive editing', async () => {
+      vi.mocked(prompt.promptCommitAction).mockResolvedValue('edit')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+
+      await manager.commitChanges(mockWorktreePath, {
+        issuePrefix: '#',
+        dryRun: false,
+      })
+
+      expect(git.executeGitCommand).toHaveBeenCalledWith(
+        ['commit', '-e', '-m', 'WIP: Auto-commit uncommitted changes'],
+        { cwd: mockWorktreePath, stdio: 'inherit', timeout: 300000 }
+      )
+    })
+  })
 })

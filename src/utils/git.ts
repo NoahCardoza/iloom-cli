@@ -26,12 +26,12 @@ export class GitCommandError extends Error {
  */
 export async function executeGitCommand(
   args: string[],
-  options?: { cwd?: string; timeout?: number; stdio?: 'inherit' | 'pipe'; env?: NodeJS.ProcessEnv }
+  options?: { cwd?: string; timeout?: number | undefined; stdio?: 'inherit' | 'pipe'; env?: NodeJS.ProcessEnv }
 ): Promise<string> {
   try {
     const result = await execa('git', args, {
       cwd: options?.cwd ?? process.cwd(),
-      timeout: options?.timeout ?? 30000,
+      timeout: options?.timeout ?? 60000,
       encoding: 'utf8',
       stdio: options?.stdio ?? 'pipe',
       verbose: logger.isDebugEnabled(),
