@@ -84,4 +84,64 @@ describe('migrations', () => {
       )
     })
   })
+
+  describe('v0.7.1 global gitignore migration for package.iloom.local.json', () => {
+    const expectedPath = path.join(os.homedir(), '.config', 'git', 'ignore')
+    const pattern = '**/.iloom/package.iloom.local.json'
+    const migration = migrations.find(m => m.version === '0.7.1')
+
+    it('should exist', () => {
+      expect(migration).toBeDefined()
+      expect(migration?.description).toBe('Add global gitignore for .iloom/package.iloom.local.json')
+    })
+
+    it('should create ~/.config/git/ignore if not exists', async () => {
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.readFile).mockRejectedValue(new Error('ENOENT'))
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+
+      expect(fs.ensureDir).toHaveBeenCalledWith(path.dirname(expectedPath))
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        expectedPath,
+        '\n# Added by iloom CLI\n' + pattern + '\n',
+        'utf-8'
+      )
+    })
+
+    it('should append pattern if not already present', async () => {
+      const existingContent = '# Existing ignores\n*.log\n'
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        expectedPath,
+        existingContent + '\n# Added by iloom CLI\n' + pattern + '\n',
+        'utf-8'
+      )
+    })
+
+    it('should not duplicate if pattern exists', async () => {
+      const existingContent = '# Existing\n**/.iloom/package.iloom.local.json\n'
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+
+      await migration?.migrate()
+
+      expect(fs.writeFile).not.toHaveBeenCalled()
+    })
+
+    it('should be idempotent when run multiple times', async () => {
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.readFile).mockResolvedValue('**/.iloom/package.iloom.local.json\n')
+
+      await migration?.migrate()
+
+      expect(fs.writeFile).not.toHaveBeenCalled()
+    })
+  })
 })

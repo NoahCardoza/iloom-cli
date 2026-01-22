@@ -9,7 +9,8 @@ import {
   getPackageConfig,
   getPackageScripts,
   getExplicitCapabilities,
-  ILOOM_PACKAGE_PATH
+  ILOOM_PACKAGE_PATH,
+  ILOOM_PACKAGE_LOCAL_PATH
 } from './package-json.js'
 import type { PackageJson } from './package-json.js'
 
@@ -293,21 +294,24 @@ describe('ILOOM_PACKAGE_PATH', () => {
   })
 })
 
-describe('readIloomPackageScripts', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
+describe('ILOOM_PACKAGE_LOCAL_PATH', () => {
+  it('should have correct path value', () => {
+    expect(ILOOM_PACKAGE_LOCAL_PATH).toBe('.iloom/package.iloom.local.json')
   })
+})
 
-  it('should return null when package.iloom.json does not exist', async () => {
+describe('readIloomPackageScripts', () => {
+  it('should return null when neither base nor local file exists', async () => {
     vi.mocked(fs.pathExists).mockResolvedValue(false)
 
     const result = await readIloomPackageScripts('/test/path')
 
     expect(result).toBeNull()
     expect(fs.pathExists).toHaveBeenCalledWith('/test/path/.iloom/package.iloom.json')
+    expect(fs.pathExists).toHaveBeenCalledWith('/test/path/.iloom/package.iloom.local.json')
   })
 
-  it('should read and return scripts from package.iloom.json when it exists', async () => {
+  it('should read and return scripts from package.iloom.json when only base exists', async () => {
     const mockIloomPackage = {
       name: 'my-rust-project',
       scripts: {
@@ -316,8 +320,11 @@ describe('readIloomPackageScripts', () => {
         dev: 'cargo run',
       },
     }
-    vi.mocked(fs.pathExists).mockResolvedValue(true)
-    vi.mocked(fs.readJson).mockResolvedValue(mockIloomPackage)
+    // Base exists, local does not
+    vi.mocked(fs.pathExists)
+      .mockResolvedValueOnce(true)  // base exists
+      .mockResolvedValueOnce(false) // local does not exist
+    vi.mocked(fs.readJson).mockResolvedValueOnce(mockIloomPackage)
 
     const result = await readIloomPackageScripts('/test/path')
 
@@ -325,9 +332,129 @@ describe('readIloomPackageScripts', () => {
     expect(fs.readJson).toHaveBeenCalledWith('/test/path/.iloom/package.iloom.json')
   })
 
-  it('should return null and log warning when package.iloom.json contains invalid JSON', async () => {
-    vi.mocked(fs.pathExists).mockResolvedValue(true)
-    vi.mocked(fs.readJson).mockRejectedValue(new Error('Invalid JSON'))
+  it('should return local config when only local file exists', async () => {
+    const mockLocalPackage = {
+      name: 'local-override',
+      scripts: {
+        test: 'pytest --custom',
+        dev: 'python -m myapp --debug',
+      },
+    }
+    // Base does not exist, local exists
+    vi.mocked(fs.pathExists)
+      .mockResolvedValueOnce(false)  // base does not exist
+      .mockResolvedValueOnce(true)   // local exists
+    vi.mocked(fs.readJson).mockResolvedValueOnce(mockLocalPackage)
+
+    const result = await readIloomPackageScripts('/test/path')
+
+    expect(result).toEqual(mockLocalPackage)
+    expect(fs.readJson).toHaveBeenCalledWith('/test/path/.iloom/package.iloom.local.json')
+  })
+
+  it('should return merged config when both base and local exist', async () => {
+    const mockBasePackage = {
+      name: 'my-rust-project',
+      scripts: {
+        build: 'cargo build',
+        test: 'cargo test',
+      },
+    }
+    const mockLocalPackage = {
+      name: 'local-override',
+      scripts: {
+        test: 'pytest --custom',  // Override base test
+        dev: 'python -m myapp',   // Add new script
+      },
+    }
+    // Both exist
+    vi.mocked(fs.pathExists)
+      .mockResolvedValueOnce(true)  // base exists
+      .mockResolvedValueOnce(true)  // local exists
+    vi.mocked(fs.readJson)
+      .mockResolvedValueOnce(mockBasePackage)
+      .mockResolvedValueOnce(mockLocalPackage)
+
+    const result = await readIloomPackageScripts('/test/path')
+
+    expect(result).toEqual({
+      name: 'my-rust-project',  // From base
+      scripts: {
+        build: 'cargo build',   // From base
+        test: 'pytest --custom', // Overridden by local
+        dev: 'python -m myapp',  // Added by local
+      },
+    })
+  })
+
+  it('should merge capabilities with local taking precedence', async () => {
+    const mockBasePackage = {
+      name: 'my-project',
+      capabilities: ['cli'] as ['cli'],
+      scripts: { build: 'make' },
+    }
+    const mockLocalPackage = {
+      name: 'local',
+      capabilities: ['web'] as ['web'],
+      scripts: {},
+    }
+    vi.mocked(fs.pathExists)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+    vi.mocked(fs.readJson)
+      .mockResolvedValueOnce(mockBasePackage)
+      .mockResolvedValueOnce(mockLocalPackage)
+
+    const result = await readIloomPackageScripts('/test/path')
+
+    expect(result?.capabilities).toEqual(['web'])  // Local replaces base
+    expect(result?.scripts).toEqual({ build: 'make' })  // Scripts merged
+  })
+
+  it('should preserve base capabilities when local has none', async () => {
+    const mockBasePackage = {
+      name: 'my-project',
+      capabilities: ['cli', 'web'] as ['cli', 'web'],
+      scripts: { build: 'make' },
+    }
+    const mockLocalPackage = {
+      name: 'local',
+      scripts: { dev: 'run' },
+    }
+    vi.mocked(fs.pathExists)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+    vi.mocked(fs.readJson)
+      .mockResolvedValueOnce(mockBasePackage)
+      .mockResolvedValueOnce(mockLocalPackage)
+
+    const result = await readIloomPackageScripts('/test/path')
+
+    expect(result?.capabilities).toEqual(['cli', 'web'])  // From base
+  })
+
+  it('should fall back to base when local has malformed JSON', async () => {
+    const mockBasePackage = {
+      name: 'my-project',
+      scripts: { build: 'make' },
+    }
+    vi.mocked(fs.pathExists)
+      .mockResolvedValueOnce(true)  // base exists
+      .mockResolvedValueOnce(true)  // local exists
+    vi.mocked(fs.readJson)
+      .mockResolvedValueOnce(mockBasePackage)
+      .mockRejectedValueOnce(new Error('Invalid JSON'))
+
+    const result = await readIloomPackageScripts('/test/path')
+
+    expect(result).toEqual(mockBasePackage)
+  })
+
+  it('should return null and log warning when base has malformed JSON and no local', async () => {
+    vi.mocked(fs.pathExists)
+      .mockResolvedValueOnce(true)   // base exists
+      .mockResolvedValueOnce(false)  // local does not exist
+    vi.mocked(fs.readJson).mockRejectedValueOnce(new Error('Invalid JSON'))
 
     const result = await readIloomPackageScripts('/test/path')
 

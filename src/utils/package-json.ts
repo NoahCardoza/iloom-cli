@@ -8,6 +8,7 @@ import type { ProjectCapability } from '../types/loom.js'
  * This file allows non-Node.js projects to define scripts for iloom workflows
  */
 export const ILOOM_PACKAGE_PATH = '.iloom/package.iloom.json'
+export const ILOOM_PACKAGE_LOCAL_PATH = '.iloom/package.iloom.local.json'
 
 export interface PackageJson {
   name: string
@@ -60,27 +61,51 @@ export async function readPackageJson(dir: string): Promise<PackageJson> {
 }
 
 /**
- * Read scripts from .iloom/package.iloom.json if it exists
- * This file takes precedence over package.json and contains raw shell commands
+ * Read scripts from .iloom/package.iloom.json if it exists, merged with
+ * .iloom/package.iloom.local.json (local takes precedence).
+ * These files take precedence over package.json and contain raw shell commands.
  * @param dir Directory containing .iloom/package.iloom.json
- * @returns PackageJson-like object with scripts, or null if file doesn't exist
+ * @returns PackageJson-like object with scripts, or null if neither file exists
  */
 export async function readIloomPackageScripts(dir: string): Promise<PackageJson | null> {
   const iloomPkgPath = path.join(dir, ILOOM_PACKAGE_PATH)
+  const localPkgPath = path.join(dir, ILOOM_PACKAGE_LOCAL_PATH)
 
+  // Read base package.iloom.json
+  let baseConfig: PackageJson | null = null
   try {
     const exists = await fs.pathExists(iloomPkgPath)
-    if (!exists) {
-      return null
+    if (exists) {
+      baseConfig = await fs.readJson(iloomPkgPath) as PackageJson
     }
-
-    const content = await fs.readJson(iloomPkgPath)
-    return content as PackageJson
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     getLogger().warn(`Failed to read ${ILOOM_PACKAGE_PATH}: ${message}`)
-    return null
   }
+
+  // Read local override if exists
+  let localConfig: PackageJson | null = null
+  try {
+    const localExists = await fs.pathExists(localPkgPath)
+    if (localExists) {
+      localConfig = await fs.readJson(localPkgPath) as PackageJson
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    getLogger().warn(`Failed to read ${ILOOM_PACKAGE_LOCAL_PATH}: ${message}`)
+  }
+
+  // Merge: local scripts override base scripts
+  if (baseConfig && localConfig) {
+    return {
+      ...baseConfig,
+      scripts: { ...baseConfig.scripts, ...localConfig.scripts },
+      ...(localConfig.capabilities && { capabilities: localConfig.capabilities }),
+    }
+  }
+
+  // Return whichever exists (or null if neither)
+  return localConfig ?? baseConfig
 }
 
 /**

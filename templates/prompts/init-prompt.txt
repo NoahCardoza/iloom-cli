@@ -7,6 +7,35 @@
 
 **If NO to all → IMMEDIATELY decline and redirect to exit session**
 
+---
+
+## 🍴 FORK CONTRIBUTOR RULE - APPLIES TO ALL FILE DECISIONS
+
+**CRITICAL: Check this FIRST before recommending ANY iloom configuration file.**
+
+**Fork Detection Check:**
+If BOTH "origin" AND "upstream" git remotes are detected → This is a FORK.
+
+**When Fork Detected:**
+ALL iloom configuration files should default to their `.local` variants:
+- `settings.local.json` (NOT `settings.json`)
+- `package.iloom.local.json` (NOT `package.iloom.json`)
+
+**Why:**
+- Local variants are globally gitignored and won't appear in PRs to upstream
+- Prevents personal iloom configuration from polluting upstream repository
+- Your code changes should be the only thing in your PRs - not iloom settings
+
+**How to Apply:**
+1. At the START of any configuration session, check for fork pattern
+2. If fork detected, set mental "fork mode" flag for the entire session
+3. When ANY file creation/recommendation is made, default to `.local` variant
+4. Remind the user why local files are recommended for forks
+
+**This rule supersedes other file location recommendations when fork is detected.**
+
+---
+
 ## 🚫 FILE ACCESS RULES - STRICTLY ENFORCE
 
 **SETTINGS FILES (.iloom/settings.json and .iloom/settings.local.json):**
@@ -266,6 +295,8 @@ Use AskUserQuestion to ask ALL local development settings questions **IN A SINGL
 ### Phase 1.5: Framework Detection (Non-Node.js Project) - DO NOT SKIP
 
 iloom needs to detect the project's language and framework to configure build/test/dev scripts.
+
+**IMPORTANT - Fork Mode Reminder:** If fork was detected earlier (origin + upstream remotes), pass this context to the framework detector. The detector should recommend `package.iloom.local.json` instead of `package.iloom.json` for fork contributors.
 
 **Invoke the framework detector agent** using the `iloom-framework-detector` agent:
 
@@ -959,6 +990,32 @@ If users ask about specific configurations, help them add these sections to thei
    - Using a different test runner than what's in package.json
    - Running additional commands before/after the standard npm scripts
    - Wrapping commands with environment variables or tools
+
+   **Local Overrides for Fork Contributors:**
+
+   If you're contributing to a forked repository, save your customizations to `.iloom/package.iloom.local.json` instead of `package.iloom.json`. This file:
+   - Is automatically added to global gitignore (won't appear in PRs)
+   - Merges with package.iloom.json (local scripts override base scripts)
+   - Is automatically copied to new looms
+
+   **When to use each file:**
+   - `package.iloom.json` - Shared team configuration, committed to git
+   - `package.iloom.local.json` - Personal overrides, never committed (gitignored globally)
+
+   Example `.iloom/package.iloom.local.json`:
+   ```json
+   {
+     "scripts": {
+       "test": "pytest --my-local-options",
+       "dev": "python -m mymodule --debug"
+     }
+   }
+   ```
+
+   This is especially useful when:
+   - Working on a fork where upstream has different script requirements
+   - Your local environment needs different commands than the team standard
+   - You want to add debug flags or local-only tooling without affecting others
 
 ## Important Notes
 

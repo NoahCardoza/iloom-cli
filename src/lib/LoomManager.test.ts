@@ -2158,6 +2158,179 @@ describe('LoomManager', () => {
     })
   })
 
+  describe('Iloom Package Local Config Copying', () => {
+    const baseInput: CreateLoomInput = {
+      type: 'issue',
+      identifier: 456,
+      originalInput: '456',
+    }
+
+    beforeEach(() => {
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 456,
+        title: 'Copy Iloom Package Local',
+        body: 'Test body',
+        state: 'open',
+        url: 'https://github.com/test/test/issues/456',
+        labels: [],
+        assignees: [],
+      })
+
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => '/main/workspace'),
+        configurable: true,
+      })
+
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/worktree/issue-456')
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/worktree/issue-456')
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3456)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {},
+      })
+    })
+
+    it('copies package.iloom.local.json when source exists and destination does not', async () => {
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        // Source exists
+        if (pathStr.includes('package.iloom.local.json') && !pathStr.includes('worktree')) {
+          return true
+        }
+        // Destination does not exist
+        if (pathStr.includes('package.iloom.local.json') && pathStr.includes('worktree')) {
+          return false
+        }
+        return false
+      })
+
+      vi.mocked(mockEnvironment.copyIfExists).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify copyIfExists was called for package.iloom.local.json
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const packageLocalCopy = copyIfExistsCalls.find(
+        (call) =>
+          String(call[0]).includes('package.iloom.local.json') ||
+          String(call[0]).includes('package.iloom.local.json')
+      )
+      expect(packageLocalCopy).toBeDefined()
+    })
+
+    it('skips copying when package.iloom.local.json already exists in worktree', async () => {
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        // Both source and destination exist
+        if (pathStr.includes('package.iloom.local.json')) {
+          return true
+        }
+        return false
+      })
+
+      vi.mocked(mockEnvironment.copyIfExists).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify copyIfExists was NOT called for package.iloom.local.json
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const packageLocalCopy = copyIfExistsCalls.find(
+        (call) =>
+          String(call[0]).includes('package.iloom.local.json') ||
+          String(call[0]).includes('package.iloom.local.json')
+      )
+      expect(packageLocalCopy).toBeUndefined()
+    })
+
+    it('handles missing source package.iloom.local.json gracefully', async () => {
+      // Source does not exist
+      vi.mocked(fs.pathExists).mockResolvedValue(false)
+      vi.mocked(mockEnvironment.copyIfExists).mockResolvedValue(undefined)
+
+      // Should not throw
+      await expect(manager.createIloom(baseInput)).resolves.toBeDefined()
+    })
+
+    it('ensures .iloom directory is created before copying', async () => {
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        if (pathStr.includes('package.iloom.local.json') && !pathStr.includes('worktree')) {
+          return true
+        }
+        return false
+      })
+
+      vi.mocked(mockEnvironment.copyIfExists).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify ensureDir was called for .iloom directory in worktree
+      const ensureDirCalls = vi.mocked(fs.ensureDir).mock.calls
+      const iloomDirCreation = ensureDirCalls.find((call) =>
+        String(call[0]).includes('.iloom')
+      )
+      expect(iloomDirCreation).toBeDefined()
+    })
+
+    it('copies package.iloom.local.json when reusing existing worktree', async () => {
+      const existingWorktree = {
+        path: '/test/worktree-issue-456',
+        branch: 'issue-456-test',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(existingWorktree)
+
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        if (pathStr.includes('package.iloom.local.json') && !pathStr.includes('worktree')) {
+          return true
+        }
+        return false
+      })
+
+      vi.mocked(mockEnvironment.copyIfExists).mockResolvedValue(undefined)
+
+      await manager.createIloom(baseInput)
+
+      // Verify copyIfExists was called for package.iloom.local.json during reuse
+      const copyIfExistsCalls = vi.mocked(mockEnvironment.copyIfExists).mock.calls
+      const packageLocalCopy = copyIfExistsCalls.find(
+        (call) =>
+          String(call[0]).includes('package.iloom.local.json') ||
+          String(call[0]).includes('package.iloom.local.json')
+      )
+      expect(packageLocalCopy).toBeDefined()
+    })
+
+    it('warns but does not fail when copying fails', async () => {
+      vi.mocked(fs.pathExists).mockImplementation(async (path: string) => {
+        const pathStr = String(path)
+        if (pathStr.includes('package.iloom.local.json') && !pathStr.includes('worktree')) {
+          return true
+        }
+        return false
+      })
+
+      // Make ensureDir throw an error for .iloom directory
+      vi.mocked(fs.ensureDir).mockImplementation(async (path: string) => {
+        if (String(path).includes('.iloom') && String(path).includes('worktree')) {
+          throw new Error('Permission denied')
+        }
+        return undefined
+      })
+
+      // Should not throw - continues despite error
+      const result = await manager.createIloom(baseInput)
+
+      expect(result).toBeDefined()
+      expect(result.path).toBe('/test/worktree/issue-456')
+    })
+  })
+
   describe('Global Color Collision Detection', () => {
     const baseInput: CreateLoomInput = {
       type: 'issue',

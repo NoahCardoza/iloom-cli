@@ -115,6 +115,9 @@ export class LoomManager {
     // 7. Copy Loom settings (settings.local.json) - ALWAYS done regardless of capabilities
     await this.copyIloomSettings(worktreePath)
 
+    // 7.1. Copy iloom package local config (package.iloom.local.json)
+    await this.copyIloomPackageLocal(worktreePath)
+
     // 7.5. Copy Claude settings (.claude/settings.local.json) - ALWAYS done regardless of capabilities
     await this.copyClaudeSettings(worktreePath)
 
@@ -755,6 +758,34 @@ export class LoomManager {
   }
 
   /**
+   * Copy iloom package local config (package.iloom.local.json) from main repo to worktree
+   * Always called regardless of project capabilities
+   * Follows the same pattern as copyIloomSettings()
+   * @param worktreePath Path to the worktree
+   */
+  private async copyIloomPackageLocal(worktreePath: string): Promise<void> {
+    const mainPackageLocalPath = path.join(process.cwd(), '.iloom', 'package.iloom.local.json')
+
+    try {
+      const worktreeIloomDir = path.join(worktreePath, '.iloom')
+
+      // Ensure .iloom directory exists in worktree
+      await fs.ensureDir(worktreeIloomDir)
+
+      const worktreePackageLocalPath = path.join(worktreeIloomDir, 'package.iloom.local.json')
+
+      // Check if package.iloom.local.json already exists in worktree
+      if (await fs.pathExists(worktreePackageLocalPath)) {
+        getLogger().debug('package.iloom.local.json already exists in worktree, skipping copy')
+      } else {
+        await this.environment.copyIfExists(mainPackageLocalPath, worktreePackageLocalPath)
+      }
+    } catch (error) {
+      getLogger().warn(`Warning: Failed to copy package.iloom.local.json: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /**
    * Copy Claude settings (settings.local.json) from main repo to worktree
    * Always called regardless of project capabilities
    * Follows the same pattern as copyIloomSettings()
@@ -1099,6 +1130,7 @@ export class LoomManager {
     // 3. Defensively copy .env and settings.local.json if missing
     await this.copyEnvironmentFiles(worktreePath)
     await this.copyIloomSettings(worktreePath)
+    await this.copyIloomPackageLocal(worktreePath)
     await this.copyClaudeSettings(worktreePath)
 
     // 3.5. Copy gitignored files matching configured patterns
