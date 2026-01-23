@@ -228,7 +228,8 @@ export class UpdateNotifier {
 export async function checkAndNotifyUpdate(
   currentVersion: string,
   packageName: string,
-  installMethod: string
+  installMethod: string,
+  options?: { suppressOutput?: boolean }
 ): Promise<void> {
   logger.debug(`checkAndNotifyUpdate: Called with version=${currentVersion}, package=${packageName}, installMethod=${installMethod}`)
   try {
@@ -241,12 +242,32 @@ export async function checkAndNotifyUpdate(
     logger.debug('checkAndNotifyUpdate: Creating UpdateNotifier instance')
     const notifier = new UpdateNotifier(currentVersion, packageName)
 
+    // Check for fake update flag (for testing purposes)
+    const fakeUpdateEnv = process.env.ILOOM_FAKE_UPDATE_AVAILABLE
+    if (fakeUpdateEnv === '1' || fakeUpdateEnv === 'true') {
+      logger.debug('checkAndNotifyUpdate: ILOOM_FAKE_UPDATE_AVAILABLE is set, using fake update result')
+      const fakeResult: UpdateCheckResult = {
+        currentVersion,
+        latestVersion: '99.99.99',
+        updateAvailable: true,
+      }
+      if (!options?.suppressOutput) {
+        logger.debug('checkAndNotifyUpdate: Displaying fake update notification')
+        notifier.displayUpdateNotification(fakeResult)
+      } else {
+        logger.debug('checkAndNotifyUpdate: Suppressing fake update notification (suppressOutput=true)')
+      }
+      return
+    }
+
     logger.debug('checkAndNotifyUpdate: Calling checkForUpdates()')
     const result = await notifier.checkForUpdates()
 
-    if (result !== null) {
+    if (result !== null && !options?.suppressOutput) {
       logger.debug(`checkAndNotifyUpdate: Got result, calling displayUpdateNotification`)
       notifier.displayUpdateNotification(result)
+    } else if (result !== null && options?.suppressOutput) {
+      logger.debug('checkAndNotifyUpdate: Suppressing update notification (suppressOutput=true)')
     } else {
       logger.debug('checkAndNotifyUpdate: Result was null, not displaying notification')
     }

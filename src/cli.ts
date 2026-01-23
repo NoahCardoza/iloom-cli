@@ -68,7 +68,9 @@ program
       const installMethod = detectInstallationMethod(__filename)
 
       // Check and notify (non-blocking, all errors handled internally)
-      await checkAndNotifyUpdate(packageJson.version, packageJson.name, installMethod)
+      // Suppress update notification when --json flag is passed to avoid breaking JSON output
+      const jsonMode = actionCommand.opts().json === true
+      await checkAndNotifyUpdate(packageJson.version, packageJson.name, installMethod, { suppressOutput: jsonMode })
     } catch {
       // Silently fail - update check should never break user experience
     }

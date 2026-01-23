@@ -16,7 +16,7 @@ export function detectInstallationMethod(scriptPath: string): InstallationMethod
 
   if (process.env.OVERRIDE_INSTALLATION_METHOD) {
     const overrideMethod = process.env.OVERRIDE_INSTALLATION_METHOD as InstallationMethod
-    logger.info(`[installation-detector] Override detected, returning: ${overrideMethod}`)
+    logger.debug(`[installation-detector] Override detected, returning: ${overrideMethod}`)
     return overrideMethod
   }
 

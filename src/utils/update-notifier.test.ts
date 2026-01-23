@@ -487,4 +487,55 @@ describe('checkAndNotifyUpdate', () => {
     // Should not throw
     await expect(checkAndNotifyUpdate('1.2.3', '@test/package', 'global')).resolves.toBeUndefined()
   })
+
+  it('suppresses notification output when suppressOutput is true', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false)
+    vi.mocked(execa).mockResolvedValue(mockExecaResponse('1.3.0'))
+    vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+    vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    // Call with suppressOutput: true - should NOT display notification
+    await checkAndNotifyUpdate('1.2.3', '@test/package', 'global', { suppressOutput: true })
+
+    // console.log should NOT have been called (notification suppressed)
+    expect(consoleSpy).not.toHaveBeenCalled()
+
+    consoleSpy.mockRestore()
+  })
+
+  it('displays notification when suppressOutput is false', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false)
+    vi.mocked(execa).mockResolvedValue(mockExecaResponse('1.3.0'))
+    vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+    vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    // Call with suppressOutput: false - should display notification
+    await checkAndNotifyUpdate('1.2.3', '@test/package', 'global', { suppressOutput: false })
+
+    // console.log should have been called (notification displayed)
+    expect(consoleSpy).toHaveBeenCalled()
+
+    consoleSpy.mockRestore()
+  })
+
+  it('displays notification when options not provided', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false)
+    vi.mocked(execa).mockResolvedValue(mockExecaResponse('1.3.0'))
+    vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+    vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    // Call without options - should display notification (backward compatible)
+    await checkAndNotifyUpdate('1.2.3', '@test/package', 'global')
+
+    // console.log should have been called (notification displayed)
+    expect(consoleSpy).toHaveBeenCalled()
+
+    consoleSpy.mockRestore()
+  })
 })
