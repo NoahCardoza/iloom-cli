@@ -101,7 +101,7 @@ program
     await validateGhCliForCommand(actionCommand)
 
     // Validate IDE availability for start command
-    await validateIdeForStartCommand(thisCommand)
+    await validateIdeForStartCommand(actionCommand)
   })
 
 // Helper function to validate settings at startup
@@ -234,7 +234,7 @@ export async function validateGhCliForCommand(command: Command): Promise<void> {
 // Helper function to validate IDE availability for start command
 // Exported for testing
 export async function validateIdeForStartCommand(command: Command): Promise<void> {
-  const commandName = command.args[0] ?? ''
+  const commandName = command.name()
 
   // Only validate for start command (and its aliases are resolved to 'start')
   if (commandName !== 'start') {

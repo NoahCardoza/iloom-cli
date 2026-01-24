@@ -351,22 +351,23 @@ describe.skip('Settings validation on CLI startup', () => {
 // Unit tests for gh CLI validation (not integration tests)
 describe('GitHub CLI validation', () => {
   describe('validateGhCliForCommand', () => {
-    let mockCommand: { args: string[]; name: () => string }
+    let commandName: string
     let mockExit: ReturnType<typeof vi.spyOn<typeof process, 'exit'>>
     let mockIsCliAvailable: ReturnType<typeof vi.spyOn<typeof GitHubService, 'isCliAvailable'>>
     let mockLoadSettings: ReturnType<typeof vi.spyOn<SettingsManager, 'loadSettings'>>
-    let commandName: string
+
+    // Helper to create mock command with proper typing
+    const createMockCommand = () =>
+      ({
+        name: () => commandName,
+      }) as unknown as import('commander').Command
 
     beforeEach(() => {
       // Mock process.exit
       mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
 
-      // Create mock command with name() method
+      // Default command state
       commandName = ''
-      mockCommand = {
-        args: [] as string[],
-        name: () => commandName,
-      }
 
       // Mock GitHubService.isCliAvailable
       mockIsCliAvailable = vi.spyOn(GitHubService, 'isCliAvailable')
@@ -384,7 +385,7 @@ describe('GitHub CLI validation', () => {
         commandName = 'feedback'
         mockIsCliAvailable.mockReturnValue(false)
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).toHaveBeenCalledWith(1)
       })
@@ -393,7 +394,7 @@ describe('GitHub CLI validation', () => {
         commandName = 'contribute'
         mockIsCliAvailable.mockReturnValue(false)
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).toHaveBeenCalledWith(1)
       })
@@ -402,7 +403,7 @@ describe('GitHub CLI validation', () => {
         commandName = 'feedback'
         mockIsCliAvailable.mockReturnValue(true)
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).not.toHaveBeenCalled()
       })
@@ -416,7 +417,7 @@ describe('GitHub CLI validation', () => {
           issueManagement: { provider: 'github' },
         })
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).toHaveBeenCalledWith(1)
       })
@@ -429,7 +430,7 @@ describe('GitHub CLI validation', () => {
           mergeBehavior: { mode: 'github-pr' },
         })
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).toHaveBeenCalledWith(1)
       })
@@ -442,7 +443,7 @@ describe('GitHub CLI validation', () => {
           mergeBehavior: { mode: 'github-draft-pr' },
         })
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).toHaveBeenCalledWith(1)
       })
@@ -455,7 +456,7 @@ describe('GitHub CLI validation', () => {
           mergeBehavior: { mode: 'local' },
         })
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).not.toHaveBeenCalled()
       })
@@ -467,7 +468,7 @@ describe('GitHub CLI validation', () => {
           issueManagement: { provider: 'github' },
         })
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).not.toHaveBeenCalled()
       })
@@ -477,7 +478,7 @@ describe('GitHub CLI validation', () => {
         mockIsCliAvailable.mockReturnValue(false)
         mockLoadSettings.mockRejectedValue(new Error('Settings file not found'))
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).toHaveBeenCalledWith(1)
       })
@@ -491,7 +492,7 @@ describe('GitHub CLI validation', () => {
           issueManagement: { provider: 'github' },
         })
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).not.toHaveBeenCalled()
       })
@@ -503,7 +504,7 @@ describe('GitHub CLI validation', () => {
           issueManagement: { provider: 'github' },
         })
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).not.toHaveBeenCalled()
       })
@@ -515,7 +516,7 @@ describe('GitHub CLI validation', () => {
           issueManagement: { provider: 'github' },
         })
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).not.toHaveBeenCalled()
       })
@@ -526,7 +527,7 @@ describe('GitHub CLI validation', () => {
         commandName = 'help'
         mockIsCliAvailable.mockReturnValue(false)
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).not.toHaveBeenCalled()
         expect(mockIsCliAvailable).not.toHaveBeenCalled()
@@ -536,7 +537,7 @@ describe('GitHub CLI validation', () => {
         commandName = 'test-github'
         mockIsCliAvailable.mockReturnValue(false)
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         expect(mockExit).not.toHaveBeenCalled()
         expect(mockIsCliAvailable).not.toHaveBeenCalled()
@@ -551,7 +552,7 @@ describe('GitHub CLI validation', () => {
           // No issueManagement.provider specified
         })
 
-        await validateGhCliForCommand(mockCommand)
+        await validateGhCliForCommand(createMockCommand())
 
         // Should exit because default provider is 'github' and gh CLI is missing
         expect(mockExit).toHaveBeenCalledWith(1)
@@ -563,20 +564,26 @@ describe('GitHub CLI validation', () => {
 // Unit tests for IDE validation
 describe('IDE validation', () => {
   describe('validateIdeForStartCommand', () => {
-    let mockCommand: { args: string[]; opts: () => Record<string, unknown> }
+    let commandName: string
+    let commandOpts: Record<string, unknown>
     let mockExit: ReturnType<typeof vi.spyOn<typeof process, 'exit'>>
     let mockIsIdeAvailable: ReturnType<typeof vi.spyOn<typeof ide, 'isIdeAvailable'>>
     let mockLoadSettings: ReturnType<typeof vi.spyOn<SettingsManager, 'loadSettings'>>
+
+    // Helper to create mock command with proper typing
+    const createMockCommand = () =>
+      ({
+        name: () => commandName,
+        opts: () => commandOpts,
+      }) as unknown as import('commander').Command
 
     beforeEach(() => {
       // Mock process.exit
       mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
 
-      // Create mock command with args and opts
-      mockCommand = {
-        args: [] as string[],
-        opts: () => ({})
-      }
+      // Default command state
+      commandName = ''
+      commandOpts = {}
 
       // Mock isIdeAvailable
       mockIsIdeAvailable = vi.spyOn(ide, 'isIdeAvailable')
@@ -591,18 +598,18 @@ describe('IDE validation', () => {
 
     describe('command filtering', () => {
       it('should skip validation for non-start commands', async () => {
-        mockCommand.args = ['finish']
+        commandName = 'finish'
 
-        await validateIdeForStartCommand(mockCommand)
+        await validateIdeForStartCommand(createMockCommand())
 
         expect(mockExit).not.toHaveBeenCalled()
         expect(mockIsIdeAvailable).not.toHaveBeenCalled()
       })
 
       it('should skip validation for list command', async () => {
-        mockCommand.args = ['list']
+        commandName = 'list'
 
-        await validateIdeForStartCommand(mockCommand)
+        await validateIdeForStartCommand(createMockCommand())
 
         expect(mockExit).not.toHaveBeenCalled()
         expect(mockIsIdeAvailable).not.toHaveBeenCalled()
@@ -611,10 +618,10 @@ describe('IDE validation', () => {
 
     describe('--no-code flag handling', () => {
       it('should skip validation when --no-code flag is used', async () => {
-        mockCommand.args = ['start']
-        mockCommand.opts = () => ({ code: false })
+        commandName = 'start'
+        commandOpts = { code: false }
 
-        await validateIdeForStartCommand(mockCommand)
+        await validateIdeForStartCommand(createMockCommand())
 
         expect(mockExit).not.toHaveBeenCalled()
         expect(mockIsIdeAvailable).not.toHaveBeenCalled()
@@ -623,27 +630,27 @@ describe('IDE validation', () => {
 
     describe('startIde setting handling', () => {
       it('should skip validation when startIde is false in settings', async () => {
-        mockCommand.args = ['start']
-        mockCommand.opts = () => ({})
+        commandName = 'start'
+        commandOpts = {}
         mockLoadSettings.mockResolvedValue({
           workflows: { issue: { startIde: false } }
         })
 
-        await validateIdeForStartCommand(mockCommand)
+        await validateIdeForStartCommand(createMockCommand())
 
         expect(mockExit).not.toHaveBeenCalled()
         expect(mockIsIdeAvailable).not.toHaveBeenCalled()
       })
 
       it('should validate when --code flag overrides startIde=false', async () => {
-        mockCommand.args = ['start']
-        mockCommand.opts = () => ({ code: true })
+        commandName = 'start'
+        commandOpts = { code: true }
         mockLoadSettings.mockResolvedValue({
           workflows: { issue: { startIde: false } }
         })
         mockIsIdeAvailable.mockResolvedValue(true)
 
-        await validateIdeForStartCommand(mockCommand)
+        await validateIdeForStartCommand(createMockCommand())
 
         expect(mockIsIdeAvailable).toHaveBeenCalled()
         expect(mockExit).not.toHaveBeenCalled()
@@ -652,47 +659,47 @@ describe('IDE validation', () => {
 
     describe('IDE availability checking', () => {
       it('should exit with error when configured IDE command is not found', async () => {
-        mockCommand.args = ['start']
-        mockCommand.opts = () => ({})
+        commandName = 'start'
+        commandOpts = {}
         mockLoadSettings.mockResolvedValue({})
         mockIsIdeAvailable.mockResolvedValue(false)
 
-        await validateIdeForStartCommand(mockCommand)
+        await validateIdeForStartCommand(createMockCommand())
 
         expect(mockExit).toHaveBeenCalledWith(1)
       })
 
       it('should pass when configured IDE is available', async () => {
-        mockCommand.args = ['start']
-        mockCommand.opts = () => ({})
+        commandName = 'start'
+        commandOpts = {}
         mockLoadSettings.mockResolvedValue({})
         mockIsIdeAvailable.mockResolvedValue(true)
 
-        await validateIdeForStartCommand(mockCommand)
+        await validateIdeForStartCommand(createMockCommand())
 
         expect(mockExit).not.toHaveBeenCalled()
       })
 
       it('should check correct IDE command based on settings', async () => {
-        mockCommand.args = ['start']
-        mockCommand.opts = () => ({})
+        commandName = 'start'
+        commandOpts = {}
         mockLoadSettings.mockResolvedValue({
           ide: { type: 'cursor' }
         })
         mockIsIdeAvailable.mockResolvedValue(true)
 
-        await validateIdeForStartCommand(mockCommand)
+        await validateIdeForStartCommand(createMockCommand())
 
         expect(mockIsIdeAvailable).toHaveBeenCalledWith('cursor')
       })
 
       it('should default to vscode when IDE type not configured', async () => {
-        mockCommand.args = ['start']
-        mockCommand.opts = () => ({})
+        commandName = 'start'
+        commandOpts = {}
         mockLoadSettings.mockResolvedValue({})
         mockIsIdeAvailable.mockResolvedValue(true)
 
-        await validateIdeForStartCommand(mockCommand)
+        await validateIdeForStartCommand(createMockCommand())
 
         expect(mockIsIdeAvailable).toHaveBeenCalledWith('code')
       })
@@ -700,11 +707,11 @@ describe('IDE validation', () => {
 
     describe('settings loading error handling', () => {
       it('should skip validation when settings cannot be loaded', async () => {
-        mockCommand.args = ['start']
-        mockCommand.opts = () => ({})
+        commandName = 'start'
+        commandOpts = {}
         mockLoadSettings.mockRejectedValue(new Error('Settings file not found'))
 
-        await validateIdeForStartCommand(mockCommand)
+        await validateIdeForStartCommand(createMockCommand())
 
         // Should not exit - let settings validation handle the error
         expect(mockExit).not.toHaveBeenCalled()
