@@ -528,3 +528,7 @@ License & Name
     
 
 See [LICENSE](https://raw.githubusercontent.com/iloom-ai/iloom-cli/main/LICENSE) for complete terms.
+
+**Terms of Service**
+
+By using iloom, you agree to our [Terms of Service](https://iloom.ai/terms).

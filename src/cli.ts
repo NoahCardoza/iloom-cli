@@ -44,6 +44,7 @@ program
   .option('--completion', 'Output shell completion script for current shell')
   .option('--set <key=value>', 'Override any setting using dot notation (repeatable, e.g., --set workflows.issue.startIde=false)')
   .allowUnknownOption() // Allow --set to be used multiple times
+  .addHelpText('afterAll', '\nBy using iloom, you agree to our Terms of Service: https://iloom.ai/terms')
   .hook('preAction', async (thisCommand, actionCommand) => {
     // Set debug mode based on flag or environment variable
     const options = thisCommand.opts()
