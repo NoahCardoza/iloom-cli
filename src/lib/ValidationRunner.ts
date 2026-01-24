@@ -404,6 +404,7 @@ export class ValidationRunner {
 				headless: false, // Interactive mode
 				permissionMode: 'acceptEdits', // Auto-accept edits
 				model: 'sonnet', // Use Sonnet model
+				noSessionPersistence: true, // Utility operation - no session persistence needed
 			})
 
 			// After Claude completes, re-run validation to verify fix

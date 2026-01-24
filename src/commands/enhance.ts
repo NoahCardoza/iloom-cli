@@ -125,6 +125,7 @@ export class EnhanceCommand {
 			headless: true,
 			model: 'sonnet',
 			agents,
+			noSessionPersistence: true, // Headless operation - no session persistence needed
 			...(mcpConfig && { mcpConfig }),
 			...(allowedTools && { allowedTools }),
 			...(disallowedTools && { disallowedTools }),

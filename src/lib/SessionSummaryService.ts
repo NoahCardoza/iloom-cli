@@ -179,6 +179,7 @@ export class SessionSummaryService {
 				headless: true,
 				model: summaryModel,
 				sessionId: sessionId, // Resume this session so Claude has conversation context
+				noSessionPersistence: true, // Don't persist new data after generating summary
 			})
 
 			if (!summaryResult || typeof summaryResult !== 'string' || summaryResult.trim() === '') {
@@ -269,6 +270,7 @@ export class SessionSummaryService {
 			headless: true,
 			model: summaryModel,
 			sessionId: sessionId,
+			noSessionPersistence: true, // Don't persist new data after generating summary
 		})
 
 		if (!summaryResult || typeof summaryResult !== 'string' || summaryResult.trim() === '') {

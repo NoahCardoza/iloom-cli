@@ -69,6 +69,7 @@ export interface ClaudeCliOptions {
 	setArguments?: string[] // Raw --set arguments to forward (e.g., ['workflows.issue.startIde=false'])
 	executablePath?: string // Executable path to use for spin command (e.g., 'il', 'il-125', or '/path/to/dist/cli.js')
 	sessionId?: string // Session ID for Claude Code resume support (must be valid UUID)
+	noSessionPersistence?: boolean // Prevent session data from being saved to disk (for utility operations)
 }
 
 /**
@@ -141,7 +142,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId } = options
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, noSessionPersistence } = options
 	const log = getLogger()
 
 	// Build command arguments
@@ -199,6 +200,11 @@ export async function launchClaude(
 	// Add --session-id flag if provided (enables Claude Code session resume)
 	if (sessionId) {
 		args.push('--session-id', sessionId)
+	}
+
+	// Add --no-session-persistence flag if requested (for utility operations that don't need session persistence)
+	if (noSessionPersistence) {
+		args.push('--no-session-persistence')
 	}
 
 	try {
@@ -527,6 +533,7 @@ Generate a git branch name for the following issue:
 		const result = (await launchClaude(prompt, {
 			model,
 			headless: true,
+			noSessionPersistence: true, // Utility operation - don't persist session
 		})) as string
 
 		// Normalize to lowercase for consistency (Linear IDs are uppercase but branches should be lowercase)

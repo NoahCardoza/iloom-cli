@@ -166,6 +166,7 @@ describe('SessionSummaryService', () => {
 				headless: true,
 				model: 'sonnet',
 				sessionId: 'test-session-id-12345',
+				noSessionPersistence: true,
 			})
 
 			// Verify provider was created and comment was posted

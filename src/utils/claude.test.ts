@@ -1597,6 +1597,115 @@ describe('claude utils', () => {
 				)
 			})
 		})
+
+		describe('noSessionPersistence parameter', () => {
+			it('should add --no-session-persistence flag when noSessionPersistence is true', async () => {
+				const prompt = 'Test prompt'
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: true,
+					noSessionPersistence: true,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/tmp', '--no-session-persistence'],
+					expect.any(Object)
+				)
+			})
+
+			it('should not add --no-session-persistence flag when noSessionPersistence is false', async () => {
+				const prompt = 'Test prompt'
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: true,
+					noSessionPersistence: false,
+				})
+
+				const execaCall = vi.mocked(execa).mock.calls[0]
+				expect(execaCall[1]).not.toContain('--no-session-persistence')
+			})
+
+			it('should not add --no-session-persistence flag when noSessionPersistence is undefined', async () => {
+				const prompt = 'Test prompt'
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, { headless: true })
+
+				const execaCall = vi.mocked(execa).mock.calls[0]
+				expect(execaCall[1]).not.toContain('--no-session-persistence')
+			})
+
+			it('should work with noSessionPersistence in interactive mode', async () => {
+				const prompt = 'Test prompt'
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: false,
+					noSessionPersistence: true,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['--add-dir', '/tmp', '--no-session-persistence', '--', prompt],
+					expect.objectContaining({
+						stdio: ['inherit', 'inherit', 'pipe'],
+					})
+				)
+			})
+
+			it('should combine noSessionPersistence with other options in correct order', async () => {
+				const prompt = 'Test prompt'
+				const sessionId = '12345678-1234-5678-1234-567812345678'
+
+				vi.mocked(execa).mockResolvedValueOnce({
+					stdout: 'output',
+					exitCode: 0,
+				} as MockExecaReturn)
+
+				await launchClaude(prompt, {
+					headless: true,
+					model: 'opus',
+					addDir: '/workspace',
+					sessionId,
+					noSessionPersistence: true,
+				})
+
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					[
+						'-p',
+						'--output-format',
+						'stream-json',
+						'--verbose',
+						'--model', 'opus',
+						'--add-dir', '/workspace',
+						'--add-dir', '/tmp',
+						'--session-id', sessionId,
+						'--no-session-persistence',
+					],
+					expect.any(Object)
+				)
+			})
+		})
 	})
 
 	describe.runIf(process.platform === 'darwin')('launchClaudeInNewTerminalWindow', () => {
@@ -1804,7 +1913,7 @@ describe('claude utils', () => {
 			expect(result).toBe('feat/issue-123__user-authentication')
 			expect(execa).toHaveBeenCalledWith(
 				'claude',
-				['-p', '--output-format', 'stream-json', '--verbose', '--model', 'haiku', '--add-dir', '/tmp'],
+				['-p', '--output-format', 'stream-json', '--verbose', '--model', 'haiku', '--add-dir', '/tmp', '--no-session-persistence'],
 				expect.objectContaining({
 					input: expect.stringContaining(issueTitle),
 				})

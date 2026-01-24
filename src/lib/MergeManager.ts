@@ -464,6 +464,7 @@ export class MergeManager {
 				addDir: worktreePath,
 				headless: false, // Interactive - runs in current terminal with stdio: inherit
 				allowedTools: rebaseAllowedTools,
+				noSessionPersistence: true, // Utility operation - no session persistence needed
 			})
 
 			// After Claude interaction completes, check if conflicts resolved
