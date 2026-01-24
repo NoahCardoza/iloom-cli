@@ -524,7 +524,7 @@ License & Name
     
 *   ❌ You cannot resell iloom itself as a product or SaaS.
     
-*   Converts to Apache 2.0 on 2030-01-22.
+*   Converts to Apache 2.0 on 2030-01-24.
     
 
 See [LICENSE](https://raw.githubusercontent.com/iloom-ai/iloom-cli/main/LICENSE) for complete terms.
