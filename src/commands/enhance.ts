@@ -1,13 +1,10 @@
 import type { IssueTracker } from '../lib/IssueTracker.js'
-import type { AgentManager } from '../lib/AgentManager.js'
 import type { SettingsManager } from '../lib/SettingsManager.js'
 import type { EnhanceResult } from '../types/index.js'
-import { launchClaude } from '../utils/claude.js'
+import type { IssueEnhancementService } from '../lib/IssueEnhancementService.js'
 import { openBrowser } from '../utils/browser.js'
 import { waitForKeypress } from '../utils/prompt.js'
 import { getLogger } from '../utils/logger-context.js'
-import { generateIssueManagementMcpConfig } from '../utils/mcp.js'
-import { AgentManager as DefaultAgentManager } from '../lib/AgentManager.js'
 import { SettingsManager as DefaultSettingsManager } from '../lib/SettingsManager.js'
 import { getConfiguredRepoFromSettings, hasMultipleRemotes } from '../utils/remote.js'
 import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setup.js'
@@ -29,16 +26,16 @@ export interface EnhanceOptions {
  */
 export class EnhanceCommand {
 	private issueTracker: IssueTracker
-	private agentManager: AgentManager
+	private enhancementService: IssueEnhancementService
 	private settingsManager: SettingsManager
 
 	constructor(
 		issueTracker: IssueTracker,
-		agentManager?: AgentManager,
+		enhancementService: IssueEnhancementService,
 		settingsManager?: SettingsManager
 	) {
 		this.issueTracker = issueTracker
-		this.agentManager = agentManager ?? new DefaultAgentManager()
+		this.enhancementService = enhancementService
 		this.settingsManager = settingsManager ?? new DefaultSettingsManager()
 	}
 
@@ -46,11 +43,9 @@ export class EnhanceCommand {
 	 * Execute the enhance command workflow:
 	 * 1. Validate issue number
 	 * 2. Fetch issue to verify it exists
-	 * 3. Load agent configurations
-	 * 4. Invoke Claude CLI with enhancer agent
-	 * 5. Parse response to determine outcome
-	 * 6. Handle browser interaction based on outcome (unless --json mode)
-	 * 7. Return result object when --json mode
+	 * 3. Invoke enhancement service
+	 * 4. Handle browser interaction based on outcome (unless --json mode)
+	 * 5. Return result object when --json mode
 	 */
 	public async execute(input: EnhanceCommandInput): Promise<EnhanceResult | void> {
 		const { issueNumber, options } = input
@@ -85,56 +80,17 @@ export class EnhanceCommand {
 		const issue = await this.issueTracker.fetchIssue(issueNumber, repo)
 		getLogger().debug('Issue fetched successfully', { number: issue.number, title: issue.title })
 
-		// Step 3: Load agent configurations
-		getLogger().debug('Loading agent configurations...')
-		const loadedAgents = await this.agentManager.loadAgents(settings)
-		const agents = this.agentManager.formatForCli(loadedAgents)
-
-		// Step 3.5: Generate MCP config and tool filtering for issue management
-		let mcpConfig: Record<string, unknown>[] | undefined
-		let allowedTools: string[] | undefined
-		let disallowedTools: string[] | undefined
-
-		try {
-			const provider = this.issueTracker.providerName as 'github' | 'linear'
-			mcpConfig = await generateIssueManagementMcpConfig('issue', repo, provider, settings)
-			getLogger().debug('Generated MCP configuration for issue management:', { mcpConfig })
-
-			// Configure tool filtering for issue workflows
-			allowedTools = [
-				'mcp__issue_management__get_issue',
-				'mcp__issue_management__get_comment',
-				'mcp__issue_management__create_comment',
-				'mcp__issue_management__update_comment',
-				'mcp__issue_management__create_issue',
-			]
-			disallowedTools = ['Bash(gh api:*)']
-
-			getLogger().debug('Configured tool filtering for issue workflow', { allowedTools, disallowedTools })
-		} catch (error) {
-			// Log warning but continue without MCP
-			getLogger().warn(`Failed to generate MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
-		}
-
-		// Step 4: Invoke Claude CLI with enhancer agent
+		// Step 3: Invoke enhancement service
 		if (!isJsonMode) {
 			getLogger().info('Invoking enhancer agent. This may take a moment...')
 		}
-		const prompt = this.constructPrompt(issueNumber, author)
-		const response = await launchClaude(prompt, {
-			headless: true,
-			model: 'sonnet',
-			agents,
-			noSessionPersistence: true, // Headless operation - no session persistence needed
-			...(mcpConfig && { mcpConfig }),
-			...(allowedTools && { allowedTools }),
-			...(disallowedTools && { disallowedTools }),
-		})
+		// Build options object conditionally to satisfy exactOptionalPropertyTypes
+		const enhanceOptions: { author?: string; repo?: string } = {}
+		if (author !== undefined) enhanceOptions.author = author
+		if (repo !== undefined) enhanceOptions.repo = repo
+		const result = await this.enhancementService.enhanceExistingIssue(issueNumber, enhanceOptions)
 
-		// Step 5: Parse response to determine outcome
-		const result = this.parseEnhancerResponse(response)
-
-		// Step 6: Handle JSON mode - return structured result
+		// Step 4: Handle JSON mode - return structured result
 		if (isJsonMode) {
 			const commentId = result.url ? this.extractCommentId(result.url) : 0
 			const resultData: EnhanceResult = {
@@ -147,7 +103,7 @@ export class EnhanceCommand {
 			return resultData
 		}
 
-		// Step 7: Handle non-JSON mode - browser interaction based on outcome
+		// Step 5: Handle non-JSON mode - browser interaction based on outcome
 		if (!result.enhanced) {
 			getLogger().success('Issue already has thorough description. No enhancement needed.')
 			return
@@ -190,63 +146,6 @@ export class EnhanceCommand {
 		if (typeof issueNumber === 'string' && issueNumber.trim().length === 0) {
 			throw new Error('Issue identifier cannot be empty')
 		}
-	}
-
-	/**
-	 * Construct the prompt for the orchestrating Claude instance.
-	 * This prompt is very clear about expected output format to ensure reliable parsing.
-	 */
-	private constructPrompt(issueNumber: string | number, author?: string): string {
-		const authorInstruction = author
-			? `\nIMPORTANT: When you create your analysis comment, tag @${author} in the "Questions for Reporter" section if you have questions.\n`
-			: ''
-
-		return `Execute @agent-iloom-issue-enhancer ${issueNumber}${authorInstruction}
-
-## OUTPUT REQUIREMENTS
-* If the issue was not enhanced, return ONLY: "No enhancement needed"
-* If the issue WAS enhanced, return ONLY: <FULL URL OF THE COMMENT INCLUDING COMMENT ID>
-* If you encounter permission/authentication/access errors, return ONLY: "Permission denied: <specific error description>"
-* IMPORTANT: Return ONLY one of the above - DO NOT include commentary such as "I created a comment at <URL>" or "I examined the issue and found no enhancement was necessary"
-* CONTEXT: Your output is going to be parsed programmatically, so adherence to the output requirements is CRITICAL.`
-	}
-
-	/**
-	 * Parse the response from the enhancer agent.
-	 * Returns either { enhanced: false } or { enhanced: true, url: "..." }
-	 * Throws specific errors for permission issues.
-	 */
-	private parseEnhancerResponse(response: string | void): { enhanced: boolean; url?: string } {
-		// Handle empty or void response
-		if (!response || typeof response !== 'string') {
-			throw new Error('No response from enhancer agent')
-		}
-
-		const trimmed = response.trim()
-
-		getLogger().debug(`RESPONSE FROM ENHANCER AGENT: '${trimmed}'`)
-
-		// Check for permission denied errors (case-insensitive)
-		if (trimmed.toLowerCase().startsWith('permission denied:')) {
-			const errorMessage = trimmed.substring('permission denied:'.length).trim()
-			throw new Error(`Permission denied: ${errorMessage}`)
-		}
-
-		// Check for "No enhancement needed" (case-insensitive)
-		if (trimmed.toLowerCase().includes('no enhancement needed')) {
-			return { enhanced: false }
-		}
-
-		// Check if response looks like a GitHub comment URL
-		const urlPattern = /https:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+#issuecomment-\d+/
-		const match = trimmed.match(urlPattern)
-
-		if (match) {
-			return { enhanced: true, url: match[0] }
-		}
-
-		// Unexpected response format
-		throw new Error(`Unexpected response from enhancer agent: ${trimmed}`)
 	}
 
 	/**

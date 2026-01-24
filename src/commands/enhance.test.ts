@@ -1,23 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { EnhanceCommand } from './enhance.js'
 import type { GitHubService } from '../lib/GitHubService.js'
-import type { AgentManager } from '../lib/AgentManager.js'
+import type { IssueEnhancementService } from '../lib/IssueEnhancementService.js'
 import type { SettingsManager, IloomSettings } from '../lib/SettingsManager.js'
 import type { Issue } from '../types/index.js'
-import { launchClaude } from '../utils/claude.js'
 import { openBrowser } from '../utils/browser.js'
 import { waitForKeypress } from '../utils/prompt.js'
 
 // Mock dependencies
-vi.mock('../utils/claude.js')
 vi.mock('../utils/browser.js')
 vi.mock('../utils/prompt.js', () => ({
 	waitForKeypress: vi.fn(),
 	promptConfirmation: vi.fn(),
 	promptInput: vi.fn(),
-}))
-vi.mock('../utils/mcp.js', () => ({
-	generateIssueManagementMcpConfig: vi.fn().mockResolvedValue([]),
 }))
 vi.mock('../utils/remote.js', () => ({
 	hasMultipleRemotes: vi.fn().mockResolvedValue(false),
@@ -46,7 +41,7 @@ vi.mock('../utils/logger.js', () => ({
 describe('EnhanceCommand', () => {
 	let command: EnhanceCommand
 	let mockGitHubService: GitHubService
-	let mockAgentManager: AgentManager
+	let mockEnhancementService: IssueEnhancementService
 	let mockSettingsManager: SettingsManager
 
 	beforeEach(() => {
@@ -54,20 +49,20 @@ describe('EnhanceCommand', () => {
 		mockGitHubService = {
 			fetchIssue: vi.fn(),
 			getIssueUrl: vi.fn(),
+			providerName: 'github',
 		} as unknown as GitHubService
 
-		// Create mock AgentManager
-		mockAgentManager = {
-			loadAgents: vi.fn(),
-			formatForCli: vi.fn(),
-		} as unknown as AgentManager
+		// Create mock IssueEnhancementService
+		mockEnhancementService = {
+			enhanceExistingIssue: vi.fn(),
+		} as unknown as IssueEnhancementService
 
 		// Create mock SettingsManager
 		mockSettingsManager = {
 			loadSettings: vi.fn(),
 		} as unknown as SettingsManager
 
-		command = new EnhanceCommand(mockGitHubService, mockAgentManager, mockSettingsManager)
+		command = new EnhanceCommand(mockGitHubService, mockEnhancementService, mockSettingsManager)
 	})
 
 	afterEach(() => {
@@ -93,9 +88,7 @@ describe('EnhanceCommand', () => {
 
 			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			await command.execute({ issueNumber: 42, options: {} })
 
@@ -121,9 +114,7 @@ describe('EnhanceCommand', () => {
 
 			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			await command.execute({ issueNumber: 42, options: {} })
 
@@ -151,9 +142,7 @@ describe('EnhanceCommand', () => {
 
 				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
 				vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-				vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-				vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
-				vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+				vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 				await command.execute({ issueNumber: 42, options: {} })
 
@@ -202,10 +191,7 @@ describe('EnhanceCommand', () => {
 
 			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
-
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			await expect(
 				command.execute({ issueNumber: 42, options: {} })
@@ -227,10 +213,7 @@ describe('EnhanceCommand', () => {
 
 			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
-
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			await command.execute({ issueNumber: 123, options: {} })
 
@@ -256,7 +239,7 @@ describe('EnhanceCommand', () => {
 		})
 	})
 
-	describe('agent invocation', () => {
+	describe('enhancement service invocation', () => {
 		beforeEach(() => {
 			const mockIssue: Issue = {
 				number: 42,
@@ -270,85 +253,34 @@ describe('EnhanceCommand', () => {
 			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
 		})
 
-		it('should load agents using AgentManager', async () => {
-			const mockSettings = { agentPath: '/test/path' }
-			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue(mockSettings as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
-
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+		it('should invoke enhancement service with issue number', async () => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			await command.execute({ issueNumber: 42, options: {} })
 
-			expect(mockAgentManager.loadAgents).toHaveBeenCalledWith(mockSettings)
+			expect(mockEnhancementService.enhanceExistingIssue).toHaveBeenCalledWith(
+				42,
+				{} // Empty object when no author or repo provided
+			)
 		})
 
-		it('should construct correct prompt for orchestrating Claude instance', async () => {
+		it('should pass author to enhancement service when provided', async () => {
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+			await command.execute({ issueNumber: 42, options: { author: 'testuser' } })
 
-			await command.execute({ issueNumber: 42, options: {} })
-
-			expect(launchClaude).toHaveBeenCalledWith(
-				expect.stringContaining('@agent-iloom-issue-enhancer 42'),
+			expect(mockEnhancementService.enhanceExistingIssue).toHaveBeenCalledWith(
+				42,
 				expect.objectContaining({
-					headless: true,
-					model: 'sonnet',
+					author: 'testuser',
 				})
-			)
-		})
-
-		it('should call launchClaude with headless mode', async () => {
-			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
-
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
-
-			await command.execute({ issueNumber: 42, options: {} })
-
-			expect(launchClaude).toHaveBeenCalledWith(
-				expect.any(String),
-				expect.objectContaining({ headless: true })
-			)
-		})
-
-		it('should pass correct agents configuration to launchClaude', async () => {
-			const mockAgents = { 'iloom-issue-enhancer': {} }
-			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue(mockAgents)
-
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
-
-			await command.execute({ issueNumber: 42, options: {} })
-
-			expect(launchClaude).toHaveBeenCalledWith(
-				expect.any(String),
-				expect.objectContaining({ agents: mockAgents })
-			)
-		})
-
-		it('should use sonnet model for Claude CLI', async () => {
-			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
-
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
-
-			await command.execute({ issueNumber: 42, options: {} })
-
-			expect(launchClaude).toHaveBeenCalledWith(
-				expect.any(String),
-				expect.objectContaining({ model: 'sonnet' })
 			)
 		})
 	})
 
-	describe('response parsing', () => {
+	describe('response handling', () => {
 		beforeEach(() => {
 			const mockIssue: Issue = {
 				number: 42,
@@ -361,12 +293,10 @@ describe('EnhanceCommand', () => {
 			}
 			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
 		})
 
-		it('should detect "No enhancement needed" response', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+		it('should not prompt for browser when no enhancement needed', async () => {
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			await command.execute({ issueNumber: 42, options: {} })
 
@@ -374,9 +304,9 @@ describe('EnhanceCommand', () => {
 			expect(waitForKeypress).not.toHaveBeenCalled()
 		})
 
-		it('should detect comment URL in response', async () => {
+		it('should prompt for browser when enhancement occurred', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: true, url: commentUrl })
 			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -385,63 +315,24 @@ describe('EnhanceCommand', () => {
 			expect(waitForKeypress).toHaveBeenCalled()
 		})
 
-		it('should extract comment URL from response', async () => {
-			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
-			vi.mocked(waitForKeypress).mockResolvedValue('a')
-
-			await command.execute({ issueNumber: 42, options: {} })
-
-			// Verify URL is passed to browser opening (when not pressing 'q')
-			expect(openBrowser).toHaveBeenCalledWith(commentUrl)
-		})
-
-		it('should handle malformed responses gracefully', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('Some unexpected response format')
-
-			await expect(
-				command.execute({ issueNumber: 42, options: {} })
-			).rejects.toThrow('Unexpected response from enhancer agent')
-		})
-
-		it('should throw error on empty response', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('')
+		it('should propagate errors from enhancement service', async () => {
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockRejectedValue(
+				new Error('No response from enhancer agent')
+			)
 
 			await expect(
 				command.execute({ issueNumber: 42, options: {} })
 			).rejects.toThrow('No response from enhancer agent')
 		})
 
-		it('should detect and handle permission denied responses', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('Permission denied: GitHub CLI not authenticated or not installed')
+		it('should propagate permission denied errors from enhancement service', async () => {
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockRejectedValue(
+				new Error('Permission denied: GitHub CLI not authenticated or not installed')
+			)
 
 			await expect(
 				command.execute({ issueNumber: 42, options: {} })
 			).rejects.toThrow('Permission denied: GitHub CLI not authenticated or not installed')
-		})
-
-		it('should handle permission denied with case insensitive matching', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('permission denied: Cannot access repository or issue does not exist')
-
-			await expect(
-				command.execute({ issueNumber: 42, options: {} })
-			).rejects.toThrow('Permission denied: Cannot access repository or issue does not exist')
-		})
-
-		it('should handle permission denied for comment creation', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('Permission denied: Cannot create comments on this repository')
-
-			await expect(
-				command.execute({ issueNumber: 42, options: {} })
-			).rejects.toThrow('Permission denied: Cannot create comments on this repository')
-		})
-
-		it('should handle permission denied for API rate limits', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('Permission denied: GitHub API rate limit exceeded')
-
-			await expect(
-				command.execute({ issueNumber: 42, options: {} })
-			).rejects.toThrow('Permission denied: GitHub API rate limit exceeded')
 		})
 	})
 
@@ -458,12 +349,10 @@ describe('EnhanceCommand', () => {
 			}
 			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
 		})
 
 		it('should not prompt for browser when no enhancement needed', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			await command.execute({ issueNumber: 42, options: {} })
 
@@ -472,7 +361,7 @@ describe('EnhanceCommand', () => {
 
 		it('should prompt "Press q to quit or any other key to view" when enhanced', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: true, url: commentUrl })
 			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -484,7 +373,7 @@ describe('EnhanceCommand', () => {
 
 		it('should open browser when user does not press q', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: true, url: commentUrl })
 			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -494,7 +383,7 @@ describe('EnhanceCommand', () => {
 
 		it('should NOT open browser when user presses q', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: true, url: commentUrl })
 			vi.mocked(waitForKeypress).mockResolvedValue('q')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -505,7 +394,7 @@ describe('EnhanceCommand', () => {
 
 		it('should NOT open browser when user presses Q (uppercase)', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: true, url: commentUrl })
 			vi.mocked(waitForKeypress).mockResolvedValue('Q')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -516,7 +405,7 @@ describe('EnhanceCommand', () => {
 
 		it('should skip browser when --no-browser flag is set', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: true, url: commentUrl })
 
 			await command.execute({ issueNumber: 42, options: { noBrowser: true } })
 
@@ -526,7 +415,7 @@ describe('EnhanceCommand', () => {
 
 		it('should handle browser opening failures gracefully', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: true, url: commentUrl })
 			vi.mocked(waitForKeypress).mockResolvedValue('a')
 			vi.mocked(openBrowser).mockRejectedValue(new Error('Browser failed to open'))
 
@@ -561,19 +450,9 @@ describe('EnhanceCommand', () => {
 				return {} as IloomSettings
 			})
 
-			vi.mocked(mockAgentManager.loadAgents).mockImplementation(async () => {
-				calls.push('loadAgents')
-				return []
-			})
-
-			vi.mocked(mockAgentManager.formatForCli).mockImplementation(() => {
-				calls.push('formatForCli')
-				return {}
-			})
-
-			vi.mocked(launchClaude).mockImplementation(async () => {
-				calls.push('launchClaude')
-				return 'https://github.com/owner/repo/issues/42#issuecomment-123456'
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockImplementation(async () => {
+				calls.push('enhanceExistingIssue')
+				return { enhanced: true, url: 'https://github.com/owner/repo/issues/42#issuecomment-123456' }
 			})
 
 			vi.mocked(waitForKeypress).mockImplementation(async () => {
@@ -590,9 +469,7 @@ describe('EnhanceCommand', () => {
 			expect(calls).toEqual([
 				'loadSettings',
 				'fetchIssue',
-				'loadAgents',
-				'formatForCli',
-				'launchClaude',
+				'enhanceExistingIssue',
 				'waitForKeypress',
 				'openBrowser',
 			])
@@ -611,10 +488,7 @@ describe('EnhanceCommand', () => {
 
 			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
-
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			await command.execute({ issueNumber: 42, options: {} })
 
@@ -636,10 +510,7 @@ describe('EnhanceCommand', () => {
 
 			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
-
-			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: true, url: commentUrl })
 			vi.mocked(waitForKeypress).mockResolvedValue('a')
 
 			await command.execute({ issueNumber: 42, options: {} })
@@ -662,13 +533,11 @@ describe('EnhanceCommand', () => {
 			}
 			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
 		})
 
 		it('should return EnhanceResult object when json option is true and enhancement occurred', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: true, url: commentUrl })
 
 			const result = await command.execute({ issueNumber: 42, options: { json: true } })
 
@@ -682,7 +551,7 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should return EnhanceResult with enhanced=false when no enhancement needed', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			const result = await command.execute({ issueNumber: 42, options: { json: true } })
 
@@ -696,7 +565,7 @@ describe('EnhanceCommand', () => {
 
 		it('should skip browser interaction when json option is true', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
-			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: true, url: commentUrl })
 
 			await command.execute({ issueNumber: 42, options: { json: true } })
 
@@ -705,7 +574,7 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should return void when json option is not set', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			const result = await command.execute({ issueNumber: 42, options: {} })
 
@@ -717,7 +586,7 @@ describe('EnhanceCommand', () => {
 				'../utils/first-run-setup.js'
 			)
 			vi.mocked(needsFirstRunSetup).mockResolvedValue(true)
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			await command.execute({ issueNumber: 42, options: { json: true } })
 
@@ -726,7 +595,7 @@ describe('EnhanceCommand', () => {
 
 		it('should extract comment ID from URL correctly', async () => {
 			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-999888777'
-			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: true, url: commentUrl })
 
 			const result = await command.execute({ issueNumber: 42, options: { json: true } })
 
@@ -734,7 +603,7 @@ describe('EnhanceCommand', () => {
 		})
 
 		it('should include created_at as ISO timestamp', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			const result = await command.execute({ issueNumber: 42, options: { json: true } })
 
@@ -758,32 +627,34 @@ describe('EnhanceCommand', () => {
 			}
 			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
 			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({} as IloomSettings)
-			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue([])
-			vi.mocked(mockAgentManager.formatForCli).mockReturnValue({})
 		})
 
-		it('should include author in prompt when provided', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+		it('should pass author to enhancement service when provided', async () => {
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			await command.execute({ issueNumber: 42, options: { author: 'testuser' } })
 
-			expect(launchClaude).toHaveBeenCalledWith(
-				expect.stringContaining('tag @testuser'),
-				expect.any(Object)
+			expect(mockEnhancementService.enhanceExistingIssue).toHaveBeenCalledWith(
+				42,
+				expect.objectContaining({
+					author: 'testuser',
+				})
 			)
 		})
 
-		it('should not include author reference in prompt when not provided', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+		it('should not include author when not provided', async () => {
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			await command.execute({ issueNumber: 42, options: {} })
 
-			const calledPrompt = vi.mocked(launchClaude).mock.calls[0][0]
-			expect(calledPrompt).not.toContain('tag @')
+			// When no author is provided, the options object should not contain author key
+			const call = vi.mocked(mockEnhancementService.enhanceExistingIssue).mock.calls[0]
+			expect(call[0]).toBe(42)
+			expect(call[1]).not.toHaveProperty('author')
 		})
 
 		it('should work without author parameter for backwards compatibility', async () => {
-			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+			vi.mocked(mockEnhancementService.enhanceExistingIssue).mockResolvedValue({ enhanced: false })
 
 			await expect(
 				command.execute({ issueNumber: 42, options: {} })

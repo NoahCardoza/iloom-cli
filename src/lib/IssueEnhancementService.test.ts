@@ -36,6 +36,10 @@ vi.mock('../utils/logger.js', () => ({
 	},
 }))
 
+vi.mock('../utils/mcp.js', () => ({
+	generateIssueManagementMcpConfig: vi.fn().mockResolvedValue([]),
+}))
+
 describe('IssueEnhancementService', () => {
 	let service: IssueEnhancementService
 	let mockGitHubService: GitHubService
@@ -543,6 +547,139 @@ describe('IssueEnhancementService', () => {
 
 			expect(waitForKeypress).not.toHaveBeenCalled()
 			expect(openBrowser).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('enhanceExistingIssue', () => {
+		beforeEach(() => {
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				agents: {},
+			})
+			vi.mocked(mockAgentManager.loadAgents).mockResolvedValue({
+				'iloom-issue-enhancer': {
+					description: 'Test agent',
+					prompt: 'Test prompt',
+					tools: [],
+					model: 'sonnet',
+				},
+			})
+			vi.mocked(mockAgentManager.formatForCli).mockReturnValue('agent1=path1')
+			// Mock providerName
+			Object.defineProperty(mockGitHubService, 'providerName', { value: 'github', configurable: true })
+		})
+
+		it('should invoke Claude with correct prompt and MCP config', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+
+			await service.enhanceExistingIssue(42)
+
+			expect(launchClaude).toHaveBeenCalledWith(
+				expect.stringContaining('@agent-iloom-issue-enhancer 42'),
+				expect.objectContaining({
+					headless: true,
+					model: 'sonnet',
+					agents: 'agent1=path1',
+					noSessionPersistence: true,
+				})
+			)
+		})
+
+		it('should return { enhanced: false } for "No enhancement needed" response', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+
+			const result = await service.enhanceExistingIssue(42)
+
+			expect(result).toEqual({ enhanced: false })
+		})
+
+		it('should return { enhanced: true, url } for valid comment URL response', async () => {
+			const commentUrl = 'https://github.com/owner/repo/issues/42#issuecomment-123456'
+			vi.mocked(launchClaude).mockResolvedValue(commentUrl)
+
+			const result = await service.enhanceExistingIssue(42)
+
+			expect(result).toEqual({ enhanced: true, url: commentUrl })
+		})
+
+		it('should throw on empty response', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('')
+
+			await expect(service.enhanceExistingIssue(42)).rejects.toThrow('No response from enhancer agent')
+		})
+
+		it('should throw on permission denied responses', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('Permission denied: GitHub CLI not authenticated')
+
+			await expect(service.enhanceExistingIssue(42)).rejects.toThrow('Permission denied: GitHub CLI not authenticated')
+		})
+
+		it('should throw on malformed responses', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('Some unexpected response format')
+
+			await expect(service.enhanceExistingIssue(42)).rejects.toThrow('Unexpected response from enhancer agent')
+		})
+
+		it('should include author tag in prompt when author provided', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+
+			await service.enhanceExistingIssue(42, { author: 'testuser' })
+
+			expect(launchClaude).toHaveBeenCalledWith(
+				expect.stringContaining('tag @testuser'),
+				expect.any(Object)
+			)
+		})
+
+		it('should not include author tag when author not provided', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+
+			await service.enhanceExistingIssue(42)
+
+			const calledPrompt = vi.mocked(launchClaude).mock.calls[0][0]
+			expect(calledPrompt).not.toContain('tag @')
+		})
+
+		it('should pass MCP config and tool filtering to launchClaude', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('No enhancement needed')
+
+			await service.enhanceExistingIssue(42)
+
+			expect(launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					allowedTools: [
+						'mcp__issue_management__get_issue',
+						'mcp__issue_management__get_comment',
+						'mcp__issue_management__create_comment',
+						'mcp__issue_management__update_comment',
+						'mcp__issue_management__create_issue',
+					],
+					disallowedTools: ['Bash(gh api:*)'],
+				})
+			)
+		})
+
+		it('should handle case-insensitive "No enhancement needed" response', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('no enhancement needed')
+
+			const result = await service.enhanceExistingIssue(42)
+
+			expect(result).toEqual({ enhanced: false })
+		})
+
+		it('should handle case-insensitive permission denied response', async () => {
+			vi.mocked(launchClaude).mockResolvedValue('permission denied: Cannot access repository')
+
+			await expect(service.enhanceExistingIssue(42)).rejects.toThrow('Permission denied: Cannot access repository')
+		})
+
+		it('should extract URL from response containing extra text', async () => {
+			const response = 'Some text before https://github.com/owner/repo/issues/42#issuecomment-123456 and after'
+			vi.mocked(launchClaude).mockResolvedValue(response)
+
+			const result = await service.enhanceExistingIssue(42)
+
+			expect(result).toEqual({ enhanced: true, url: 'https://github.com/owner/repo/issues/42#issuecomment-123456' })
 		})
 	})
 })

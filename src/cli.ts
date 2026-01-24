@@ -499,7 +499,8 @@ program
         const settingsManager = new SettingsManager()
         const settings = await settingsManager.loadSettings()
         const issueTracker = IssueTrackerFactory.create(settings)
-        const command = new EnhanceCommand(issueTracker)
+        const enhancementService = new IssueEnhancementService(issueTracker, new AgentManager(), settingsManager)
+        const command = new EnhanceCommand(issueTracker, enhancementService, settingsManager)
         const result = await command.execute({
           issueNumber,
           options: {
