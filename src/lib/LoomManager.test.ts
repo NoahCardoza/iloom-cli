@@ -518,7 +518,7 @@ describe('LoomManager', () => {
       expect(mockCreateDraftPR).toHaveBeenCalledWith(
         expect.any(String), // branch name
         'Test Linear Issue', // PR title from issue
-        expect.stringContaining('Draft PR for issue'), // PR body
+        expect.stringContaining('PR for issue'), // PR body
         expectedPath // worktree path
       )
 

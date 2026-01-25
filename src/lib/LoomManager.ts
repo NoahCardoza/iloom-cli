@@ -234,7 +234,7 @@ export class LoomManager {
 
       // Generate PR title and body
       const prTitle = issueData?.title ?? `Work on ${branchName}`
-      const prBody = `Draft PR for issue #${input.identifier}\n\nThis PR was created automatically by iloom.`
+      const prBody = `PR for issue #${input.identifier}\n\nThis PR was created automatically by iloom.`
 
       // Create draft PR
       getLogger().info('Creating draft PR...')
