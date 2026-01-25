@@ -12,6 +12,7 @@ import { VSCodeIntegration } from './VSCodeIntegration.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager, type WriteMetadataInput } from './MetadataManager.js'
 import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit, extractPRNumber } from '../utils/git.js'
+import { GitHubService } from './GitHubService.js'
 import { generateRandomSessionId } from '../utils/claude.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName, selectDistinctColor, hexToRgb, type ColorData } from '../utils/color.js'
@@ -29,6 +30,7 @@ import { getLogger } from '../utils/logger-context.js'
  */
 export class LoomManager {
   private metadataManager: MetadataManager
+  private githubService: GitHubService | undefined
 
   constructor(
     private gitWorktree: GitWorktreeManager,
@@ -39,9 +41,11 @@ export class LoomManager {
     private capabilityDetector: ProjectCapabilityDetector,
     private cliIsolation: CLIIsolationManager,
     private settings: SettingsManager,
-    private database?: DatabaseManager
+    private database?: DatabaseManager,
+    githubService?: GitHubService
   ) {
     this.metadataManager = new MetadataManager()
+    this.githubService = githubService
   }
 
   /**
@@ -536,11 +540,17 @@ export class LoomManager {
     if (input.type === 'issue') {
       return await this.issueTracker.fetchIssue(input.identifier as number)
     } else if (input.type === 'pr') {
-      // Check if provider supports PRs before calling
-      if (!this.issueTracker.supportsPullRequests || !this.issueTracker.fetchPR) {
-        throw new Error('Issue tracker does not support pull requests')
+      // Use issue tracker if it supports PRs
+      if (this.issueTracker.supportsPullRequests && this.issueTracker.fetchPR) {
+        return await this.issueTracker.fetchPR(input.identifier as number)
       }
-      return await this.issueTracker.fetchPR(input.identifier as number)
+      // Use injected GitHubService if available
+      if (this.githubService) {
+        return await this.githubService.fetchPR(input.identifier as number)
+      }
+      // Create GitHubService on demand for PR fetching
+      const github = new GitHubService()
+      return await github.fetchPR(input.identifier as number)
     }
     return null
   }

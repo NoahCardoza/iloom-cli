@@ -1,6 +1,7 @@
 import path from 'path'
 import { getLogger } from '../utils/logger-context.js'
 import type { IssueTracker } from '../lib/IssueTracker.js'
+import { GitHubService } from '../lib/GitHubService.js'
 import { LoomManager } from '../lib/LoomManager.js'
 import { DefaultBranchNamingService } from '../lib/BranchNamingService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
@@ -38,6 +39,7 @@ export class StartCommand {
 	private loomManager: LoomManager | null = null
 	private settingsManager: SettingsManager
 	private providedLoomManager: LoomManager | undefined
+	private githubService: GitHubService | null = null
 
 	constructor(
 		issueTracker: IssueTracker,
@@ -58,6 +60,15 @@ export class StartCommand {
 		if (envResult.parsed) {
 			getLogger().debug(`Loaded ${Object.keys(envResult.parsed).length} environment variables`)
 		}
+	}
+
+	/**
+	 * Get or create a GitHubService instance for PR operations
+	 * Used when the configured issue tracker doesn't support PRs (e.g., Linear)
+	 */
+	private getGitHubService(): GitHubService {
+		this.githubService ??= new GitHubService()
+		return this.githubService
 	}
 
 	/**
@@ -377,26 +388,49 @@ export class StartCommand {
 		if (numericMatch?.[1]) {
 			const number = parseInt(numericMatch[1], 10)
 
-			// Use IssueTracker to detect if it's a PR or issue
-			const detection = await this.issueTracker.detectInputType(
-				trimmedIdentifier,
-				repo
-			)
+			// If issue tracker supports PRs, use it for detection
+			if (this.issueTracker.supportsPullRequests) {
+				const detection = await this.issueTracker.detectInputType(
+					trimmedIdentifier,
+					repo
+				)
 
-			if (detection.type === 'pr') {
-				return {
-					type: 'pr',
-					number: detection.identifier ? parseInt(detection.identifier, 10) : number,
-					originalInput: trimmedIdentifier,
-				}
-			} else if (detection.type === 'issue') {
-				return {
-					type: 'issue',
-					number: detection.identifier ? parseInt(detection.identifier, 10) : number,
-					originalInput: trimmedIdentifier,
+				if (detection.type === 'pr') {
+					return {
+						type: 'pr',
+						number: detection.identifier ? parseInt(detection.identifier, 10) : number,
+						originalInput: trimmedIdentifier,
+					}
+				} else if (detection.type === 'issue') {
+					return {
+						type: 'issue',
+						number: detection.identifier ? parseInt(detection.identifier, 10) : number,
+						originalInput: trimmedIdentifier,
+					}
+				} else {
+					throw new Error(`Could not find issue or PR #${number}`)
 				}
 			} else {
-				throw new Error(`Could not find issue or PR #${number}`)
+				// Issue tracker doesn't support PRs (e.g., Linear)
+				// Check GitHub first for PR, then fall back to issue tracker for issues
+				const githubService = this.getGitHubService()
+				const detection = await githubService.detectInputType(trimmedIdentifier, repo)
+
+				if (detection.type === 'pr') {
+					return {
+						type: 'pr',
+						number: detection.identifier ? parseInt(detection.identifier, 10) : number,
+						originalInput: trimmedIdentifier,
+					}
+				} else {
+					// Not a GitHub PR - try the configured issue tracker
+					// This allows future trackers with numeric IDs to work naturally
+					return {
+						type: 'issue',
+						number,
+						originalInput: trimmedIdentifier,
+					}
+				}
 			}
 		}
 
@@ -417,13 +451,18 @@ export class StartCommand {
 				if (!parsed.number) {
 					throw new Error('Invalid PR number')
 				}
-				// Check if provider supports PRs before calling PR methods
-				if (!this.issueTracker.supportsPullRequests || !this.issueTracker.fetchPR || !this.issueTracker.validatePRState) {
-					throw new Error('Issue tracker does not support pull requests')
+
+				// Determine which service to use for PR operations
+				if (this.issueTracker.supportsPullRequests && this.issueTracker.fetchPR && this.issueTracker.validatePRState) {
+					// Use issue tracker for PR operations (e.g., GitHub)
+					const pr = await this.issueTracker.fetchPR(parsed.number, repo)
+					await this.issueTracker.validatePRState(pr)
+				} else {
+					// Use GitHubService for PR operations when issue tracker doesn't support PRs (e.g., Linear)
+					const githubService = this.getGitHubService()
+					const pr = await githubService.fetchPR(parsed.number as number, repo)
+					await githubService.validatePRState(pr)
 				}
-				// Fetch and validate PR state
-				const pr = await this.issueTracker.fetchPR(parsed.number, repo)
-				await this.issueTracker.validatePRState(pr)
 				getLogger().debug(`Validated PR #${parsed.number}`)
 				break
 			}

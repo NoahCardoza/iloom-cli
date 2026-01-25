@@ -1555,4 +1555,276 @@ describe('StartCommand', () => {
 			expect(GitWorktreeManager).toHaveBeenCalledWith('/test/main-repo')
 		})
 	})
+
+	describe('Linear as issue tracker with GitHub PRs', () => {
+		let mockLinearService: {
+			supportsPullRequests: boolean
+			providerName: string
+			detectInputType: ReturnType<typeof vi.fn>
+			fetchIssue: ReturnType<typeof vi.fn>
+			validateIssueState: ReturnType<typeof vi.fn>
+			fetchPR?: ReturnType<typeof vi.fn>
+			validatePRState?: ReturnType<typeof vi.fn>
+		}
+		let linearCommand: StartCommand
+
+		beforeEach(() => {
+			// Create a mock Linear service that doesn't support PRs
+			mockLinearService = {
+				supportsPullRequests: false,
+				providerName: 'linear',
+				detectInputType: vi.fn(),
+				fetchIssue: vi.fn(),
+				validateIssueState: vi.fn(),
+				// Linear does NOT have fetchPR or validatePRState
+			}
+			linearCommand = new StartCommand(mockLinearService as unknown as GitHubService)
+		})
+
+		describe('GitHub PR detection via numeric input', () => {
+			it('should detect GitHub PR from numeric input when Linear is configured', async () => {
+				const mockPR = {
+					number: 42,
+					title: 'Test PR',
+					body: '',
+					state: 'open' as const,
+					branch: 'feature-branch',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/42',
+					isDraft: false,
+				}
+
+				// GitHubService will be instantiated internally via getGitHubService()
+				// We need to mock the GitHubService class methods
+				const MockedGitHubService = vi.mocked(GitHubService)
+				MockedGitHubService.prototype.detectInputType = vi.fn().mockResolvedValue({
+					type: 'pr',
+					identifier: '42',
+					rawInput: '42',
+				})
+				MockedGitHubService.prototype.fetchPR = vi.fn().mockResolvedValue(mockPR)
+				MockedGitHubService.prototype.validatePRState = vi.fn().mockResolvedValue(undefined)
+
+				await expect(
+					linearCommand.execute({
+						identifier: '42',
+						options: {},
+					})
+				).resolves.not.toThrow()
+
+				// Verify GitHubService.detectInputType was called (not LinearService)
+				expect(MockedGitHubService.prototype.detectInputType).toHaveBeenCalledWith('42', undefined)
+				// LinearService.detectInputType should NOT be called for numeric input
+				expect(mockLinearService.detectInputType).not.toHaveBeenCalled()
+			})
+
+			it('should detect GitHub PR from hash-prefixed numeric input when Linear is configured', async () => {
+				const mockPR = {
+					number: 42,
+					title: 'Test PR',
+					body: '',
+					state: 'open' as const,
+					branch: 'feature-branch',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/42',
+					isDraft: false,
+				}
+
+				const MockedGitHubService = vi.mocked(GitHubService)
+				MockedGitHubService.prototype.detectInputType = vi.fn().mockResolvedValue({
+					type: 'pr',
+					identifier: '42',
+					rawInput: '#42',
+				})
+				MockedGitHubService.prototype.fetchPR = vi.fn().mockResolvedValue(mockPR)
+				MockedGitHubService.prototype.validatePRState = vi.fn().mockResolvedValue(undefined)
+
+				await expect(
+					linearCommand.execute({
+						identifier: '#42',
+						options: {},
+					})
+				).resolves.not.toThrow()
+
+				expect(MockedGitHubService.prototype.detectInputType).toHaveBeenCalledWith('#42', undefined)
+			})
+
+			it('should fall back to issue tracker when GitHub issue is found', async () => {
+				const MockedGitHubService = vi.mocked(GitHubService)
+				MockedGitHubService.prototype.detectInputType = vi.fn().mockResolvedValue({
+					type: 'issue',
+					identifier: '42',
+					rawInput: '42',
+				})
+
+				// Mock Linear's fetchIssue to fail (as expected for numeric input)
+				mockLinearService.fetchIssue.mockRejectedValue(new Error('Issue not found'))
+
+				await expect(
+					linearCommand.execute({
+						identifier: '42',
+						options: {},
+					})
+				).rejects.toThrow('Issue not found')
+
+				// Should have called Linear's fetchIssue, not thrown GitHub-specific error
+				expect(mockLinearService.fetchIssue).toHaveBeenCalledWith(42, undefined)
+			})
+
+			it('should fall back to issue tracker when nothing is found on GitHub', async () => {
+				const MockedGitHubService = vi.mocked(GitHubService)
+				MockedGitHubService.prototype.detectInputType = vi.fn().mockResolvedValue({
+					type: 'unknown',
+					identifier: null,
+					rawInput: '999',
+				})
+
+				// Mock Linear's fetchIssue to fail
+				mockLinearService.fetchIssue.mockRejectedValue(new Error('Issue not found'))
+
+				await expect(
+					linearCommand.execute({
+						identifier: '999',
+						options: {},
+					})
+				).rejects.toThrow('Issue not found')
+
+				// Should have tried the issue tracker
+				expect(mockLinearService.fetchIssue).toHaveBeenCalledWith(999, undefined)
+			})
+		})
+
+		describe('PR validation with Linear', () => {
+			it('should validate PR state using GitHubService when Linear is configured', async () => {
+				const mockPR = {
+					number: 456,
+					title: 'Test PR',
+					body: '',
+					state: 'open' as const,
+					branch: 'feature-branch',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/456',
+					isDraft: false,
+				}
+
+				const MockedGitHubService = vi.mocked(GitHubService)
+				MockedGitHubService.prototype.fetchPR = vi.fn().mockResolvedValue(mockPR)
+				MockedGitHubService.prototype.validatePRState = vi.fn().mockResolvedValue(undefined)
+
+				// Use explicit PR format which doesn't require detection
+				await linearCommand.execute({
+					identifier: 'pr/456',
+					options: {},
+				})
+
+				// Verify GitHubService was used for PR validation (not LinearService)
+				expect(MockedGitHubService.prototype.fetchPR).toHaveBeenCalledWith(456, undefined)
+				expect(MockedGitHubService.prototype.validatePRState).toHaveBeenCalledWith(mockPR)
+			})
+
+			it('should handle closed PRs with user prompt using GitHubService', async () => {
+				const mockPR = {
+					number: 456,
+					title: 'Closed PR',
+					body: '',
+					state: 'closed' as const,
+					branch: 'feature-branch',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/456',
+					isDraft: false,
+				}
+
+				const MockedGitHubService = vi.mocked(GitHubService)
+				MockedGitHubService.prototype.fetchPR = vi.fn().mockResolvedValue(mockPR)
+				MockedGitHubService.prototype.validatePRState = vi.fn().mockRejectedValue(
+					new Error('User cancelled due to closed PR')
+				)
+
+				await expect(
+					linearCommand.execute({
+						identifier: 'pr/456',
+						options: {},
+					})
+				).rejects.toThrow('User cancelled due to closed PR')
+			})
+		})
+
+		describe('explicit PR format with Linear', () => {
+			it('should use explicit pr/123 format without GitHub detection call', async () => {
+				const mockPR = {
+					number: 123,
+					title: 'Test PR',
+					body: '',
+					state: 'open' as const,
+					branch: 'feature-branch',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/123',
+					isDraft: false,
+				}
+
+				const MockedGitHubService = vi.mocked(GitHubService)
+				MockedGitHubService.prototype.fetchPR = vi.fn().mockResolvedValue(mockPR)
+				MockedGitHubService.prototype.validatePRState = vi.fn().mockResolvedValue(undefined)
+				MockedGitHubService.prototype.detectInputType = vi.fn()
+
+				await linearCommand.execute({
+					identifier: 'pr/123',
+					options: {},
+				})
+
+				// detectInputType should NOT be called for explicit PR format
+				expect(MockedGitHubService.prototype.detectInputType).not.toHaveBeenCalled()
+				// But fetchPR and validatePRState should be called
+				expect(MockedGitHubService.prototype.fetchPR).toHaveBeenCalledWith(123, undefined)
+				expect(MockedGitHubService.prototype.validatePRState).toHaveBeenCalledWith(mockPR)
+			})
+
+			it('should use PR-123 format without GitHub detection call', async () => {
+				const mockPR = {
+					number: 123,
+					title: 'Test PR',
+					body: '',
+					state: 'open' as const,
+					branch: 'feature-branch',
+					baseBranch: 'main',
+					url: 'https://github.com/test/repo/pull/123',
+					isDraft: false,
+				}
+
+				const MockedGitHubService = vi.mocked(GitHubService)
+				MockedGitHubService.prototype.fetchPR = vi.fn().mockResolvedValue(mockPR)
+				MockedGitHubService.prototype.validatePRState = vi.fn().mockResolvedValue(undefined)
+				MockedGitHubService.prototype.detectInputType = vi.fn()
+
+				await linearCommand.execute({
+					identifier: 'PR-123',
+					options: {},
+				})
+
+				expect(MockedGitHubService.prototype.detectInputType).not.toHaveBeenCalled()
+				expect(MockedGitHubService.prototype.fetchPR).toHaveBeenCalledWith(123, undefined)
+			})
+		})
+
+		describe('Linear issue handling', () => {
+			it('should still handle Linear issue identifiers correctly', async () => {
+				// Mock LinearService.detectInputType to find a Linear issue
+				mockLinearService.detectInputType.mockResolvedValue({
+					type: 'issue',
+					identifier: 'ENG-123',
+					rawInput: 'ENG-123',
+				})
+
+				await expect(
+					linearCommand.execute({
+						identifier: 'ENG-123',
+						options: {},
+					})
+				).resolves.not.toThrow()
+
+				// LinearService.detectInputType should be called for Linear identifier format
+				expect(mockLinearService.detectInputType).toHaveBeenCalledWith('ENG-123', undefined)
+			})
+		})
+	})
 })
