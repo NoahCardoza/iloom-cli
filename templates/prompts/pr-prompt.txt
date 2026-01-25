@@ -20,6 +20,13 @@ Before sending any response, verify it doesn't contain:
 
 ---
 
+{{#if PORT}}
+<additional_env>
+Dev Server Port: {{PORT}}
+If you need to access the web server for testing purposes, use localhost:{{PORT}}
+</additional_env>
+{{/if}}
+
 ## Loom Recap
 
 **IMPORTANT: The recap is NOT a work log. It's a knowledge capture system for the USER.**
@@ -86,8 +93,6 @@ When working with libraries, frameworks, or APIs that you need documentation for
 - Setting up or configuring dependencies
 - Working with unfamiliar APIs
 - When you need current documentation that may have changed since your training data
-
-**Development Port:** This loom uses port **{{PORT}}** for the dev server (PORT environment variable is already set).
 
 After reading both the PR and any referenced issue, wait for the user to provide guidance on what they would like you to work on next.
 

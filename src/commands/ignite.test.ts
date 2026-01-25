@@ -202,13 +202,25 @@ describe('IgniteCommand', () => {
 			}
 		})
 
-		it('should read PORT from environment variables', async () => {
+		it('should calculate PORT for web-capable looms from metadata', async () => {
 			// Spy on launchClaude
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
-			// Mock environment variable
-			const originalEnv = process.env.PORT
-			process.env.PORT = '3070'
+			// Mock MetadataManager to return web capability
+			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-99__port-test',
+					worktreePath: '/path/to/feat/issue-99__port-test',
+					issueType: 'issue',
+					issue_numbers: ['99'],
+					capabilities: ['web'], // Web capability triggers PORT calculation
+					sessionId: '12345678-1234-4567-8901-123456789012',
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
 
 			// Mock process.cwd()
 			const originalCwd = process.cwd
@@ -217,31 +229,24 @@ describe('IgniteCommand', () => {
 			try {
 				await command.execute()
 
-				// Verify template manager was called with PORT
+				// Verify template manager was called with PORT calculated from issue number (3000 + 99 = 3099)
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
 					'issue',
 					expect.objectContaining({
-						PORT: 3070,
+						PORT: 3099,
 					})
 				)
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
-				if (originalEnv !== undefined) {
-					process.env.PORT = originalEnv
-				} else {
-					delete process.env.PORT
-				}
 			}
 		})
 
-		it('should handle missing PORT environment variable gracefully', async () => {
+		it('should not include PORT for looms without web capability', async () => {
 			// Spy on launchClaude
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
-			// Ensure PORT is not set
-			const originalEnv = process.env.PORT
-			delete process.env.PORT
+			// Default mock metadata has no capabilities, so PORT should not be set
 
 			// Mock process.cwd()
 			const originalCwd = process.cwd
@@ -250,16 +255,13 @@ describe('IgniteCommand', () => {
 			try {
 				await command.execute()
 
-				// Verify template manager was called without PORT
+				// Verify template manager was called without PORT (no web capability)
 				const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]
 				expect(templateCall[0]).toBe('issue')
 				expect(templateCall[1].PORT).toBeUndefined()
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
-				if (originalEnv !== undefined) {
-					process.env.PORT = originalEnv
-				}
 			}
 		})
 	})

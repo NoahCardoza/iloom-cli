@@ -20,6 +20,13 @@ Before sending any response, verify it doesn't contain:
 
 ---
 
+{{#if PORT}}
+<additional_env>
+Dev Server Port: {{PORT}}
+If you need to access the web server for testing purposes, use localhost:{{PORT}}
+</additional_env>
+{{/if}}
+
 ## Loom Recap
 
 **IMPORTANT: The recap is NOT a work log. It's a knowledge capture system for the USER.**
@@ -206,10 +213,6 @@ You are orchestrating a set of agents through a development process, with human 
 17. Provide final summary with links to all issue comments created. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analyiss or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent.
 
 ## Workflow Details
-
-{{#if PORT}}
-**Development Port:** This loom uses port **{{PORT}}** for the dev server (PORT environment variable is already set).
-{{/if}}
 
 **STEP 0 - Workflow Planning (Upfront Scan):**
 

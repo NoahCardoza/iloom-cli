@@ -12,6 +12,7 @@ import { MetadataManager } from '../lib/MetadataManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
 import { extractIssueNumber } from '../utils/git.js'
+import { getWorkspacePort } from '../utils/port.js'
 import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
 
@@ -87,6 +88,23 @@ export class IgniteCommand {
 			const metadata = await metadataManager.readMetadata(context.workspacePath)
 			const draftPrNumber = metadata?.draftPrNumber ?? undefined
 
+			// Step 2.0.5: Load settings early if not cached (needed for port calculation)
+			if (!this.settings) {
+				const cliOverrides = extractSettingsOverrides()
+				this.settings = await this.settingsManager.loadSettings(undefined, cliOverrides)
+			}
+
+			// Step 2.0.6: Calculate port for web-capable looms
+			if (metadata?.capabilities?.includes('web') && context.branchName) {
+				const basePort = this.settings?.capabilities?.web?.basePort ?? 3000
+				context.port = await getWorkspacePort({
+					basePort,
+					worktreePath: context.workspacePath,
+					worktreeBranch: context.branchName,
+				})
+				logger.info(`🌐 Development server port: ${context.port}`)
+			}
+
 			// Step 2.1: Get prompt template with variable substitution
 			const variables = this.buildTemplateVariables(context, oneShot, draftPrNumber)
 
@@ -101,13 +119,6 @@ export class IgniteCommand {
 
 			// User prompt to trigger the workflow (includes one-shot bypass instructions if needed)
 			const userPrompt = this.buildUserPrompt(oneShot)
-
-			// Step 2.5: Load settings if not cached with CLI overrides
-			// Settings are pre-validated at CLI startup, so no error handling needed here
-			if (!this.settings) {
-				const cliOverrides = extractSettingsOverrides()
-				this.settings = await this.settingsManager.loadSettings(undefined, cliOverrides)
-			}
 
 			// Step 3: Determine model and permission mode based on workflow type
 			const model = this.settingsManager.getSpinModel(this.settings)
@@ -456,16 +467,11 @@ export class IgniteCommand {
 			}
 		}
 
-		const port = this.getPortFromEnv()
 		const context: ClaudeWorkflowOptions = {
 			type: 'issue',
 			issueNumber,
 			workspacePath,
 			headless: false, // Interactive mode
-		}
-
-		if (port !== undefined) {
-			context.port = port
 		}
 
 		if (branchName !== undefined) {
@@ -491,16 +497,11 @@ export class IgniteCommand {
 			// Ignore git errors
 		}
 
-		const port = this.getPortFromEnv()
 		const context: ClaudeWorkflowOptions = {
 			type: 'pr',
 			prNumber,
 			workspacePath,
 			headless: false, // Interactive mode
-		}
-
-		if (port !== undefined) {
-			context.port = port
 		}
 
 		if (branchName !== undefined) {
@@ -523,15 +524,10 @@ export class IgniteCommand {
 			// Ignore git errors
 		}
 
-		const port = this.getPortFromEnv()
 		const context: ClaudeWorkflowOptions = {
 			type: 'regular',
 			workspacePath,
 			headless: false, // Interactive mode
-		}
-
-		if (port !== undefined) {
-			context.port = port
 		}
 
 		if (branchName !== undefined) {
@@ -539,25 +535,6 @@ export class IgniteCommand {
 		}
 
 		return context
-	}
-
-	/**
-	 * Get PORT from environment variables
-	 * Returns undefined if PORT is not set or invalid
-	 */
-	private getPortFromEnv(): number | undefined {
-		const portStr = process.env.PORT
-		if (!portStr) {
-			return undefined
-		}
-
-		const port = parseInt(portStr, 10)
-		if (isNaN(port)) {
-			logger.warn(`Invalid PORT environment variable: ${portStr}`)
-			return undefined
-		}
-
-		return port
 	}
 
 
