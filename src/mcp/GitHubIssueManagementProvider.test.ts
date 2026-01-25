@@ -506,4 +506,158 @@ describe('GitHubIssueManagementProvider', () => {
 			expect(result.id).toBe('60')
 		})
 	})
+
+	describe('getPR', () => {
+		it('returns PR details with normalized structure', async () => {
+			const mockResponse = {
+				number: 42,
+				title: 'Test PR',
+				body: 'PR description',
+				state: 'OPEN',
+				url: 'https://github.com/owner/repo/pull/42',
+				author: { login: 'testuser' },
+				headRefName: 'feature-branch',
+				baseRefName: 'main',
+				files: [
+					{ path: 'src/foo.ts', additions: 10, deletions: 5 },
+				],
+				commits: [
+					{
+						oid: 'abc123',
+						messageHeadline: 'Initial commit',
+						authors: [{ name: 'Test User', email: 'test@example.com' }],
+					},
+				],
+				comments: [
+					{
+						id: 'PC_kwDOPvp_cc5ABC',
+						author: { login: 'reviewer' },
+						body: 'LGTM',
+						createdAt: '2025-01-01T00:00:00Z',
+						url: 'https://github.com/owner/repo/pull/42#issuecomment-123456789',
+					},
+				],
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getPR({ number: '42' })
+
+			expect(result.id).toBe('42')
+			expect(result.number).toBe(42)
+			expect(result.title).toBe('Test PR')
+			expect(result.body).toBe('PR description')
+			expect(result.state).toBe('OPEN')
+			expect(result.url).toBe('https://github.com/owner/repo/pull/42')
+			expect(result.headRefName).toBe('feature-branch')
+			expect(result.baseRefName).toBe('main')
+			expect(result.author).toEqual({
+				id: 'testuser',
+				displayName: 'testuser',
+				login: 'testuser',
+			})
+			expect(result.files).toEqual([
+				{ path: 'src/foo.ts', additions: 10, deletions: 5 },
+			])
+			expect(result.commits).toEqual([
+				{
+					oid: 'abc123',
+					messageHeadline: 'Initial commit',
+					author: {
+						id: 'test@example.com',
+						displayName: 'Test User',
+						name: 'Test User',
+						email: 'test@example.com',
+					},
+				},
+			])
+			expect(result.comments).toHaveLength(1)
+			expect(result.comments![0].id).toBe('123456789')
+			expect(result.comments![0].body).toBe('LGTM')
+		})
+
+		it('handles PRs without comments', async () => {
+			const mockResponse = {
+				number: 43,
+				title: 'Test PR',
+				body: 'PR body',
+				state: 'OPEN',
+				url: 'https://github.com/owner/repo/pull/43',
+				author: { login: 'testuser' },
+				headRefName: 'feature',
+				baseRefName: 'main',
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getPR({ number: '43', includeComments: false })
+
+			expect(result.comments).toBeUndefined()
+		})
+
+		it('passes --repo flag when repo parameter is provided', async () => {
+			const mockResponse = {
+				number: 100,
+				title: 'External PR',
+				body: 'PR from another repo',
+				state: 'OPEN',
+				url: 'https://github.com/other-owner/other-repo/pull/100',
+				author: { login: 'testuser' },
+				headRefName: 'feature',
+				baseRefName: 'main',
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			await provider.getPR({ number: '100', repo: 'other-owner/other-repo', includeComments: false })
+
+			expect(executeGhCommand).toHaveBeenCalledWith([
+				'pr',
+				'view',
+				'100',
+				'--json',
+				'number,title,body,state,url,author,headRefName,baseRefName,files,commits',
+				'--repo',
+				'other-owner/other-repo',
+			])
+		})
+
+		it('throws error for invalid PR number', async () => {
+			await expect(provider.getPR({ number: 'not-a-number' })).rejects.toThrow(
+				'Invalid GitHub PR number: not-a-number. GitHub PR IDs must be numeric.'
+			)
+		})
+
+		it('handles PR with commits missing authors', async () => {
+			const mockResponse = {
+				number: 50,
+				title: 'Test PR',
+				body: 'PR body',
+				state: 'OPEN',
+				url: 'https://github.com/owner/repo/pull/50',
+				author: { login: 'testuser' },
+				headRefName: 'feature',
+				baseRefName: 'main',
+				commits: [
+					{
+						oid: 'def456',
+						messageHeadline: 'Commit without author',
+						authors: [],
+					},
+				],
+			}
+
+			vi.mocked(executeGhCommand).mockResolvedValueOnce(mockResponse)
+
+			const result = await provider.getPR({ number: '50', includeComments: false })
+
+			expect(result.commits).toEqual([
+				{
+					oid: 'def456',
+					messageHeadline: 'Commit without author',
+					author: null,
+				},
+			])
+		})
+	})
 })

@@ -46,19 +46,37 @@ Use these Recap MCP tools:
 
 ---
 
+## Comment Routing: PR Mode
+
+- **Read PR details** using `mcp__issue_management__get_pr` with `{ number: "{{PR_NUMBER}}", includeComments: true }`
+- **Write comments** to PR #{{PR_NUMBER}} using `type: "pr"`
+
+When calling `mcp__issue_management__create_comment`:
+```
+{
+  number: "{{PR_NUMBER}}",
+  body: "your comment content",
+  type: "pr"
+}
+```
+
+This ensures PR comments always go to GitHub regardless of the configured issue tracker.
+
+---
+
 You are a senior software engineer responsible for well-architected, easy to maintain and understandable code.
 
-Please read the Pull Request and all its details using JSON output:
-gh pr view {{PR_NUMBER}} --json title,body,comments,commits,files,state,createdAt,updatedAt,headRefName
+Please read the Pull Request and all its details using the MCP tool:
+`mcp__issue_management__get_pr` with `{ number: "{{PR_NUMBER}}", includeComments: true }`
 
-This single command will give you:
-- PR title and description
+This will give you:
+- PR title and description (body)
 - All comments and discussion
-- Commit history and changed files
-- Current state and metadata
+- Commit history (commits) and changed files (files)
+- Current state and branch metadata (headRefName, baseRefName)
 
 Also check if the branch name contains an issue number (like issue-123) and if so, read that issue for context:
-gh issue view {{ISSUE_NUMBER}} --json title,body,comments,assignees,labels,state,createdAt,updatedAt
+`mcp__issue_management__get_issue` with `{ number: "{{ISSUE_NUMBER}}", includeComments: true }`
 
 Since this is an existing PR, the issue may be partially addressed or in an unknown state.
 

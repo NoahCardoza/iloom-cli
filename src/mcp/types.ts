@@ -28,6 +28,16 @@ export interface GetIssueInput {
 }
 
 /**
+ * Input schema for getting pull request details
+ * Note: PRs only exist on GitHub, so this always uses GitHub provider regardless of configured issue tracker
+ */
+export interface GetPRInput {
+	number: string // PR number
+	includeComments?: boolean | undefined // Whether to include comments (default: true)
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL
+}
+
+/**
  * Input schema for getting a specific comment
  */
 export interface GetCommentInput {
@@ -52,6 +62,7 @@ export interface UpdateCommentInput {
 	commentId: string // Comment identifier to update
 	number: string // Issue or PR identifier (context for providers that need it)
 	body: string // Updated markdown content
+	type?: 'issue' | 'pr' | undefined // Optional type to route PR comments to GitHub regardless of configured provider
 }
 
 /**
@@ -129,6 +140,51 @@ export interface IssueResult {
 }
 
 /**
+ * Output schema for pull request details
+ * PRs only exist on GitHub, so this is GitHub-specific
+ */
+export interface PRResult {
+	// Core fields
+	id: string
+	number: number
+	title: string
+	body: string
+	state: string
+	url: string
+
+	// Normalized author with flexible structure
+	author: FlexibleAuthor | null
+
+	// PR-specific fields
+	headRefName: string // source branch
+	baseRefName: string // target branch
+
+	// Optional flexible fields
+	files?: Array<{
+		path: string
+		additions: number
+		deletions: number
+		[key: string]: unknown
+	}>
+	commits?: Array<{
+		oid: string
+		messageHeadline: string
+		author: FlexibleAuthor | null
+		[key: string]: unknown
+	}>
+	comments?: Array<{
+		id: string
+		body: string
+		author: FlexibleAuthor | null
+		createdAt: string
+		[key: string]: unknown
+	}>
+
+	// Passthrough for additional fields
+	[key: string]: unknown
+}
+
+/**
  * Output schema for comment details
  * Uses flexible author structure for provider compatibility
  */
@@ -163,6 +219,12 @@ export interface IssueManagementProvider {
 	 * Fetch issue details
 	 */
 	getIssue(input: GetIssueInput): Promise<IssueResult>
+
+	/**
+	 * Fetch pull request details
+	 * Note: Only GitHub supports PRs. Linear provider should throw an error.
+	 */
+	getPR(input: GetPRInput): Promise<PRResult>
 
 	/**
 	 * Fetch a specific comment by ID

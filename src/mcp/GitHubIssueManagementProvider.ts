@@ -7,6 +7,7 @@
 import type {
 	IssueManagementProvider,
 	GetIssueInput,
+	GetPRInput,
 	GetCommentInput,
 	CreateCommentInput,
 	UpdateCommentInput,
@@ -14,6 +15,7 @@ import type {
 	CreateChildIssueInput,
 	CreateIssueResult,
 	IssueResult,
+	PRResult,
 	CommentDetailResult,
 	CommentResult,
 	FlexibleAuthor,
@@ -156,6 +158,124 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 		// Handle comments with normalized authors
 		// Use extractNumericIdFromUrl to get REST API-compatible numeric IDs from comment URLs
 		// (GitHub CLI returns GraphQL node IDs in the id field, but REST API expects numeric IDs)
+		if (raw.comments !== undefined) {
+			result.comments = raw.comments.map(comment => ({
+				id: extractNumericIdFromUrl(comment.url),
+				body: comment.body,
+				createdAt: comment.createdAt,
+				author: normalizeAuthor(comment.author),
+				...(comment.updatedAt && { updatedAt: comment.updatedAt }),
+			}))
+		}
+
+		return result
+	}
+
+	/**
+	 * Fetch pull request details using gh CLI
+	 * Normalizes GitHub-specific fields to provider-agnostic format
+	 */
+	async getPR(input: GetPRInput): Promise<PRResult> {
+		const { number, includeComments = true, repo } = input
+
+		// Convert string ID to number for GitHub CLI
+		const prNumber = parseInt(number, 10)
+		if (isNaN(prNumber)) {
+			throw new Error(`Invalid GitHub PR number: ${number}. GitHub PR IDs must be numeric.`)
+		}
+
+		// Build fields list based on whether we need comments
+		const baseFields = 'number,title,body,state,url,author,headRefName,baseRefName,files,commits'
+		const fields = includeComments
+			? `${baseFields},comments`
+			: baseFields
+
+		// GitHub PR response structure
+		interface GitHubPRResponse {
+			number: number
+			title: string
+			body: string
+			state: string
+			url: string
+			author?: GitHubAuthor
+			headRefName: string
+			baseRefName: string
+			files?: Array<{
+				path: string
+				additions: number
+				deletions: number
+			}>
+			commits?: Array<{
+				oid: string
+				messageHeadline: string
+				authors: Array<{ name: string; email: string }>
+			}>
+			comments?: Array<{
+				id: number
+				author: GitHubAuthor
+				body: string
+				createdAt: string
+				updatedAt?: string
+				url: string
+			}>
+		}
+
+		const args = [
+			'pr',
+			'view',
+			String(prNumber),
+			'--json',
+			fields,
+		]
+
+		// Add --repo flag if repo is provided
+		if (repo) {
+			args.push('--repo', repo)
+		}
+
+		const raw = await executeGhCommand<GitHubPRResponse>(args)
+
+		// Normalize to PRResult with core fields + passthrough
+		const result: PRResult = {
+			// Core fields
+			id: String(raw.number),
+			number: raw.number,
+			title: raw.title,
+			body: raw.body,
+			state: raw.state,
+			url: raw.url,
+
+			// Normalized author
+			author: normalizeAuthor(raw.author),
+
+			// PR-specific fields
+			headRefName: raw.headRefName,
+			baseRefName: raw.baseRefName,
+
+			// Optional files
+			...(raw.files && {
+				files: raw.files,
+			}),
+
+			// Optional commits - normalize author
+			...(raw.commits && {
+				commits: raw.commits.map(commit => ({
+					oid: commit.oid,
+					messageHeadline: commit.messageHeadline,
+					author: commit.authors?.[0]
+						? {
+							id: commit.authors[0].email,
+							displayName: commit.authors[0].name,
+							name: commit.authors[0].name,
+							email: commit.authors[0].email,
+						}
+						: null,
+				})),
+			}),
+		}
+
+		// Handle comments with normalized authors
+		// Use extractNumericIdFromUrl to get REST API-compatible numeric IDs from comment URLs
 		if (raw.comments !== undefined) {
 			result.comments = raw.comments.map(comment => ({
 				id: extractNumericIdFromUrl(comment.url),

@@ -6,6 +6,7 @@
 import type {
 	IssueManagementProvider,
 	GetIssueInput,
+	GetPRInput,
 	GetCommentInput,
 	CreateCommentInput,
 	UpdateCommentInput,
@@ -13,6 +14,7 @@ import type {
 	CreateChildIssueInput,
 	CreateIssueResult,
 	IssueResult,
+	PRResult,
 	CommentDetailResult,
 	CommentResult,
 } from './types.js'
@@ -90,6 +92,14 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 		}
 
 		return result
+	}
+
+	/**
+	 * Fetch pull request details
+	 * Linear does not support PRs - this throws an error directing to use GitHub
+	 */
+	async getPR(_input: GetPRInput): Promise<PRResult> {
+		throw new Error('Linear does not support pull requests. PRs exist only on GitHub. Use the GitHub provider for PR operations.')
 	}
 
 	/**

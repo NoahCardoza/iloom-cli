@@ -53,7 +53,16 @@ Use these Recap MCP tools:
 **IMPORTANT: This loom is using draft PR mode.**
 
 - **Read issue details** from Issue #{{ISSUE_NUMBER}} using `mcp__issue_management__get_issue`
+- **Read draft PR details** from PR #{{DRAFT_PR_NUMBER}} using `mcp__issue_management__get_pr`
 - **Write ALL workflow comments** to PR #{{DRAFT_PR_NUMBER}} using `type: "pr"`
+
+When calling `mcp__issue_management__get_pr` to read the draft PR:
+```
+{
+  number: "{{DRAFT_PR_NUMBER}}",
+  includeComments: true
+}
+```
 
 When calling `mcp__issue_management__create_comment`:
 ```

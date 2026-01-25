@@ -13,6 +13,7 @@ import { IssueManagementProviderFactory } from './IssueManagementProviderFactory
 import type {
 	IssueProvider,
 	GetIssueInput,
+	GetPRInput,
 	GetCommentInput,
 	CreateCommentInput,
 	UpdateCommentInput,
@@ -154,6 +155,105 @@ server.registerTool(
 	}
 )
 
+// Import GitHubIssueManagementProvider for get_pr tool (PRs always use GitHub)
+import { GitHubIssueManagementProvider } from './GitHubIssueManagementProvider.js'
+
+// Register get_pr tool
+// Note: PRs only exist on GitHub, so this tool always uses the GitHub provider
+// regardless of the configured issue tracker
+server.registerTool(
+	'get_pr',
+	{
+		title: 'Get Pull Request',
+		description:
+			'Fetch pull request details including title, body, comments, files, commits, and branch information. ' +
+			'PRs only exist on GitHub, so this tool always uses GitHub regardless of configured issue tracker. ' +
+			'Author fields have normalized core fields: { id, displayName } plus provider-specific fields.',
+		inputSchema: {
+			number: z.string().describe('The PR number'),
+			includeComments: z
+				.boolean()
+				.optional()
+				.describe('Whether to include comments (default: true)'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository.'
+				),
+		},
+		outputSchema: {
+			// Core validated fields
+			id: z.string().describe('PR identifier'),
+			number: z.number().describe('PR number'),
+			title: z.string().describe('PR title'),
+			body: z.string().describe('PR body/description'),
+			state: z.string().describe('PR state (OPEN, CLOSED, MERGED)'),
+			url: z.string().describe('PR URL'),
+
+			// Branch info
+			headRefName: z.string().describe('Source branch name'),
+			baseRefName: z.string().describe('Target branch name'),
+
+			// Flexible author - core fields + passthrough
+			author: flexibleAuthorSchema.nullable().describe(
+				'PR author with normalized { id, displayName } plus provider-specific fields'
+			),
+
+			// Optional flexible arrays
+			files: z.array(
+				z.object({
+					path: z.string(),
+					additions: z.number(),
+					deletions: z.number(),
+				}).passthrough()
+			).optional().describe('Changed files in the PR'),
+			commits: z.array(
+				z.object({
+					oid: z.string(),
+					messageHeadline: z.string(),
+					author: flexibleAuthorSchema.nullable(),
+				}).passthrough()
+			).optional().describe('Commits in the PR'),
+			comments: z.array(
+				z.object({
+					id: z.string(),
+					body: z.string(),
+					author: flexibleAuthorSchema.nullable(),
+					createdAt: z.string(),
+				}).passthrough()
+			).optional().describe('PR comments'),
+		},
+	},
+	async ({ number, includeComments, repo }: GetPRInput) => {
+		console.error(`Fetching PR ${number}${repo ? ` from ${repo}` : ''}`)
+
+		try {
+			// PRs always use GitHub provider regardless of configured issue tracker
+			const provider = new GitHubIssueManagementProvider()
+			const result = await provider.getPR({ number, includeComments, repo })
+
+			console.error(`PR fetched successfully: #${result.number} - ${result.title}`)
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify(result),
+					},
+				],
+				structuredContent: result as unknown as { [x: string]: unknown },
+			}
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to fetch PR: ${errorMessage}`)
+			throw new Error(`Failed to fetch PR: ${errorMessage}`)
+		}
+	}
+)
+
 // Register get_comment tool
 server.registerTool(
 	'get_comment',
@@ -235,9 +335,9 @@ server.registerTool(
 		console.error(`Creating ${type} comment on ${number}`)
 
 		try {
-			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
-			)
+			// PR comments must always go to GitHub since PRs only exist on GitHub
+			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
+			const provider = IssueManagementProviderFactory.create(providerType)
 			const result = await provider.createComment({ number, body, type })
 
 			console.error(
@@ -273,6 +373,7 @@ server.registerTool(
 			commentId: z.string().describe('The comment identifier to update'),
 			number: z.string().describe('The issue or PR identifier (context for providers that need it)'),
 			body: z.string().describe('The updated comment body (markdown supported)'),
+			type: z.enum(['issue', 'pr']).optional().describe('Optional type to route PR comments to GitHub regardless of configured provider'),
 		},
 		outputSchema: {
 			id: z.string(),
@@ -280,13 +381,13 @@ server.registerTool(
 			updated_at: z.string().optional(),
 		},
 	},
-	async ({ commentId, number, body }: UpdateCommentInput) => {
-		console.error(`Updating comment ${commentId} on issue ${number}`)
+	async ({ commentId, number, body, type }: UpdateCommentInput) => {
+		console.error(`Updating comment ${commentId} on ${type === 'pr' ? 'PR' : 'issue'} ${number}`)
 
 		try {
-			const provider = IssueManagementProviderFactory.create(
-				process.env.ISSUE_PROVIDER as IssueProvider
-			)
+			// PR comments must always go to GitHub since PRs only exist on GitHub
+			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
+			const provider = IssueManagementProviderFactory.create(providerType)
 			const result = await provider.updateComment({ commentId, number, body })
 
 			console.error(
