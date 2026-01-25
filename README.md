@@ -79,9 +79,7 @@ iloom uses your existing Claude subscription to build a shared mental model of y
  il finish
  ```
 
-**The iloom Difference:** il start doesn't just create a branch. It launches a multi-agent workflow that surfaces assumptions and creates a structured plan in your issue tracker **before you even need to look at your IDE.**
-
-**→ [Want to know how you'll benefit from iloom?](docs/is-iloom-right-for-you.md)**
+**The iloom Difference:** il start doesn't merely create a branch. It launches a multi-agent workflow that surfaces assumptions and creates a structured plan in your issue tracker **before you even need to look at your IDE.**
 
 How It Works: The Multi-Agent Workflow
 --------------------------------------
