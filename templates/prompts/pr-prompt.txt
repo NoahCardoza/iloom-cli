@@ -69,12 +69,9 @@ When working with libraries, frameworks, or APIs that you need documentation for
 - Working with unfamiliar APIs
 - When you need current documentation that may have changed since your training data
 
-After reading both the PR and any referenced issue, check if the dev server is running:
-1. Check if dev server is already running: "lsof -i :{{PORT}}"
-2. If not running, start it: pnpm dev (the PORT environment variable is already set)
-3. If running, you can optionally restart it if your changes require it
+**Development Port:** This loom uses port **{{PORT}}** for the dev server (PORT environment variable is already set).
 
-Then wait for the user to provide guidance on what they would like you to work on next.
+After reading both the PR and any referenced issue, wait for the user to provide guidance on what they would like you to work on next.
 
 Remember to:
 - Follow the project's coding conventions and patterns

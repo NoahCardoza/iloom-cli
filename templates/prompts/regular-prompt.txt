@@ -164,6 +164,10 @@ You are orchestrating a set of agents through a development process, with human 
 
 ## Workflow Details
 
+{{#if PORT}}
+**Development Port:** This loom uses port **{{PORT}}** for the dev server (PORT environment variable is already set).
+{{/if}}
+
 **STEP 0 - Gather Problem Statement:**
 
 1. Use the AskUserQuestion tool to ask user to describe what they want to achieve:
