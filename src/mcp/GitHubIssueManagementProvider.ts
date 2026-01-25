@@ -29,6 +29,7 @@ import {
 	getIssueNodeId,
 	addSubIssue,
 } from '../utils/github.js'
+import { processMarkdownImages } from '../utils/image-processor.js'
 
 /**
  * GitHub-specific author structure from API
@@ -168,6 +169,14 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 			}))
 		}
 
+		// Process authenticated images in body and comments
+		result.body = await processMarkdownImages(result.body, 'github')
+		if (result.comments) {
+			for (const comment of result.comments) {
+				comment.body = await processMarkdownImages(comment.body, 'github')
+			}
+		}
+
 		return result
 	}
 
@@ -286,6 +295,14 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 			}))
 		}
 
+		// Process authenticated images in body and comments
+		result.body = await processMarkdownImages(result.body, 'github')
+		if (result.comments) {
+			for (const comment of result.comments) {
+				comment.body = await processMarkdownImages(comment.body, 'github')
+			}
+		}
+
 		return result
 	}
 
@@ -328,10 +345,13 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 			'{id: .id, body: .body, user: .user, created_at: .created_at, updated_at: .updated_at, html_url: .html_url, reactions: .reactions}',
 		])
 
+		// Process authenticated images in comment body
+		const processedBody = await processMarkdownImages(raw.body, 'github')
+
 		// Normalize to CommentDetailResult
 		return {
 			id: String(raw.id),
-			body: raw.body,
+			body: processedBody,
 			author: normalizeAuthor(raw.user),
 			created_at: raw.created_at,
 			...(raw.updated_at && { updated_at: raw.updated_at }),

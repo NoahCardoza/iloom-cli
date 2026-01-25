@@ -28,6 +28,7 @@ import {
 	createLinearChildIssue,
 } from '../utils/linear.js'
 import { LinearMarkupConverter } from '../utils/linear-markup-converter.js'
+import { processMarkdownImages } from '../utils/image-processor.js'
 
 /**
  * Linear-specific implementation of IssueManagementProvider
@@ -91,6 +92,14 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 			}
 		}
 
+		// Process images in body and comments to make them accessible
+		result.body = await processMarkdownImages(result.body, 'linear')
+		if (result.comments) {
+			for (const comment of result.comments) {
+				comment.body = await processMarkdownImages(comment.body, 'linear')
+			}
+		}
+
 		return result
 	}
 
@@ -129,9 +138,12 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 
 		const raw = await getLinearComment(commentId)
 
+		// Process images to make them accessible
+		const processedBody = await processMarkdownImages(raw.body, 'linear')
+
 		return {
 			id: raw.id,
-			body: raw.body,
+			body: processedBody,
 			author: null, // Linear SDK doesn't return comment author info in basic fetch
 			created_at: raw.createdAt,
 		}
