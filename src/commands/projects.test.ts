@@ -197,6 +197,12 @@ describe('ProjectsCommand', () => {
           issueTracker: 'github',
           colorHex: '#dcebff',
           sessionId: 'session-1',
+          projectPath: '/Users/adam/Documents/Projects/project-a',
+          issueUrls: {},
+          prUrls: {},
+          draftPrNumber: null,
+          capabilities: [],
+          parentLoom: null,
         },
         {
           description: 'Issue #2 work',
@@ -209,6 +215,12 @@ describe('ProjectsCommand', () => {
           issueTracker: 'github',
           colorHex: '#dcebff',
           sessionId: 'session-2',
+          projectPath: '/Users/adam/Documents/Projects/project-a',
+          issueUrls: {},
+          prUrls: {},
+          draftPrNumber: null,
+          capabilities: [],
+          parentLoom: null,
         },
       ]
 
@@ -220,6 +232,118 @@ describe('ProjectsCommand', () => {
 
       expect(result).toHaveLength(1)
       expect(result[0].activeLooms).toBe(2)
+    })
+
+    it('includes child looms in activeLooms count', async () => {
+      vi.mocked(fs.pathExists).mockImplementation(async (p) => {
+        const pathStr = p.toString()
+        if (pathStr === projectsDir) return true
+        if (pathStr === '/Users/adam/Documents/Projects/project-a') return true
+        // Parent loom worktree is valid
+        if (pathStr === '/Users/adam/Documents/Projects/project-a-looms/feat-issue-25-auth/.git') return true
+        // Child loom worktrees are valid (nested in parent-looms directory)
+        if (
+          pathStr ===
+          '/Users/adam/Documents/Projects/project-a-looms/feat-issue-25-auth-looms/fix-issue-42/.git'
+        )
+          return true
+        if (
+          pathStr ===
+          '/Users/adam/Documents/Projects/project-a-looms/feat-issue-25-auth-looms/fix-issue-43/.git'
+        )
+          return true
+        return false
+      })
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readdir).mockResolvedValue(['project-a-marker'] as any)
+
+      vi.mocked(fs.readFile).mockResolvedValue(
+        JSON.stringify({
+          configuredAt: '2025-12-05T22:59:58.488Z',
+          projectPath: '/Users/adam/Documents/Projects/project-a',
+          projectName: 'project-a',
+        })
+      )
+
+      const mockMetadata: LoomMetadata[] = [
+        {
+          description: 'Auth feature work',
+          created_at: '2025-12-05T22:59:58.488Z',
+          branchName: 'feat-issue-25-auth',
+          worktreePath: '/Users/adam/Documents/Projects/project-a-looms/feat-issue-25-auth',
+          issueType: 'issue',
+          issue_numbers: ['25'],
+          pr_numbers: [],
+          issueTracker: 'github',
+          colorHex: '#dcebff',
+          sessionId: 'session-1',
+          projectPath: '/Users/adam/Documents/Projects/project-a',
+          issueUrls: {},
+          prUrls: {},
+          draftPrNumber: null,
+          capabilities: [],
+          parentLoom: null,
+        },
+        {
+          description: 'Fix issue 42 (child of 25)',
+          created_at: '2025-12-05T23:00:00.000Z',
+          branchName: 'fix-issue-42',
+          worktreePath:
+            '/Users/adam/Documents/Projects/project-a-looms/feat-issue-25-auth-looms/fix-issue-42',
+          issueType: 'issue',
+          issue_numbers: ['42'],
+          pr_numbers: [],
+          issueTracker: 'github',
+          colorHex: '#dcebff',
+          sessionId: 'session-2',
+          projectPath: '/Users/adam/Documents/Projects/project-a',
+          issueUrls: {},
+          prUrls: {},
+          draftPrNumber: null,
+          capabilities: [],
+          parentLoom: {
+            type: 'issue',
+            identifier: '25',
+            branchName: 'feat-issue-25-auth',
+            worktreePath: '/Users/adam/Documents/Projects/project-a-looms/feat-issue-25-auth',
+          },
+        },
+        {
+          description: 'Fix issue 43 (child of 25)',
+          created_at: '2025-12-05T23:01:00.000Z',
+          branchName: 'fix-issue-43',
+          worktreePath:
+            '/Users/adam/Documents/Projects/project-a-looms/feat-issue-25-auth-looms/fix-issue-43',
+          issueType: 'issue',
+          issue_numbers: ['43'],
+          pr_numbers: [],
+          issueTracker: 'github',
+          colorHex: '#dcebff',
+          sessionId: 'session-3',
+          projectPath: '/Users/adam/Documents/Projects/project-a',
+          issueUrls: {},
+          prUrls: {},
+          draftPrNumber: null,
+          capabilities: [],
+          parentLoom: {
+            type: 'issue',
+            identifier: '25',
+            branchName: 'feat-issue-25-auth',
+            worktreePath: '/Users/adam/Documents/Projects/project-a-looms/feat-issue-25-auth',
+          },
+        },
+      ]
+
+      const command = new ProjectsCommand(
+        createMockMetadataManager(mockMetadata) as unknown as MetadataManager,
+        createMockCapabilityDetector() as unknown as ProjectCapabilityDetector
+      )
+      const result = await command.execute()
+
+      expect(result).toHaveLength(1)
+      // 1 parent loom + 2 child looms = 3 total
+      expect(result[0].activeLooms).toBe(3)
     })
 
     it('excludes looms where worktree is not a valid git worktree', async () => {
@@ -256,6 +380,12 @@ describe('ProjectsCommand', () => {
           issueTracker: 'github',
           colorHex: '#dcebff',
           sessionId: 'session-1',
+          projectPath: '/Users/adam/Documents/Projects/project-a',
+          issueUrls: {},
+          prUrls: {},
+          draftPrNumber: null,
+          capabilities: [],
+          parentLoom: null,
         },
         {
           description: 'Issue #2 work (stale)',
@@ -268,6 +398,12 @@ describe('ProjectsCommand', () => {
           issueTracker: 'github',
           colorHex: '#dcebff',
           sessionId: 'session-2',
+          projectPath: '/Users/adam/Documents/Projects/project-a',
+          issueUrls: {},
+          prUrls: {},
+          draftPrNumber: null,
+          capabilities: [],
+          parentLoom: null,
         },
       ]
 

@@ -2,6 +2,7 @@ import path from 'path'
 import os from 'os'
 import fs from 'fs-extra'
 import { getLogger } from '../utils/logger-context.js'
+import { pathsEqual } from '../utils/xplat-utils.js'
 import { MetadataManager, type LoomMetadata } from '../lib/MetadataManager.js'
 import { ProjectCapabilityDetector } from '../lib/ProjectCapabilityDetector.js'
 import type { ProjectCapability } from '../types/loom.js'
@@ -109,18 +110,15 @@ export class ProjectsCommand {
 
   /**
    * Count active looms for a project
-   * Looms are counted if their worktreePath is in the project's -looms directory
-   * or if they share the same parent directory as the project.
+   * Uses the metadata's projectPath field to determine project membership.
    * Only counts looms where the worktree is a valid git worktree (.git exists).
    */
   private async countActiveLooms(projectPath: string, allMetadata: LoomMetadata[]): Promise<number> {
     let count = 0
     for (const meta of allMetadata) {
       if (!meta.worktreePath) continue
-      const parentDir = path.dirname(meta.worktreePath)
-      const isProjectLoom =
-        parentDir === path.dirname(projectPath) ||
-        parentDir.startsWith(projectPath + '-looms')
+      // Use metadata's projectPath field for accurate project membership (with cross-platform normalization)
+      const isProjectLoom = pathsEqual(meta.projectPath, projectPath)
       // Check for .git (file for worktrees, directory for main repo) to verify it's a valid git worktree
       const isValidWorktree = await fs.pathExists(path.join(meta.worktreePath, '.git'))
       if (isProjectLoom && isValidWorktree) {
