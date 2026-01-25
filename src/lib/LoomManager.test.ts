@@ -64,6 +64,8 @@ vi.mock('../utils/git.js', () => ({
   ensureRepositoryHasCommits: vi.fn().mockResolvedValue(undefined),
   isEmptyRepository: vi.fn().mockResolvedValue(false),
   isFileTrackedByGit: vi.fn().mockResolvedValue(false),
+  pushBranchToRemote: vi.fn().mockResolvedValue(undefined),
+  PLACEHOLDER_COMMIT_PREFIX: '[iloom:placeholder]',
   extractIssueNumber: vi.fn((branchName: string) => {
     // Match the real implementation logic for test compatibility
     const newFormatMatch = branchName.match(/issue-([^_]+)__/i)
@@ -104,6 +106,17 @@ vi.mock('./LoomLauncher.js', () => ({
     launchLoom: vi.fn().mockResolvedValue(undefined),
   })),
 }))
+
+// Mock PRManager for draft PR creation tests
+// Shared mock function for verification in tests
+const mockCreateDraftPR = vi.fn()
+vi.mock('./PRManager.js', () => {
+  return {
+    PRManager: vi.fn().mockImplementation(() => ({
+      createDraftPR: mockCreateDraftPR,
+    })),
+  }
+})
 
 // Mock vscode utils (dynamically imported)
 vi.mock('../utils/vscode.js', () => ({
@@ -165,13 +178,14 @@ describe('LoomManager', () => {
     mockGitHub.supportsPullRequests = true
     mockGitHub.providerName = 'github'
 
-    // Reset shared MetadataManager mock functions (they get reset by mockReset: true in vitest.config)
+    vi.clearAllMocks()
+
+    // Set up shared mock return values (after clearAllMocks)
     mockWriteMetadata.mockResolvedValue(undefined)
     mockReadMetadata.mockResolvedValue(null)
     mockDeleteMetadata.mockResolvedValue(undefined)
     mockListAllMetadata.mockResolvedValue([])
-
-    vi.clearAllMocks()
+    mockCreateDraftPR.mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' })
   })
 
   describe('createIloom', () => {
@@ -460,6 +474,61 @@ describe('LoomManager', () => {
       await manager.createIloom(inputWithSkipClaude)
 
       expect(mockClaude.launchWithContext).not.toHaveBeenCalled()
+    })
+
+    it('should succeed with Linear provider and github-draft-pr merge mode', async () => {
+      // Configure Linear provider (doesn't support PRs natively)
+      mockGitHub.supportsPullRequests = false
+      mockGitHub.providerName = 'linear'
+
+      // Mock settings with github-draft-pr mode
+      // (Issue #464: Linear + github-draft-pr should work since PRs go through GitHub CLI)
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        mainBranch: 'main',
+        worktreeDir: '/test/worktrees',
+        mergeBehavior: {
+          mode: 'github-draft-pr',
+        },
+      })
+
+      // Mock issue fetch (Linear issues work like GitHub issues)
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test Linear Issue',
+        body: 'Test description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://linear.app/team/ENG-123',
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-issue-123'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+      const result = await manager.createIloom(baseInput)
+
+      // Verify loom was created successfully
+      expect(result.path).toBe(expectedPath)
+      expect(result.type).toBe('issue')
+
+      // Verify draft PR was created via PRManager (not Linear's issue tracker)
+      expect(mockCreateDraftPR).toHaveBeenCalledWith(
+        expect.any(String), // branch name
+        'Test Linear Issue', // PR title from issue
+        expect.stringContaining('Draft PR for issue'), // PR body
+        expectedPath // worktree path
+      )
+
+      // Verify draft PR number was stored in metadata
+      expect(mockWriteMetadata).toHaveBeenCalledWith(
+        expectedPath,
+        expect.objectContaining({
+          draftPrNumber: 99,
+        })
+      )
     })
   })
 

@@ -204,14 +204,6 @@ export class LoomManager {
     const mergeBehavior = settingsData.mergeBehavior ?? { mode: 'local' }
 
     if (mergeBehavior.mode === 'github-draft-pr' && input.type === 'issue') {
-      // Validate provider supports PRs
-      if (!this.issueTracker.supportsPullRequests) {
-        throw new Error(
-          `The 'github-draft-pr' merge mode requires a GitHub-compatible issue tracker. ` +
-          `Your provider (${this.issueTracker.providerName}) does not support pull requests.`
-        )
-      }
-
       // Create placeholder commit to enable draft PR creation
       // GitHub requires at least one commit ahead of base branch
       getLogger().info('Creating placeholder commit for draft PR...')

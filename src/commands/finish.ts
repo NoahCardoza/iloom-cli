@@ -701,29 +701,12 @@ export class FinishCommand {
 		const mergeBehavior = settings.mergeBehavior ?? { mode: 'local' }
 
 		if (mergeBehavior.mode === 'github-pr') {
-			// Validate that issue tracker supports pull requests
-			if (!this.issueTracker.supportsPullRequests) {
-				throw new Error(
-					`The 'github-pr' merge mode requires a GitHub-compatible issue tracker. ` +
-					`Your current provider (${this.issueTracker.providerName}) does not support pull requests. ` +
-					`Either change mergeBehavior.mode to 'local' in your settings, or use GitHub as your issue tracker.`
-				)
-			}
-
 			// Execute github-pr workflow instead of local merge
 			await this.executeGitHubPRWorkflow(parsed, options, worktree, settings, result)
 			return
 		}
 
 		if (mergeBehavior.mode === 'github-draft-pr') {
-			// Validate that issue tracker supports pull requests
-			if (!this.issueTracker.supportsPullRequests) {
-				throw new Error(
-					`The 'github-draft-pr' merge mode requires a GitHub-compatible issue tracker. ` +
-					`Your provider (${this.issueTracker.providerName}) does not support pull requests.`
-				)
-			}
-
 			// Read metadata to get draft PR number
 			const { MetadataManager } = await import('../lib/MetadataManager.js')
 			const metadataManager = new MetadataManager()

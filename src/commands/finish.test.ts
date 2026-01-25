@@ -3390,7 +3390,7 @@ describe('FinishCommand', () => {
 				})
 			})
 
-			it('should throw error when Linear provider is used with github-pr merge mode', async () => {
+			it('should succeed with Linear provider and github-pr merge mode', async () => {
 				// Mock settings with github-pr mode
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
@@ -3400,17 +3400,52 @@ describe('FinishCommand', () => {
 					},
 				})
 
-				await expect(
-					command.execute({
-						identifier: '123',
-						options: {},
-					})
-				).rejects.toThrow(/github-pr.*merge mode requires.*GitHub-compatible issue tracker/)
+				// Mock the executeGitHubPRWorkflow method to verify it's called
+				// (Issue #464: Linear + github-pr should work since PRs go through GitHub CLI)
+				const executeGitHubPRWorkflowSpy = vi
+					.spyOn(command as unknown as { executeGitHubPRWorkflow: () => Promise<void> }, 'executeGitHubPRWorkflow')
+					.mockResolvedValue()
 
-				// Rebase runs BEFORE the merge mode check (Issue #344)
-				// The error is thrown when checking merge mode, after rebase completes
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				// Rebase runs before PR workflow
 				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalled()
-				// But should NOT perform the final merge
+				// The github-pr workflow should be executed (not the local merge)
+				expect(executeGitHubPRWorkflowSpy).toHaveBeenCalled()
+				// Local merge should NOT be performed (PR workflow handles merging)
+				expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
+			})
+
+			it('should succeed with Linear provider and github-draft-pr merge mode', async () => {
+				// Mock settings with github-draft-pr mode
+				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+					mainBranch: 'main',
+					worktreeDir: '/test/worktrees',
+					mergeBehavior: {
+						mode: 'github-draft-pr',
+					},
+				})
+
+				// Mock the executeGitHubPRWorkflow as fallback handler
+				// When no draftPrNumber in metadata, github-draft-pr falls back to github-pr workflow
+				// (Issue #464: Linear + github-draft-pr should work since PRs go through GitHub CLI)
+				const executeGitHubPRWorkflowSpy = vi
+					.spyOn(command as unknown as { executeGitHubPRWorkflow: () => Promise<void> }, 'executeGitHubPRWorkflow')
+					.mockResolvedValue()
+
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				// Rebase runs before PR workflow
+				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalled()
+				// For github-draft-pr without existing draft PR, it falls back to executeGitHubPRWorkflow
+				expect(executeGitHubPRWorkflowSpy).toHaveBeenCalled()
+				// Local merge should NOT be performed (PR workflow handles merging)
 				expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
 			})
 
