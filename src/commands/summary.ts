@@ -2,6 +2,8 @@ import path from 'path'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { SessionSummaryService } from '../lib/SessionSummaryService.js'
+import { SettingsManager } from '../lib/SettingsManager.js'
+import { PRManager } from '../lib/PRManager.js'
 import { getLogger } from '../utils/logger-context.js'
 import { extractIssueNumber } from '../utils/git.js'
 import type { GitWorktree } from '../types/worktree.js'
@@ -44,8 +46,34 @@ export class SummaryCommand {
 	constructor(
 		private gitWorktreeManager = new GitWorktreeManager(),
 		private metadataManager = new MetadataManager(),
-		private sessionSummaryService = new SessionSummaryService()
+		private sessionSummaryService = new SessionSummaryService(),
+		private settingsManager = new SettingsManager()
 	) {}
+
+	/**
+	 * Determine PR number based on merge mode and metadata
+	 * Returns undefined if should post to issue instead
+	 */
+	private async getPRNumberForPosting(
+		worktreePath: string,
+		branchName: string
+	): Promise<number | undefined> {
+		const settings = await this.settingsManager.loadSettings(worktreePath)
+		const mergeMode = settings.mergeBehavior?.mode ?? 'local'
+
+		if (mergeMode === 'github-draft-pr') {
+			const metadata = await this.metadataManager.readMetadata(worktreePath)
+			return metadata?.draftPrNumber ?? undefined
+		}
+
+		if (mergeMode === 'github-pr') {
+			const prManager = new PRManager(settings)
+			const existingPR = await prManager.checkForExistingPR(branchName, worktreePath)
+			return existingPR?.number
+		}
+
+		return undefined // local mode - post to issue
+	}
 
 	/**
 	 * Execute the summary command
@@ -103,10 +131,16 @@ export class SummaryCommand {
 			if (parsed.loomType === 'branch') {
 				logger.debug('Skipping comment posting: branch type looms have no associated issue')
 			} else if (parsed.issueNumber !== undefined) {
+				// Determine if we should post to PR instead of issue
+				const prNumber = await this.getPRNumberForPosting(
+					parsed.worktree.path,
+					parsed.worktree.branch
+				)
 				await this.sessionSummaryService.postSummary(
 					parsed.issueNumber,
 					result.summary,
-					parsed.worktree.path
+					parsed.worktree.path,
+					prNumber
 				)
 			}
 		}

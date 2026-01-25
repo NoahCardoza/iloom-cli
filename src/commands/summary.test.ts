@@ -3,8 +3,16 @@ import { SummaryCommand, type SummaryCommandInput } from './summary.js'
 import type { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import type { MetadataManager, LoomMetadata } from '../lib/MetadataManager.js'
 import type { SessionSummaryService, SessionSummaryResult } from '../lib/SessionSummaryService.js'
+import type { SettingsManager, IloomSettings } from '../lib/SettingsManager.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { SummaryResult } from '../types/index.js'
+
+// Mock the PRManager
+vi.mock('../lib/PRManager.js', () => ({
+	PRManager: vi.fn().mockImplementation(() => ({
+		checkForExistingPR: vi.fn().mockResolvedValue(null),
+	})),
+}))
 
 // Mock the git utilities
 vi.mock('../utils/git.js', () => ({
@@ -27,6 +35,7 @@ describe('SummaryCommand', () => {
 	let mockGitWorktreeManager: GitWorktreeManager
 	let mockMetadataManager: MetadataManager
 	let mockSessionSummaryService: SessionSummaryService
+	let mockSettingsManager: SettingsManager
 	let command: SummaryCommand
 
 	const defaultWorktree: GitWorktree = {
@@ -34,6 +43,8 @@ describe('SummaryCommand', () => {
 		branch: 'feat/issue-123__test-feature',
 		commit: 'abc123',
 		bare: false,
+		detached: false,
+		locked: false,
 	}
 
 	const defaultMetadata: LoomMetadata = {
@@ -47,11 +58,25 @@ describe('SummaryCommand', () => {
 		issueTracker: 'github',
 		colorHex: '#dcebff',
 		sessionId: 'test-session-id-12345',
+		projectPath: '/path/to/project',
+		issueUrls: {},
+		prUrls: {},
+		draftPrNumber: null,
+		capabilities: [],
+		parentLoom: null,
 	}
 
 	const defaultSummaryResult: SessionSummaryResult = {
 		summary: '## Session Summary\n\n### Key Insights\n- Test insight',
 		sessionId: 'test-session-id-12345',
+	}
+
+	const defaultSettings: IloomSettings = {
+		mergeBehavior: {
+			mode: 'local',
+		},
+		sourceEnvOnStart: false,
+		attribution: 'upstreamOnly',
 	}
 
 	beforeEach(() => {
@@ -76,10 +101,16 @@ describe('SummaryCommand', () => {
 			applyAttribution: vi.fn().mockImplementation((summary: string) => Promise.resolve(summary)),
 		} as unknown as SessionSummaryService
 
+		// Create mock SettingsManager
+		mockSettingsManager = {
+			loadSettings: vi.fn().mockResolvedValue(defaultSettings),
+		} as unknown as SettingsManager
+
 		command = new SummaryCommand(
 			mockGitWorktreeManager,
 			mockMetadataManager,
-			mockSessionSummaryService
+			mockSessionSummaryService,
+			mockSettingsManager
 		)
 	})
 
@@ -177,10 +208,12 @@ describe('SummaryCommand', () => {
 
 			await command.execute(input)
 
+			// In local merge mode (default), prNumber is undefined (posts to issue)
 			expect(mockSessionSummaryService.postSummary).toHaveBeenCalledWith(
 				'123',
 				defaultSummaryResult.summary,
-				'/path/to/worktree'
+				'/path/to/worktree',
+				undefined
 			)
 
 			consoleSpy.mockRestore()
@@ -205,10 +238,12 @@ describe('SummaryCommand', () => {
 
 			await command.execute(input)
 
+			// In local merge mode (default), prNumber is undefined (posts to issue)
 			expect(mockSessionSummaryService.postSummary).toHaveBeenCalledWith(
 				'456',
 				defaultSummaryResult.summary,
-				'/path/to/worktree'
+				'/path/to/worktree',
+				undefined
 			)
 
 			consoleSpy.mockRestore()
@@ -520,6 +555,132 @@ describe('SummaryCommand', () => {
 
 			expect(result).toBeUndefined()
 			expect(consoleSpy).toHaveBeenCalledWith(defaultSummaryResult.summary)
+
+			consoleSpy.mockRestore()
+		})
+	})
+
+	describe('postSummary PR routing', () => {
+		it('should post to PR when mergeMode is github-draft-pr and draftPrNumber exists', async () => {
+			const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+			// Configure github-draft-pr mode with draftPrNumber in metadata
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				...defaultSettings,
+				mergeBehavior: { mode: 'github-draft-pr' },
+			})
+			vi.mocked(mockMetadataManager.readMetadata).mockResolvedValue({
+				...defaultMetadata,
+				draftPrNumber: 789,
+			})
+
+			const input: SummaryCommandInput = {
+				identifier: '123',
+				options: { withComment: true },
+			}
+
+			await command.execute(input)
+
+			// Should post with prNumber = 789
+			expect(mockSessionSummaryService.postSummary).toHaveBeenCalledWith(
+				'123',
+				defaultSummaryResult.summary,
+				'/path/to/worktree',
+				789
+			)
+
+			consoleSpy.mockRestore()
+		})
+
+		it('should post to PR when mergeMode is github-pr and PR exists for branch', async () => {
+			const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+			// Configure github-pr mode
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				...defaultSettings,
+				mergeBehavior: { mode: 'github-pr' },
+			})
+
+			// Mock PRManager to return an existing PR
+			const { PRManager } = await import('../lib/PRManager.js')
+			vi.mocked(PRManager).mockImplementation(() => ({
+				checkForExistingPR: vi.fn().mockResolvedValue({ number: 456, url: 'https://github.com/test/repo/pull/456' }),
+			}) as unknown as InstanceType<typeof PRManager>)
+
+			const input: SummaryCommandInput = {
+				identifier: '123',
+				options: { withComment: true },
+			}
+
+			await command.execute(input)
+
+			// Should post with prNumber = 456
+			expect(mockSessionSummaryService.postSummary).toHaveBeenCalledWith(
+				'123',
+				defaultSummaryResult.summary,
+				'/path/to/worktree',
+				456
+			)
+
+			consoleSpy.mockRestore()
+		})
+
+		it('should fall back to issue when github-pr mode but no PR found', async () => {
+			const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+			// Configure github-pr mode
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				...defaultSettings,
+				mergeBehavior: { mode: 'github-pr' },
+			})
+
+			// Mock PRManager to return no existing PR
+			const { PRManager } = await import('../lib/PRManager.js')
+			vi.mocked(PRManager).mockImplementation(() => ({
+				checkForExistingPR: vi.fn().mockResolvedValue(null),
+			}) as unknown as InstanceType<typeof PRManager>)
+
+			const input: SummaryCommandInput = {
+				identifier: '123',
+				options: { withComment: true },
+			}
+
+			await command.execute(input)
+
+			// Should post without prNumber (undefined)
+			expect(mockSessionSummaryService.postSummary).toHaveBeenCalledWith(
+				'123',
+				defaultSummaryResult.summary,
+				'/path/to/worktree',
+				undefined
+			)
+
+			consoleSpy.mockRestore()
+		})
+
+		it('should post to issue when mergeMode is local', async () => {
+			const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+			// Configure local mode (default)
+			vi.mocked(mockSettingsManager.loadSettings).mockResolvedValue({
+				...defaultSettings,
+				mergeBehavior: { mode: 'local' },
+			})
+
+			const input: SummaryCommandInput = {
+				identifier: '123',
+				options: { withComment: true },
+			}
+
+			await command.execute(input)
+
+			// Should post without prNumber (undefined) - posts to issue
+			expect(mockSessionSummaryService.postSummary).toHaveBeenCalledWith(
+				'123',
+				defaultSummaryResult.summary,
+				'/path/to/worktree',
+				undefined
+			)
 
 			consoleSpy.mockRestore()
 		})

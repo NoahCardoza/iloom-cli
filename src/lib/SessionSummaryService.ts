@@ -300,11 +300,13 @@ export class SessionSummaryService {
 	async postSummary(
 		issueNumber: string | number,
 		summary: string,
-		worktreePath?: string
+		worktreePath?: string,
+		prNumber?: number
 	): Promise<void> {
 		const settings = await this.settingsManager.loadSettings(worktreePath)
-		await this.postSummaryToIssue(issueNumber, summary, settings, worktreePath ?? process.cwd())
-		logger.success('Session summary posted to issue')
+		await this.postSummaryToIssue(issueNumber, summary, settings, worktreePath ?? process.cwd(), prNumber)
+		const target = prNumber ? `PR #${prNumber}` : 'issue'
+		logger.success(`Session summary posted to ${target}`)
 	}
 
 	/**
@@ -401,7 +403,11 @@ export class SessionSummaryService {
 		prNumber?: number
 	): Promise<void> {
 		// Get the issue management provider from settings
-		const providerType = (settings.issueManagement?.provider ?? 'github') as IssueProvider
+		// PRs only exist on GitHub, so always use 'github' provider when prNumber is provided
+		// (see types.ts:32-33 and LinearIssueManagementProvider.getPR())
+		const providerType = prNumber !== undefined
+			? 'github'
+			: (settings.issueManagement?.provider ?? 'github') as IssueProvider
 		const provider = IssueManagementProviderFactory.create(providerType)
 
 		// Apply attribution if configured
