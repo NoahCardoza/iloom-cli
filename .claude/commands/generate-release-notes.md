@@ -18,7 +18,17 @@ Generate release notes for iloom CLI from {{fromVersion}} to {{toVersion}}.
    - What features are central to this mission vs peripheral
    - Product terminology and concepts
 
-2. Determine the git reference to use:
+2. Check for existing release notes to build upon:
+   ```bash
+   # Get the most recent GitHub release notes
+   gh release view --json tagName,body
+   ```
+   - If existing release notes cover part of the range (e.g., generating v0.5.0→v0.8.0 and v0.7.0 notes exist), use them as a foundation
+   - Preserve well-written descriptions from previous releases rather than rewriting from commits
+   - Only add new content for commits not covered by existing release notes
+   - This ensures consistency in tone and avoids duplicating effort
+
+3. Determine the git reference to use:
    ```bash
    # Check if toVersion exists as a git reference
    git rev-parse --verify {{toVersion}} 2>/dev/null
@@ -27,7 +37,7 @@ Generate release notes for iloom CLI from {{fromVersion}} to {{toVersion}}.
    - If the command fails (toVersion doesn't exist), use HEAD for the git log
    - **Important**: Always label the release notes as {{fromVersion}} → {{toVersion}} regardless of which git ref is used
 
-3. Get detailed commit history:
+4. Get detailed commit history:
    ```bash
    # Use {{toVersion}} if it exists, otherwise use HEAD
    git log {{fromVersion}}..<git-ref> --format="format:%h %s%n%b%n" --reverse
