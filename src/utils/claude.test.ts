@@ -1650,7 +1650,7 @@ describe('claude utils', () => {
 				expect(execaCall[1]).not.toContain('--no-session-persistence')
 			})
 
-			it('should work with noSessionPersistence in interactive mode', async () => {
+			it('should NOT add noSessionPersistence in interactive mode (only works with --print)', async () => {
 				const prompt = 'Test prompt'
 
 				vi.mocked(execa).mockResolvedValueOnce({
@@ -1660,12 +1660,13 @@ describe('claude utils', () => {
 
 				await launchClaude(prompt, {
 					headless: false,
-					noSessionPersistence: true,
+					noSessionPersistence: true, // Should be ignored in interactive mode
 				})
 
+				// --no-session-persistence should NOT be added since it only works with -p/--print mode
 				expect(execa).toHaveBeenCalledWith(
 					'claude',
-					['--add-dir', '/tmp', '--no-session-persistence', '--', prompt],
+					['--add-dir', '/tmp', '--', prompt],
 					expect.objectContaining({
 						stdio: ['inherit', 'inherit', 'pipe'],
 					})

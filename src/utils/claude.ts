@@ -203,7 +203,8 @@ export async function launchClaude(
 	}
 
 	// Add --no-session-persistence flag if requested (for utility operations that don't need session persistence)
-	if (noSessionPersistence) {
+	// Note: --no-session-persistence can only be used with --print mode (-p), which is only added in headless mode
+	if (noSessionPersistence && headless) {
 		args.push('--no-session-persistence')
 	}
 
