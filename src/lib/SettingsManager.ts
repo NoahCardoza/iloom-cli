@@ -44,6 +44,17 @@ export const SpinAgentSettingsSchema = z.object({
 })
 
 /**
+ * Zod schema for plan agent settings with default model
+ * Used for the plan command configuration
+ */
+export const PlanAgentSettingsSchema = z.object({
+	model: z
+		.enum(['sonnet', 'opus', 'haiku'])
+		.default('opus')
+		.describe('Claude model shorthand for plan command'),
+})
+
+/**
  * Zod schema for summary settings with default model
  * Used for session summary generation configuration
  */
@@ -317,6 +328,9 @@ export const IloomSettingsSchema = z.object({
 	spin: SpinAgentSettingsSchema.optional().describe(
 		'Spin orchestrator configuration. Model defaults to opus when not configured.',
 	),
+	plan: PlanAgentSettingsSchema.optional().describe(
+		'Plan command configuration. Model defaults to opus when not configured.',
+	),
 	summary: SummarySettingsSchema.optional().describe(
 		'Session summary generation configuration. Model defaults to sonnet when not configured.',
 	),
@@ -489,6 +503,12 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		})
 		.optional()
 		.describe('Spin orchestrator configuration'),
+	plan: z
+		.object({
+			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
+		})
+		.optional()
+		.describe('Plan command configuration'),
 	summary: z
 		.object({
 			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
@@ -597,6 +617,11 @@ export type AgentSettings = z.infer<typeof AgentSettingsSchema>
  * TypeScript type for spin agent settings derived from Zod schema
  */
 export type SpinAgentSettings = z.infer<typeof SpinAgentSettingsSchema>
+
+/**
+ * TypeScript type for plan agent settings derived from Zod schema
+ */
+export type PlanAgentSettings = z.infer<typeof PlanAgentSettingsSchema>
 
 /**
  * TypeScript type for summary settings derived from Zod schema
@@ -903,6 +928,17 @@ export class SettingsManager {
 	 */
 	getSpinModel(settings?: IloomSettings): 'sonnet' | 'opus' | 'haiku' {
 		return settings?.spin?.model ?? SpinAgentSettingsSchema.parse({}).model
+	}
+
+	/**
+	 * Get the plan command model with default applied
+	 * Default is defined in PlanAgentSettingsSchema
+	 *
+	 * @param settings - Pre-loaded settings object
+	 * @returns Model shorthand ('opus', 'sonnet', or 'haiku')
+	 */
+	getPlanModel(settings?: IloomSettings): 'sonnet' | 'opus' | 'haiku' {
+		return settings?.plan?.model ?? PlanAgentSettingsSchema.parse({}).model
 	}
 
 	/**

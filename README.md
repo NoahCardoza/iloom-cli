@@ -152,6 +152,7 @@ Command Reference
 | `il test` |  | Run the test script for a workspace. |
 | `il compile` | `typecheck` | Run the compile or typecheck script for a workspace. |
 | `il add-issue` | `a` | Create and AI-enhance a new issue without starting work yet. |
+| `il plan` |  | Launch interactive planning session to decompose epics into child issues. |
 | `il contribute` |  | Fork, clone, and set up a GitHub repo for contribution (defaults to iloom-cli). |
 | `il init` | `config` | Interactive configuration wizard. |
 | `il feedback` | `f` | Submit bug reports/feedback directly from the CLI. |

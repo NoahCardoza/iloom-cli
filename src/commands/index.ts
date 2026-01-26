@@ -49,3 +49,5 @@ export type { CompileCommandInput } from './compile.js'
 
 export { CommitCommand } from './commit.js'
 export type { CommitCommandInput, CommitResult } from './commit.js'
+
+export { PlanCommand } from './plan.js'

@@ -21,6 +21,8 @@ Complete documentation for all iloom CLI commands, options, and flags.
   - [il compile](#il-compile)
   - [il summary](#il-summary)
   - [il shell](#il-shell)
+- [Planning Commands](#planning-commands)
+  - [il plan](#il-plan)
 - [Issue Management Commands](#issue-management-commands)
   - [il add-issue](#il-add-issue)
   - [il enhance](#il-enhance)
@@ -979,6 +981,76 @@ il terminal 25
 - Great for debugging or using tools not covered by `il dev-server`
 - Environment persists for the entire shell session
 - Exit shell normally (Ctrl+D or `exit`) to return
+
+---
+
+## Planning Commands
+
+### il plan
+
+Launch an interactive planning session with an Architect persona to decompose features into child issues.
+
+**Usage:**
+```bash
+il plan [prompt] [options]
+```
+
+**Arguments:**
+- `[prompt]` - Optional initial planning prompt or topic
+
+**Options:**
+
+| Flag | Values | Description |
+|------|--------|-------------|
+| `--model <model>` | `opus`, `sonnet`, `haiku` | Model to use (default: from settings `plan.model`, falls back to 'opus') |
+
+**Behavior:**
+
+1. Loads settings to detect issue provider (GitHub/Linear) and model preference
+2. Generates MCP config for issue management tools
+3. Launches Claude with Architect persona
+4. Architect helps decompose features using brainstorming patterns
+5. At session end, creates parent epic issue and child issues with dependencies
+
+**Available MCP Tools in Session:**
+
+| Category | Tools |
+|----------|-------|
+| Issue Management | `create_issue`, `create_child_issue`, `get_issue`, `get_comment` |
+| Dependency Management | `create_dependency`, `get_dependencies`, `remove_dependency` |
+| Codebase Exploration | Read, Glob, Grep, Task |
+| Web Research | WebFetch, WebSearch |
+| Git Commands | `git status`, `git log`, `git branch`, `git remote`, `git diff`, `git show` |
+
+**Configuration:**
+
+Settings file (`.iloom/settings.json`):
+```json
+{
+  "plan": {
+    "model": "opus"
+  }
+}
+```
+
+**Examples:**
+
+```bash
+# Start planning session with a topic
+il plan "Build user authentication system"
+
+# Start planning session without initial prompt
+il plan
+
+# Use a specific model
+il plan --model sonnet "Add payment processing"
+```
+
+**Notes:**
+- Must be run from a git repository with a remote configured
+- Creates parent epic + child issues following "1 issue = 1 loom = 1 PR" pattern
+- Architect sets up blocking dependencies between child issues
+- Does NOT create a loom workspace (use `il start` after planning)
 
 ---
 

@@ -103,7 +103,7 @@ export class PromptTemplateManager {
 	/**
 	 * Load a template file by name
 	 */
-	async loadTemplate(templateName: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary'): Promise<string> {
+	async loadTemplate(templateName: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan'): Promise<string> {
 		const templatePath = path.join(this.templateDir, `${templateName}-prompt.txt`)
 
 		logger.debug('Loading template', {
@@ -132,7 +132,7 @@ export class PromptTemplateManager {
 	 * Get a fully processed prompt for a workflow type
 	 */
 	async getPrompt(
-		type: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary',
+		type: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan',
 		variables: TemplateVariables
 	): Promise<string> {
 		const template = await this.loadTemplate(type)

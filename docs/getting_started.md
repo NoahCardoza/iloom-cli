@@ -223,6 +223,43 @@ This command:
 
 ---
 
+## Planning vs Starting: When to Use Each
+
+iloom offers two ways to begin work: `il plan` for strategic decomposition and `il start` for immediate implementation.
+
+### Use `il plan` when:
+
+- You have a complex feature that needs decomposition into multiple issues
+- You want to create an epic with child issues
+- You need to think through architecture before implementation
+- You want Claude to help identify dependencies between tasks
+
+### Use `il start "<description>"` when:
+
+- You have a single, focused task to implement
+- The work fits in one PR
+- You want to immediately create a loom and start coding
+- You already know exactly what needs to be done
+
+### Example Workflow
+
+```bash
+# For complex features - plan first, then start individual issues
+il plan "Implement user authentication with OAuth providers"
+# Architect creates Epic #100 with child issues #101, #102, #103
+
+il start 101  # Start work on first child issue
+# ... implement and finish ...
+il start 102  # Continue with next child issue
+
+# For simple tasks - start directly
+il start "Fix typo in login error message"
+```
+
+**Key Difference:** `il plan` creates issues but does NOT create a loom workspace. Use `il start <issue-number>` after planning to begin implementation on each child issue.
+
+---
+
 ## Keeping Your Branch Current with il rebase
 
 For long-running features, main may advance while you work. Use `il rebase` to stay current:

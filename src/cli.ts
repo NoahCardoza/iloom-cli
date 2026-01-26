@@ -1148,6 +1148,22 @@ program
   })
 
 program
+  .command('plan')
+  .description('Launch interactive planning session with Architect persona')
+  .argument('[prompt]', 'Initial planning prompt or topic')
+  .option('--model <model>', 'Model to use (default: opus)')
+  .action(async (prompt?: string, options?: { model?: string }) => {
+    try {
+      const { PlanCommand } = await import('./commands/plan.js')
+      const command = new PlanCommand()
+      await command.execute(prompt, options?.model)
+    } catch (error) {
+      logger.error(`Planning session failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+program
   .command('contribute')
   .description('Set up local development environment for contributing to a GitHub project')
   .argument('[repository]', 'GitHub repository (owner/repo, github.com/owner/repo, or full URL). Defaults to iloom-ai/iloom-cli')
