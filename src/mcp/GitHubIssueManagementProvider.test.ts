@@ -10,9 +10,22 @@ vi.mock('../utils/github.js', () => ({
 	createIssue: vi.fn(),
 	getIssueNodeId: vi.fn(),
 	addSubIssue: vi.fn(),
+	getIssueDatabaseId: vi.fn(),
+	getIssueDependencies: vi.fn(),
+	createIssueDependency: vi.fn(),
+	removeIssueDependency: vi.fn(),
 }))
 
-import { executeGhCommand, createIssue, getIssueNodeId, addSubIssue } from '../utils/github.js'
+import {
+	executeGhCommand,
+	createIssue,
+	getIssueNodeId,
+	addSubIssue,
+	getIssueDatabaseId,
+	getIssueDependencies,
+	createIssueDependency,
+	removeIssueDependency,
+} from '../utils/github.js'
 
 describe('extractNumericIdFromUrl', () => {
 	it('extracts numeric ID from valid GitHub issue comment URL', () => {
@@ -658,6 +671,195 @@ describe('GitHubIssueManagementProvider', () => {
 					author: null,
 				},
 			])
+		})
+	})
+
+	describe('createDependency', () => {
+		it('should create dependency between two issues', async () => {
+			vi.mocked(getIssueDatabaseId).mockResolvedValueOnce(123456789)
+			vi.mocked(createIssueDependency).mockResolvedValueOnce(undefined)
+
+			await provider.createDependency({
+				blockingIssue: '100',
+				blockedIssue: '200',
+			})
+
+			// Gets database ID of blocking issue (100)
+			// GitHub API: POST /issues/{blocked}/dependencies/blocked_by with body issue_id={blocking_db_id}
+			expect(getIssueDatabaseId).toHaveBeenCalledWith(100, undefined)
+			// Creates dependency: path uses blocked issue (200), body uses blocking issue DB ID
+			expect(createIssueDependency).toHaveBeenCalledWith(200, 123456789, undefined)
+		})
+
+		it('should pass repo parameter when provided', async () => {
+			vi.mocked(getIssueDatabaseId).mockResolvedValueOnce(987654321)
+			vi.mocked(createIssueDependency).mockResolvedValueOnce(undefined)
+
+			await provider.createDependency({
+				blockingIssue: '50',
+				blockedIssue: '60',
+				repo: 'other-owner/other-repo',
+			})
+
+			// Gets database ID of blocking issue (50)
+			expect(getIssueDatabaseId).toHaveBeenCalledWith(50, 'other-owner/other-repo')
+			// Creates dependency: path uses blocked issue (60), body uses blocking issue DB ID
+			expect(createIssueDependency).toHaveBeenCalledWith(60, 987654321, 'other-owner/other-repo')
+		})
+
+		it('should throw error for invalid blocking issue number', async () => {
+			await expect(
+				provider.createDependency({
+					blockingIssue: 'invalid',
+					blockedIssue: '200',
+				})
+			).rejects.toThrow('Invalid GitHub issue number: invalid. GitHub issue IDs must be numeric.')
+
+			expect(getIssueDatabaseId).not.toHaveBeenCalled()
+		})
+
+		it('should throw error for invalid blocked issue number', async () => {
+			await expect(
+				provider.createDependency({
+					blockingIssue: '100',
+					blockedIssue: 'invalid',
+				})
+			).rejects.toThrow('Invalid GitHub issue number: invalid. GitHub issue IDs must be numeric.')
+
+			expect(getIssueDatabaseId).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('getDependencies', () => {
+		it('should return blocking issues when direction is blocking', async () => {
+			vi.mocked(getIssueDependencies).mockResolvedValueOnce([
+				{ id: '200', databaseId: 200200200, title: 'Blocked Issue', url: 'https://github.com/owner/repo/issues/200', state: 'open' },
+			])
+
+			const result = await provider.getDependencies({
+				number: '100',
+				direction: 'blocking',
+			})
+
+			expect(getIssueDependencies).toHaveBeenCalledWith(100, 'blocking', undefined)
+			expect(result.blocking).toHaveLength(1)
+			expect(result.blocking[0].id).toBe('200')
+			expect(result.blockedBy).toHaveLength(0)
+		})
+
+		it('should return blocked_by issues when direction is blocked_by', async () => {
+			vi.mocked(getIssueDependencies).mockResolvedValueOnce([
+				{ id: '50', databaseId: 5050505, title: 'Blocking Issue', url: 'https://github.com/owner/repo/issues/50', state: 'open' },
+			])
+
+			const result = await provider.getDependencies({
+				number: '100',
+				direction: 'blocked_by',
+			})
+
+			expect(getIssueDependencies).toHaveBeenCalledWith(100, 'blocked_by', undefined)
+			expect(result.blockedBy).toHaveLength(1)
+			expect(result.blockedBy[0].id).toBe('50')
+			expect(result.blocking).toHaveLength(0)
+		})
+
+		it('should return both directions when direction is both', async () => {
+			vi.mocked(getIssueDependencies)
+				.mockResolvedValueOnce([
+					{ id: '200', databaseId: 200200200, title: 'Blocked Issue', url: 'https://github.com/owner/repo/issues/200', state: 'open' },
+				])
+				.mockResolvedValueOnce([
+					{ id: '50', databaseId: 5050505, title: 'Blocking Issue', url: 'https://github.com/owner/repo/issues/50', state: 'open' },
+				])
+
+			const result = await provider.getDependencies({
+				number: '100',
+				direction: 'both',
+			})
+
+			expect(getIssueDependencies).toHaveBeenCalledWith(100, 'blocking', undefined)
+			expect(getIssueDependencies).toHaveBeenCalledWith(100, 'blocked_by', undefined)
+			expect(result.blocking).toHaveLength(1)
+			expect(result.blockedBy).toHaveLength(1)
+		})
+
+		it('should pass repo parameter when provided', async () => {
+			vi.mocked(getIssueDependencies).mockResolvedValueOnce([])
+
+			await provider.getDependencies({
+				number: '100',
+				direction: 'blocking',
+				repo: 'other-owner/other-repo',
+			})
+
+			expect(getIssueDependencies).toHaveBeenCalledWith(100, 'blocking', 'other-owner/other-repo')
+		})
+
+		it('should throw error for invalid issue number', async () => {
+			await expect(
+				provider.getDependencies({
+					number: 'invalid',
+					direction: 'both',
+				})
+			).rejects.toThrow('Invalid GitHub issue number: invalid. GitHub issue IDs must be numeric.')
+
+			expect(getIssueDependencies).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('removeDependency', () => {
+		it('should remove dependency between two issues', async () => {
+			vi.mocked(getIssueDatabaseId).mockResolvedValueOnce(123456789)
+			vi.mocked(removeIssueDependency).mockResolvedValueOnce(undefined)
+
+			await provider.removeDependency({
+				blockingIssue: '100',
+				blockedIssue: '200',
+			})
+
+			// Gets database ID of blocking issue (100)
+			// GitHub API: DELETE /issues/{blocked}/dependencies/blocked_by with body issue_id={blocking_db_id}
+			expect(getIssueDatabaseId).toHaveBeenCalledWith(100, undefined)
+			// Removes dependency: path uses blocked issue (200), body uses blocking issue DB ID
+			expect(removeIssueDependency).toHaveBeenCalledWith(200, 123456789, undefined)
+		})
+
+		it('should pass repo parameter when provided', async () => {
+			vi.mocked(getIssueDatabaseId).mockResolvedValueOnce(987654321)
+			vi.mocked(removeIssueDependency).mockResolvedValueOnce(undefined)
+
+			await provider.removeDependency({
+				blockingIssue: '50',
+				blockedIssue: '60',
+				repo: 'other-owner/other-repo',
+			})
+
+			// Gets database ID of blocking issue (50)
+			expect(getIssueDatabaseId).toHaveBeenCalledWith(50, 'other-owner/other-repo')
+			// Removes dependency: path uses blocked issue (60), body uses blocking issue DB ID
+			expect(removeIssueDependency).toHaveBeenCalledWith(60, 987654321, 'other-owner/other-repo')
+		})
+
+		it('should throw error for invalid blocking issue number', async () => {
+			await expect(
+				provider.removeDependency({
+					blockingIssue: 'invalid',
+					blockedIssue: '200',
+				})
+			).rejects.toThrow('Invalid GitHub issue number: invalid. GitHub issue IDs must be numeric.')
+
+			expect(getIssueDatabaseId).not.toHaveBeenCalled()
+		})
+
+		it('should throw error for invalid blocked issue number', async () => {
+			await expect(
+				provider.removeDependency({
+					blockingIssue: '100',
+					blockedIssue: 'invalid',
+				})
+			).rejects.toThrow('Invalid GitHub issue number: invalid. GitHub issue IDs must be numeric.')
+
+			expect(getIssueDatabaseId).not.toHaveBeenCalled()
 		})
 	})
 })

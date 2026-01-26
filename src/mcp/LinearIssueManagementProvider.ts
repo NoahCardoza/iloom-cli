@@ -12,11 +12,15 @@ import type {
 	UpdateCommentInput,
 	CreateIssueInput,
 	CreateChildIssueInput,
+	CreateDependencyInput,
+	GetDependenciesInput,
+	RemoveDependencyInput,
 	CreateIssueResult,
 	IssueResult,
 	PRResult,
 	CommentDetailResult,
 	CommentResult,
+	DependenciesResult,
 } from './types.js'
 import {
 	fetchLinearIssue,
@@ -26,6 +30,10 @@ import {
 	fetchLinearIssueComments,
 	createLinearIssue,
 	createLinearChildIssue,
+	createLinearIssueRelation,
+	getLinearIssueDependencies,
+	findLinearIssueRelation,
+	deleteLinearIssueRelation,
 } from '../utils/linear.js'
 import { LinearMarkupConverter } from '../utils/linear-markup-converter.js'
 import { processMarkdownImages } from '../utils/image-processor.js'
@@ -239,5 +247,47 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 			id: result.identifier,
 			url: result.url,
 		}
+	}
+
+	/**
+	 * Create a blocking dependency between two issues
+	 */
+	async createDependency(input: CreateDependencyInput): Promise<void> {
+		const { blockingIssue, blockedIssue } = input
+
+		// Fetch both issues to get their UUIDs
+		const [blockingIssueData, blockedIssueData] = await Promise.all([
+			fetchLinearIssue(blockingIssue),
+			fetchLinearIssue(blockedIssue),
+		])
+
+		// Create the blocking relation (blockingIssue blocks blockedIssue)
+		await createLinearIssueRelation(blockingIssueData.id, blockedIssueData.id)
+	}
+
+	/**
+	 * Get dependencies for an issue
+	 */
+	async getDependencies(input: GetDependenciesInput): Promise<DependenciesResult> {
+		const { number, direction } = input
+
+		return await getLinearIssueDependencies(number, direction)
+	}
+
+	/**
+	 * Remove a blocking dependency between two issues
+	 */
+	async removeDependency(input: RemoveDependencyInput): Promise<void> {
+		const { blockingIssue, blockedIssue } = input
+
+		// Find the relation ID
+		const relationId = await findLinearIssueRelation(blockingIssue, blockedIssue)
+
+		if (!relationId) {
+			throw new Error(`No blocking dependency found from ${blockingIssue} to ${blockedIssue}`)
+		}
+
+		// Delete the relation
+		await deleteLinearIssueRelation(relationId)
 	}
 }

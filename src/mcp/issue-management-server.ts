@@ -19,6 +19,9 @@ import type {
 	UpdateCommentInput,
 	CreateIssueInput,
 	CreateChildIssueInput,
+	CreateDependencyInput,
+	GetDependenciesInput,
+	RemoveDependencyInput,
 } from './types.js'
 
 // Validate required environment variables
@@ -523,6 +526,172 @@ server.registerTool(
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 			console.error(`Failed to create child issue: ${errorMessage}`)
 			throw new Error(`Failed to create child issue: ${errorMessage}`)
+		}
+	}
+)
+
+// Define dependency result schema
+const dependencyResultSchema = z.object({
+	id: z.string().describe('Issue identifier'),
+	title: z.string().describe('Issue title'),
+	url: z.string().describe('Issue URL'),
+	state: z.string().describe('Issue state'),
+})
+
+// Register create_dependency tool
+server.registerTool(
+	'create_dependency',
+	{
+		title: 'Create Dependency',
+		description:
+			'Create a blocking dependency between two issues. ' +
+			'The blockingIssue will block the blockedIssue. ' +
+			'For GitHub: uses the sub-issue API. ' +
+			'For Linear: creates a "blocks" relation.',
+		inputSchema: {
+			blockingIssue: z.string().describe('The issue that blocks (GitHub issue number or Linear identifier like "ENG-123")'),
+			blockedIssue: z.string().describe('The issue being blocked (GitHub issue number or Linear identifier like "ENG-123")'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
+		},
+		outputSchema: {
+			success: z.boolean().describe('Whether the dependency was created successfully'),
+		},
+	},
+	async ({ blockingIssue, blockedIssue, repo }: CreateDependencyInput) => {
+		console.error(`Creating dependency: ${blockingIssue} blocks ${blockedIssue}${repo ? ` in ${repo}` : ''}`)
+
+		try {
+			const provider = IssueManagementProviderFactory.create(
+				process.env.ISSUE_PROVIDER as IssueProvider
+			)
+			await provider.createDependency({ blockingIssue, blockedIssue, repo })
+
+			console.error(`Dependency created successfully: ${blockingIssue} -> ${blockedIssue}`)
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify({ success: true }),
+					},
+				],
+				structuredContent: { success: true },
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to create dependency: ${errorMessage}`)
+			throw new Error(`Failed to create dependency: ${errorMessage}`)
+		}
+	}
+)
+
+// Register get_dependencies tool
+server.registerTool(
+	'get_dependencies',
+	{
+		title: 'Get Dependencies',
+		description:
+			'Get blocking/blocked_by dependencies for an issue. ' +
+			'Returns lists of issues that this issue blocks and/or is blocked by.',
+		inputSchema: {
+			number: z.string().describe('Issue identifier (GitHub issue number or Linear identifier like "ENG-123")'),
+			direction: z
+				.enum(['blocking', 'blocked_by', 'both'])
+				.describe('Which dependencies to fetch: "blocking" for issues this blocks, "blocked_by" for issues blocking this, "both" for all'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
+		},
+		outputSchema: {
+			blocking: z.array(dependencyResultSchema).describe('Issues that this issue blocks'),
+			blockedBy: z.array(dependencyResultSchema).describe('Issues that block this issue'),
+		},
+	},
+	async ({ number, direction, repo }: GetDependenciesInput) => {
+		console.error(`Getting dependencies for ${number} (direction: ${direction})${repo ? ` in ${repo}` : ''}`)
+
+		try {
+			const provider = IssueManagementProviderFactory.create(
+				process.env.ISSUE_PROVIDER as IssueProvider
+			)
+			const result = await provider.getDependencies({ number, direction, repo })
+
+			console.error(`Dependencies fetched: ${result.blocking.length} blocking, ${result.blockedBy.length} blocked_by`)
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify(result),
+					},
+				],
+				structuredContent: result as unknown as { [x: string]: unknown },
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to get dependencies: ${errorMessage}`)
+			throw new Error(`Failed to get dependencies: ${errorMessage}`)
+		}
+	}
+)
+
+// Register remove_dependency tool
+server.registerTool(
+	'remove_dependency',
+	{
+		title: 'Remove Dependency',
+		description:
+			'Remove a blocking dependency between two issues. ' +
+			'The blockingIssue will no longer block the blockedIssue.',
+		inputSchema: {
+			blockingIssue: z.string().describe('The issue that blocks (GitHub issue number or Linear identifier like "ENG-123")'),
+			blockedIssue: z.string().describe('The issue being blocked (GitHub issue number or Linear identifier like "ENG-123")'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
+		},
+		outputSchema: {
+			success: z.boolean().describe('Whether the dependency was removed successfully'),
+		},
+	},
+	async ({ blockingIssue, blockedIssue, repo }: RemoveDependencyInput) => {
+		console.error(`Removing dependency: ${blockingIssue} blocks ${blockedIssue}${repo ? ` in ${repo}` : ''}`)
+
+		try {
+			const provider = IssueManagementProviderFactory.create(
+				process.env.ISSUE_PROVIDER as IssueProvider
+			)
+			await provider.removeDependency({ blockingIssue, blockedIssue, repo })
+
+			console.error(`Dependency removed successfully: ${blockingIssue} -> ${blockedIssue}`)
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify({ success: true }),
+					},
+				],
+				structuredContent: { success: true },
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to remove dependency: ${errorMessage}`)
+			throw new Error(`Failed to remove dependency: ${errorMessage}`)
 		}
 	}
 )

@@ -490,3 +490,180 @@ export async function addSubIssue(
 		'-F', `subIssueId=${childNodeId}`,
 	])
 }
+
+// GitHub Issue Dependency Operations
+
+/**
+ * GitHub dependency result from API
+ */
+interface GitHubDependency {
+	id: number
+	number: number
+	title: string
+	state: string
+	html_url: string
+}
+
+/**
+ * Get the internal database ID for a GitHub issue
+ * Required for dependency API which uses database IDs, not node IDs
+ * @param issueNumber - The issue number
+ * @param repo - Optional repo in "owner/repo" format
+ * @returns Internal GitHub issue database ID
+ */
+export async function getIssueDatabaseId(
+	issueNumber: number,
+	repo?: string
+): Promise<number> {
+	logger.debug('Fetching GitHub issue database ID', { issueNumber, repo })
+
+	const apiPath = repo
+		? `repos/${repo}/issues/${issueNumber}`
+		: `repos/:owner/:repo/issues/${issueNumber}`
+
+	const result = await executeGhCommand<{ id: number }>([
+		'api',
+		apiPath,
+		'--jq',
+		'{id: .id}',
+	])
+
+	return result.id
+}
+
+/**
+ * Get dependencies for a GitHub issue
+ * Uses GitHub's issue dependencies API
+ * @param issueNumber - The issue number
+ * @param direction - 'blocking' for issues this blocks, 'blocked_by' for issues blocking this
+ * @param repo - Optional repo in "owner/repo" format
+ * @returns Array of dependency objects with id, title, url, state
+ */
+export async function getIssueDependencies(
+	issueNumber: number,
+	direction: 'blocking' | 'blocked_by',
+	repo?: string
+): Promise<Array<{ id: string; databaseId: number; title: string; url: string; state: string }>> {
+	logger.debug('Fetching GitHub issue dependencies', { issueNumber, direction, repo })
+
+	// Use the dependencies API with the appropriate direction endpoint
+	const apiPath = repo
+		? `repos/${repo}/issues/${issueNumber}/dependencies/${direction}`
+		: `repos/:owner/:repo/issues/${issueNumber}/dependencies/${direction}`
+
+	try {
+		const result = await executeGhCommand<GitHubDependency[]>([
+			'api',
+			'-H', 'Accept: application/vnd.github+json',
+			'-H', 'X-GitHub-Api-Version: 2022-11-28',
+			'--jq', '.',
+			apiPath,
+		])
+
+		return (result ?? []).map(dep => ({
+			id: String(dep.number),
+			databaseId: dep.id,
+			title: dep.title,
+			url: dep.html_url,
+			state: dep.state,
+		}))
+	} catch (error) {
+		// Return empty array for 404 on the dependencies endpoint
+		// This indicates the issue exists but has no dependencies configured
+		if (error instanceof Error) {
+			const errorMessage = error.message
+			const stderr = 'stderr' in error ? (error as { stderr?: string }).stderr ?? '' : ''
+			const combinedError = `${errorMessage} ${stderr}`
+
+			// Check for 404 specifically on dependencies endpoint
+			if (combinedError.includes('404') && combinedError.includes('dependencies')) {
+				return []
+			}
+		}
+		throw error
+	}
+}
+
+/**
+ * Create a dependency between two issues (A blocks B)
+ * Uses GitHub's issue dependencies API
+ * @param blockedIssueNumber - The issue number that is blocked
+ * @param blockingIssueDatabaseId - The database ID of the issue that blocks
+ * @param repo - Optional repo in "owner/repo" format
+ * @throws Error with specific message for: dependency already exists, issue not found, or dependencies feature not enabled
+ */
+export async function createIssueDependency(
+	blockedIssueNumber: number,
+	blockingIssueDatabaseId: number,
+	repo?: string
+): Promise<void> {
+	logger.debug('Creating GitHub issue dependency', { blockedIssueNumber, blockingIssueDatabaseId, repo })
+
+	// POST to the blocked issue's blocked_by endpoint with the blocking issue's database ID
+	const apiPath = repo
+		? `repos/${repo}/issues/${blockedIssueNumber}/dependencies/blocked_by`
+		: `repos/:owner/:repo/issues/${blockedIssueNumber}/dependencies/blocked_by`
+
+	try {
+		await executeGhCommand([
+			'api',
+			'-X', 'POST',
+			'-H', 'Accept: application/vnd.github+json',
+			'-H', 'X-GitHub-Api-Version: 2022-11-28',
+			apiPath,
+			'-F', `issue_id=${blockingIssueDatabaseId}`,
+		])
+	} catch (error) {
+		if (error instanceof Error) {
+			const errorMessage = error.message
+			const stderr = 'stderr' in error ? (error as { stderr?: string }).stderr ?? '' : ''
+			const combinedError = `${errorMessage} ${stderr}`
+
+			// Check for dependency already exists (422 Unprocessable Entity)
+			if (combinedError.includes('422') || combinedError.includes('already exists') || combinedError.includes('Unprocessable Entity')) {
+				throw new Error(`Dependency already exists: issue #${blockedIssueNumber} is already blocked by the specified issue`)
+			}
+
+			// Check for issue not found (404)
+			if (combinedError.includes('404') || combinedError.includes('Not Found')) {
+				throw new Error(`Issue not found: unable to create dependency for issue #${blockedIssueNumber}. The issue may not exist or you may not have access to it.`)
+			}
+
+			// Check for dependencies feature not enabled (403 or specific error message)
+			if (combinedError.includes('403') || combinedError.includes('Forbidden') || combinedError.includes('not enabled')) {
+				throw new Error(`Dependencies feature not enabled: the repository may not have issue dependencies enabled. This feature requires GitHub Enterprise or specific repository settings.`)
+			}
+		}
+
+		// Re-throw the original error if it doesn't match any known patterns
+		throw error
+	}
+}
+
+/**
+ * Remove a dependency between two issues (A blocks B)
+ * Uses GitHub's issue dependencies API
+ * @param blockedIssueNumber - The issue number that is blocked
+ * @param blockingIssueDatabaseId - The database ID of the issue that blocks
+ * @param repo - Optional repo in "owner/repo" format
+ */
+export async function removeIssueDependency(
+	blockedIssueNumber: number,
+	blockingIssueDatabaseId: number,
+	repo?: string
+): Promise<void> {
+	logger.debug('Removing GitHub issue dependency', { blockedIssueNumber, blockingIssueDatabaseId, repo })
+
+	// DELETE from the blocked issue's blocked_by endpoint with the blocking issue's database ID
+	const apiPath = repo
+		? `repos/${repo}/issues/${blockedIssueNumber}/dependencies/blocked_by/${blockingIssueDatabaseId}`
+		: `repos/:owner/:repo/issues/${blockedIssueNumber}/dependencies/blocked_by/${blockingIssueDatabaseId}`
+
+	await executeGhCommand([
+		'api',
+		'-X', 'DELETE',
+		'-H', 'Accept: application/vnd.github+json',
+		'-H', 'X-GitHub-Api-Version: 2022-11-28',
+		apiPath,
+	])
+}

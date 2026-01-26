@@ -13,6 +13,10 @@ vi.mock('../utils/linear.js', async (importOriginal) => {
 		fetchLinearIssueComments: vi.fn(),
 		createLinearIssue: vi.fn(),
 		createLinearChildIssue: vi.fn(),
+		createLinearIssueRelation: vi.fn(),
+		getLinearIssueDependencies: vi.fn(),
+		findLinearIssueRelation: vi.fn(),
+		deleteLinearIssueRelation: vi.fn(),
 	}
 })
 
@@ -25,6 +29,10 @@ import {
 	fetchLinearIssueComments,
 	createLinearIssue,
 	createLinearChildIssue,
+	createLinearIssueRelation,
+	getLinearIssueDependencies,
+	findLinearIssueRelation,
+	deleteLinearIssueRelation,
 } from '../utils/linear.js'
 
 describe('LinearIssueManagementProvider', () => {
@@ -547,6 +555,141 @@ New content here
 
 			expect(fetchLinearIssue).toHaveBeenCalledWith('X-1')
 			expect(createLinearChildIssue).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('createDependency', () => {
+		it('should create blocking relation between two issues', async () => {
+			vi.mocked(fetchLinearIssue)
+				.mockResolvedValueOnce({
+					id: 'blocking-uuid',
+					identifier: 'ENG-100',
+					title: 'Blocking Issue',
+					state: 'In Progress',
+					url: 'https://linear.app/issue/ENG-100',
+					createdAt: '2024-01-01T00:00:00Z',
+					updatedAt: '2024-01-02T00:00:00Z',
+				})
+				.mockResolvedValueOnce({
+					id: 'blocked-uuid',
+					identifier: 'ENG-200',
+					title: 'Blocked Issue',
+					state: 'In Progress',
+					url: 'https://linear.app/issue/ENG-200',
+					createdAt: '2024-01-01T00:00:00Z',
+					updatedAt: '2024-01-02T00:00:00Z',
+				})
+			vi.mocked(createLinearIssueRelation).mockResolvedValueOnce(undefined)
+
+			await provider.createDependency({
+				blockingIssue: 'ENG-100',
+				blockedIssue: 'ENG-200',
+			})
+
+			expect(fetchLinearIssue).toHaveBeenCalledWith('ENG-100')
+			expect(fetchLinearIssue).toHaveBeenCalledWith('ENG-200')
+			expect(createLinearIssueRelation).toHaveBeenCalledWith('blocking-uuid', 'blocked-uuid')
+		})
+
+		it('should throw error when blocking issue not found', async () => {
+			vi.mocked(fetchLinearIssue).mockRejectedValueOnce(new Error('Issue ENG-999 not found'))
+
+			await expect(
+				provider.createDependency({
+					blockingIssue: 'ENG-999',
+					blockedIssue: 'ENG-200',
+				})
+			).rejects.toThrow('Issue ENG-999 not found')
+
+			expect(createLinearIssueRelation).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('getDependencies', () => {
+		it('should return blocking issues when direction is blocking', async () => {
+			vi.mocked(getLinearIssueDependencies).mockResolvedValueOnce({
+				blocking: [
+					{ id: 'ENG-200', title: 'Blocked Issue', url: 'https://linear.app/issue/ENG-200', state: 'In Progress' },
+				],
+				blockedBy: [],
+			})
+
+			const result = await provider.getDependencies({
+				number: 'ENG-100',
+				direction: 'blocking',
+			})
+
+			expect(getLinearIssueDependencies).toHaveBeenCalledWith('ENG-100', 'blocking')
+			expect(result.blocking).toHaveLength(1)
+			expect(result.blocking[0].id).toBe('ENG-200')
+			expect(result.blockedBy).toHaveLength(0)
+		})
+
+		it('should return blocked_by issues when direction is blocked_by', async () => {
+			vi.mocked(getLinearIssueDependencies).mockResolvedValueOnce({
+				blocking: [],
+				blockedBy: [
+					{ id: 'ENG-50', title: 'Blocking Issue', url: 'https://linear.app/issue/ENG-50', state: 'In Progress' },
+				],
+			})
+
+			const result = await provider.getDependencies({
+				number: 'ENG-100',
+				direction: 'blocked_by',
+			})
+
+			expect(getLinearIssueDependencies).toHaveBeenCalledWith('ENG-100', 'blocked_by')
+			expect(result.blockedBy).toHaveLength(1)
+			expect(result.blockedBy[0].id).toBe('ENG-50')
+			expect(result.blocking).toHaveLength(0)
+		})
+
+		it('should return both directions when direction is both', async () => {
+			vi.mocked(getLinearIssueDependencies).mockResolvedValueOnce({
+				blocking: [
+					{ id: 'ENG-200', title: 'Blocked Issue', url: 'https://linear.app/issue/ENG-200', state: 'In Progress' },
+				],
+				blockedBy: [
+					{ id: 'ENG-50', title: 'Blocking Issue', url: 'https://linear.app/issue/ENG-50', state: 'In Progress' },
+				],
+			})
+
+			const result = await provider.getDependencies({
+				number: 'ENG-100',
+				direction: 'both',
+			})
+
+			expect(getLinearIssueDependencies).toHaveBeenCalledWith('ENG-100', 'both')
+			expect(result.blocking).toHaveLength(1)
+			expect(result.blockedBy).toHaveLength(1)
+		})
+	})
+
+	describe('removeDependency', () => {
+		it('should remove blocking relation between two issues', async () => {
+			vi.mocked(findLinearIssueRelation).mockResolvedValueOnce('relation-uuid')
+			vi.mocked(deleteLinearIssueRelation).mockResolvedValueOnce(undefined)
+
+			await provider.removeDependency({
+				blockingIssue: 'ENG-100',
+				blockedIssue: 'ENG-200',
+			})
+
+			expect(findLinearIssueRelation).toHaveBeenCalledWith('ENG-100', 'ENG-200')
+			expect(deleteLinearIssueRelation).toHaveBeenCalledWith('relation-uuid')
+		})
+
+		it('should throw error when relation not found', async () => {
+			vi.mocked(findLinearIssueRelation).mockResolvedValueOnce(null)
+
+			await expect(
+				provider.removeDependency({
+					blockingIssue: 'ENG-100',
+					blockedIssue: 'ENG-200',
+				})
+			).rejects.toThrow('No blocking dependency found from ENG-100 to ENG-200')
+
+			expect(deleteLinearIssueRelation).not.toHaveBeenCalled()
 		})
 	})
 })

@@ -3,7 +3,7 @@
  * Wrapper functions for the @linear/sdk
  */
 
-import { LinearClient } from '@linear/sdk'
+import { LinearClient, IssueRelationType } from '@linear/sdk'
 import type { LinearIssue, LinearComment } from '../types/linear.js'
 import { LinearServiceError } from '../types/linear.js'
 import { logger } from './logger.js'
@@ -485,5 +485,220 @@ export async function fetchLinearIssueComments(identifier: string): Promise<Line
       throw error
     }
     handleLinearError(error, 'fetchLinearIssueComments')
+  }
+}
+
+// Linear Issue Dependency Operations
+
+/**
+ * Dependency result for Linear issues
+ */
+export interface LinearDependencyResult {
+  id: string
+  title: string
+  url: string
+  state: string
+}
+
+/**
+ * Create a blocking relationship between two issues
+ * @param blockingIssueId - UUID of the issue that blocks (the blocker)
+ * @param blockedIssueId - UUID of the issue being blocked
+ * @throws LinearServiceError on creation failure
+ */
+export async function createLinearIssueRelation(
+  blockingIssueId: string,
+  blockedIssueId: string,
+): Promise<void> {
+  try {
+    logger.debug(`Creating Linear issue relation: ${blockingIssueId} blocks ${blockedIssueId}`)
+    const client = createLinearClient()
+
+    // Create a "blocks" relation from blockingIssue to blockedIssue
+    // In Linear, the relation is created on the blocking issue pointing to the blocked issue
+    const payload = await client.createIssueRelation({
+      issueId: blockingIssueId,
+      relatedIssueId: blockedIssueId,
+      type: IssueRelationType.Blocks,
+    })
+
+    if (!payload.success) {
+      throw new LinearServiceError('CLI_ERROR', 'Failed to create Linear issue relation')
+    }
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'createLinearIssueRelation')
+  }
+}
+
+/**
+ * Get dependencies for a Linear issue
+ * @param identifier - Linear issue identifier (e.g., "ENG-123")
+ * @param direction - 'blocking' for issues this blocks, 'blocked_by' for blockers, 'both' for all
+ * @returns Object with blocking and blockedBy arrays
+ * @throws LinearServiceError on fetch failure
+ */
+export async function getLinearIssueDependencies(
+  identifier: string,
+  direction: 'blocking' | 'blocked_by' | 'both',
+): Promise<{ blocking: LinearDependencyResult[]; blockedBy: LinearDependencyResult[] }> {
+  try {
+    logger.debug(`Fetching Linear issue dependencies: ${identifier} (direction: ${direction})`)
+    const client = createLinearClient()
+
+    // Get issue by identifier
+    const issue = await client.issue(identifier)
+    if (!issue) {
+      throw new LinearServiceError('NOT_FOUND', `Linear issue ${identifier} not found`)
+    }
+
+    // Fetch relations and inverse relations in parallel
+    const [relations, inverseRelations] = await Promise.all([
+      issue.relations(),
+      issue.inverseRelations(),
+    ])
+
+    const blocking: LinearDependencyResult[] = []
+    const blockedBy: LinearDependencyResult[] = []
+
+    // Helper to build dependency result from a resolved issue
+    const buildDependencyResult = async (
+      relatedIssue: { identifier: string; title: string; url: string; state: unknown } | null | undefined,
+    ): Promise<LinearDependencyResult | null> => {
+      if (!relatedIssue) return null
+
+      const stateObj = await (relatedIssue.state as Promise<{ name?: string } | null | undefined>)
+      const state = stateObj?.name ?? 'unknown'
+
+      return {
+        id: relatedIssue.identifier,
+        title: relatedIssue.title,
+        url: relatedIssue.url,
+        state,
+      }
+    }
+
+    // Process blocking relations (this issue blocks the related issue)
+    // relations with type 'blocks' mean this issue blocks the related issue
+    if (direction === 'blocking' || direction === 'both') {
+      const blockingRelations = relations.nodes.filter(
+        (r) => r.type === IssueRelationType.Blocks,
+      )
+      // Resolve all related issues in parallel, then build results
+      // Filter out undefined relatedIssue before Promise.all (LinearFetch<Issue> | undefined)
+      const relatedIssuePromises = blockingRelations
+        .map((r) => r.relatedIssue)
+        .filter((p): p is NonNullable<typeof p> => p !== undefined)
+      const relatedIssues = await Promise.all(relatedIssuePromises)
+      const blockingResults = await Promise.all(
+        relatedIssues.map((issue) => buildDependencyResult(issue)),
+      )
+      blocking.push(...blockingResults.filter((r): r is LinearDependencyResult => r !== null))
+    }
+
+    // Process blocked by relations (the related issue blocks this issue)
+    // inverseRelations with type 'blocks' mean the related issue blocks this issue
+    if (direction === 'blocked_by' || direction === 'both') {
+      const blockedByRelations = inverseRelations.nodes.filter(
+        (r) => r.type === IssueRelationType.Blocks,
+      )
+      // Resolve all source issues in parallel, then build results
+      // Filter out undefined issue before Promise.all (LinearFetch<Issue> | undefined)
+      const sourceIssuePromises = blockedByRelations
+        .map((r) => r.issue)
+        .filter((p): p is NonNullable<typeof p> => p !== undefined)
+      const sourceIssues = await Promise.all(sourceIssuePromises)
+      const blockedByResults = await Promise.all(
+        sourceIssues.map((issue) => buildDependencyResult(issue)),
+      )
+      blockedBy.push(...blockedByResults.filter((r): r is LinearDependencyResult => r !== null))
+    }
+
+    return { blocking, blockedBy }
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'getLinearIssueDependencies')
+  }
+}
+
+/**
+ * Delete an issue relation by ID
+ * @param relationId - UUID of the relation to delete
+ * @throws LinearServiceError on deletion failure
+ */
+export async function deleteLinearIssueRelation(relationId: string): Promise<void> {
+  try {
+    logger.debug(`Deleting Linear issue relation: ${relationId}`)
+    const client = createLinearClient()
+
+    const payload = await client.deleteIssueRelation(relationId)
+
+    if (!payload.success) {
+      throw new LinearServiceError('CLI_ERROR', 'Failed to delete Linear issue relation')
+    }
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'deleteLinearIssueRelation')
+  }
+}
+
+/**
+ * Find the relation ID between two issues for removal
+ * @param blockingIdentifier - Identifier of the blocking issue
+ * @param blockedIdentifier - Identifier of the blocked issue
+ * @returns The relation ID if found, null otherwise
+ * @throws LinearServiceError on fetch failure
+ */
+export async function findLinearIssueRelation(
+  blockingIdentifier: string,
+  blockedIdentifier: string,
+): Promise<string | null> {
+  try {
+    logger.debug(`Finding Linear issue relation: ${blockingIdentifier} blocks ${blockedIdentifier}`)
+    const client = createLinearClient()
+
+    // Get the blocking issue
+    const blockingIssue = await client.issue(blockingIdentifier)
+    if (!blockingIssue) {
+      throw new LinearServiceError('NOT_FOUND', `Linear issue ${blockingIdentifier} not found`)
+    }
+
+    // Get the blocked issue to get its ID
+    const blockedIssue = await client.issue(blockedIdentifier)
+    if (!blockedIssue) {
+      throw new LinearServiceError('NOT_FOUND', `Linear issue ${blockedIdentifier} not found`)
+    }
+
+    // Find the relation from blockingIssue that blocks blockedIssue
+    const relations = await blockingIssue.relations()
+
+    // Filter to only 'blocks' relations and fetch related issues in parallel
+    const blockingRelations = relations.nodes.filter(
+      (r) => r.type === IssueRelationType.Blocks,
+    )
+
+    const relationsWithIssues = await Promise.all(
+      blockingRelations.map(async (relation) => ({
+        relation,
+        relatedIssue: await relation.relatedIssue,
+      })),
+    )
+
+    const matchingRelation = relationsWithIssues.find(
+      ({ relatedIssue }) => relatedIssue?.id === blockedIssue.id,
+    )
+
+    return matchingRelation?.relation.id ?? null
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'findLinearIssueRelation')
   }
 }

@@ -89,6 +89,51 @@ export interface CreateChildIssueInput {
 }
 
 /**
+ * Input schema for creating a blocking dependency between two issues
+ */
+export interface CreateDependencyInput {
+	blockingIssue: string // Issue that blocks
+	blockedIssue: string // Issue being blocked
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
+}
+
+/**
+ * Input schema for getting dependencies of an issue
+ */
+export interface GetDependenciesInput {
+	number: string // Issue identifier
+	direction: 'blocking' | 'blocked_by' | 'both' // Which direction of dependencies to fetch
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
+}
+
+/**
+ * Input schema for removing a blocking dependency between two issues
+ */
+export interface RemoveDependencyInput {
+	blockingIssue: string // Issue that blocks
+	blockedIssue: string // Issue being blocked
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
+}
+
+/**
+ * Single dependency result item
+ */
+export interface DependencyResult {
+	id: string
+	title: string
+	url: string
+	state: string
+}
+
+/**
+ * Result for get dependencies operation
+ */
+export interface DependenciesResult {
+	blocking: DependencyResult[]
+	blockedBy: DependencyResult[]
+}
+
+/**
  * Output schema for issue creation
  */
 export interface CreateIssueResult {
@@ -252,4 +297,23 @@ export interface IssueManagementProvider {
 	 * For Linear: creates issue atomically with parent relationship
 	 */
 	createChildIssue(input: CreateChildIssueInput): Promise<CreateIssueResult>
+
+	/**
+	 * Create a blocking dependency between two issues
+	 * @param input - The blocking and blocked issue identifiers
+	 */
+	createDependency(input: CreateDependencyInput): Promise<void>
+
+	/**
+	 * Get dependencies for an issue
+	 * @param input - The issue identifier and direction (blocking, blocked_by, or both)
+	 * @returns Dependencies in the requested direction(s)
+	 */
+	getDependencies(input: GetDependenciesInput): Promise<DependenciesResult>
+
+	/**
+	 * Remove a blocking dependency between two issues
+	 * @param input - The blocking and blocked issue identifiers
+	 */
+	removeDependency(input: RemoveDependencyInput): Promise<void>
 }

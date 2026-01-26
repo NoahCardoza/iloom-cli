@@ -13,11 +13,15 @@ import type {
 	UpdateCommentInput,
 	CreateIssueInput,
 	CreateChildIssueInput,
+	CreateDependencyInput,
+	GetDependenciesInput,
+	RemoveDependencyInput,
 	CreateIssueResult,
 	IssueResult,
 	PRResult,
 	CommentDetailResult,
 	CommentResult,
+	DependenciesResult,
 	FlexibleAuthor,
 } from './types.js'
 import {
@@ -28,6 +32,10 @@ import {
 	createIssue,
 	getIssueNodeId,
 	addSubIssue,
+	getIssueDatabaseId,
+	getIssueDependencies,
+	createIssueDependency,
+	removeIssueDependency,
 } from '../utils/github.js'
 import { processMarkdownImages } from '../utils/image-processor.js'
 
@@ -465,5 +473,85 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 			url: childResult.url,
 			number: childNumber,
 		}
+	}
+
+	/**
+	 * Create a blocking dependency between two issues (A blocks B)
+	 * Uses GitHub's sub-issues API: blocking issue becomes parent, blocked issue becomes sub-issue
+	 */
+	async createDependency(input: CreateDependencyInput): Promise<void> {
+		const { blockingIssue, blockedIssue, repo } = input
+
+		// Convert string IDs to numbers
+		const blockingNumber = parseInt(blockingIssue, 10)
+		if (isNaN(blockingNumber)) {
+			throw new Error(`Invalid GitHub issue number: ${blockingIssue}. GitHub issue IDs must be numeric.`)
+		}
+
+		const blockedNumber = parseInt(blockedIssue, 10)
+		if (isNaN(blockedNumber)) {
+			throw new Error(`Invalid GitHub issue number: ${blockedIssue}. GitHub issue IDs must be numeric.`)
+		}
+
+		// Get the database ID of the blocking issue
+		// GitHub API: POST /issues/{blocked_issue_number}/dependencies/blocked_by with body issue_id={blocking_database_id}
+		const blockingDatabaseId = await getIssueDatabaseId(blockingNumber, repo)
+
+		// Create the dependency: path uses blocked issue number, body uses blocking issue DB ID
+		await createIssueDependency(blockedNumber, blockingDatabaseId, repo)
+	}
+
+	/**
+	 * Get dependencies for an issue
+	 */
+	async getDependencies(input: GetDependenciesInput): Promise<DependenciesResult> {
+		const { number, direction, repo } = input
+
+		const issueNumber = parseInt(number, 10)
+		if (isNaN(issueNumber)) {
+			throw new Error(`Invalid GitHub issue number: ${number}. GitHub issue IDs must be numeric.`)
+		}
+
+		const result: DependenciesResult = {
+			blocking: [],
+			blockedBy: [],
+		}
+
+		// Fetch dependencies based on direction
+		if (direction === 'blocking' || direction === 'both') {
+			result.blocking = await getIssueDependencies(issueNumber, 'blocking', repo)
+		}
+
+		if (direction === 'blocked_by' || direction === 'both') {
+			result.blockedBy = await getIssueDependencies(issueNumber, 'blocked_by', repo)
+		}
+
+		return result
+	}
+
+	/**
+	 * Remove a blocking dependency between two issues (A blocks B)
+	 * Uses GitHub's sub-issues API: blocking issue is parent, blocked issue is sub-issue
+	 */
+	async removeDependency(input: RemoveDependencyInput): Promise<void> {
+		const { blockingIssue, blockedIssue, repo } = input
+
+		// Convert string IDs to numbers
+		const blockingNumber = parseInt(blockingIssue, 10)
+		if (isNaN(blockingNumber)) {
+			throw new Error(`Invalid GitHub issue number: ${blockingIssue}. GitHub issue IDs must be numeric.`)
+		}
+
+		const blockedNumber = parseInt(blockedIssue, 10)
+		if (isNaN(blockedNumber)) {
+			throw new Error(`Invalid GitHub issue number: ${blockedIssue}. GitHub issue IDs must be numeric.`)
+		}
+
+		// Get the database ID of the blocking issue
+		// GitHub API: DELETE /issues/{blocked_issue_number}/dependencies/blocked_by with body issue_id={blocking_database_id}
+		const blockingDatabaseId = await getIssueDatabaseId(blockingNumber, repo)
+
+		// Remove the dependency: path uses blocked issue number, body uses blocking issue DB ID
+		await removeIssueDependency(blockedNumber, blockingDatabaseId, repo)
 	}
 }
