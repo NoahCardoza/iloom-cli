@@ -244,7 +244,7 @@ async function main() {
 | Request Type | Action |
 |--------------|--------|
 | Trivial (quick answer, single-line fix) | Handle directly |
-| Bug investigation / analysis | \`@agent-iloom-issue-analyzer\` → present findings → offer to fix |
+| Bug investigation / analysis - ESPECIALLY INVOLVING 3rd PARTY APIs/LIBRARIES | \`@agent-iloom-issue-analyzer\` → present findings → offer to fix |
 | Code changes | \`@agent-iloom-issue-implementer\` - TELL THE AGENT NOT TO MAKE/UPDATE ISSUE COMMENTS TO AVOID POLLUTION |
 | On 3rd repeated attempt at fixing the same problem  |  \`@agent-iloom-issue-analyze-and-plan\` → if approved, \`@agent-iloom-issue-implementer\` - DO NOT PROVIDE ADDITIONAL GUIDANCE ABOUT ISSUE COMMENTS |
 | On 4rd or more repeated attempt at fixing the same problem  |  \`@agent-iloom-issue-analyzer\` → if approved, \`@agent-iloom-issue-planner\` → if approved, \`@agent-iloom-issue-implementer\`  - DO NOT PROVIDE ADDITIONAL GUIDANCE ABOUT ISSUE COMMENTS |
