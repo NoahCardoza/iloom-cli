@@ -153,6 +153,38 @@ describe('InitCommand', () => {
 
       await expect(initCommand.execute()).rejects.toThrow('Permission denied')
     })
+
+    it('should pass allowedTools for common git and file operations to launchClaude', async () => {
+      vi.mocked(mockShellCompletion.detectShell).mockReturnValue('bash')
+      vi.mocked(mockShellCompletion.grepCompletionConfig).mockResolvedValue({
+        path: '/home/user/.bashrc',
+        content: '',
+      })
+      vi.mocked(mockTemplateManager.getPrompt).mockResolvedValue('Test prompt')
+      vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValue(true)
+      vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(readFile).mockResolvedValue('')
+
+      initCommand = new InitCommand(mockShellCompletion, mockTemplateManager)
+      await initCommand.execute()
+
+      expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          allowedTools: expect.arrayContaining([
+            'Bash(git rev-parse:*)',
+            'Bash(git init:*)',
+            'Bash(git status:*)',
+            'Bash(git add:*)',
+            'Bash(git commit:*)',
+            'Read',
+            'Write',
+            'Edit',
+          ])
+        })
+      )
+    })
   })
 
   describe('setupProjectConfiguration', () => {
@@ -304,7 +336,7 @@ describe('InitCommand', () => {
       const mockIloomReadmeContent = '# iloom Settings\n\nTest settings documentation.'
 
       // Mock readFile to return README content when README.md is read
-      vi.mocked(readFile).mockImplementation(async (filePath: string | Buffer | URL) => {
+      vi.mocked(readFile).mockImplementation(async (filePath) => {
         const pathStr = filePath.toString()
         if (pathStr.endsWith('README.md') && !pathStr.includes('.iloom')) {
           return mockReadmeContent

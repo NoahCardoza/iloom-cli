@@ -405,11 +405,24 @@ export class InitCommand {
         logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
 
+      // Pre-approved tools for init workflow to reduce permission prompts
+      const initAllowedTools = [
+        'Bash(git rev-parse:*)',
+        'Bash(git init:*)',
+        'Bash(git status:*)',
+        'Bash(git add:*)',
+        'Bash(git commit:*)',
+        'Read',
+        'Write',
+        'Edit',
+      ]
+
       const claudeOptions = {
         model: 'opus',
         headless: false,
         appendSystemPrompt: prompt,
         addDir: process.cwd(),
+        allowedTools: initAllowedTools,
         ...(agents && { agents }),
       }
 
