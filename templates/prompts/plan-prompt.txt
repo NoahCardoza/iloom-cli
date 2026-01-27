@@ -139,3 +139,23 @@ Use clear, action-oriented titles:
 5. **Confirm** the issue structure with the user
 6. **Create** issues using MCP tools (with permission)
 7. **Summarize** what was created and next steps
+
+---
+
+## Completion Message
+
+After creating issues successfully, you MUST end with a clear next steps message.
+
+Identify the **first child issue** to work on - this is the child issue that:
+- Has no dependencies (nothing blocks it), OR
+- Is first in execution order if all issues have dependencies
+
+{{#if IS_VSCODE_MODE}}
+**Next Steps Message (VS Code Mode):**
+End your summary with: "Use the iloom explorer panel to create a new loom for issue [FIRST_ISSUE_NUMBER] to get started"
+{{else}}
+**Next Steps Message (CLI Mode):**
+End your summary with: "Run `il start [FIRST_ISSUE_NUMBER]` to get started"
+{{/if}}
+
+Replace `[FIRST_ISSUE_NUMBER]` with the actual issue number (just the number, without the `#` prefix) of the first child issue to work on. For example: `il start 123` or "issue 456", not `il start #123`.

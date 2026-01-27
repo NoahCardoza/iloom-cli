@@ -77,9 +77,13 @@ export class PlanCommand {
 				serverCount: mcpConfig.length,
 			})
 
-			// Load plan prompt template
+			// Load and process plan prompt template
 			logger.debug('Loading plan prompt template')
-			const architectPrompt = await this.templateManager.loadTemplate('plan')
+			const isVscodeMode = process.env.ILOOM_VSCODE === '1'
+			logger.debug('VS Code mode detection', { isVscodeMode })
+			const architectPrompt = await this.templateManager.getPrompt('plan', {
+				IS_VSCODE_MODE: isVscodeMode,
+			})
 			logger.debug('Plan prompt loaded', {
 				promptLength: architectPrompt.length,
 			})

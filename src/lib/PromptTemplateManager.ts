@@ -48,6 +48,8 @@ export interface TemplateVariables {
 	DRAFT_PR_NUMBER?: number  // PR number for draft PR workflow
 	DRAFT_PR_MODE?: boolean   // True when using github-draft-pr merge mode
 	STANDARD_ISSUE_MODE?: boolean  // True when using standard issue commenting (not draft PR)
+	// VS Code environment detection
+	IS_VSCODE_MODE?: boolean  // True when ILOOM_VSCODE=1 environment variable is set
 	// Multi-language support variables - mutually exclusive
 	HAS_PACKAGE_JSON?: boolean  // True when project has package.json
 	NO_PACKAGE_JSON?: boolean   // True when project does not have package.json (non-Node.js projects)
