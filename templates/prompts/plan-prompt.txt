@@ -112,6 +112,64 @@ Use clear, action-oriented titles:
 - "Fix [bug] in [area]"
 - "Refactor [component] to [improvement]"
 
+**Summary Comment with Dependency Diagram:**
+After creating all child issues and dependencies, post a summary comment on the parent epic that includes:
+1. A list of the child issues created with their numbers and titles
+2. A Mermaid diagram visualizing the dependency DAG
+
+The Mermaid diagram should:
+- Use `graph TD` (top-down) format
+- Include each child issue as a node with format: `ISSUE_ID[Short Title]`
+- Use the appropriate issue ID format for the tracker:
+  - GitHub: `#123` in text, `471` (number only) for Mermaid node IDs
+  - Linear: `ENG-123` (team prefix + number)
+- Draw arrows from blocker → blocked (e.g., `A --> B` means A blocks B, so B depends on A)
+- Only include arrows for issues that have explicit dependencies
+
+Example summary comment format (GitHub):
+```
+## Child Issues Created
+
+| Issue | Title | Dependencies |
+|-------|-------|--------------|
+| #471 | Bootstrap plan command | None |
+| #472 | Add dependency management | None |
+| #473 | Implement creation flow | #471, #472 |
+
+## Dependency Graph
+
+```mermaid
+graph TD
+    471[Bootstrap plan command] --> 473[Implement creation flow]
+    472[Add dependency management] --> 473
+```
+
+Issues without dependencies can be worked on in parallel. Start with any unblocked issue.
+```
+
+Example summary comment format (Linear):
+```
+## Child Issues Created
+
+| Issue | Title | Dependencies |
+|-------|-------|--------------|
+| ENG-101 | Bootstrap plan command | None |
+| ENG-102 | Add dependency management | None |
+| ENG-103 | Implement creation flow | ENG-101, ENG-102 |
+
+## Dependency Graph
+
+```mermaid
+graph TD
+    ENG-101[Bootstrap plan command] --> ENG-103[Implement creation flow]
+    ENG-102[Add dependency management] --> ENG-103
+```
+
+Issues without dependencies can be worked on in parallel. Start with any unblocked issue.
+```
+
+Use `mcp__issue_management__create_comment` to post this summary to the parent epic after all issues and dependencies are created.
+
 ---
 
 ## Important Guidelines
