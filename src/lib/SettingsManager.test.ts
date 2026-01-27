@@ -450,7 +450,7 @@ describe('SettingsManager', () => {
 					mainBranch: 'develop',
 					agents: {
 						'test-agent': {
-							model: 'sonnet',
+							model: 'sonnet' as const,
 						},
 					},
 				}
@@ -622,13 +622,13 @@ describe('SettingsManager', () => {
 			const validSettings = {
 				agents: {
 					'iloom-issue-analyzer': {
-						model: 'sonnet',
+						model: 'sonnet' as const,
 					},
 					'iloom-issue-planner': {
-						model: 'opus',
+						model: 'opus' as const,
 					},
 					'iloom-issue-implementer': {
-						model: 'haiku',
+						model: 'haiku' as const,
 					},
 				},
 			}
@@ -641,7 +641,7 @@ describe('SettingsManager', () => {
 			const partialSettings = {
 				agents: {
 					'iloom-issue-implementer': {
-						model: 'haiku',
+						model: 'haiku' as const,
 					},
 				},
 			}
@@ -668,13 +668,13 @@ describe('SettingsManager', () => {
 				},
 			}
 
-			expect(() => settingsManager['validateSettings'](invalidSettings)).toThrow(
+			expect(() => settingsManager['validateSettings'](invalidSettings as never)).toThrow(
 				/Invalid enum value.*Expected 'sonnet' \| 'opus' \| 'haiku'/,
 			)
 		})
 
 		it('should accept all valid shorthand model names', () => {
-			const validModels = ['sonnet', 'opus', 'haiku']
+			const validModels = ['sonnet', 'opus', 'haiku'] as const
 
 			validModels.forEach(model => {
 				const settings = {
@@ -729,10 +729,10 @@ describe('SettingsManager', () => {
 			const settings = {
 				workflows: {
 					issue: {
-						permissionMode: 'bypassPermissions',
+						permissionMode: 'bypassPermissions' as const,
 					},
 					pr: {
-						permissionMode: 'acceptEdits',
+						permissionMode: 'acceptEdits' as const,
 					},
 				},
 			}
@@ -743,7 +743,7 @@ describe('SettingsManager', () => {
 			const settings = {
 				workflows: {
 					issue: {
-						permissionMode: 'plan',
+						permissionMode: 'plan' as const,
 					},
 				},
 			}
@@ -754,7 +754,7 @@ describe('SettingsManager', () => {
 			const settings = {
 				workflows: {
 					pr: {
-						permissionMode: 'acceptEdits',
+						permissionMode: 'acceptEdits' as const,
 					},
 				},
 			}
@@ -762,7 +762,7 @@ describe('SettingsManager', () => {
 		})
 
 		it('should accept all valid permission mode values: plan, acceptEdits, bypassPermissions, default', () => {
-			const validModes = ['plan', 'acceptEdits', 'bypassPermissions', 'default']
+			const validModes = ['plan', 'acceptEdits', 'bypassPermissions', 'default'] as const
 
 			validModes.forEach(mode => {
 				const settings = {
@@ -806,13 +806,13 @@ describe('SettingsManager', () => {
 			const settings = {
 				workflows: {
 					issue: {
-						permissionMode: 'bypassPermissions',
+						permissionMode: 'bypassPermissions' as const,
 					},
 				},
 				mainBranch: 'develop',
 				agents: {
 					'test-agent': {
-						model: 'sonnet',
+						model: 'sonnet' as const,
 					},
 				},
 			}
@@ -830,7 +830,7 @@ describe('SettingsManager', () => {
 			const settings = {
 				workflows: {
 					regular: {
-						permissionMode: 'plan',
+						permissionMode: 'plan' as const,
 					},
 				},
 			}
@@ -2843,6 +2843,76 @@ const error: { code?: string; message: string } = {
 			const settings = { sourceEnvOnStart: false, spin: {} as { model: 'opus' } }
 			const result = settingsManager.getSpinModel(settings)
 			expect(result).toBe('opus')
+		})
+	})
+
+	describe('getPlanPlanner', () => {
+		it('should return claude by default when plan not configured', () => {
+			const settings = { sourceEnvOnStart: false }
+			const result = settingsManager.getPlanPlanner(settings)
+			expect(result).toBe('claude')
+		})
+
+		it('should return configured planner when plan.planner is set to gemini', () => {
+			const settings = { sourceEnvOnStart: false, plan: { planner: 'gemini' as const } }
+			const result = settingsManager.getPlanPlanner(settings)
+			expect(result).toBe('gemini')
+		})
+
+		it('should return configured planner when plan.planner is set to codex', () => {
+			const settings = { sourceEnvOnStart: false, plan: { planner: 'codex' as const } }
+			const result = settingsManager.getPlanPlanner(settings)
+			expect(result).toBe('codex')
+		})
+
+		it('should return configured planner when plan.planner is set to claude', () => {
+			const settings = { sourceEnvOnStart: false, plan: { planner: 'claude' as const } }
+			const result = settingsManager.getPlanPlanner(settings)
+			expect(result).toBe('claude')
+		})
+
+		it('should return claude when plan object exists but planner not set', () => {
+			const settings = { sourceEnvOnStart: false, plan: { model: 'opus' as const } }
+			const result = settingsManager.getPlanPlanner(settings)
+			expect(result).toBe('claude')
+		})
+	})
+
+	describe('getPlanReviewer', () => {
+		it('should return none by default when plan not configured', () => {
+			const settings = { sourceEnvOnStart: false }
+			const result = settingsManager.getPlanReviewer(settings)
+			expect(result).toBe('none')
+		})
+
+		it('should return configured reviewer when plan.reviewer is set to gemini', () => {
+			const settings = { sourceEnvOnStart: false, plan: { reviewer: 'gemini' as const } }
+			const result = settingsManager.getPlanReviewer(settings)
+			expect(result).toBe('gemini')
+		})
+
+		it('should return configured reviewer when plan.reviewer is set to codex', () => {
+			const settings = { sourceEnvOnStart: false, plan: { reviewer: 'codex' as const } }
+			const result = settingsManager.getPlanReviewer(settings)
+			expect(result).toBe('codex')
+		})
+
+		it('should return configured reviewer when plan.reviewer is set to claude', () => {
+			const settings = { sourceEnvOnStart: false, plan: { reviewer: 'claude' as const } }
+			const result = settingsManager.getPlanReviewer(settings)
+			expect(result).toBe('claude')
+		})
+
+		it('should return configured reviewer when plan.reviewer is set to none', () => {
+			const settings = { sourceEnvOnStart: false, plan: { reviewer: 'none' as const } }
+			const result = settingsManager.getPlanReviewer(settings)
+			expect(result).toBe('none')
+		})
+
+		it('should return none when plan object exists but reviewer not set', () => {
+			const settings = { sourceEnvOnStart: false, plan: { model: 'opus' as const } }
+			const result = settingsManager.getPlanReviewer(settings)
+			expect(result).toBe('none')
 		})
 	})
 })

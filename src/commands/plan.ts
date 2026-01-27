@@ -1,14 +1,22 @@
 import { logger } from '../utils/logger.js'
 import chalk from 'chalk'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
-import { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
+import { PromptTemplateManager, type TemplateVariables } from '../lib/PromptTemplateManager.js'
 import { generateIssueManagementMcpConfig } from '../utils/mcp.js'
-import { SettingsManager } from '../lib/SettingsManager.js'
+import { SettingsManager, PlanCommandSettingsSchema } from '../lib/SettingsManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { matchIssueIdentifier } from '../utils/IdentifierParser.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
 import { needsFirstRunSetup, launchFirstRunSetup } from '../utils/first-run-setup.js'
 import type { IssueProvider, ChildIssueResult, DependenciesResult } from '../mcp/types.js'
+import { promptConfirmation, isInteractiveEnvironment } from '../utils/prompt.js'
+
+// Define provider arrays for validation and dynamic flag generation
+const PLANNER_PROVIDERS = ['claude', 'gemini', 'codex'] as const
+const REVIEWER_PROVIDERS = ['claude', 'gemini', 'codex', 'none'] as const
+
+type PlannerProvider = (typeof PLANNER_PROVIDERS)[number]
+type ReviewerProvider = (typeof REVIEWER_PROVIDERS)[number]
 
 /**
  * Format child issues as a markdown list for inclusion in the prompt
@@ -65,11 +73,38 @@ export class PlanCommand {
 	 * @param prompt - Optional initial planning prompt or topic
 	 * @param model - Optional model to use (defaults to 'opus')
 	 * @param yolo - Optional flag to enable autonomous mode (skip permission prompts)
+	 * @param planner - Optional planner provider (defaults to 'claude')
+	 * @param reviewer - Optional reviewer provider (defaults to 'none')
 	 */
-	public async execute(prompt?: string, model?: string, yolo?: boolean): Promise<void> {
+	public async execute(prompt?: string, model?: string, yolo?: boolean, planner?: string, reviewer?: string): Promise<void> {
+		// Validate and normalize planner CLI argument
+		let normalizedPlanner: PlannerProvider | undefined
+		if (planner) {
+			const normalized = planner.toLowerCase()
+			const result = PlanCommandSettingsSchema.shape.planner.safeParse(normalized)
+			if (!result.success) {
+				throw new Error(`Invalid planner: "${planner}". Allowed values: ${PLANNER_PROVIDERS.join(', ')}`)
+			}
+			normalizedPlanner = normalized as PlannerProvider
+		}
+
+		// Validate and normalize reviewer CLI argument
+		let normalizedReviewer: ReviewerProvider | undefined
+		if (reviewer) {
+			const normalized = reviewer.toLowerCase()
+			const result = PlanCommandSettingsSchema.shape.reviewer.safeParse(normalized)
+			if (!result.success) {
+				throw new Error(`Invalid reviewer: "${reviewer}". Allowed values: ${REVIEWER_PROVIDERS.join(', ')}`)
+			}
+			normalizedReviewer = normalized as ReviewerProvider
+		}
+
 		logger.debug('PlanCommand.execute() starting', {
 			cwd: process.cwd(),
 			hasPrompt: !!prompt,
+			yolo,
+			planner: normalizedPlanner ?? planner,
+			reviewer: normalizedReviewer ?? reviewer,
 		})
 
 		// Check for first-run setup (same check as StartCommand)
@@ -174,30 +209,102 @@ export class PlanCommand {
 
 		// Use CLI model if provided, otherwise use settings (plan.model), defaults to opus
 		const effectiveModel = model ?? settingsManager.getPlanModel(settings ?? undefined)
-		logger.debug('Detected issue provider and model', { provider, effectiveModel })
+
+		// Get effective planner/reviewer (CLI > settings > default)
+		const effectivePlanner = normalizedPlanner ?? settingsManager.getPlanPlanner(settings ?? undefined)
+		const effectiveReviewer = normalizedReviewer ?? settingsManager.getPlanReviewer(settings ?? undefined)
+
+		logger.debug('Detected issue provider, model, planner, and reviewer', {
+			provider,
+			effectiveModel,
+			effectivePlanner,
+			effectiveReviewer,
+		})
 
 		// Generate MCP config for issue management tools
+		// This will throw if no git remote is configured - offer to run 'il init' as fallback
 		logger.debug('Generating MCP config for issue management')
 		let mcpConfig: Record<string, unknown>[]
 		try {
 			mcpConfig = await generateIssueManagementMcpConfig(undefined, undefined, provider, settings ?? undefined)
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Unknown error'
-			logger.error(`Failed to generate MCP config: ${message}`)
-			if (provider === 'github') {
-				logger.error(
-					'GitHub issue management requires a git repository with a GitHub remote configured.'
+
+			// Check if running in interactive mode - offer to run init
+			if (isInteractiveEnvironment()) {
+				const shouldRunInit = await promptConfirmation(
+					"No git repository or remote found. Would you like to run 'il init' to set up?",
+					true
 				)
-				throw new Error(
-					`Cannot start planning session: ${message}. Ensure you are in a git repository with a GitHub remote configured.`
-				)
+				if (shouldRunInit) {
+					// Dynamically import and run InitCommand
+					logger.info(chalk.bold('Launching iloom init...'))
+					const { InitCommand } = await import('./init.js')
+					const initCommand = new InitCommand()
+					await initCommand.execute(
+						'Help the user set up a GitHub repository or Linear project for this project so they can use issue management features. When complete tell the user they can exit to continue the planning session.'
+					)
+
+					// Retry MCP config generation after init
+					logger.info(chalk.bold('Retrying planning session setup...'))
+					try {
+						mcpConfig = await generateIssueManagementMcpConfig(undefined, undefined, provider, settings ?? undefined)
+					} catch (retryError) {
+						const retryMessage = retryError instanceof Error ? retryError.message : 'Unknown error'
+						logger.error(`Failed to generate MCP config: ${retryMessage}`)
+						if (provider === 'github') {
+							logger.error(
+								'GitHub issue management requires a git repository with a GitHub remote configured.'
+							)
+							throw new Error(
+								`Cannot start planning session after init: ${retryMessage}. Ensure you are in a git repository with a GitHub remote configured.`
+							)
+						} else {
+							logger.error(
+								'Linear issue management requires LINEAR_API_TOKEN to be configured.'
+							)
+							throw new Error(
+								`Cannot start planning session after init: ${retryMessage}. Ensure LINEAR_API_TOKEN is configured in settings or environment.`
+							)
+						}
+					}
+				} else {
+					// User declined init prompt - show provider-specific error messages
+					logger.error(`Failed to generate MCP config: ${message}`)
+					if (provider === 'github') {
+						logger.error(
+							'GitHub issue management requires a git repository with a GitHub remote configured.'
+						)
+						throw new Error(
+							`Cannot start planning session: ${message}. Ensure you are in a git repository with a GitHub remote configured.`
+						)
+					} else {
+						logger.error(
+							'Linear issue management requires LINEAR_API_TOKEN to be configured.'
+						)
+						throw new Error(
+							`Cannot start planning session: ${message}. Ensure LINEAR_API_TOKEN is configured in settings or environment.`
+						)
+					}
+				}
 			} else {
-				logger.error(
-					'Linear issue management requires LINEAR_API_TOKEN to be configured.'
-				)
-				throw new Error(
-					`Cannot start planning session: ${message}. Ensure LINEAR_API_TOKEN is configured in settings or environment.`
-				)
+				// Non-interactive mode - show provider-specific error messages
+				logger.error(`Failed to generate MCP config: ${message}`)
+				if (provider === 'github') {
+					logger.error(
+						'GitHub issue management requires a git repository with a GitHub remote configured.'
+					)
+					throw new Error(
+						`Cannot start planning session: ${message}. Ensure you are in a git repository with a GitHub remote configured.`
+					)
+				} else {
+					logger.error(
+						'Linear issue management requires LINEAR_API_TOKEN to be configured.'
+					)
+					throw new Error(
+						`Cannot start planning session: ${message}. Ensure LINEAR_API_TOKEN is configured in settings or environment.`
+					)
+				}
 			}
 		}
 
@@ -205,11 +312,25 @@ export class PlanCommand {
 			serverCount: mcpConfig.length,
 		})
 
-		// Load plan prompt template with mode-specific variables
-		logger.debug('Loading plan prompt template')
+		// Detect VS Code mode
 		const isVscodeMode = process.env.ILOOM_VSCODE === '1'
 		logger.debug('VS Code mode detection', { isVscodeMode })
-		const templateVariables = {
+
+		// Compute template variables for multi-AI provider support
+		// Generate USE_*_PLANNER and USE_*_REVIEWER flags dynamically
+		const providerFlags = PLANNER_PROVIDERS.reduce((acc, p) => ({
+			...acc,
+			[`USE_${p.toUpperCase()}_PLANNER`]: effectivePlanner === p,
+		}), {} as Record<string, boolean>)
+
+		// Add reviewer flags (excluding 'none')
+		;(['claude', 'gemini', 'codex'] as const).forEach(p => {
+			providerFlags[`USE_${p.toUpperCase()}_REVIEWER`] = effectiveReviewer === p
+		})
+
+		// Load plan prompt template with mode-specific variables
+		logger.debug('Loading plan prompt template')
+		const templateVariables: TemplateVariables = {
 			IS_VSCODE_MODE: isVscodeMode,
 			EXISTING_ISSUE_MODE: !!decompositionContext,
 			FRESH_PLANNING_MODE: !decompositionContext,
@@ -222,6 +343,10 @@ export class PlanCommand {
 			PARENT_ISSUE_DEPENDENCIES: decompositionContext?.dependencies
 				? formatDependencies(decompositionContext.dependencies, issuePrefix)
 				: undefined,
+			PLANNER: effectivePlanner,
+			REVIEWER: effectiveReviewer,
+			HAS_REVIEWER: effectiveReviewer !== 'none',
+			...providerFlags,
 		}
 		const architectPrompt = await this.templateManager.getPrompt('plan', templateVariables)
 		logger.debug('Plan prompt loaded', {
@@ -275,7 +400,7 @@ export class PlanCommand {
 				throw new Error('--yolo requires a prompt or issue identifier (e.g., il plan --yolo "add gitlab support" or il plan --yolo 42)')
 			}
 			logger.warn(
-				'⚠️  YOLO mode enabled - Claude will skip permission prompts and proceed autonomously'
+				'⚠️  YOLO mode enabled - Claude will skip permission prompts and proceed autonomously. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
 			)
 		}
 

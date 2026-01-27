@@ -1153,11 +1153,13 @@ program
   .argument('[prompt]', 'Initial planning prompt or topic')
   .option('--model <model>', 'Model to use (default: opus)')
   .option('--yolo', 'Enable autonomous mode - Claude proceeds without user interaction')
-  .action(async (prompt?: string, options?: { model?: string; yolo?: boolean }) => {
+  .option('--planner <provider>', 'AI provider for planning: claude, gemini, codex (default: claude)')
+  .option('--reviewer <provider>', 'AI provider for review: claude, gemini, codex, none (default: none)')
+  .action(async (prompt?: string, options?: { model?: string; yolo?: boolean; planner?: string; reviewer?: string }) => {
     try {
       const { PlanCommand } = await import('./commands/plan.js')
       const command = new PlanCommand()
-      await command.execute(prompt, options?.model, options?.yolo)
+      await command.execute(prompt, options?.model, options?.yolo, options?.planner, options?.reviewer)
     } catch (error) {
       logger.error(`Planning session failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)

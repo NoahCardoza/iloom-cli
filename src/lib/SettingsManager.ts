@@ -44,14 +44,22 @@ export const SpinAgentSettingsSchema = z.object({
 })
 
 /**
- * Zod schema for plan agent settings with default model
+ * Zod schema for plan command settings with default model
  * Used for the plan command configuration
  */
-export const PlanAgentSettingsSchema = z.object({
+export const PlanCommandSettingsSchema = z.object({
 	model: z
 		.enum(['sonnet', 'opus', 'haiku'])
 		.default('opus')
 		.describe('Claude model shorthand for plan command'),
+	planner: z
+		.enum(['claude', 'gemini', 'codex'])
+		.default('claude')
+		.describe('AI provider for creating the plan'),
+	reviewer: z
+		.enum(['claude', 'gemini', 'codex', 'none'])
+		.default('none')
+		.describe('AI provider for reviewing the plan (none to skip review)'),
 })
 
 /**
@@ -328,8 +336,8 @@ export const IloomSettingsSchema = z.object({
 	spin: SpinAgentSettingsSchema.optional().describe(
 		'Spin orchestrator configuration. Model defaults to opus when not configured.',
 	),
-	plan: PlanAgentSettingsSchema.optional().describe(
-		'Plan command configuration. Model defaults to opus when not configured.',
+	plan: PlanCommandSettingsSchema.optional().describe(
+		'Plan command configuration. Model defaults to opus, planner to claude, reviewer to none when not configured.',
 	),
 	summary: SummarySettingsSchema.optional().describe(
 		'Session summary generation configuration. Model defaults to sonnet when not configured.',
@@ -506,6 +514,8 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 	plan: z
 		.object({
 			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
+			planner: z.enum(['claude', 'gemini', 'codex']).optional(),
+			reviewer: z.enum(['claude', 'gemini', 'codex', 'none']).optional(),
 		})
 		.optional()
 		.describe('Plan command configuration'),
@@ -619,9 +629,9 @@ export type AgentSettings = z.infer<typeof AgentSettingsSchema>
 export type SpinAgentSettings = z.infer<typeof SpinAgentSettingsSchema>
 
 /**
- * TypeScript type for plan agent settings derived from Zod schema
+ * TypeScript type for plan command settings derived from Zod schema
  */
-export type PlanAgentSettings = z.infer<typeof PlanAgentSettingsSchema>
+export type PlanCommandSettings = z.infer<typeof PlanCommandSettingsSchema>
 
 /**
  * TypeScript type for summary settings derived from Zod schema
@@ -652,6 +662,12 @@ export type IdeSettings = z.infer<typeof IloomSettingsSchema>['ide']
  * TypeScript type for iloom settings derived from Zod schema
  */
 export type IloomSettings = z.infer<typeof IloomSettingsSchema>
+
+/**
+ * TypeScript input type for iloom settings (before Zod defaults are applied)
+ * Used for validation where partial/input objects need to be accepted
+ */
+export type IloomSettingsInput = z.input<typeof IloomSettingsSchema>
 
 /**
  * Manages project-level settings from .iloom/settings.json
@@ -807,7 +823,7 @@ export class SettingsManager {
 	 * @internal - Only used in tests via bracket notation
 	 */
 	// @ts-expect-error - Used in tests via bracket notation, TypeScript can't detect this usage
-	private validateSettings(settings: IloomSettings): void {
+	private validateSettings(settings: IloomSettingsInput): void {
 		try {
 			IloomSettingsSchema.parse(settings)
 		} catch (error) {
@@ -932,13 +948,35 @@ export class SettingsManager {
 
 	/**
 	 * Get the plan command model with default applied
-	 * Default is defined in PlanAgentSettingsSchema
+	 * Default is defined in PlanCommandSettingsSchema
 	 *
 	 * @param settings - Pre-loaded settings object
 	 * @returns Model shorthand ('opus', 'sonnet', or 'haiku')
 	 */
 	getPlanModel(settings?: IloomSettings): 'sonnet' | 'opus' | 'haiku' {
-		return settings?.plan?.model ?? PlanAgentSettingsSchema.parse({}).model
+		return settings?.plan?.model ?? PlanCommandSettingsSchema.parse({}).model
+	}
+
+	/**
+	 * Get the plan command planner with default applied
+	 * Default is 'claude'
+	 *
+	 * @param settings - Pre-loaded settings object
+	 * @returns Planner provider ('claude', 'gemini', or 'codex')
+	 */
+	getPlanPlanner(settings?: IloomSettings): 'claude' | 'gemini' | 'codex' {
+		return settings?.plan?.planner ?? 'claude'
+	}
+
+	/**
+	 * Get the plan command reviewer with default applied
+	 * Default is 'none' (no review step)
+	 *
+	 * @param settings - Pre-loaded settings object
+	 * @returns Reviewer provider ('claude', 'gemini', 'codex', or 'none')
+	 */
+	getPlanReviewer(settings?: IloomSettings): 'claude' | 'gemini' | 'codex' | 'none' {
+		return settings?.plan?.reviewer ?? 'none'
 	}
 
 	/**

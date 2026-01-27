@@ -71,6 +71,16 @@ export interface TemplateVariables {
 	// Existing children and dependencies context for decomposition mode
 	PARENT_ISSUE_CHILDREN?: string | undefined  // Formatted list of existing child issues (if any)
 	PARENT_ISSUE_DEPENDENCIES?: string | undefined  // Formatted list of existing dependencies (if any)
+	// Multi-AI provider support for plan command
+	PLANNER?: 'claude' | 'gemini' | 'codex'
+	REVIEWER?: 'claude' | 'gemini' | 'codex' | 'none'
+	USE_CLAUDE_PLANNER?: boolean
+	USE_GEMINI_PLANNER?: boolean
+	USE_CODEX_PLANNER?: boolean
+	USE_CLAUDE_REVIEWER?: boolean
+	USE_GEMINI_REVIEWER?: boolean
+	USE_CODEX_REVIEWER?: boolean
+	HAS_REVIEWER?: boolean
 }
 
 export class PromptTemplateManager {

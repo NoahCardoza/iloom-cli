@@ -13,6 +13,8 @@ vi.mock('../lib/SettingsManager.js', () => ({
 	SettingsManager: vi.fn(() => ({
 		loadSettings: vi.fn().mockResolvedValue(null),
 		getPlanModel: vi.fn().mockReturnValue('opus'),
+		getPlanPlanner: vi.fn().mockReturnValue('claude'),
+		getPlanReviewer: vi.fn().mockReturnValue('none'),
 	})),
 }))
 vi.mock('../lib/IssueTrackerFactory.js', () => ({
@@ -349,7 +351,7 @@ describe('PlanCommand', () => {
 			await command.execute('test prompt', undefined, true)
 
 			expect(logger.warn).toHaveBeenCalledWith(
-				'⚠️  YOLO mode enabled - Claude will skip permission prompts and proceed autonomously'
+				'⚠️  YOLO mode enabled - Claude will skip permission prompts and proceed autonomously. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
 			)
 		})
 	})
