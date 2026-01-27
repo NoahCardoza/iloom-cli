@@ -155,7 +155,7 @@ export class MetadataManager {
     // 1. Trim trailing slashes
     let slug = worktreePath.replace(/[/\\]+$/, '')
 
-    // 2. Replace path separators with double underscores
+    // 2. Replace path separators with triple underscores
     slug = slug.replace(/[/\\]/g, '___')
 
     // 3. Replace non-alphanumeric chars (except _ and -) with hyphens

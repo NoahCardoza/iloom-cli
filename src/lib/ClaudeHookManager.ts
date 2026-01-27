@@ -200,15 +200,29 @@ export class ClaudeHookManager {
 			const existing = mergedHooks[eventName] ?? []
 
 			// Check if our hook is already registered
-			const ourCommand = eventConfigs[0]?.hooks?.[0]?.command
-			const alreadyRegistered = existing.some(
+			const ourConfig = eventConfigs[0]
+			const ourCommand = ourConfig?.hooks?.[0]?.command
+			const existingConfigIndex = existing.findIndex(
 				(config) => config.hooks?.some((h) => h.command === ourCommand)
 			)
 
-			if (!alreadyRegistered) {
+			if (existingConfigIndex === -1) {
 				// Add our hook config to the event
 				mergedHooks[eventName] = [...existing, ...eventConfigs]
 				hooksAdded = true
+			} else {
+				// Hook is already registered - check if we need to update the matcher
+				const existingConfig = existing[existingConfigIndex]
+				const ourMatcher = ourConfig?.matcher
+
+				// Update matcher if our config has one and existing doesn't match
+				if (existingConfig && ourMatcher !== undefined && existingConfig.matcher !== ourMatcher) {
+					existing[existingConfigIndex] = {
+						...existingConfig,
+						matcher: ourMatcher
+					}
+					hooksAdded = true
+				}
 			}
 		}
 
@@ -272,7 +286,7 @@ export class ClaudeHookManager {
 				{ matcher: '*', hooks: [{ type: 'command', command: hookCommand }] }
 			],
 			SessionStart: [
-				{ hooks: [{ type: 'command', command: hookCommand }] }
+				{ matcher: '*', hooks: [{ type: 'command', command: hookCommand }] }
 			],
 			SessionEnd: [
 				{ hooks: [{ type: 'command', command: hookCommand }] }

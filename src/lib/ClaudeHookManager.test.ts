@@ -118,6 +118,9 @@ describe('ClaudeHookManager', () => {
 			expect(settings.hooks.Notification).toBeDefined()
 			expect(settings.hooks.Stop).toBeDefined()
 			expect(settings.hooks.SubagentStop).toBeDefined()
+
+			// SessionStart should have matcher: '*' for receiving all sources (including 'clear')
+			expect(settings.hooks.SessionStart[0].matcher).toBe('*')
 		})
 
 		it('should merge hook config preserving existing user hooks', async () => {
@@ -194,7 +197,54 @@ describe('ClaudeHookManager', () => {
 		})
 
 		it('should be idempotent - safe to run multiple times', async () => {
-			// Settings already have our hooks
+			// Settings already have ALL our hooks with correct matchers
+			const existingSettings = {
+				hooks: {
+					SessionStart: [
+						{ matcher: '*', hooks: [{ type: 'command', command: `node ${mockHooksDir}/iloom-hook.js` }] }
+					],
+					SessionEnd: [
+						{ hooks: [{ type: 'command', command: `node ${mockHooksDir}/iloom-hook.js` }] }
+					],
+					Notification: [
+						{ hooks: [{ type: 'command', command: `node ${mockHooksDir}/iloom-hook.js` }] }
+					],
+					Stop: [
+						{ hooks: [{ type: 'command', command: `node ${mockHooksDir}/iloom-hook.js` }] }
+					],
+					SubagentStop: [
+						{ hooks: [{ type: 'command', command: `node ${mockHooksDir}/iloom-hook.js` }] }
+					],
+					PermissionRequest: [
+						{ matcher: '*', hooks: [{ type: 'command', command: `node ${mockHooksDir}/iloom-hook.js`, timeout: 86400 }] }
+					],
+					PreToolUse: [
+						{ matcher: '*', hooks: [{ type: 'command', command: `node ${mockHooksDir}/iloom-hook.js` }] }
+					],
+					PostToolUse: [
+						{ matcher: '*', hooks: [{ type: 'command', command: `node ${mockHooksDir}/iloom-hook.js` }] }
+					],
+					UserPromptSubmit: [
+						{ hooks: [{ type: 'command', command: `node ${mockHooksDir}/iloom-hook.js` }] }
+					]
+				}
+			}
+
+			vi.mocked(fs.pathExists).mockResolvedValue(true)
+			vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+			vi.mocked(fs.copyFile).mockResolvedValue(undefined)
+			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(existingSettings))
+			vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+			vi.mocked(fs.rename).mockResolvedValue(undefined)
+
+			await hookManager.installHooks()
+
+			// Should not write since nothing changed
+			expect(fs.writeFile).not.toHaveBeenCalled()
+		})
+
+		it('should update existing hooks to add missing matcher property', async () => {
+			// Settings have our hooks but WITHOUT the matcher
 			const existingSettings = {
 				hooks: {
 					SessionStart: [
@@ -216,8 +266,9 @@ describe('ClaudeHookManager', () => {
 			const content = writeCall[1] as string
 			const settings = JSON.parse(content)
 
-			// Should not duplicate our hooks
+			// SessionStart should now have the matcher property
 			expect(settings.hooks.SessionStart).toHaveLength(1)
+			expect(settings.hooks.SessionStart[0].matcher).toBe('*')
 		})
 
 		it('should not throw on errors - logs warning instead', async () => {

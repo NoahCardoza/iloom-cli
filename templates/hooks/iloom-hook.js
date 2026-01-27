@@ -33,6 +33,7 @@
 
 const fs = require('fs');
 const net = require('net');
+const os = require('os');
 const path = require('path');
 
 // Debug logging - writes to /tmp/iloom-hook.log
@@ -106,6 +107,59 @@ function findAllIloomSockets() {
   } catch (error) {
     debug('Error finding iloom sockets', { error: error.message });
     return [];
+  }
+}
+
+/**
+ * Slugify a worktree path to create a metadata filename.
+ * Must match MetadataManager.slugifyPath() algorithm.
+ *
+ * @param {string} worktreePath - Absolute path to worktree
+ * @returns {string} Slugified filename with .json extension
+ */
+function slugifyPath(worktreePath) {
+  // 1. Trim trailing slashes
+  let slug = worktreePath.replace(/[/\\]+$/, '');
+  // 2. Replace path separators with triple underscores
+  slug = slug.replace(/[/\\]/g, '___');
+  // 3. Replace non-alphanumeric chars (except _ and -) with hyphens
+  slug = slug.replace(/[^a-zA-Z0-9_-]/g, '-');
+  // 4. Append .json
+  return `${slug}.json`;
+}
+
+/**
+ * Get the full path to the metadata file for a worktree.
+ *
+ * @param {string} cwd - Working directory (worktree path)
+ * @returns {string} Full path to metadata JSON file
+ */
+function getMetadataFilePath(cwd) {
+  const loomsDir = path.join(os.homedir(), '.config', 'iloom-ai', 'looms');
+  return path.join(loomsDir, slugifyPath(cwd));
+}
+
+/**
+ * Update the session ID in the metadata file for a worktree.
+ * Silently fails if the metadata file doesn't exist or can't be updated.
+ *
+ * @param {string} cwd - Working directory (worktree path)
+ * @param {string} newSessionId - New session ID to set
+ */
+async function updateSessionId(cwd, newSessionId) {
+  try {
+    const filePath = getMetadataFilePath(cwd);
+    if (!fs.existsSync(filePath)) {
+      debug('No metadata file found, skipping session ID update', { cwd, filePath });
+      return;
+    }
+    const content = fs.readFileSync(filePath, 'utf8');
+    const metadata = JSON.parse(content);
+    metadata.sessionId = newSessionId;
+    fs.writeFileSync(filePath, JSON.stringify(metadata, null, 2), 'utf8');
+    debug('Session ID updated in metadata', { cwd, newSessionId });
+  } catch (error) {
+    debug('Failed to update session ID', { cwd, error: error.message, stack: error.stack });
   }
 }
 
@@ -226,7 +280,22 @@ async function main() {
     const hookData = await readStdin();
     const { hook_event_name, cwd, notification_type, session_id } = hookData;
 
-    debug('Received hook event', { hook_event_name, cwd, notification_type, session_id, tool_name: hookData.tool_name });
+    debug('Received hook event', { hook_event_name, cwd, notification_type, session_id, tool_name: hookData.tool_name, matcher: hookData.matcher });
+
+    // Handle SessionStart with source='clear' - update session ID in metadata
+    // This keeps iloom's session tracking synchronized with Claude's session lifecycle
+    if (hook_event_name === 'SessionStart') {
+      debug('SessionStart event received', { source: hookData.source });
+      if (hookData.source === 'clear') {
+        debug('Detected /clear, updating session ID to match Claude');
+        await updateSessionId(cwd, session_id);
+        debug('Updated session ID for /clear', { cwd, newSessionId: session_id });
+      } else {
+        debug('SessionStart source is not clear, skipping', { source: hookData.source });
+      }
+      // SessionStart events are not broadcast - exit early
+      process.exit(0);
+    }
 
     const status = mapEventToStatus(hook_event_name, notification_type);
     debug('Mapped event to status', { status });
@@ -283,4 +352,7 @@ async function main() {
   }
 }
 
-main().catch(() => process.exit(0));
+main().catch((error) => {
+  debug('Unhandled error in main', { error: error?.message, stack: error?.stack });
+  process.exit(0);
+});
