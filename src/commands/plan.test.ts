@@ -232,4 +232,74 @@ describe('PlanCommand', () => {
 			)
 		})
 	})
+
+	describe('yolo mode', () => {
+		it('should add bypassPermissions when yolo is true', async () => {
+			await command.execute('test prompt', undefined, true)
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					permissionMode: 'bypassPermissions',
+				})
+			)
+		})
+
+		it('should not add bypassPermissions when yolo is false', async () => {
+			await command.execute(undefined, undefined, false)
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.not.objectContaining({
+					permissionMode: 'bypassPermissions',
+				})
+			)
+		})
+
+		it('should structure prompt with AUTONOMOUS MODE and TOPIC sections when yolo is true', async () => {
+			const testPrompt = 'Help me plan a feature'
+
+			await command.execute(testPrompt, undefined, true)
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.stringContaining('[AUTONOMOUS MODE]'),
+				expect.any(Object)
+			)
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.stringContaining('[TOPIC]'),
+				expect.any(Object)
+			)
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.stringContaining(testPrompt),
+				expect.any(Object)
+			)
+		})
+
+		it('should throw error when yolo is true but no prompt provided', async () => {
+			await expect(command.execute(undefined, undefined, true)).rejects.toThrow(
+				'--yolo requires a prompt or issue identifier'
+			)
+		})
+
+		it('should not modify prompt when yolo is false', async () => {
+			const testPrompt = 'Help me plan a feature'
+
+			await command.execute(testPrompt, undefined, false)
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				testPrompt,
+				expect.any(Object)
+			)
+		})
+
+		it('should log warning when yolo mode is enabled', async () => {
+			const { logger } = await import('../utils/logger.js')
+
+			await command.execute('test prompt', undefined, true)
+
+			expect(logger.warn).toHaveBeenCalledWith(
+				'⚠️  YOLO mode enabled - Claude will skip permission prompts and proceed autonomously'
+			)
+		})
+	})
 })
