@@ -432,7 +432,7 @@ Prompt`
 			await expect(manager.loadAgents()).rejects.toThrow('Missing required field: description')
 		})
 
-		it('should throw error for missing required field: tools', async () => {
+		it('should allow agents without tools field (tools inherits from parent)', async () => {
 			vi.mocked(fg).mockResolvedValueOnce(['agent.md'])
 
 			const markdownContent = `---
@@ -445,7 +445,9 @@ Prompt`
 
 			vi.mocked(readFile).mockResolvedValueOnce(markdownContent)
 
-			await expect(manager.loadAgents()).rejects.toThrow('Missing required field: tools')
+			const agents = await manager.loadAgents()
+			expect(agents['no-tools-agent']).toBeDefined()
+			expect(agents['no-tools-agent'].tools).toBeUndefined()
 		})
 
 		it('should throw error for missing required field: model', async () => {

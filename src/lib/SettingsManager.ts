@@ -19,7 +19,17 @@ export const AgentSettingsSchema = z.object({
 		.enum(['sonnet', 'opus', 'haiku'])
 		.optional()
 		.describe('Claude model shorthand: sonnet, opus, or haiku'),
-	// Future: could add other per-agent overrides
+	enabled: z
+		.boolean()
+		.optional()
+		.describe('Whether this agent is enabled. Defaults to true.'),
+	providers: z
+		.record(
+			z.enum(['claude', 'gemini', 'codex']),
+			z.string()
+		)
+		.optional()
+		.describe('Map of review providers to model names. Keys: claude, gemini, codex. Values: model name strings (e.g., "sonnet", "gemini-2.0-flash", "gpt-5.2-codex")'),
 })
 
 /**

@@ -12,7 +12,7 @@ import { PromptTemplateManager, TemplateVariables } from './PromptTemplateManage
 export interface AgentConfig {
 	description: string
 	prompt: string
-	tools: string[]
+	tools?: string[]  // Optional - when omitted, agent inherits all tools from parent
 	model: string
 	color?: string
 }
@@ -106,6 +106,33 @@ export class AgentManager {
 
 		// Apply template variable substitution to agent prompts if variables provided
 		if (templateVariables) {
+			// Extract review config from settings with defaults and add to template variables
+			const reviewerSettings = settings?.agents?.['iloom-issue-reviewer']
+			const reviewEnabled = reviewerSettings?.enabled !== false  // Default to true
+
+			templateVariables.REVIEW_ENABLED = reviewEnabled
+
+			if (reviewEnabled) {
+				const providers = reviewerSettings?.providers ?? {}
+				// Default to Claude if no providers specified
+				const hasAnyProvider = Object.keys(providers).length > 0
+
+				// Determine Claude model: use configured, or default to 'sonnet' if no providers specified
+				const claudeModel = providers.claude ?? (hasAnyProvider ? undefined : 'sonnet')
+				if (claudeModel) {
+					templateVariables.REVIEW_CLAUDE_MODEL = claudeModel
+				}
+				if (providers.gemini) {
+					templateVariables.REVIEW_GEMINI_MODEL = providers.gemini
+				}
+				if (providers.codex) {
+					templateVariables.REVIEW_CODEX_MODEL = providers.codex
+				}
+				templateVariables.HAS_REVIEW_CLAUDE = !!claudeModel
+				templateVariables.HAS_REVIEW_GEMINI = !!providers.gemini
+				templateVariables.HAS_REVIEW_CODEX = !!providers.codex
+			}
+
 			for (const [agentName, agentConfig] of Object.entries(agents)) {
 				agents[agentName] = {
 					...agentConfig,
@@ -135,9 +162,10 @@ export class AgentManager {
 
 	/**
 	 * Validate agent configuration has required fields
+	 * Note: tools is optional - when omitted, agent inherits all tools from parent
 	 */
 	private validateAgentConfig(config: AgentConfig, agentName: string): void {
-		const requiredFields: (keyof AgentConfig)[] = ['description', 'prompt', 'tools', 'model']
+		const requiredFields: (keyof AgentConfig)[] = ['description', 'prompt', 'model']
 
 		for (const field of requiredFields) {
 			if (!config[field]) {
@@ -145,7 +173,8 @@ export class AgentManager {
 			}
 		}
 
-		if (!Array.isArray(config.tools)) {
+		// Tools is optional, but if present must be an array
+		if (config.tools !== undefined && !Array.isArray(config.tools)) {
 			throw new Error(`Agent ${agentName} tools must be an array`)
 		}
 	}
@@ -168,18 +197,19 @@ export class AgentManager {
 			if (!data.description) {
 				throw new Error('Missing required field: description')
 			}
-			if (!data.tools) {
-				throw new Error('Missing required field: tools')
-			}
+			// Note: tools is now optional - when omitted, agent inherits all tools from parent
 			if (!data.model) {
 				throw new Error('Missing required field: model')
 			}
 
-			// Parse tools from comma-separated string to array
-			const tools = data.tools
-				.split(',')
-				.map((tool: string) => tool.trim())
-				.filter((tool: string) => tool.length > 0)
+			// Parse tools from comma-separated string to array (only if tools field is present)
+			let tools: string[] | undefined
+			if (data.tools) {
+				tools = data.tools
+					.split(',')
+					.map((tool: string) => tool.trim())
+					.filter((tool: string) => tool.length > 0)
+			}
 
 			// Validate model and warn if non-standard
 			const validModels = ['sonnet', 'opus', 'haiku']
@@ -194,8 +224,8 @@ export class AgentManager {
 			const config: AgentConfig = {
 				description: data.description,
 				prompt: markdownBody.trim(),
-				tools,
 				model: data.model,
+				...(tools && { tools }),
 				...(data.color && { color: data.color }),
 			}
 

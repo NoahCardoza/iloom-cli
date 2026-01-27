@@ -51,6 +51,14 @@ export interface TemplateVariables {
 	// Multi-language support variables - mutually exclusive
 	HAS_PACKAGE_JSON?: boolean  // True when project has package.json
 	NO_PACKAGE_JSON?: boolean   // True when project does not have package.json (non-Node.js projects)
+	// Review agent configuration variables
+	REVIEW_ENABLED?: boolean               // True if review is enabled (defaults to true)
+	REVIEW_CLAUDE_MODEL?: string           // Claude model if configured (defaults to 'sonnet')
+	REVIEW_GEMINI_MODEL?: string           // Gemini model if configured
+	REVIEW_CODEX_MODEL?: string            // Codex model if configured
+	HAS_REVIEW_CLAUDE?: boolean            // True if claude provider configured (defaults to true)
+	HAS_REVIEW_GEMINI?: boolean            // True if gemini provider configured
+	HAS_REVIEW_CODEX?: boolean             // True if codex provider configured
 }
 
 export class PromptTemplateManager {

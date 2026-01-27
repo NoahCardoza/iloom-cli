@@ -494,6 +494,49 @@ Execute combined analyze-and-plan agent:
 
 ---
 
+## STEP 5.5 - Review Phase
+
+Review uncommitted code changes for quality, security, and compliance issues.
+
+{{#if REVIEW_ENABLED}}
+**Auto-Run Mode**: Review automatically executes after implementation completes. No manual trigger needed.
+
+1. Execute: @agent-iloom-issue-reviewer with prompt "Run code review." (foreground, no extra context)
+2. Wait for review completion
+3. If critical issues found:
+{{#if ONE_SHOT_MODE}}
+   - Automatically implement the recommended fixes without asking
+{{else}}
+   - Ask the user: "Critical issues found. Do you want to proceed anyway, or address these first?"
+   - Wait for user response before continuing
+{{/if}}
+{{/if}}
+
+{{#unless ONE_SHOT_MODE}}
+**How to run review manually:**
+- Execute: @agent-iloom-issue-reviewer with prompt "Run code review."
+- **IMPORTANT**: Must run in foreground (not as background Task) to access MCP tools
+- **DO NOT** pass extra context (file lists, issue details, etc.) - the agent knows what to do
+- The reviewer will analyze uncommitted changes and report findings
+
+**When critical issues are found:**
+- Ask the user: "Critical issues found. Do you want to proceed anyway, or address these first?"
+- Wait for user response before continuing
+{{/unless}}
+
+**MANDATORY Claude Local Review**: If the reviewer returns "Instructions for Orchestrator: Claude Local Review", you MUST execute those instructions:
+1. Gather git diff (`git diff`) and CLAUDE.md content (using Glob/Read)
+2. Launch the 5 parallel Task agents as specified in the instructions
+3. Collect results from all agents
+4. Present unified report as specified
+5. If critical issues found, ask user before proceeding
+
+This is NOT optional - if the reviewer requests Claude Local Review, it must be performed before continuing.
+
+After review completes (or if skipped), continue to Post-Workflow Help.
+
+---
+
 ## Post-Workflow Help
 
 After completing the implementation phase, tell the user:
