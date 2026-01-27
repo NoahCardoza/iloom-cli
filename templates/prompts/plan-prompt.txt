@@ -130,7 +130,7 @@ If child issues or dependencies already exist:
    - Include: Design rationale, key decisions, trade-offs, recommended execution order
 4. **Output next steps to the user**
    - Tell them what was created: "Created N child issues for #{{PARENT_ISSUE_NUMBER}}."
-   - Recommend where to start: "Run `il start Z` to begin with [first task title]."
+   - Recommend where to start: "Exit this session and run `il start Z` to begin with [first task title]."
 {{else}}
 **Fresh Planning Mode - Issue Creation Order:**
 1. **Create the parent epic issue first** (using `create_issue`)
@@ -147,7 +147,7 @@ If child issues or dependencies already exist:
    - Include: Design rationale, key decisions, trade-offs, recommended execution order
 5. **Output next steps to the user**
    - Tell them what was created: "Created Epic #X with Y child issues."
-   - Recommend where to start: "Run `il start Z` to begin with [first task title]."
+   - Recommend where to start: "Exit this session and run `il start Z` to begin with [first task title]."
 {{/if}}
 
 **Issue Title Format:**
@@ -254,10 +254,10 @@ Identify the **first child issue** to work on - this is the child issue that:
 
 {{#if IS_VSCODE_MODE}}
 **Next Steps Message (VS Code Mode):**
-End your summary with: "Use the iloom explorer panel to create a new loom for issue [FIRST_ISSUE_NUMBER] to get started"
+End your summary with: "Exit this session, then use the iloom explorer panel to create a new loom for issue [FIRST_ISSUE_NUMBER] to get started"
 {{else}}
 **Next Steps Message (CLI Mode):**
-End your summary with: "Run `il start [FIRST_ISSUE_NUMBER]` to get started"
+End your summary with: "Exit this session and run `il start [FIRST_ISSUE_NUMBER]` to get started"
 {{/if}}
 
 Replace `[FIRST_ISSUE_NUMBER]` with the actual issue number (just the number, without the `#` prefix) of the first child issue to work on. For example: `il start 123` or "issue 456", not `il start #123`.
