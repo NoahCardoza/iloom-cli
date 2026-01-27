@@ -3,10 +3,12 @@ import { PlanCommand } from './plan.js'
 import type { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import * as claudeUtils from '../utils/claude.js'
 import * as mcpUtils from '../utils/mcp.js'
+import * as firstRunSetup from '../utils/first-run-setup.js'
 
 // Mock dependencies
 vi.mock('../utils/claude.js')
 vi.mock('../utils/mcp.js')
+vi.mock('../utils/first-run-setup.js')
 vi.mock('../lib/SettingsManager.js', () => ({
 	SettingsManager: vi.fn(() => ({
 		loadSettings: vi.fn().mockResolvedValue(null),
@@ -47,6 +49,9 @@ describe('PlanCommand', () => {
 		vi.mocked(mcpUtils.generateIssueManagementMcpConfig).mockResolvedValue([
 			{ mcpServers: { issue_management: {} } },
 		])
+		// Default: project is already configured (no first-run setup needed)
+		vi.mocked(firstRunSetup.needsFirstRunSetup).mockResolvedValue(false)
+		vi.mocked(firstRunSetup.launchFirstRunSetup).mockResolvedValue(undefined)
 	})
 
 	describe('VS Code mode detection', () => {
@@ -230,6 +235,52 @@ describe('PlanCommand', () => {
 					]),
 				})
 			)
+		})
+	})
+
+	describe('first-run setup check', () => {
+		it('should launch first-run setup when project is not configured', async () => {
+			vi.mocked(firstRunSetup.needsFirstRunSetup).mockResolvedValue(true)
+
+			await command.execute()
+
+			expect(firstRunSetup.launchFirstRunSetup).toHaveBeenCalled()
+		})
+
+		it('should skip first-run setup when project is already configured', async () => {
+			vi.mocked(firstRunSetup.needsFirstRunSetup).mockResolvedValue(false)
+
+			await command.execute()
+
+			expect(firstRunSetup.launchFirstRunSetup).not.toHaveBeenCalled()
+		})
+
+		it('should launch first-run setup when FORCE_FIRST_TIME_SETUP is true', async () => {
+			const originalEnv = process.env.FORCE_FIRST_TIME_SETUP
+			process.env.FORCE_FIRST_TIME_SETUP = 'true'
+			vi.mocked(firstRunSetup.needsFirstRunSetup).mockResolvedValue(false)
+
+			try {
+				await command.execute()
+
+				expect(firstRunSetup.launchFirstRunSetup).toHaveBeenCalled()
+			} finally {
+				if (originalEnv === undefined) {
+					delete process.env.FORCE_FIRST_TIME_SETUP
+				} else {
+					process.env.FORCE_FIRST_TIME_SETUP = originalEnv
+				}
+			}
+		})
+
+		it('should continue with planning after first-run setup completes', async () => {
+			vi.mocked(firstRunSetup.needsFirstRunSetup).mockResolvedValue(true)
+
+			await command.execute()
+
+			// Verify that both setup and Claude launch happened
+			expect(firstRunSetup.launchFirstRunSetup).toHaveBeenCalled()
+			expect(claudeUtils.launchClaude).toHaveBeenCalled()
 		})
 	})
 

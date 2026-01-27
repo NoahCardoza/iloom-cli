@@ -7,6 +7,7 @@ import { SettingsManager } from '../lib/SettingsManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { matchIssueIdentifier } from '../utils/IdentifierParser.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
+import { needsFirstRunSetup, launchFirstRunSetup } from '../utils/first-run-setup.js'
 import type { IssueProvider, ChildIssueResult, DependenciesResult } from '../mcp/types.js'
 
 /**
@@ -70,6 +71,11 @@ export class PlanCommand {
 			cwd: process.cwd(),
 			hasPrompt: !!prompt,
 		})
+
+		// Check for first-run setup (same check as StartCommand)
+		if (process.env.FORCE_FIRST_TIME_SETUP === "true" || await needsFirstRunSetup()) {
+			await launchFirstRunSetup()
+		}
 
 		logger.info(chalk.bold('Starting interactive planning session...'))
 
@@ -171,7 +177,6 @@ export class PlanCommand {
 		logger.debug('Detected issue provider and model', { provider, effectiveModel })
 
 		// Generate MCP config for issue management tools
-		// This will throw if no git remote is configured (per requirements: fail with error, no fallback)
 		logger.debug('Generating MCP config for issue management')
 		let mcpConfig: Record<string, unknown>[]
 		try {
@@ -179,12 +184,21 @@ export class PlanCommand {
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Unknown error'
 			logger.error(`Failed to generate MCP config: ${message}`)
-			logger.error(
-				'Planning sessions require a git repository with a remote configured.'
-			)
-			throw new Error(
-				`Cannot start planning session: ${message}. Ensure you are in a git repository with a remote configured.`
-			)
+			if (provider === 'github') {
+				logger.error(
+					'GitHub issue management requires a git repository with a GitHub remote configured.'
+				)
+				throw new Error(
+					`Cannot start planning session: ${message}. Ensure you are in a git repository with a GitHub remote configured.`
+				)
+			} else {
+				logger.error(
+					'Linear issue management requires LINEAR_API_TOKEN to be configured.'
+				)
+				throw new Error(
+					`Cannot start planning session: ${message}. Ensure LINEAR_API_TOKEN is configured in settings or environment.`
+				)
+			}
 		}
 
 		logger.debug('MCP config generated', {

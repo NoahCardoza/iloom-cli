@@ -130,7 +130,11 @@ If child issues or dependencies already exist:
    - Include: Design rationale, key decisions, trade-offs, recommended execution order
 4. **Output next steps to the user**
    - Tell them what was created: "Created N child issues for #{{PARENT_ISSUE_NUMBER}}."
+{{#if IS_VSCODE_MODE}}
+   - Recommend where to start: "Exit this session, then use the iloom explorer panel to create a new loom for issue Z to begin with [first task title]."
+{{else}}
    - Recommend where to start: "Exit this session and run `il start Z` to begin with [first task title]."
+{{/if}}
 {{else}}
 **Fresh Planning Mode - Issue Creation Order:**
 1. **Create the parent epic issue first** (using `create_issue`)
@@ -147,7 +151,11 @@ If child issues or dependencies already exist:
    - Include: Design rationale, key decisions, trade-offs, recommended execution order
 5. **Output next steps to the user**
    - Tell them what was created: "Created Epic #X with Y child issues."
+{{#if IS_VSCODE_MODE}}
+   - Recommend where to start: "Exit this session, then use the iloom explorer panel to create a new loom for issue Z to begin with [first task title]."
+{{else}}
    - Recommend where to start: "Exit this session and run `il start Z` to begin with [first task title]."
+{{/if}}
 {{/if}}
 
 **Issue Title Format:**
@@ -187,8 +195,6 @@ graph TD
     471[Bootstrap plan command] --> 473[Implement creation flow]
     472[Add dependency management] --> 473
 ```
-
-Issues #471 and #472 have no dependencies and can be worked on in parallel. Start with either one.
 ```
 
 Example summary comment format (Linear):
@@ -208,8 +214,6 @@ graph TD
     ENG-101[Bootstrap plan command] --> ENG-103[Implement creation flow]
     ENG-102[Add dependency management] --> ENG-103
 ```
-
-Issues ENG-101 and ENG-102 have no dependencies and can be worked on in parallel. Start with either one.
 ```
 
 Use `mcp__issue_management__create_comment` to post this summary to the parent epic after all issues and dependencies are created.
