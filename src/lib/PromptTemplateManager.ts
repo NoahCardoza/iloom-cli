@@ -61,6 +61,16 @@ export interface TemplateVariables {
 	HAS_REVIEW_CLAUDE?: boolean            // True if claude provider configured (defaults to true)
 	HAS_REVIEW_GEMINI?: boolean            // True if gemini provider configured
 	HAS_REVIEW_CODEX?: boolean             // True if codex provider configured
+	// Planning mode variables - mutually exclusive
+	EXISTING_ISSUE_MODE?: boolean   // True when decomposing an existing issue (il plan 42)
+	FRESH_PLANNING_MODE?: boolean   // True when starting fresh planning session (il plan "feature idea")
+	// Issue context for decomposition mode
+	PARENT_ISSUE_NUMBER?: string | undefined    // Issue number being decomposed
+	PARENT_ISSUE_TITLE?: string | undefined     // Title of issue being decomposed
+	PARENT_ISSUE_BODY?: string | undefined      // Body of issue being decomposed
+	// Existing children and dependencies context for decomposition mode
+	PARENT_ISSUE_CHILDREN?: string | undefined  // Formatted list of existing child issues (if any)
+	PARENT_ISSUE_DEPENDENCIES?: string | undefined  // Formatted list of existing dependencies (if any)
 }
 
 export class PromptTemplateManager {

@@ -15,12 +15,14 @@ import type {
 	CreateDependencyInput,
 	GetDependenciesInput,
 	RemoveDependencyInput,
+	GetChildIssuesInput,
 	CreateIssueResult,
 	IssueResult,
 	PRResult,
 	CommentDetailResult,
 	CommentResult,
 	DependenciesResult,
+	ChildIssueResult,
 } from './types.js'
 import {
 	fetchLinearIssue,
@@ -34,6 +36,7 @@ import {
 	getLinearIssueDependencies,
 	findLinearIssueRelation,
 	deleteLinearIssueRelation,
+	getLinearChildIssues,
 } from '../utils/linear.js'
 import { LinearMarkupConverter } from '../utils/linear-markup-converter.js'
 import { processMarkdownImages } from '../utils/image-processor.js'
@@ -289,5 +292,14 @@ export class LinearIssueManagementProvider implements IssueManagementProvider {
 
 		// Delete the relation
 		await deleteLinearIssueRelation(relationId)
+	}
+
+	/**
+	 * Get child issues of a parent issue
+	 */
+	async getChildIssues(input: GetChildIssuesInput): Promise<ChildIssueResult[]> {
+		const { number } = input
+		// repo is ignored for Linear
+		return await getLinearChildIssues(number)
 	}
 }

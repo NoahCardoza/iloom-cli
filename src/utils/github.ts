@@ -20,11 +20,12 @@ export async function executeGhCommand<T = unknown>(
 		encoding: 'utf8',
 	})
 
-	// Parse JSON output if --json flag, --format json, or --jq was used
+	// Parse JSON output if --json flag, --format json, --jq, or GraphQL was used
 	const isJson =
 		args.includes('--json') ||
 		args.includes('--jq') ||
-		(args.includes('--format') && args[args.indexOf('--format') + 1] === 'json')
+		(args.includes('--format') && args[args.indexOf('--format') + 1] === 'json') ||
+		(args[0] === 'api' && args[1] === 'graphql')
 	const data = isJson ? JSON.parse(result.stdout) : result.stdout
 
 	return data as T
@@ -489,6 +490,89 @@ export async function addSubIssue(
 		'-F', `parentId=${parentNodeId}`,
 		'-F', `subIssueId=${childNodeId}`,
 	])
+}
+
+/**
+ * Get sub-issues (children) of a parent GitHub issue
+ * Uses GraphQL to query the sub-issue relationship
+ * @param issueNumber - The parent issue number
+ * @param repo - Optional repo in "owner/repo" format
+ * @returns Array of child issues with id, title, url, and state
+ */
+export async function getSubIssues(
+	issueNumber: number,
+	repo?: string
+): Promise<Array<{ id: string; title: string; url: string; state: string }>> {
+	logger.debug('Fetching GitHub sub-issues', { issueNumber, repo })
+
+	// Get the node ID for the parent issue
+	const parentNodeId = await getIssueNodeId(issueNumber, repo)
+
+	// Query sub-issues using GraphQL
+	const query = `
+		query getSubIssues($parentId: ID!) {
+			node(id: $parentId) {
+				... on Issue {
+					subIssues(first: 100) {
+						nodes {
+							number
+							title
+							url
+							state
+						}
+					}
+				}
+			}
+		}
+	`
+
+	interface SubIssueNode {
+		number: number
+		title: string
+		url: string
+		state: string
+	}
+
+	interface SubIssuesResponse {
+		data: {
+			node: {
+				subIssues: {
+					nodes: SubIssueNode[]
+				}
+			} | null
+		}
+	}
+
+	try {
+		const result = await executeGhCommand<SubIssuesResponse>([
+			'api', 'graphql',
+			'-H', 'GraphQL-Features: sub_issues',
+			'-f', `query=${query}`,
+			'-F', `parentId=${parentNodeId}`,
+		])
+
+		const subIssues = result.data.node?.subIssues?.nodes ?? []
+
+		return subIssues.map(issue => ({
+			id: String(issue.number),
+			title: issue.title,
+			url: issue.url,
+			state: issue.state.toLowerCase(),
+		}))
+	} catch (error) {
+		// Return empty array if sub-issues feature is not available or no children
+		if (error instanceof Error) {
+			const errorMessage = error.message
+			const stderr = 'stderr' in error ? (error as { stderr?: string }).stderr ?? '' : ''
+			const combinedError = `${errorMessage} ${stderr}`
+
+			// Check for feature not available or empty result
+			if (combinedError.includes('sub_issues') || combinedError.includes('null')) {
+				return []
+			}
+		}
+		throw error
+	}
 }
 
 // GitHub Issue Dependency Operations

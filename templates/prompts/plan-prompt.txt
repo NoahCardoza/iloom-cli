@@ -76,10 +76,14 @@ Each child issue should include:
 At the end of the planning session, you have MCP tools to create issues:
 
 **Issue Management Tools:**
+{{#if FRESH_PLANNING_MODE}}
 - `mcp__issue_management__create_issue`: Create the parent epic issue (top-level feature/initiative)
+{{/if}}
 - `mcp__issue_management__create_child_issue`: Create child issues linked to the parent epic
   - Parameters: `parentId` (the parent issue number), `title`, `body`
 - `mcp__issue_management__get_issue`: Fetch existing issue details for context
+- `mcp__issue_management__create_comment`: Post comments on issues
+  - Parameters: `number` (issue number), `body` (comment text), `type` ("issue")
 
 **Dependency Management Tools:**
 - `mcp__issue_management__create_dependency`: Create a blocking dependency between issues
@@ -94,7 +98,41 @@ At the end of the planning session, you have MCP tools to create issues:
 2. Ask for explicit confirmation: "Ready to create these issues?"
 3. Create issues only after user approval
 
-**Issue and Dependency Creation Order:**
+{{#if EXISTING_ISSUE_MODE}}
+**Issue Decomposition Mode:**
+
+You are decomposing an existing issue into child tasks:
+- **Parent Issue:** #{{PARENT_ISSUE_NUMBER}}
+- **Title:** {{PARENT_ISSUE_TITLE}}
+- **Body:**
+{{PARENT_ISSUE_BODY}}
+
+**IMPORTANT - Check for existing work first:**
+Before proposing any new child issues, use the MCP tools to check what already exists:
+1. Use `mcp__issue_management__get_child_issues` with `number: "{{PARENT_ISSUE_NUMBER}}"` to fetch existing child issues
+2. For each child issue returned, use `mcp__issue_management__get_dependencies` with `number: <child issue number>`, `direction: "both"` to build the full dependency graph between children
+
+If child issues or dependencies already exist:
+- Review them with the user before proposing changes
+- Ask if they want to add more children, modify existing ones, or adjust dependencies
+- Avoid creating duplicates of existing work
+
+**Creation Order:**
+1. **Create child issues using the existing issue as parent**
+   - Use `create_child_issue` with `parentId: {{PARENT_ISSUE_NUMBER}}`
+   - Each child represents one focused unit of work (1 loom = 1 PR)
+   - Do NOT create a new parent epic - use the existing issue #{{PARENT_ISSUE_NUMBER}}
+2. **Set up blocking dependencies between children**
+   - Use `create_dependency` to define execution order
+   - If Issue B depends on work from Issue A, create a dependency where A blocks B
+3. **Post Architectural Decision Record (ADR) as comment on parent issue**
+   - Use `create_comment` with `number: "{{PARENT_ISSUE_NUMBER}}"`, `type: "issue"`
+   - Include: Design rationale, key decisions, trade-offs, recommended execution order
+4. **Output next steps to the user**
+   - Tell them what was created: "Created N child issues for #{{PARENT_ISSUE_NUMBER}}."
+   - Recommend where to start: "Run `il start Z` to begin with [first task title]."
+{{else}}
+**Fresh Planning Mode - Issue Creation Order:**
 1. **Create the parent epic issue first** (using `create_issue`)
    - This is the top-level issue describing the overall feature or initiative
    - Title format: "Epic: [Feature Name]" or "[Feature Name] Implementation"
@@ -104,7 +142,13 @@ At the end of the planning session, you have MCP tools to create issues:
 3. **Set up blocking dependencies between children**
    - Use `create_dependency` to define execution order
    - If Issue B depends on work from Issue A, create a dependency where A blocks B
-   - The dependency graph should match the decomposition order from Phase 3
+4. **Post Architectural Decision Record (ADR) as first comment on parent epic**
+   - Use `create_comment` with `number: <parent epic number>`, `type: "issue"`
+   - Include: Design rationale, key decisions, trade-offs, recommended execution order
+5. **Output next steps to the user**
+   - Tell them what was created: "Created Epic #X with Y child issues."
+   - Recommend where to start: "Run `il start Z` to begin with [first task title]."
+{{/if}}
 
 **Issue Title Format:**
 Use clear, action-oriented titles:
@@ -144,7 +188,7 @@ graph TD
     472[Add dependency management] --> 473
 ```
 
-Issues without dependencies can be worked on in parallel. Start with any unblocked issue.
+Issues #471 and #472 have no dependencies and can be worked on in parallel. Start with either one.
 ```
 
 Example summary comment format (Linear):
@@ -165,7 +209,7 @@ graph TD
     ENG-102[Add dependency management] --> ENG-103
 ```
 
-Issues without dependencies can be worked on in parallel. Start with any unblocked issue.
+Issues ENG-101 and ENG-102 have no dependencies and can be worked on in parallel. Start with either one.
 ```
 
 Use `mcp__issue_management__create_comment` to post this summary to the parent epic after all issues and dependencies are created.

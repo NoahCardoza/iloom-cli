@@ -21,6 +21,7 @@ import type {
 	CreateChildIssueInput,
 	CreateDependencyInput,
 	GetDependenciesInput,
+	GetChildIssuesInput,
 	RemoveDependencyInput,
 } from './types.js'
 
@@ -692,6 +693,64 @@ server.registerTool(
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 			console.error(`Failed to remove dependency: ${errorMessage}`)
 			throw new Error(`Failed to remove dependency: ${errorMessage}`)
+		}
+	}
+)
+
+// Define child issue result schema (reuse dependencyResultSchema pattern)
+const childIssueResultSchema = z.object({
+	id: z.string().describe('Issue identifier'),
+	title: z.string().describe('Issue title'),
+	url: z.string().describe('Issue URL'),
+	state: z.string().describe('Issue state'),
+})
+
+// Register get_child_issues tool
+server.registerTool(
+	'get_child_issues',
+	{
+		title: 'Get Child Issues',
+		description:
+			'Get child issues (sub-issues) of a parent issue. ' +
+			'Returns a list of issues that are children of the specified parent.',
+		inputSchema: {
+			number: z.string().describe('Parent issue identifier (GitHub issue number or Linear identifier like "ENG-123")'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
+		},
+		outputSchema: {
+			children: z.array(childIssueResultSchema).describe('Child issues of the parent'),
+		},
+	},
+	async ({ number, repo }: GetChildIssuesInput) => {
+		console.error(`Getting child issues for ${number}${repo ? ` in ${repo}` : ''}`)
+
+		try {
+			const provider = IssueManagementProviderFactory.create(
+				process.env.ISSUE_PROVIDER as IssueProvider
+			)
+			const result = await provider.getChildIssues({ number, repo })
+
+			console.error(`Child issues fetched: ${result.length} children`)
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify({ children: result }),
+					},
+				],
+				structuredContent: { children: result } as unknown as { [x: string]: unknown },
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to get child issues: ${errorMessage}`)
+			throw new Error(`Failed to get child issues: ${errorMessage}`)
 		}
 	}
 )

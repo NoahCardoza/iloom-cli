@@ -488,6 +488,52 @@ export async function fetchLinearIssueComments(identifier: string): Promise<Line
   }
 }
 
+/**
+ * Get child issues of a parent Linear issue
+ * @param identifier - Linear issue identifier (e.g., "ENG-123")
+ * @returns Array of child issues
+ * @throws LinearServiceError on fetch failure
+ */
+export async function getLinearChildIssues(
+  identifier: string,
+): Promise<Array<{ id: string; title: string; url: string; state: string }>> {
+  try {
+    logger.debug(`Fetching child issues for Linear issue: ${identifier}`)
+    const client = createLinearClient()
+
+    // Get issue by identifier
+    const issue = await client.issue(identifier)
+    if (!issue) {
+      throw new LinearServiceError('NOT_FOUND', `Linear issue ${identifier} not found`)
+    }
+
+    // Fetch child issues
+    const children = await issue.children({ first: 100 })
+
+    // Build results, fetching state in parallel
+    const results = await Promise.all(
+      children.nodes.map(async (child) => {
+        const stateObj = await child.state
+        const state = stateObj?.name ?? 'unknown'
+
+        return {
+          id: child.identifier,
+          title: child.title,
+          url: child.url,
+          state,
+        }
+      }),
+    )
+
+    return results
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'getLinearChildIssues')
+  }
+}
+
 // Linear Issue Dependency Operations
 
 /**

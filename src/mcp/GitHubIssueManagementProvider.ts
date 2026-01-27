@@ -16,12 +16,14 @@ import type {
 	CreateDependencyInput,
 	GetDependenciesInput,
 	RemoveDependencyInput,
+	GetChildIssuesInput,
 	CreateIssueResult,
 	IssueResult,
 	PRResult,
 	CommentDetailResult,
 	CommentResult,
 	DependenciesResult,
+	ChildIssueResult,
 	FlexibleAuthor,
 } from './types.js'
 import {
@@ -36,6 +38,7 @@ import {
 	getIssueDependencies,
 	createIssueDependency,
 	removeIssueDependency,
+	getSubIssues,
 } from '../utils/github.js'
 import { processMarkdownImages } from '../utils/image-processor.js'
 
@@ -553,5 +556,19 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 
 		// Remove the dependency: path uses blocked issue number, body uses blocking issue DB ID
 		await removeIssueDependency(blockedNumber, blockingDatabaseId, repo)
+	}
+
+	/**
+	 * Get child issues (sub-issues) of a parent issue
+	 */
+	async getChildIssues(input: GetChildIssuesInput): Promise<ChildIssueResult[]> {
+		const { number, repo } = input
+
+		const issueNumber = parseInt(number, 10)
+		if (isNaN(issueNumber)) {
+			throw new Error(`Invalid GitHub issue number: ${number}. GitHub issue IDs must be numeric.`)
+		}
+
+		return await getSubIssues(issueNumber, repo)
 	}
 }

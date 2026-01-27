@@ -3,6 +3,60 @@ import type { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { extractIssueNumber, extractPRNumber } from './git.js'
 
 /**
+ * Result of parsing an issue identifier input
+ */
+export interface IssueIdentifierMatch {
+  /** Whether the input matches an issue identifier pattern */
+  isIssueIdentifier: boolean
+  /** The type of identifier: 'numeric' (GitHub) or 'linear' (Linear format) */
+  type?: 'numeric' | 'linear'
+  /** The extracted identifier (without # prefix for numeric) */
+  identifier?: string
+}
+
+/**
+ * Check if a string looks like an issue identifier
+ *
+ * Matches:
+ * - Numeric patterns: "123", "#123" (GitHub format)
+ * - Linear patterns: "ENG-123", "PLAT-456" (requires at least 2 letters before dash)
+ *
+ * This is a pure pattern match - it does NOT validate that the issue exists.
+ * Use IssueTracker.detectInputType() to validate existence.
+ *
+ * @param input - The input string to check
+ * @returns Object with isIssueIdentifier flag and optional type/identifier
+ */
+export function matchIssueIdentifier(input: string): IssueIdentifierMatch {
+  const trimmed = input.trim()
+
+  // Check for Linear identifier format (TEAM-NUMBER, e.g., ENG-123, PLAT-456)
+  // Requires at least 2 letters before dash to avoid conflict with PR-123 format
+  const linearPattern = /^([A-Z]{2,}-\d+)$/i
+  const linearMatch = trimmed.match(linearPattern)
+  if (linearMatch?.[1]) {
+    return {
+      isIssueIdentifier: true,
+      type: 'linear',
+      identifier: linearMatch[1].toUpperCase(),
+    }
+  }
+
+  // Check for numeric pattern (GitHub format: 123 or #123)
+  const numericPattern = /^#?(\d+)$/
+  const numericMatch = trimmed.match(numericPattern)
+  if (numericMatch?.[1]) {
+    return {
+      isIssueIdentifier: true,
+      type: 'numeric',
+      identifier: numericMatch[1],
+    }
+  }
+
+  return { isIssueIdentifier: false }
+}
+
+/**
  * IdentifierParser provides consistent identifier parsing across commands
  * using pattern-based detection without GitHub API calls.
  *

@@ -107,6 +107,24 @@ export interface GetDependenciesInput {
 }
 
 /**
+ * Input schema for getting child issues of a parent issue
+ */
+export interface GetChildIssuesInput {
+	number: string // Parent issue identifier (GitHub issue number or Linear identifier like "ENG-123")
+	repo?: string | undefined // Optional repository in "owner/repo" format or full GitHub URL (GitHub only)
+}
+
+/**
+ * Result for a single child issue
+ */
+export interface ChildIssueResult {
+	id: string // Issue identifier
+	title: string // Issue title
+	url: string // Issue URL
+	state: string // Issue state (open, closed, etc.)
+}
+
+/**
  * Input schema for removing a blocking dependency between two issues
  */
 export interface RemoveDependencyInput {
@@ -316,4 +334,11 @@ export interface IssueManagementProvider {
 	 * @param input - The blocking and blocked issue identifiers
 	 */
 	removeDependency(input: RemoveDependencyInput): Promise<void>
+
+	/**
+	 * Get child issues of a parent issue
+	 * @param input - The parent issue identifier
+	 * @returns Array of child issues
+	 */
+	getChildIssues(input: GetChildIssuesInput): Promise<ChildIssueResult[]>
 }

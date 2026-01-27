@@ -13,6 +13,7 @@ import { SettingsManager } from '../lib/SettingsManager.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { DatabaseManager } from '../lib/DatabaseManager.js'
 import { findMainWorktreePathWithSettings } from '../utils/git.js'
+import { matchIssueIdentifier } from '../utils/IdentifierParser.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
@@ -357,11 +358,12 @@ export class StartCommand {
 			}
 		}
 
-		// Check for Linear identifier format (TEAM-NUMBER, e.g., ENG-123, PLAT-456)
-		// Requires at least 2 letters before dash to avoid conflict with PR-123 format
-		const linearPattern = /^([A-Z]{2,}-\d+)$/i
-		const linearMatch = trimmedIdentifier.match(linearPattern)
-		if (linearMatch?.[1]) {
+		// Check for issue identifier patterns using shared utility
+		// - Linear pattern: ENG-123 (requires at least 2 letters before dash)
+		// - Numeric pattern: #123 or 123 (GitHub format)
+		const identifierMatch = matchIssueIdentifier(trimmedIdentifier)
+
+		if (identifierMatch.type === 'linear' && identifierMatch.identifier) {
 			// Use IssueTracker to validate it exists
 			const detection = await this.issueTracker.detectInputType(
 				trimmedIdentifier,
@@ -378,15 +380,13 @@ export class StartCommand {
 
 			// Linear identifier format matched but not found
 			throw new Error(
-				`Could not find Linear issue ${linearMatch[1].toUpperCase()}`
+				`Could not find Linear issue ${identifierMatch.identifier}`
 			)
 		}
 
 		// Check for numeric pattern (could be issue or PR)
-		const numericPattern = /^#?(\d+)$/
-		const numericMatch = trimmedIdentifier.match(numericPattern)
-		if (numericMatch?.[1]) {
-			const number = parseInt(numericMatch[1], 10)
+		if (identifierMatch.type === 'numeric' && identifierMatch.identifier) {
+			const number = parseInt(identifierMatch.identifier, 10)
 
 			// If issue tracker supports PRs, use it for detection
 			if (this.issueTracker.supportsPullRequests) {
