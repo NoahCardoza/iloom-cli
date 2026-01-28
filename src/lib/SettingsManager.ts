@@ -29,7 +29,7 @@ export const AgentSettingsSchema = z.object({
 			z.string()
 		)
 		.optional()
-		.describe('Map of review providers to model names. Keys: claude, gemini, codex. Values: model name strings (e.g., "sonnet", "gemini-2.0-flash", "gpt-5.2-codex")'),
+		.describe('Map of review providers to model names. Keys: claude, gemini, codex. Values: model name strings (e.g., "sonnet", "gemini-3-pro-preview", "gpt-5.2-codex")'),
 })
 
 /**

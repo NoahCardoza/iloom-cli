@@ -700,7 +700,7 @@ No review providers are configured. To enable code review, configure providers i
     "iloom-issue-reviewer": {
       "providers": {
         "claude": "sonnet",
-        "gemini": "gemini-2.0-flash",
+        "gemini": "gemini-3-pro-preview",
         "codex": "gpt-5.2-codex"
       }
     }
