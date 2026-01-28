@@ -439,9 +439,9 @@ iloom provides first-class support for building CLI tools. When you start a loom
 
 
 ```bash
-> il start 52 # Working on CLI feature in issue 52 
+> il start 52 # Working on CLI feature in issue 52
 
-> my-cli-52 --version  # Test issue 52's version 
+> my-cli-52 --version  # Test issue 52's version
 
 > il start 137  # Switch to different CLI issue
 
@@ -450,6 +450,34 @@ iloom provides first-class support for building CLI tools. When you start a loom
 # Original binary still works from main branch
 > my-cli --version     # Unaffected by other looms' CLIs
 ```
+
+### Epic Planning and Decomposition
+
+The `il plan` command launches an interactive Architect session that helps you break down complex features into manageable child issues.
+
+**Two Operating Modes:**
+
+```bash
+# Fresh planning - start from a topic
+il plan "Build user authentication system"
+
+# Decomposition - break down an existing issue
+il plan 42
+```
+
+**Multi-AI Provider Support:** Configure different AI providers for planning and review phases:
+
+```bash
+il plan --planner gemini --reviewer claude "Add OAuth support"
+```
+
+**Autonomous Mode:** Skip prompts and let the Architect work independently:
+
+```bash
+il plan --yolo "Add GitLab integration"
+```
+
+See the [Complete Command Reference](docs/iloom-commands.md#il-plan) for all options including `--model`, `--planner`, and `--reviewer` flags.
 
 System Requirements & Limitations
 ---------------------------------

@@ -993,30 +993,102 @@ Launch an interactive planning session with an Architect persona to decompose fe
 **Usage:**
 ```bash
 il plan [prompt] [options]
+il plan <issue-number> [options]
 ```
 
 **Arguments:**
-- `[prompt]` - Optional initial planning prompt or topic
+- `[prompt]` - Optional initial planning prompt or topic for fresh planning mode
+- `<issue-number>` - Issue identifier to decompose (GitHub: `#123` or `123`, Linear: `ENG-123`)
+
+**Operating Modes:**
+
+| Mode | Trigger | Description |
+|------|---------|-------------|
+| Fresh Planning | `il plan` or `il plan "topic"` | Start a new planning session for a feature or epic |
+| Decomposition | `il plan 123` or `il plan #123` | Break down an existing issue into child issues |
 
 **Options:**
 
 | Flag | Values | Description |
 |------|--------|-------------|
 | `--model <model>` | `opus`, `sonnet`, `haiku` | Model to use (default: from settings `plan.model`, falls back to 'opus') |
+| `--yolo` | - | Autonomous mode: skip permission prompts and proceed automatically |
+| `--planner <provider>` | `claude`, `gemini`, `codex` | AI provider for planning (default: from settings `plan.planner`, falls back to 'claude') |
+| `--reviewer <provider>` | `claude`, `gemini`, `codex`, `none` | AI provider for plan review (default: from settings `plan.reviewer`, falls back to 'none') |
 
 **Behavior:**
 
 1. Loads settings to detect issue provider (GitHub/Linear) and model preference
-2. Generates MCP config for issue management tools
+2. If an issue identifier is provided, fetches issue details, existing children, and dependencies
 3. Launches Claude with Architect persona
 4. Architect helps decompose features using brainstorming patterns
-5. At session end, creates parent epic issue and child issues with dependencies
+5. At session end, creates parent epic issue if none provided, and child issues with dependencies
+
+**Fresh Planning Mode:**
+
+Start a new planning session from scratch:
+
+```bash
+# Interactive session - Claude asks what you want to plan
+il plan
+
+# Provide a topic upfront
+il plan "Build user authentication system"
+```
+
+**Decomposition Mode:**
+
+Break down an existing issue into child issues:
+
+```bash
+# GitHub issue
+il plan 42
+il plan "#42"
+
+# Linear issue
+il plan ENG-123
+```
+
+In decomposition mode, the Architect:
+- Fetches the parent issue's title, body, and existing comments
+- Retrieves any existing child issues and dependencies
+- Helps you identify additional sub-tasks
+- Creates child issues with proper parent-child relationships
+
+**Multi-AI Provider Support:**
+
+Configure different AI providers for planning and review phases:
+
+```bash
+# Use Gemini for planning with Claude review
+il plan --planner gemini --reviewer claude "Add OAuth support"
+
+# Use Claude for planning with no review
+il plan --planner claude --reviewer none "Fix login flow"
+
+# Use Codex for both phases
+il plan --planner codex --reviewer codex "Refactor database layer"
+```
+
+**Autonomous Mode (--yolo):**
+
+Skip all permission prompts and proceed automatically:
+
+```bash
+# Autonomous fresh planning
+il plan --yolo "Add GitLab integration"
+
+# Autonomous decomposition
+il plan --yolo 42
+```
+
+**Warning:** Autonomous mode will create issues and dependencies without confirmation. Use with caution - it can make irreversible changes to your issue tracker.
 
 **Available MCP Tools in Session:**
 
 | Category | Tools |
 |----------|-------|
-| Issue Management | `create_issue`, `create_child_issue`, `get_issue`, `get_comment` |
+| Issue Management | `create_issue`, `create_child_issue`, `get_issue`, `get_child_issues`, `get_comment`, `create_comment` |
 | Dependency Management | `create_dependency`, `get_dependencies`, `remove_dependency` |
 | Codebase Exploration | Read, Glob, Grep, Task |
 | Web Research | WebFetch, WebSearch |
@@ -1028,22 +1100,45 @@ Settings file (`.iloom/settings.json`):
 ```json
 {
   "plan": {
-    "model": "opus"
+    "model": "opus",
+    "planner": "claude",
+    "reviewer": "none"
   }
 }
 ```
 
+| Setting | Values | Default | Description |
+|---------|--------|---------|-------------|
+| `plan.model` | `opus`, `sonnet`, `haiku` | `opus` | Claude model for the planning session |
+| `plan.planner` | `claude`, `gemini`, `codex` | `claude` | AI provider for generating plans |
+| `plan.reviewer` | `claude`, `gemini`, `codex`, `none` | `none` | AI provider for reviewing plans |
+
 **Examples:**
 
 ```bash
-# Start planning session with a topic
-il plan "Build user authentication system"
-
-# Start planning session without initial prompt
+# Fresh planning - interactive session
 il plan
 
-# Use a specific model
+# Fresh planning - with a topic
+il plan "Build user authentication system"
+
+# Fresh planning - with specific model
 il plan --model sonnet "Add payment processing"
+
+# Decomposition mode - break down existing issue
+il plan 42
+
+# Decomposition mode - Linear issue
+il plan ENG-123
+
+# Multi-AI provider - Gemini plans, Claude reviews
+il plan --planner gemini --reviewer claude "Add OAuth support"
+
+# Autonomous mode - skip all prompts
+il plan --yolo "Add GitLab integration"
+
+# Combine options
+il plan --yolo --planner gemini --model sonnet 42
 ```
 
 **Notes:**
@@ -1051,6 +1146,7 @@ il plan --model sonnet "Add payment processing"
 - Creates parent epic + child issues following "1 issue = 1 loom = 1 PR" pattern
 - Architect sets up blocking dependencies between child issues
 - Does NOT create a loom workspace (use `il start` after planning)
+- First run may trigger `il init` wizard if repository is not configured
 
 ---
 

@@ -233,6 +233,7 @@ iloom offers two ways to begin work: `il plan` for strategic decomposition and `
 - You want to create an epic with child issues
 - You need to think through architecture before implementation
 - You want Claude to help identify dependencies between tasks
+- You have an existing issue that needs to be broken down
 
 ### Use `il start "<description>"` when:
 
@@ -240,6 +241,63 @@ iloom offers two ways to begin work: `il plan` for strategic decomposition and `
 - The work fits in one PR
 - You want to immediately create a loom and start coding
 - You already know exactly what needs to be done
+
+### Planning Modes
+
+**Fresh Planning** - Start from scratch with a topic:
+
+```bash
+il plan "Implement user authentication with OAuth providers"
+```
+
+**Decomposition Mode** - Break down an existing issue:
+
+```bash
+il plan 42      # Decompose GitHub issue #42
+il plan ENG-123 # Decompose Linear issue ENG-123
+```
+
+In decomposition mode, the Architect fetches the existing issue's context, any child issues already created, and existing dependencies - so you can resume planning where you left off.
+
+### Multi-AI Provider Configuration
+
+Configure different AI providers for planning and review phases:
+
+```bash
+# Use Gemini for planning with Claude review
+il plan --planner gemini --reviewer claude "Add OAuth support"
+
+# Use Claude for planning with no review (default)
+il plan --planner claude --reviewer none "Add logging"
+```
+
+Or set defaults using `il config`:
+
+```bash
+il config "change the planning agent to gemini and the reviewer to claude"
+```
+
+or directly in `.iloom/settings.json` or `.iloom/settings.local.json`:
+
+```json
+{
+  "plan": {
+    "planner": "gemini",
+    "reviewer": "claude"
+  }
+}
+```
+
+### Autonomous Mode
+
+For hands-off planning, use `--yolo` to skip permission prompts:
+
+```bash
+il plan --yolo "Add GitLab integration"
+il plan --yolo 42  # Autonomous decomposition
+```
+
+**Warning:** Autonomous mode uses `--dangerously-bypass-permissions`, which can perform irreversible damage. Use this mode at your own risk and, of course, review the results carefully.
 
 ### Example Workflow
 
@@ -272,7 +330,7 @@ This command:
 
 1. Fetches the latest main branch
 2. Automatically handles uncommitted changes (creates a temporary WIP commit)
-3. Attempts to rebase your branch
+3. Attempts to rebase your branch onto the main branch.
 4. If conflicts occur, launches Claude to help resolve them
 5. Restores your uncommitted changes after success
 
@@ -311,6 +369,10 @@ Force the behavior with flags:
 il start 42 --child-loom      # Always create as child
 il start 42 --no-child-loom   # Always create independent
 ```
+
+#### Rebasing in Child Looms
+
+When you run `il rebase` from wthin a Child Loom, it rebases the branch onto the parent branch, NOT onto main.
 
 ### Inheritance
 
