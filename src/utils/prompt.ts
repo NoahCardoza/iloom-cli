@@ -1,5 +1,9 @@
 import * as readline from 'node:readline'
 import { logger } from './logger.js'
+import {
+	broadcastApprovalNotification,
+	clearApprovalNotification,
+} from './notification.js'
 
 /**
  * Prompt user for confirmation (yes/no)
@@ -146,6 +150,8 @@ export async function promptCommitAction(message: string): Promise<CommitAction>
 		return 'accept'
 	}
 
+	const cwd = process.cwd()
+
 	// Display the commit message with clear demarcation
 	process.stdout.write('\n' + '='.repeat(60) + '\n')
 	process.stdout.write('COMMIT MESSAGE:\n')
@@ -153,35 +159,43 @@ export async function promptCommitAction(message: string): Promise<CommitAction>
 	process.stdout.write(message + '\n')
 	process.stdout.write('='.repeat(60) + '\n\n')
 
-	// Loop until valid input is received
-	while (true) {
-		const rl = readline.createInterface({
-			input: process.stdin,
-			output: process.stdout,
-		})
+	// Broadcast approval notification before prompting
+	await broadcastApprovalNotification(cwd)
 
-		const answer = await new Promise<string>((resolve) => {
-			rl.question('[A]ccept as-is, [E]dit in editor, A[b]ort? [A/e/b]: ', (ans) => {
-				rl.close()
-				resolve(ans)
+	try {
+		// Loop until valid input is received
+		while (true) {
+			const rl = readline.createInterface({
+				input: process.stdin,
+				output: process.stdout,
 			})
-		})
 
-		const normalized = answer.trim().toLowerCase()
+			const answer = await new Promise<string>((resolve) => {
+				rl.question('[A]ccept as-is, [E]dit in editor, A[b]ort? [A/e/b]: ', (ans) => {
+					rl.close()
+					resolve(ans)
+				})
+			})
 
-		if (normalized === '' || normalized === 'a' || normalized === 'accept') {
-			return 'accept'
+			const normalized = answer.trim().toLowerCase()
+
+			if (normalized === '' || normalized === 'a' || normalized === 'accept') {
+				return 'accept'
+			}
+
+			if (normalized === 'e' || normalized === 'edit') {
+				return 'edit'
+			}
+
+			if (normalized === 'b' || normalized === 'abort') {
+				return 'abort'
+			}
+
+			// Invalid input - show warning and re-prompt
+			logger.warn('Invalid input. Please enter A (accept), E (edit), or B (abort).')
 		}
-
-		if (normalized === 'e' || normalized === 'edit') {
-			return 'edit'
-		}
-
-		if (normalized === 'b' || normalized === 'abort') {
-			return 'abort'
-		}
-
-		// Invalid input - show warning and re-prompt
-		logger.warn('Invalid input. Please enter A (accept), E (edit), or B (abort).')
+	} finally {
+		// Clear approval notification after user makes selection
+		await clearApprovalNotification(cwd)
 	}
 }
