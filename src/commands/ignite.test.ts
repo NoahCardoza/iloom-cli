@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { IgniteCommand } from './ignite.js'
+import { IgniteCommand, WorktreeValidationError } from './ignite.js'
 import type { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import type { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import * as claudeUtils from '../utils/claude.js'
 import * as githubUtils from '../utils/github.js'
+import * as gitUtils from '../utils/git.js'
 
 // Mock MetadataManager to return proper metadata for recap MCP tests
 vi.mock('../lib/MetadataManager.js', () => ({
@@ -1914,6 +1915,166 @@ describe('IgniteCommand', () => {
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
+			}
+		})
+	})
+
+	describe('Main worktree validation', () => {
+		it('should throw WorktreeValidationError when running from main worktree', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const isValidGitRepoSpy = vi.spyOn(gitUtils, 'isValidGitRepo').mockResolvedValue(true)
+			const getWorktreeRootSpy = vi.spyOn(gitUtils, 'getWorktreeRoot').mockResolvedValue('/path/to/main')
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockGitWorktreeManagerWithMain = {
+				getRepoInfo: vi.fn().mockResolvedValue({
+					currentBranch: 'main',
+				}),
+				listWorktrees: vi.fn().mockResolvedValue([
+					{ path: '/path/to/main', branch: 'main' },
+					{ path: '/path/to/feat/issue-123', branch: 'feat/issue-123' },
+				]),
+				isMainWorktree: vi.fn().mockResolvedValue(true), // This is the main worktree
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/main')
+
+			const commandWithMainWorktree = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManagerWithMain as unknown as GitWorktreeManager,
+				undefined,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await expect(commandWithMainWorktree.execute()).rejects.toThrow(WorktreeValidationError)
+				await expect(commandWithMainWorktree.execute()).rejects.toThrow(
+					'You cannot run the command from the main worktree.'
+				)
+
+				// Verify launchClaude was NOT called
+				expect(launchClaudeSpy).not.toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				isValidGitRepoSpy.mockRestore()
+				getWorktreeRootSpy.mockRestore()
+			}
+		})
+
+		it('should not throw when running from a feature worktree', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const isValidGitRepoSpy = vi.spyOn(gitUtils, 'isValidGitRepo').mockResolvedValue(true)
+			const getWorktreeRootSpy = vi.spyOn(gitUtils, 'getWorktreeRoot').mockResolvedValue('/path/to/feat/issue-123')
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockGitWorktreeManagerWithFeature = {
+				getRepoInfo: vi.fn().mockResolvedValue({
+					currentBranch: 'feat/issue-123__test',
+				}),
+				listWorktrees: vi.fn().mockResolvedValue([
+					{ path: '/path/to/main', branch: 'main' },
+					{ path: '/path/to/feat/issue-123', branch: 'feat/issue-123__test' },
+				]),
+				isMainWorktree: vi.fn().mockResolvedValue(false), // This is NOT the main worktree
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-123')
+
+			const commandWithFeatureWorktree = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManagerWithFeature as unknown as GitWorktreeManager,
+				undefined,
+				mockSettingsManager as never,
+			)
+
+			try {
+				// Should not throw - execution should proceed normally
+				await commandWithFeatureWorktree.execute()
+
+				// Verify launchClaude WAS called
+				expect(launchClaudeSpy).toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				isValidGitRepoSpy.mockRestore()
+				getWorktreeRootSpy.mockRestore()
+			}
+		})
+
+		it('should allow execution when not in a git repository', async () => {
+			// When not in a git repo, the validation should allow execution to continue
+			// (detectWorkspaceContext will handle the regular workflow gracefully)
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const isValidGitRepoSpy = vi.spyOn(gitUtils, 'isValidGitRepo').mockResolvedValue(false) // Not a git repo
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/non-git-dir')
+
+			mockGitWorktreeManager.getRepoInfo = vi.fn().mockRejectedValue(new Error('Not a git repository'))
+
+			try {
+				// Should not throw for non-git repo - let detectWorkspaceContext handle it
+				await command.execute()
+
+				// Verify launchClaude was called (regular workflow)
+				expect(launchClaudeSpy).toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				isValidGitRepoSpy.mockRestore()
+			}
+		})
+
+		it('should allow execution when directory is not a registered worktree', async () => {
+			// When the directory is a git repo but not a registered worktree,
+			// the validation should allow execution (regular workflow)
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const isValidGitRepoSpy = vi.spyOn(gitUtils, 'isValidGitRepo').mockResolvedValue(true)
+			const getWorktreeRootSpy = vi.spyOn(gitUtils, 'getWorktreeRoot').mockResolvedValue('/path/to/unregistered')
+
+			const mockGitWorktreeManagerUnregistered = {
+				getRepoInfo: vi.fn().mockResolvedValue({
+					currentBranch: 'some-branch',
+				}),
+				listWorktrees: vi.fn().mockResolvedValue([
+					{ path: '/path/to/main', branch: 'main' },
+				]),
+				isMainWorktree: vi.fn(),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/unregistered')
+
+			const commandUnregistered = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManagerUnregistered as unknown as GitWorktreeManager,
+			)
+
+			try {
+				// Should not throw - not a registered worktree, so skip main check
+				await commandUnregistered.execute()
+
+				// isMainWorktree should NOT have been called since we're not a registered worktree
+				expect(mockGitWorktreeManagerUnregistered.isMainWorktree).not.toHaveBeenCalled()
+
+				// Verify launchClaude was called
+				expect(launchClaudeSpy).toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				isValidGitRepoSpy.mockRestore()
+				getWorktreeRootSpy.mockRestore()
 			}
 		})
 	})

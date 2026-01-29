@@ -11,10 +11,23 @@ import { SettingsManager } from '../lib/SettingsManager.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
-import { extractIssueNumber } from '../utils/git.js'
+import { extractIssueNumber, isValidGitRepo, getWorktreeRoot } from '../utils/git.js'
 import { getWorkspacePort } from '../utils/port.js'
 import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
+
+/**
+ * Error thrown when the spin command is run from an invalid location
+ */
+export class WorktreeValidationError extends Error {
+	constructor(
+		message: string,
+		public readonly suggestion: string
+	) {
+		super(message)
+		this.name = 'WorktreeValidationError'
+	}
+}
 
 /**
  * IgniteCommand: Auto-detect workspace context and launch Claude
@@ -54,12 +67,64 @@ export class IgniteCommand {
 	}
 
 	/**
+	 * Validate that we're not running from the main worktree
+	 * @throws WorktreeValidationError if running from main worktree
+	 */
+	private async validateNotMainWorktree(): Promise<void> {
+		const currentDir = process.cwd()
+
+		// Step 1: Check if we're in a git repository at all
+		const isGitRepo = await isValidGitRepo(currentDir)
+		if (!isGitRepo) {
+			// Not a git repo - let detectWorkspaceContext handle this gracefully
+			return
+		}
+
+		// Step 2: Get the worktree root (handles subdirectories)
+		const worktreeRoot = await getWorktreeRoot(currentDir)
+		if (!worktreeRoot) {
+			// Could not determine root - let detectWorkspaceContext handle this
+			return
+		}
+
+		// Step 3: Check if this path is a registered git worktree
+		const worktrees = await this.gitWorktreeManager.listWorktrees()
+		const currentWorktree = worktrees.find(wt => wt.path === worktreeRoot)
+
+		if (!currentWorktree) {
+			// Not a registered worktree - let detectWorkspaceContext handle this
+			return
+		}
+
+		// Step 4: Check if this is the main worktree
+		const isMain = await this.gitWorktreeManager.isMainWorktree(currentWorktree, this.settingsManager)
+		if (isMain) {
+			throw new WorktreeValidationError(
+				'You cannot run the command from the main worktree.',
+				"Navigate to a feature worktree created by 'il start <issue>' and run 'il spin' from there."
+			)
+		}
+	}
+
+	/**
 	 * Main entry point for spin command
 	 */
 	async execute(oneShot: import('../types/index.js').OneShotMode = 'default'): Promise<void> {
 		// Set ILOOM=1 so hooks know this is an iloom session
 		// This is inherited by the Claude child process
 		process.env.ILOOM = '1'
+
+		// Validate we're not in the main worktree first
+		try {
+			await this.validateNotMainWorktree()
+		} catch (error) {
+			if (error instanceof WorktreeValidationError) {
+				logger.error(error.message)
+				logger.info(error.suggestion)
+				throw error
+			}
+			throw error
+		}
 
 		try {
 			logger.info('🚀 Your loom is spinning up, please wait...')
