@@ -131,7 +131,7 @@ Configure Claude model preferences for different agent types. This allows you to
 - `iloom-issue-enhancer` - Enhances bug/enhancement reports from Product Manager perspective
 - `iloom-issue-implementer` - Implements GitHub issues exactly as specified
 - `iloom-issue-planner` - Creates detailed implementation plans for issues
-- `iloom-issue-reviewer` - Reviews uncommitted code changes against issue requirements
+- `iloom-code-reviewer` - Reviews uncommitted code changes
 
 **Example**:
 ```json

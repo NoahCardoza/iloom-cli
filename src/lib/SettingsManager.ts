@@ -331,7 +331,7 @@ export const IloomSettingsSchema = z.object({
 				'iloom-issue-complexity-evaluator (evaluates complexity), ' +
 				'iloom-issue-enhancer (enhances issue descriptions), ' +
 				'iloom-issue-implementer (implements code changes), ' +
-				'iloom-issue-reviewer (reviews code changes against requirements)',
+				'iloom-code-reviewer (reviews code changes against requirements)',
 		),
 	spin: SpinAgentSettingsSchema.optional().describe(
 		'Spin orchestrator configuration. Model defaults to opus when not configured.',
@@ -503,7 +503,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'iloom-issue-complexity-evaluator (evaluates complexity), ' +
 				'iloom-issue-enhancer (enhances issue descriptions), ' +
 				'iloom-issue-implementer (implements code changes), ' +
-				'iloom-issue-reviewer (reviews code changes against requirements)',
+				'iloom-code-reviewer (reviews code changes against requirements)',
 		),
 	spin: z
 		.object({

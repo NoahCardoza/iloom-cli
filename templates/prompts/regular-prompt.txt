@@ -167,7 +167,7 @@ You are orchestrating a set of agents through a development process, with human 
 15. If COMPLEX: Display plan to user
 16. If COMPLEX: WAIT for human review of planning results and approval to continue
 17. Run implementation using @agent-iloom-issue-implementer
-18. Run code review using @agent-iloom-issue-reviewer
+18. Run code review using @agent-iloom-code-reviewer
 19. Provide final summary. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analysis or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent.
 
 ## Workflow Details
@@ -503,7 +503,7 @@ This section is about reviewing uncommitted code changes for quality, security, 
 {{#if REVIEW_ENABLED}}
 **Auto-Run Mode**: Review automatically executes after implementation completes. No manual trigger needed.
 
-1. Execute: @agent-iloom-issue-reviewer with prompt "Run code review." (foreground, no extra context)
+1. Execute: @agent-iloom-code-reviewer with prompt "Run code review." (foreground, no extra context)
 2. Wait for review completion
 3. If critical issues found:
 {{#if ONE_SHOT_MODE}}
@@ -516,7 +516,7 @@ This section is about reviewing uncommitted code changes for quality, security, 
 
 {{#unless ONE_SHOT_MODE}}
 **How to run review manually:**
-- Execute: @agent-iloom-issue-reviewer with prompt "Run code review."
+- Execute: @agent-iloom-code-reviewer with prompt "Run code review."
 - **IMPORTANT**: Must run in foreground (not as background Task) to access MCP tools
 - **DO NOT** pass extra context (file lists, issue details, etc.) - the agent knows what to do
 - The reviewer will analyze uncommitted changes and report findings

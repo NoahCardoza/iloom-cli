@@ -1,5 +1,5 @@
 ---
-name: iloom-issue-reviewer
+name: iloom-code-reviewer
 description: Use this agent to review uncommitted code changes.
 model: sonnet
 color: cyan
@@ -697,7 +697,7 @@ No review providers are configured. To enable code review, configure providers i
 ```json
 {
   "agents": {
-    "iloom-issue-reviewer": {
+    "iloom-code-reviewer": {
       "providers": {
         "claude": "sonnet",
         "gemini": "gemini-3-pro-preview",

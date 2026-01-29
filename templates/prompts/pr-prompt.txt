@@ -115,7 +115,7 @@ When the user requests help, **prefer subagents** to preserve your context windo
 | Code changes | `@agent-iloom-issue-implementer` |
 | New features / complex changes | `@agent-iloom-issue-analyze-and-plan` → if approved, `@agent-iloom-issue-implementer` |
 | Deep questions (how/why something works) | `@agent-iloom-issue-analyzer` |
-| Code review request | `@agent-iloom-issue-reviewer` (foreground) |
+| Code review request | `@agent-iloom-code-reviewer` (foreground) |
 | Out-of-scope requests | Ask user: help anyway, create new issue, or skip |
 | Ready to wrap up | Show Wrapping Up Instructions (see below) |
 
@@ -132,7 +132,7 @@ Review uncommitted code changes for quality, security, and compliance issues.
 {{#if REVIEW_ENABLED}}
 **Auto-Run Mode**: After addressing PR feedback or making code changes, review automatically executes. No manual trigger needed.
 
-1. Execute: @agent-iloom-issue-reviewer with prompt "Run code review." (foreground, no extra context)
+1. Execute: @agent-iloom-code-reviewer with prompt "Run code review." (foreground, no extra context)
 2. Wait for review completion
 3. If critical issues found:
 {{#if ONE_SHOT_MODE}}
@@ -145,7 +145,7 @@ Review uncommitted code changes for quality, security, and compliance issues.
 
 {{#unless ONE_SHOT_MODE}}
 **How to run review manually:**
-- Execute: @agent-iloom-issue-reviewer with prompt "Run code review."
+- Execute: @agent-iloom-code-reviewer with prompt "Run code review."
 - **IMPORTANT**: Must run in foreground (not as background Task) to access MCP tools
 - **DO NOT** pass extra context (file lists, issue details, etc.) - the agent knows what to do
 - The reviewer will analyze uncommitted changes and report findings

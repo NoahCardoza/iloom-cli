@@ -208,7 +208,7 @@ describe('SettingsManager', () => {
 			const projectRoot = '/test/project'
 			const settings = {
 				agents: {
-					'iloom-issue-reviewer': {
+					'iloom-code-reviewer': {
 						enabled: true,
 					},
 				},
@@ -224,14 +224,14 @@ describe('SettingsManager', () => {
 			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result.agents?.['iloom-issue-reviewer']?.enabled).toBe(true)
+			expect(result.agents?.['iloom-code-reviewer']?.enabled).toBe(true)
 		})
 
 		it('should accept enabled: false', async () => {
 			const projectRoot = '/test/project'
 			const settings = {
 				agents: {
-					'iloom-issue-reviewer': {
+					'iloom-code-reviewer': {
 						enabled: false,
 					},
 				},
@@ -247,14 +247,14 @@ describe('SettingsManager', () => {
 			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result.agents?.['iloom-issue-reviewer']?.enabled).toBe(false)
+			expect(result.agents?.['iloom-code-reviewer']?.enabled).toBe(false)
 		})
 
 		it('should default enabled to undefined when omitted (defaults to true at runtime)', async () => {
 			const projectRoot = '/test/project'
 			const settings = {
 				agents: {
-					'iloom-issue-reviewer': {
+					'iloom-code-reviewer': {
 						model: 'sonnet',
 					},
 				},
@@ -271,14 +271,14 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// enabled is undefined in schema (defaults to true at runtime)
-			expect(result.agents?.['iloom-issue-reviewer']?.enabled).toBeUndefined()
+			expect(result.agents?.['iloom-code-reviewer']?.enabled).toBeUndefined()
 		})
 
 		it('should accept valid providers map with known providers', async () => {
 			const projectRoot = '/test/project'
 			const settings = {
 				agents: {
-					'iloom-issue-reviewer': {
+					'iloom-code-reviewer': {
 						providers: {
 							claude: 'sonnet',
 							gemini: 'gemini-2.0-flash',
@@ -297,15 +297,15 @@ describe('SettingsManager', () => {
 			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result.agents?.['iloom-issue-reviewer']?.providers?.claude).toBe('sonnet')
-			expect(result.agents?.['iloom-issue-reviewer']?.providers?.gemini).toBe('gemini-2.0-flash')
+			expect(result.agents?.['iloom-code-reviewer']?.providers?.claude).toBe('sonnet')
+			expect(result.agents?.['iloom-code-reviewer']?.providers?.gemini).toBe('gemini-2.0-flash')
 		})
 
 		it('should accept empty providers map', async () => {
 			const projectRoot = '/test/project'
 			const settings = {
 				agents: {
-					'iloom-issue-reviewer': {
+					'iloom-code-reviewer': {
 						providers: {},
 					},
 				},
@@ -321,14 +321,14 @@ describe('SettingsManager', () => {
 			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result.agents?.['iloom-issue-reviewer']?.providers).toEqual({})
+			expect(result.agents?.['iloom-code-reviewer']?.providers).toEqual({})
 		})
 
 		it('should reject invalid provider keys', async () => {
 			const projectRoot = '/test/project'
 			const settings = {
 				agents: {
-					'iloom-issue-reviewer': {
+					'iloom-code-reviewer': {
 						providers: {
 							invalid_provider: 'some-model',
 						},
@@ -352,7 +352,7 @@ describe('SettingsManager', () => {
 			const projectRoot = '/test/project'
 			const settings = {
 				agents: {
-					'iloom-issue-reviewer': {
+					'iloom-code-reviewer': {
 						providers: {
 							codex: 'gpt-5.2-codex',
 						},
@@ -370,14 +370,14 @@ describe('SettingsManager', () => {
 			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result.agents?.['iloom-issue-reviewer']?.providers?.codex).toBe('gpt-5.2-codex')
+			expect(result.agents?.['iloom-code-reviewer']?.providers?.codex).toBe('gpt-5.2-codex')
 		})
 
 		it('should coexist with model field', async () => {
 			const projectRoot = '/test/project'
 			const settings = {
 				agents: {
-					'iloom-issue-reviewer': {
+					'iloom-code-reviewer': {
 						model: 'sonnet',
 						enabled: true,
 						providers: {
@@ -397,9 +397,9 @@ describe('SettingsManager', () => {
 			.mockRejectedValueOnce(error) // settings.local.json
 
 			const result = await settingsManager.loadSettings(projectRoot)
-			expect(result.agents?.['iloom-issue-reviewer']?.model).toBe('sonnet')
-			expect(result.agents?.['iloom-issue-reviewer']?.enabled).toBe(true)
-			expect(result.agents?.['iloom-issue-reviewer']?.providers?.gemini).toBe('flash')
+			expect(result.agents?.['iloom-code-reviewer']?.model).toBe('sonnet')
+			expect(result.agents?.['iloom-code-reviewer']?.enabled).toBe(true)
+			expect(result.agents?.['iloom-code-reviewer']?.providers?.gemini).toBe('flash')
 		})
 	})
 

@@ -107,7 +107,7 @@ export class AgentManager {
 		// Apply template variable substitution to agent prompts if variables provided
 		if (templateVariables) {
 			// Extract review config from settings with defaults and add to template variables
-			const reviewerSettings = settings?.agents?.['iloom-issue-reviewer']
+			const reviewerSettings = settings?.agents?.['iloom-code-reviewer']
 			const reviewEnabled = reviewerSettings?.enabled !== false  // Default to true
 
 			templateVariables.REVIEW_ENABLED = reviewEnabled
