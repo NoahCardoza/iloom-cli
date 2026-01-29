@@ -167,7 +167,8 @@ You are orchestrating a set of agents through a development process, with human 
 15. If COMPLEX: Display plan to user
 16. If COMPLEX: WAIT for human review of planning results and approval to continue
 17. Run implementation using @agent-iloom-issue-implementer
-18. Provide final summary. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analysis or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent.
+18. Run code review using @agent-iloom-issue-reviewer
+19. Provide final summary. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analysis or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent.
 
 ## Workflow Details
 
@@ -472,6 +473,7 @@ Execute combined analyze-and-plan agent:
    - If user chooses "Exit workflow": End workflow gracefully
    - If user chooses "Continue to implementation": Proceed to STEP 5 (Implementation Phase)
 5. Mark todo #16 as completed
+6. After user approval, proceed to STEP 5 - Implementation Phase (do NOT skip to Post-Workflow Help)
 
 ---
 
@@ -489,14 +491,14 @@ Execute combined analyze-and-plan agent:
    - **CRITICAL**: If an implementation plan is provided, it contains exact file paths and line numbers. The agent MUST use these exact locations - DO NOT search for files when the plan specifies them.
 2. Display implementation summary to user
    - If implementation revealed unexpected issues or required pivots, use `recap.add_entry` to log them (type: "insight" or "risk")
-3. Mark todos #17 and #18 as completed
-4. Provide final summary
+3. Mark todo #17 as completed
+4. After implementation completes, proceed to STEP 5.5 - Review Phase (do NOT skip to Post-Workflow Help)
 
 ---
 
 ## STEP 5.5 - Review Phase
 
-Review uncommitted code changes for quality, security, and compliance issues.
+This section is about reviewing uncommitted code changes for quality, security, and compliance issues.
 
 {{#if REVIEW_ENABLED}}
 **Auto-Run Mode**: Review automatically executes after implementation completes. No manual trigger needed.
@@ -533,7 +535,12 @@ Review uncommitted code changes for quality, security, and compliance issues.
 
 This is NOT optional - if the reviewer requests Claude Local Review, it must be performed before continuing.
 
-After review completes (or if skipped), continue to Post-Workflow Help.
+5. Mark todos #18 and #19 as completed
+6. Proceed to Post-Workflow Help
+
+---
+
+**MANDATORY CHECKPOINT: You MUST complete STEP 5.5 - Review Phase before proceeding below. Do NOT skip the review.**
 
 ---
 
