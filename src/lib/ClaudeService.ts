@@ -54,12 +54,8 @@ export class ClaudeService {
 			}
 		}
 
-		// Fall back to current defaults
-		if (type === 'issue') {
-			return 'acceptEdits'
-		}
-		// For PR and regular workflows, use default permissions
-		return 'default'
+		// Fall back to acceptEdits for all workflow types
+		return 'acceptEdits'
 	}
 
 	/**

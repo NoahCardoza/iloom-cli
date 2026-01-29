@@ -143,7 +143,7 @@ describe('ClaudeService', () => {
 		})
 
 		describe('pr workflow', () => {
-			it('should launch Claude with default model and permission mode', async () => {
+			it('should launch Claude with acceptEdits permission mode', async () => {
 				const options: ClaudeWorkflowOptions = {
 					type: 'pr',
 					prNumber: 456,
@@ -166,8 +166,9 @@ describe('ClaudeService', () => {
 					PORT: 3456,
 				})
 
-				// PR workflow uses Claude's default model and default permission mode
+				// PR workflow uses acceptEdits permission mode by default
 				expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(prompt, {
+					permissionMode: 'acceptEdits',
 					addDir: '/workspace/pr-456',
 					workspacePath: '/workspace/pr-456',
 					headless: false,
@@ -178,7 +179,7 @@ describe('ClaudeService', () => {
 		})
 
 		describe('regular workflow', () => {
-			it('should launch Claude with default model and permission mode', async () => {
+			it('should launch Claude with acceptEdits permission mode', async () => {
 				const options: ClaudeWorkflowOptions = {
 					type: 'regular',
 					workspacePath: '/workspace/feature',
@@ -195,8 +196,9 @@ describe('ClaudeService', () => {
 					WORKSPACE_PATH: '/workspace/feature',
 				})
 
-				// Regular workflow uses Claude's default model and default permission mode
+				// Regular workflow uses acceptEdits permission mode by default
 				expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(prompt, {
+					permissionMode: 'acceptEdits',
 					addDir: '/workspace/feature',
 					workspacePath: '/workspace/feature',
 					headless: false,
@@ -393,7 +395,7 @@ describe('ClaudeService', () => {
 			)
 		})
 
-		it('should fall back to default for pr workflow when no settings', async () => {
+		it('should fall back to acceptEdits for pr workflow when no settings', async () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({} as IloomSettings),
 			} as unknown as SettingsManager
@@ -413,16 +415,15 @@ describe('ClaudeService', () => {
 
 			await serviceWithSettings.launchForWorkflow(options)
 
-			// Should not include permissionMode when it's 'default'
 			expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(
 				prompt,
-				expect.not.objectContaining({
-					permissionMode: expect.anything(),
+				expect.objectContaining({
+					permissionMode: 'acceptEdits',
 				})
 			)
 		})
 
-		it('should fall back to default when workflows section missing', async () => {
+		it('should fall back to acceptEdits when workflows section missing', async () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({
 					mainBranch: 'main',
@@ -444,16 +445,15 @@ describe('ClaudeService', () => {
 
 			await serviceWithSettings.launchForWorkflow(options)
 
-			// Should not include permissionMode when it's 'default'
 			expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(
 				prompt,
-				expect.not.objectContaining({
-					permissionMode: expect.anything(),
+				expect.objectContaining({
+					permissionMode: 'acceptEdits',
 				})
 			)
 		})
 
-		it('should fall back to default when specific workflow type not configured', async () => {
+		it('should fall back to acceptEdits when specific workflow type not configured', async () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({
 					workflows: {
@@ -479,11 +479,10 @@ describe('ClaudeService', () => {
 
 			await serviceWithSettings.launchForWorkflow(options)
 
-			// Should not include permissionMode when it's 'default'
 			expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(
 				prompt,
-				expect.not.objectContaining({
-					permissionMode: expect.anything(),
+				expect.objectContaining({
+					permissionMode: 'acceptEdits',
 				})
 			)
 		})
