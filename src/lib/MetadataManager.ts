@@ -3,6 +3,7 @@ import os from 'os'
 import fs from 'fs-extra'
 import { getLogger } from '../utils/logger-context.js'
 import type { ProjectCapability } from '../types/loom.js'
+import type { OneShotMode } from '../types/index.js'
 
 /**
  * Schema for metadata JSON file
@@ -25,6 +26,7 @@ export interface MetadataFile {
   issueUrls?: Record<string, string> // Map of issue ID to URL in the issue tracker
   prUrls?: Record<string, string> // Map of PR number to URL in the issue tracker
   draftPrNumber?: number // Draft PR number if github-draft-pr mode was used
+  oneShot?: OneShotMode // One-shot automation mode stored during loom creation
   capabilities?: ProjectCapability[] // Detected project capabilities
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
@@ -54,6 +56,7 @@ export interface WriteMetadataInput {
   issueUrls: Record<string, string> // Map of issue ID to URL in the issue tracker
   prUrls: Record<string, string> // Map of PR number to URL in the issue tracker
   draftPrNumber?: number // Draft PR number for github-draft-pr mode
+  oneShot?: OneShotMode // One-shot automation mode to persist
   capabilities: ProjectCapability[] // Detected project capabilities (required for new looms)
   parentLoom?: {
     type: 'issue' | 'pr' | 'branch'
@@ -84,6 +87,7 @@ export interface LoomMetadata {
   issueUrls: Record<string, string> // Map of issue ID to URL ({} for legacy looms)
   prUrls: Record<string, string> // Map of PR number to URL ({} for legacy looms)
   draftPrNumber: number | null // Draft PR number (null if not draft mode)
+  oneShot: OneShotMode | null // One-shot mode (null for legacy looms)
   capabilities: ProjectCapability[] // Detected project capabilities (empty for legacy looms)
   parentLoom: {
     type: 'issue' | 'pr' | 'branch'
@@ -133,6 +137,7 @@ export class MetadataManager {
       issueUrls: data.issueUrls ?? {},
       prUrls: data.prUrls ?? {},
       draftPrNumber: data.draftPrNumber ?? null,
+      oneShot: data.oneShot ?? null,
       capabilities: data.capabilities ?? [],
       parentLoom: data.parentLoom ?? null,
     }
@@ -211,6 +216,7 @@ export class MetadataManager {
         prUrls: input.prUrls,
         capabilities: input.capabilities,
         ...(input.draftPrNumber && { draftPrNumber: input.draftPrNumber }),
+        ...(input.oneShot && { oneShot: input.oneShot }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
 

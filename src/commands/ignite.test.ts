@@ -1588,6 +1588,213 @@ describe('IgniteCommand', () => {
 		})
 	})
 
+	describe('One-Shot Mode Metadata Priority', () => {
+		it('should use explicit flag over stored metadata oneShot value', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with oneShot: 'noReview'
+			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-496__test',
+					worktreePath: '/path/to/feat/issue-496__test',
+					issueType: 'issue',
+					issue_numbers: ['496'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					oneShot: 'noReview', // Stored metadata value
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			const commandWithMetadataOneShot = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-496__test')
+
+			try {
+				// Execute with explicit 'bypassPermissions' flag (should override stored 'noReview')
+				await commandWithMetadataOneShot.execute('bypassPermissions')
+
+				// Verify permission mode reflects the explicit flag, not the stored value
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				expect(launchClaudeCall[1].permissionMode).toBe('bypassPermissions')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should use stored metadata oneShot when flag is undefined (not passed)', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with oneShot: 'noReview'
+			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-496__test',
+					worktreePath: '/path/to/feat/issue-496__test',
+					issueType: 'issue',
+					issue_numbers: ['496'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					oneShot: 'noReview', // Stored metadata value
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			const commandWithMetadataOneShot = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-496__test')
+
+			try {
+				// Execute with undefined (flag not passed) - should use stored 'noReview'
+				await commandWithMetadataOneShot.execute(undefined)
+
+				// Verify the user prompt uses noReview behavior (approval bypass)
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				const userPrompt = launchClaudeCall[0]
+				expect(userPrompt).toContain('without awaiting confirmation')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should use explicit default flag over stored metadata oneShot', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with oneShot: 'noReview'
+			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-496__test',
+					worktreePath: '/path/to/feat/issue-496__test',
+					issueType: 'issue',
+					issue_numbers: ['496'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					oneShot: 'noReview', // Stored metadata value
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			const commandWithMetadataOneShot = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-496__test')
+
+			try {
+				// Execute with explicit 'default' flag (should override stored 'noReview' and use 'default')
+				await commandWithMetadataOneShot.execute('default')
+
+				// Verify the user prompt uses default behavior (no approval bypass)
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				const userPrompt = launchClaudeCall[0]
+				expect(userPrompt).toBe('Guide the user through the iloom workflow!')
+				expect(userPrompt).not.toContain('without awaiting confirmation')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should use stored bypassPermissions from metadata when flag is undefined (not passed)', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with oneShot: 'bypassPermissions'
+			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-496__test',
+					worktreePath: '/path/to/feat/issue-496__test',
+					issueType: 'issue',
+					issue_numbers: ['496'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					oneShot: 'bypassPermissions', // Stored metadata value
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			const commandWithMetadataOneShot = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-496__test')
+
+			try {
+				// Execute with undefined (flag not passed) - should use stored 'bypassPermissions'
+				await commandWithMetadataOneShot.execute(undefined)
+
+				// Verify permission mode is set to bypassPermissions from stored metadata
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				expect(launchClaudeCall[1].permissionMode).toBe('bypassPermissions')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should use default when no stored value and no explicit flag', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata without oneShot field
+			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-496__test',
+					worktreePath: '/path/to/feat/issue-496__test',
+					issueType: 'issue',
+					issue_numbers: ['496'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					// No oneShot field - legacy loom
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			const commandWithNoOneShot = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-496__test')
+
+			try {
+				// Execute without explicit flag (should default to 'default' behavior)
+				await commandWithNoOneShot.execute()
+
+				// Verify the user prompt is the simple workflow prompt (default mode)
+				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
+				const userPrompt = launchClaudeCall[0]
+				expect(userPrompt).toBe('Guide the user through the iloom workflow!')
+				expect(userPrompt).not.toContain('without awaiting confirmation')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+	})
+
 	describe('Answer Table Instructions - Universal Behavior', () => {
 		it('should include answer table instructions in default mode', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)

@@ -7,7 +7,7 @@ import { PromptTemplateManager, TemplateVariables } from '../lib/PromptTemplateM
 import { generateIssueManagementMcpConfig, generateRecapMcpConfig } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
-import { SettingsManager } from '../lib/SettingsManager.js'
+import { SettingsManager, type IloomSettings } from '../lib/SettingsManager.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
@@ -15,6 +15,7 @@ import { extractIssueNumber, isValidGitRepo, getWorktreeRoot } from '../utils/gi
 import { getWorkspacePort } from '../utils/port.js'
 import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
+import type { OneShotMode } from '../types/index.js'
 
 /**
  * Error thrown when the spin command is run from an invalid location
@@ -48,7 +49,7 @@ export class IgniteCommand {
 	private settingsManager: SettingsManager
 	private firstRunManager: FirstRunManager
 	private hookManager: ClaudeHookManager
-	private settings?: import('../lib/SettingsManager.js').IloomSettings
+	private settings?: IloomSettings
 
 	constructor(
 		templateManager?: PromptTemplateManager,
@@ -109,7 +110,7 @@ export class IgniteCommand {
 	/**
 	 * Main entry point for spin command
 	 */
-	async execute(oneShot: import('../types/index.js').OneShotMode = 'default'): Promise<void> {
+	async execute(oneShot?: OneShotMode): Promise<void> {
 		// Set ILOOM=1 so hooks know this is an iloom session
 		// This is inherited by the Claude child process
 		process.env.ILOOM = '1'
@@ -153,6 +154,13 @@ export class IgniteCommand {
 			const metadata = await metadataManager.readMetadata(context.workspacePath)
 			const draftPrNumber = metadata?.draftPrNumber ?? undefined
 
+			// Step 2.0.4: Determine effective oneShot mode
+			// If oneShot is provided (any value including 'default'), use it
+			// If oneShot is undefined (not passed), use metadata or fallback to 'default'
+			// Note: metadata?.oneShot can be null (for legacy looms), so we need double nullish coalescing
+			const storedOneShot = metadata?.oneShot ?? 'default'
+			const effectiveOneShot: OneShotMode = oneShot ?? storedOneShot
+
 			// Step 2.0.5: Load settings early if not cached (needed for port calculation)
 			if (!this.settings) {
 				const cliOverrides = extractSettingsOverrides()
@@ -171,7 +179,7 @@ export class IgniteCommand {
 			}
 
 			// Step 2.1: Get prompt template with variable substitution
-			const variables = this.buildTemplateVariables(context, oneShot, draftPrNumber)
+			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber)
 
 			// Step 2.5: Add first-time user context if needed
 			if (isFirstRun) {
@@ -183,14 +191,14 @@ export class IgniteCommand {
 			const systemInstructions = await this.templateManager.getPrompt(context.type, variables)
 
 			// User prompt to trigger the workflow (includes one-shot bypass instructions if needed)
-			const userPrompt = this.buildUserPrompt(oneShot)
+			const userPrompt = this.buildUserPrompt(effectiveOneShot)
 
 			// Step 3: Determine model and permission mode based on workflow type
 			const model = this.settingsManager.getSpinModel(this.settings)
 			let permissionMode = this.getPermissionModeForWorkflow(context.type)
 
 			// Override permission mode if bypassPermissions oneShot mode
-			if (oneShot === 'bypassPermissions') {
+			if (effectiveOneShot === 'bypassPermissions') {
 				permissionMode = 'bypassPermissions'
 			}
 
@@ -380,7 +388,7 @@ export class IgniteCommand {
 	 */
 	private buildTemplateVariables(
 		context: ClaudeWorkflowOptions,
-		oneShot: import('../types/index.js').OneShotMode,
+		oneShot: OneShotMode,
 		draftPrNumber?: number
 	): TemplateVariables {
 		const variables: TemplateVariables = {
@@ -606,7 +614,7 @@ export class IgniteCommand {
 	/**
 	 * Build user prompt based on one-shot mode
 	 */
-	private buildUserPrompt(oneShot: import('../types/index.js').OneShotMode = 'default'): string {
+	private buildUserPrompt(oneShot: OneShotMode = 'default'): string {
 		// For one-shot modes, add bypass instructions to override template approval requirements
 		if (oneShot === 'noReview' || oneShot === 'bypassPermissions') {
 			return 'Guide the user through the iloom workflow! The user has requested you move through the workflow without awaiting confirmation. This supersedes any other guidance.'

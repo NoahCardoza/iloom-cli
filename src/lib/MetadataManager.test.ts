@@ -245,6 +245,40 @@ describe('MetadataManager', () => {
       const writtenContent = JSON.parse(writeCall?.[1] as string)
       expect(writtenContent.capabilities).toEqual([])
     })
+
+    it('should write oneShot mode to metadata when provided', async () => {
+      const inputWithOneShot = {
+        ...metadataInput,
+        oneShot: 'noReview' as const,
+      }
+
+      await manager.writeMetadata(worktreePath, inputWithOneShot)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.oneShot).toBe('noReview')
+    })
+
+    it('should write bypassPermissions oneShot mode to metadata', async () => {
+      const inputWithBypassPermissions = {
+        ...metadataInput,
+        oneShot: 'bypassPermissions' as const,
+      }
+
+      await manager.writeMetadata(worktreePath, inputWithBypassPermissions)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.oneShot).toBe('bypassPermissions')
+    })
+
+    it('should not include oneShot field when not provided', async () => {
+      await manager.writeMetadata(worktreePath, metadataInput)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.oneShot).toBeUndefined()
+    })
   })
 
   describe('readMetadata', () => {
@@ -288,6 +322,7 @@ describe('MetadataManager', () => {
         issueUrls: { '42': 'https://github.com/org/repo/issues/42' },
         prUrls: {},
         draftPrNumber: null,
+        oneShot: null,
         capabilities: ['web'],
         parentLoom: null,
       })
@@ -382,6 +417,7 @@ describe('MetadataManager', () => {
         issueUrls: {},
         prUrls: {},
         draftPrNumber: null,
+        oneShot: null,
         capabilities: [],
         parentLoom: null,
       })
@@ -547,6 +583,74 @@ describe('MetadataManager', () => {
 
       expect(result?.capabilities).toEqual([])
     })
+
+    it('should return oneShot when present in metadata file', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Loom with oneShot',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__feature',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+        sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+        oneShot: 'noReview',
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.oneShot).toBe('noReview')
+    })
+
+    it('should return bypassPermissions oneShot when stored', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Loom with bypassPermissions',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__feature',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+        sessionId: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+        oneShot: 'bypassPermissions',
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.oneShot).toBe('bypassPermissions')
+    })
+
+    it('should return null oneShot for legacy looms without oneShot field', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Legacy loom without oneShot',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__legacy',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+        // Note: no oneShot field
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.oneShot).toBeNull()
+    })
   })
 
   describe('listAllMetadata', () => {
@@ -633,6 +737,7 @@ describe('MetadataManager', () => {
         issueUrls: { '1': 'https://github.com/org/repo/issues/1' },
         prUrls: {},
         draftPrNumber: null,
+        oneShot: null,
         capabilities: ['cli'],
         parentLoom: null,
       })
@@ -651,6 +756,7 @@ describe('MetadataManager', () => {
         issueUrls: { '2': 'https://github.com/org/repo/issues/2' },
         prUrls: {},
         draftPrNumber: null,
+        oneShot: null,
         capabilities: ['web'],
         parentLoom: null,
       })
@@ -753,6 +859,7 @@ describe('MetadataManager', () => {
         issueUrls: {},
         prUrls: {},
         draftPrNumber: null,
+        oneShot: null,
         capabilities: [],
         parentLoom: null,
       })

@@ -2818,4 +2818,147 @@ describe('LoomManager', () => {
       expect(dbFileCopies.length).toBe(2)
     })
   })
+
+  describe('oneShot metadata persistence', () => {
+    const baseInput: CreateLoomInput = {
+      type: 'issue',
+      identifier: 496,
+      originalInput: '496',
+    }
+
+    beforeEach(() => {
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 496,
+        title: 'OneShot Mode Test',
+        body: 'Test body',
+        state: 'open',
+        url: 'https://github.com/test/test/issues/496',
+        labels: [],
+        assignees: [],
+      })
+
+      Object.defineProperty(mockGitWorktree, 'workingDirectory', {
+        get: vi.fn(() => '/main/workspace'),
+        configurable: true,
+      })
+
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/worktree/issue-496')
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue('/test/worktree/issue-496')
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3496)
+      vi.mocked(mockCapabilityDetector.detectCapabilities).mockResolvedValue({
+        capabilities: [],
+        binEntries: {},
+      })
+    })
+
+    it('should pass oneShot to metadata when provided in createIloom options', async () => {
+      const inputWithOneShot: CreateLoomInput = {
+        ...baseInput,
+        options: { oneShot: 'noReview' },
+      }
+
+      await manager.createIloom(inputWithOneShot)
+
+      // Verify writeMetadata was called with oneShot
+      expect(mockWriteMetadata).toHaveBeenCalled()
+      const metadataInput = mockWriteMetadata.mock.calls[0][1]
+      expect(metadataInput.oneShot).toBe('noReview')
+    })
+
+    it('should pass bypassPermissions oneShot mode to metadata', async () => {
+      const inputWithOneShot: CreateLoomInput = {
+        ...baseInput,
+        options: { oneShot: 'bypassPermissions' },
+      }
+
+      await manager.createIloom(inputWithOneShot)
+
+      expect(mockWriteMetadata).toHaveBeenCalled()
+      const metadataInput = mockWriteMetadata.mock.calls[0][1]
+      expect(metadataInput.oneShot).toBe('bypassPermissions')
+    })
+
+    it('should NOT include oneShot in metadata when default mode (not explicitly set)', async () => {
+      // Note: When oneShot is undefined or 'default', it should not be included in metadata
+      // The spread operator ...(input.options?.oneShot && { oneShot: input.options.oneShot })
+      // only includes oneShot if it's truthy
+      await manager.createIloom(baseInput)
+
+      expect(mockWriteMetadata).toHaveBeenCalled()
+      const metadataInput = mockWriteMetadata.mock.calls[0][1]
+      expect(metadataInput.oneShot).toBeUndefined()
+    })
+
+    it('should pass oneShot to metadata when reusing existing loom without metadata', async () => {
+      const existingWorktree = {
+        path: '/test/worktree-issue-496',
+        branch: 'issue-496-test',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(existingWorktree)
+
+      // No existing metadata (null) - reuseIloom will write new metadata
+      mockReadMetadata.mockResolvedValue(null)
+
+      const inputWithOneShot: CreateLoomInput = {
+        ...baseInput,
+        options: { oneShot: 'noReview' },
+      }
+
+      await manager.createIloom(inputWithOneShot)
+
+      // Verify writeMetadata was called (since no existing metadata)
+      expect(mockWriteMetadata).toHaveBeenCalled()
+      const metadataInput = mockWriteMetadata.mock.calls[0][1]
+      expect(metadataInput.oneShot).toBe('noReview')
+    })
+
+    it('should NOT overwrite metadata when reusing loom that already has metadata', async () => {
+      const existingWorktree = {
+        path: '/test/worktree-issue-496',
+        branch: 'issue-496-test',
+        commit: 'abc123',
+        bare: false,
+        detached: false,
+        locked: false,
+      }
+
+      vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValue(existingWorktree)
+
+      // Existing metadata present
+      mockReadMetadata.mockResolvedValue({
+        description: 'Existing loom',
+        created_at: '2024-01-01T00:00:00Z',
+        branchName: 'issue-496-test',
+        worktreePath: '/test/worktree-issue-496',
+        issueType: 'issue',
+        issue_numbers: ['496'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#dcebff',
+        sessionId: 'existing-session',
+        projectPath: '/main/workspace',
+        issueUrls: {},
+        prUrls: {},
+        draftPrNumber: null,
+        oneShot: 'default',
+        capabilities: [],
+        parentLoom: null,
+      })
+
+      const inputWithOneShot: CreateLoomInput = {
+        ...baseInput,
+        options: { oneShot: 'bypassPermissions' },
+      }
+
+      await manager.createIloom(inputWithOneShot)
+
+      // Verify writeMetadata was NOT called (existing metadata preserved)
+      expect(mockWriteMetadata).not.toHaveBeenCalled()
+    })
+  })
 })

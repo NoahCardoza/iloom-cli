@@ -655,13 +655,12 @@ program
   .addOption(
     new Option('--one-shot <mode>', 'One-shot automation mode')
       .choices(['default', 'noReview', 'bypassPermissions'])
-      .default('default')
   )
   .action(async (options: { oneShot?: import('./types/index.js').OneShotMode }) => {
     try {
       const { IgniteCommand } = await import('./commands/ignite.js')
       const command = new IgniteCommand()
-      await command.execute(options.oneShot ?? 'default')
+      await command.execute(options.oneShot)
     } catch (error) {
       logger.error(`Failed to spin up loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)

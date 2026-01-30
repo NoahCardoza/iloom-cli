@@ -385,6 +385,7 @@ export class LoomManager {
       prUrls,
       capabilities,
       ...(draftPrNumber && { draftPrNumber }),
+      ...(input.options?.oneShot && { oneShot: input.options.oneShot }),
       ...(input.parentLoom && { parentLoom: input.parentLoom }),
     }
     await this.metadataManager.writeMetadata(worktreePath, metadataInput)
@@ -1288,6 +1289,7 @@ export class LoomManager {
         issueUrls,
         prUrls,
         capabilities,
+        ...(input.options?.oneShot && { oneShot: input.options.oneShot }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
       }
       await this.metadataManager.writeMetadata(worktreePath, metadataInput)
