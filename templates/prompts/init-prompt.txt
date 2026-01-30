@@ -918,7 +918,17 @@ When you're ready to finish, type `/exit` to close this session and return to yo
 
 If users ask about specific configurations, help them add these sections to their settings:
 
-1. **Agent Models Configuration:**
+**Available Models by Provider** (as of February 2026):
+
+When configuring agents, use these model identifiers:
+
+| Provider | Models | Notes |
+|----------|--------|-------|
+| `claude` | `sonnet`, `opus`, `haiku` | Default provider. Use the `model` field. |
+| `gemini` | `gemini-3-pro-preview` | Requires Gemini MCP server configured. Use the `providers` field. |
+| `codex` | `gpt-5.2-codex` | Requires Codex MCP server configured. Use the `providers` field. |
+
+1. **Agent Models Configuration (Claude):**
    ```json
    "agents": {
      "iloom-issue-analyzer": { "model": "opus" },
@@ -959,7 +969,21 @@ If users ask about specific configurations, help them add these sections to thei
    }
    ```
 
-6. **Custom Script Configuration (package.iloom.json):**
+6. **Code Review with Multiple Providers:**
+   ```json
+   "agents": {
+     "iloom-code-reviewer": {
+       "providers": {
+         "claude": "opus",
+         "gemini": "gemini-3-pro-preview"
+       }
+     }
+   }
+   ```
+
+   This configures the code reviewer to use both Claude and Gemini for reviews. Multiple providers can be configured to get reviews from different AI models.
+
+7. **Custom Script Configuration (package.iloom.json):**
 
    If users want to override or supplement npm scripts with custom commands, help them create `.iloom/package.iloom.json`:
    ```json

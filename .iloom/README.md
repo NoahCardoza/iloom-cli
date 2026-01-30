@@ -117,9 +117,17 @@ Configure per-workflow permission modes for Claude CLI. This allows you to contr
 - **`default` mode**: When you want standard Claude CLI behavior without any special permissions
 
 #### agents (optional)
-Configure Claude model preferences for different agent types. This allows you to use more powerful or faster models depending on the task.
+Configure model preferences for different agent types. This allows you to use more powerful or faster models depending on the task, and optionally use alternative AI providers for specific agents.
 
-**Available models**:
+**Available models by provider** (as of February 2026):
+
+| Provider | Models | Notes |
+|----------|--------|-------|
+| `claude` | `sonnet`, `opus`, `haiku` | Default provider. Use the `model` field. |
+| `gemini` | `gemini-3-pro-preview` | Requires Gemini MCP server configured. Use the `providers` field. |
+| `codex` | `gpt-5.2-codex` | Requires Codex MCP server configured. Use the `providers` field. |
+
+**Claude models**:
 - `opus` - Most capable model for complex tasks (default for workflow agents)
 - `sonnet` - Balanced performance and speed
 - `haiku` - Fastest model for simple tasks
@@ -154,16 +162,23 @@ Or manually configure specific agents:
 }
 ```
 
-**Example** (configure code reviewer with alternative provider):
+**Multi-provider example** (code review with multiple providers):
 ```json
 {
   "agents": {
+    "iloom-issue-analyzer": { "model": "opus" },
+    "iloom-issue-planner": { "model": "sonnet" },
     "iloom-code-reviewer": {
-      "providers": { "gemini": "gemini-3-pro-preview" }
+      "providers": {
+        "claude": "opus",
+        "gemini": "gemini-3-pro-preview"
+      }
     }
   }
 }
 ```
+
+This configures the code reviewer to use both Claude and Gemini for reviews. Multiple providers can be configured to get reviews from different AI models.
 
 #### capabilities.web.basePort (optional)
 Configure the base port number for web workspace port calculations. Each workspace gets a unique port calculated as `basePort + identifier`.
