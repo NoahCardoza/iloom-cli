@@ -288,6 +288,48 @@ or directly in `.iloom/settings.json` or `.iloom/settings.local.json`:
 }
 ```
 
+### Code Review with Gemini MCP (Recommended)
+
+For code review during implementation, iloom can use Gemini via the Gemini MCP server. This is **recommended** due to observed high quality review results.
+
+**Step 1: Install and Configure Gemini MCP**
+
+Add the Gemini MCP server to your Claude Code configuration (`~/.claude.json` or project `.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "gemini": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/gemini-mcp-server"],
+      "env": {
+        "GEMINI_API_KEY": "your-gemini-api-key"
+      }
+    }
+  }
+}
+```
+
+Get your Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey).
+
+**Step 2: Configure the Code Review Agent**
+
+Add the `iloom-issue-reviewer` agent configuration to `.iloom/settings.json`:
+
+```json
+{
+  "agents": {
+    "iloom-issue-reviewer": {
+      "providers": {
+        "gemini": "gemini-3-pro-preview"
+      }
+    }
+  }
+}
+```
+
+This configures iloom to use Gemini for reviewing code changes against issue requirements during the implementation workflow.
+
 ### Autonomous Mode
 
 For hands-off planning, use `--yolo` to skip permission prompts:
