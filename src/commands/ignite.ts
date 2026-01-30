@@ -422,6 +422,32 @@ export class IgniteCommand {
 			variables.INTERACTIVE_MODE = true
 		}
 
+		// Set review configuration variables (same logic as AgentManager)
+		const reviewerSettings = this.settings?.agents?.['iloom-code-reviewer']
+		const reviewEnabled = reviewerSettings?.enabled !== false // Default to true
+		variables.REVIEW_ENABLED = reviewEnabled
+
+		if (reviewEnabled) {
+			const providers = reviewerSettings?.providers ?? {}
+			// Default to Claude if no providers specified
+			const hasAnyProvider = Object.keys(providers).length > 0
+
+			// Determine Claude model: use configured, or default to 'sonnet' if no providers specified
+			const claudeModel = providers.claude ?? (hasAnyProvider ? undefined : 'sonnet')
+			if (claudeModel) {
+				variables.REVIEW_CLAUDE_MODEL = claudeModel
+			}
+			if (providers.gemini) {
+				variables.REVIEW_GEMINI_MODEL = providers.gemini
+			}
+			if (providers.codex) {
+				variables.REVIEW_CODEX_MODEL = providers.codex
+			}
+			variables.HAS_REVIEW_CLAUDE = !!claudeModel
+			variables.HAS_REVIEW_GEMINI = !!providers.gemini
+			variables.HAS_REVIEW_CODEX = !!providers.codex
+		}
+
 		// Set draft PR mode flags (mutually exclusive)
 		// When draftPrNumber is set, we're in github-draft-pr mode
 		if (draftPrNumber !== undefined) {

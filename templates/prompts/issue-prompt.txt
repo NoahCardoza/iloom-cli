@@ -663,11 +663,11 @@ This section is about reviewing uncommitted code changes for quality, security, 
 
 1. Execute: @agent-iloom-code-reviewer with prompt "Run code review." (foreground, no extra context)
 2. Wait for review completion
-3. If critical issues found:
+3. If critical, high, or medium priority issues found:
 {{#if ONE_SHOT_MODE}}
-   - Automatically implement the recommended fixes without asking
+   - Automatically implement the recommended fixes for critical, high, and medium priority issues without asking
 {{else}}
-   - Ask the user: "Critical issues found. Do you want to proceed anyway, or address these first?"
+   - Ask the user: "Issues found. Do you want to proceed anyway, or address these first?"
    - Wait for user response before continuing
 {{/if}}
 {{/if}}
@@ -679,8 +679,8 @@ This section is about reviewing uncommitted code changes for quality, security, 
 - **DO NOT** pass extra context (file lists, issue details, etc.) - the agent knows what to do
 - The reviewer will analyze uncommitted changes and report findings
 
-**When critical issues are found:**
-- Ask the user: "Critical issues found. Do you want to proceed anyway, or address these first?"
+**When issues are found:**
+- Ask the user: "Issues found. Do you want to proceed anyway, or address these first?"
 - Wait for user response before continuing
 {{/unless}}
 
