@@ -14,6 +14,7 @@ Complete documentation for all iloom CLI commands, options, and flags.
 - [Context & Development Commands](#context--development-commands)
   - [il spin](#il-spin)
   - [il open](#il-open)
+  - [il vscode](#il-vscode)
   - [il dev-server](#il-dev-server)
   - [il build](#il-build)
   - [il lint](#il-lint)
@@ -548,6 +549,50 @@ il open 25
 il open 25 --help
 il open 25 --version
 ```
+
+---
+
+### il vscode
+
+Install the iloom VS Code extension and open a workspace in VS Code.
+
+**Usage:**
+```bash
+il vscode [identifier]
+```
+
+**Arguments:**
+- `[identifier]` - Optional issue number, PR number, or branch name
+- If omitted, auto-detects from current directory or branch
+
+**Behavior:**
+
+1. Checks if VS Code CLI (`code`) is available
+2. Parses identifier or auto-detects from current directory/branch
+3. Finds the corresponding worktree
+4. Installs the iloom VS Code extension (if not already installed)
+5. Opens VS Code at the worktree path
+
+**Examples:**
+
+```bash
+# Auto-detect from current directory
+il vscode
+
+# Open workspace for issue #45
+il vscode 45
+
+# Open workspace for Linear issue
+il vscode ENG-123
+
+# Open workspace for branch
+il vscode feat/my-feature
+```
+
+**Notes:**
+- Requires VS Code CLI (`code`) to be available in PATH
+- Automatically installs the iloom VS Code extension if not present
+- Works with any loom workspace (issue, PR, or branch-based)
 
 ---
 

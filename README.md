@@ -9,6 +9,8 @@ iloom
 
 </div>
 
+> **VS Code extension now available!** Run `il vscode` to install. Get the recap panel to see AI decisions, risks, and assumptions in real-time, plus the loom explorer to manage and switch between active projects and tasks.
+
 <div align="center">
   <img width="600" alt="iloom-ai-screenshot" src="https://raw.githubusercontent.com/iloom-ai/iloom-cli/main/assets/iloom-screenshot.png" />
   <div>iloom in action: Scale understanding, not just output.</div>
@@ -146,6 +148,7 @@ Command Reference
 | `il projects` |  | List configured projects (JSON output). |
 | `il spin` |  | Launch Claude inside the current loom with context auto-detected. |
 | `il open` | `run` | Open loom in browser (web) or run your CLI tool. |
+| `il vscode` |  | Install iloom VS Code extension and open workspace in VS Code. |
 | `il dev-server` | `dev` | Start dev server in foreground for a workspace. |
 | `il build` |  | Run the build script for a workspace. |
 | `il lint` |  | Run the lint script for a workspace. |

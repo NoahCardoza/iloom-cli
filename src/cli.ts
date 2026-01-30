@@ -105,6 +105,17 @@ program
     // Validate IDE availability for start command
     await validateIdeForStartCommand(actionCommand)
   })
+  .hook('postAction', async (_thisCommand, actionCommand) => {
+    try {
+      const { showVSCodeAnnouncementIfNeeded } = await import('./utils/vscode-announcement.js')
+      const jsonMode = actionCommand.opts().json === true
+      if (!jsonMode) {
+        await showVSCodeAnnouncementIfNeeded(actionCommand.name())
+      }
+    } catch {
+      // Silently fail - announcement should never break CLI
+    }
+  })
 
 // Helper function to validate settings at startup
 async function validateSettingsForCommand(command: Command): Promise<void> {
@@ -705,6 +716,21 @@ program
     } catch (error) {
       logger.error(`Failed to run: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
+    }
+  })
+
+program
+  .command('vscode')
+  .description('Install iloom VS Code extension and open workspace in VS Code')
+  .argument('[identifier]', 'Issue number, PR number, or branch name (auto-detected if omitted)')
+  .option('--no-wait', 'Skip keypress prompt and open immediately')
+  .action(async (identifier?: string, options?: { wait?: boolean }) => {
+    try {
+      const { VSCodeCommand } = await import('./commands/vscode.js')
+      const cmd = new VSCodeCommand()
+      await cmd.execute({ identifier, wait: options?.wait })
+    } catch (error) {
+      throw new Error(`Failed to open VS Code: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   })
 

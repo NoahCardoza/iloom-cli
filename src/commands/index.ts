@@ -51,3 +51,6 @@ export { CommitCommand } from './commit.js'
 export type { CommitCommandInput, CommitResult } from './commit.js'
 
 export { PlanCommand } from './plan.js'
+
+export { VSCodeCommand } from './vscode.js'
+export type { VSCodeCommandInput } from './vscode.js'
