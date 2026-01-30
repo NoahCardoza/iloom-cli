@@ -2,14 +2,22 @@
 description: Generate user-focused release notes between two versions
 args:
   - name: fromVersion
-    description: Starting version tag (e.g., v0.2.0)
+    description: Starting version number (e.g., 0.2.0)
     required: true
   - name: toVersion
-    description: Ending version tag or HEAD (e.g., v0.3.0 or HEAD)
+    description: Ending version number (e.g., 0.3.0)
     required: true
 ---
 
 Generate release notes for iloom CLI from {{fromVersion}} to {{toVersion}}.
+
+## Input Normalization
+
+First, strip any leading 'v' prefix from the version arguments:
+- `v0.8.0` → `0.8.0`
+- `0.8.0` → `0.8.0`
+
+Use the normalized versions (without 'v') throughout, and add the 'v' prefix when constructing git refs.
 
 ## Context Requirements
 
@@ -30,17 +38,17 @@ Generate release notes for iloom CLI from {{fromVersion}} to {{toVersion}}.
 
 3. Determine the git reference to use:
    ```bash
-   # Check if toVersion exists as a git reference
-   git rev-parse --verify {{toVersion}} 2>/dev/null
+   # Check if toVersion exists as a git reference (tags use 'v' prefix)
+   git rev-parse --verify v{{toVersion}} 2>/dev/null
    ```
-   - If the command succeeds, use {{toVersion}} for the git log
+   - If the command succeeds, use `v{{toVersion}}` for the git log
    - If the command fails (toVersion doesn't exist), use HEAD for the git log
-   - **Important**: Always label the release notes as {{fromVersion}} → {{toVersion}} regardless of which git ref is used
+   - **Important**: Always label the release notes as v{{fromVersion}} → v{{toVersion}} regardless of which git ref is used
 
 4. Get detailed commit history:
    ```bash
-   # Use {{toVersion}} if it exists, otherwise use HEAD
-   git log {{fromVersion}}..<git-ref> --format="format:%h %s%n%b%n" --reverse
+   # Use v{{toVersion}} if it exists, otherwise use HEAD
+   git log v{{fromVersion}}..<git-ref> --format="format:%h %s%n%b%n" --reverse
    ```
 
 ## Release Notes Guidelines
@@ -84,7 +92,7 @@ Generate release notes for iloom CLI from {{fromVersion}} to {{toVersion}}.
 ### Structure
 
 ```markdown
-## Release Notes ({{fromVersion}} → {{toVersion}})
+## Release Notes (v{{fromVersion}} → v{{toVersion}})
 
 ### 🎉 New Features
 
@@ -110,7 +118,7 @@ Generate release notes for iloom CLI from {{fromVersion}} to {{toVersion}}.
 
 ---
 
-**Full Changelog**: {{fromVersion}}...{{toVersion}}
+**Full Changelog**: v{{fromVersion}}...v{{toVersion}}
 ```
 
 ## Prioritization
