@@ -21,6 +21,7 @@ import { getIdeConfig, isIdeAvailable, getInstallHint } from './utils/ide.js'
 import { fileURLToPath } from 'url'
 import { realpathSync } from 'fs'
 import { formatLoomsForJson, formatFinishedLoomForJson } from './utils/loom-formatter.js'
+import { assembleChildrenData, type ChildrenData } from './utils/list-children.js'
 import { findMainWorktreePathWithSettings, GitCommandError, isValidGitRepo } from './utils/git.js'
 import fs from 'fs-extra'
 import { VersionMigrationManager } from './lib/VersionMigrationManager.js'
@@ -857,7 +858,8 @@ program
   .option('--finished', 'Show only finished looms (sorted by finish time, latest first)')
   .option('--all', 'Show both active and finished looms')
   .option('--global', 'Show looms from all projects (default: current project only)')
-  .action(async (options: { json?: boolean; finished?: boolean; all?: boolean; global?: boolean }) => {
+  .option('--children', 'Fetch and display child issues and child looms for each parent loom')
+  .action(async (options: { json?: boolean; finished?: boolean; all?: boolean; global?: boolean; children?: boolean }) => {
     try {
       const manager = new GitWorktreeManager()
       const metadataManager = new MetadataManager()
@@ -994,6 +996,8 @@ program
               prUrls: loom.prUrls ?? {},
               status: 'active' as const,
               finishedAt: null,
+              isChildLoom: loom.parentLoom != null,
+              parentLoom: loom.parentLoom ?? null,
             }))
           } else {
             // Format worktrees from current repo
@@ -1023,6 +1027,62 @@ program
           )
         }
 
+        // Fetch children data if --children flag is set
+        if (options.children) {
+          // Load settings for determining issue tracker provider
+          const settingsManager = new SettingsManager()
+          const settings = await settingsManager.loadSettings()
+
+          // Fetch children for all active looms in parallel using Promise.allSettled
+          const activeChildrenResults = await Promise.allSettled(
+            activeJson.map(async (loom): Promise<{ index: number; children: ChildrenData | null }> => {
+              const index = activeJson.indexOf(loom)
+              // Find the corresponding metadata for this loom
+              const loomMetadata = options.global
+                ? globalActiveLooms.find(m => m.branchName === loom.branch)
+                : metadata.get(loom.worktreePath ?? '')
+              if (!loomMetadata) {
+                return { index, children: null }
+              }
+              const children = await assembleChildrenData(loomMetadata, metadataManager, settings)
+              return { index, children }
+            })
+          )
+
+          // Attach children data to active looms
+          for (const result of activeChildrenResults) {
+            if (result.status === 'fulfilled' && result.value.children) {
+              const loom = activeJson[result.value.index]
+              if (loom) {
+                loom.children = result.value.children
+              }
+            }
+          }
+
+          // Fetch children for all finished looms in parallel using Promise.allSettled
+          const finishedChildrenResults = await Promise.allSettled(
+            finishedJson.map(async (loom, index): Promise<{ index: number; children: ChildrenData | null }> => {
+              // Find the corresponding metadata for this loom
+              const loomMetadata = finishedLooms.find(m => m.branchName === loom.branch)
+              if (!loomMetadata) {
+                return { index, children: null }
+              }
+              const children = await assembleChildrenData(loomMetadata, metadataManager, settings)
+              return { index, children }
+            })
+          )
+
+          // Attach children data to finished looms
+          for (const result of finishedChildrenResults) {
+            if (result.status === 'fulfilled' && result.value.children) {
+              const loom = finishedJson[result.value.index]
+              if (loom) {
+                loom.children = result.value.children
+              }
+            }
+          }
+        }
+
         // Combine and output
         const allLooms = [...activeJson, ...finishedJson]
         console.log(JSON.stringify(allLooms, null, 2))
@@ -1045,13 +1105,25 @@ program
         return
       }
 
+      // Load settings for children fetching if --children flag is set
+      let textSettings: import('./lib/SettingsManager.js').IloomSettings | null = null
+      if (options.children) {
+        const settingsManager = new SettingsManager()
+        textSettings = await settingsManager.loadSettings()
+      }
+
       // Show active workspaces
       if (showActive && hasActive) {
         logger.info('Active workspaces:')
         if (options.global) {
           // Global mode: display from metadata
           for (const loom of filteredGlobalActiveLooms) {
-            logger.info(`  ${loom.branchName ?? 'unknown'}`)
+            // Show child loom indicator if this loom has a parent
+            if (loom.parentLoom) {
+              logger.info(`  ${loom.branchName ?? 'unknown'} (Child of: ${loom.parentLoom.branchName})`)
+            } else {
+              logger.info(`  ${loom.branchName ?? 'unknown'}`)
+            }
             if (loom.description) {
               logger.info(`    Description: ${loom.description}`)
             }
@@ -1061,18 +1133,49 @@ program
             if (loom.projectPath) {
               logger.info(`    Project: ${loom.projectPath}`)
             }
+            // Show children summary if --children flag is set
+            if (options.children && textSettings) {
+              const childrenData = await assembleChildrenData(loom, metadataManager, textSettings)
+              if (childrenData && (childrenData.summary.totalIssues > 0 || childrenData.summary.totalLooms > 0)) {
+                logger.info(`    Child Issues: ${childrenData.summary.totalIssues} (${childrenData.summary.issuesWithLooms} with active looms)`)
+                // Show child issues without looms
+                for (const issue of childrenData.issues) {
+                  if (!issue.hasActiveLoom) {
+                    logger.info(`      [No loom] #${issue.id} - ${issue.title} (${issue.state})`)
+                  }
+                }
+              }
+            }
           }
         } else {
           // Non-global mode: display from git worktrees
           for (const worktree of filteredWorktrees) {
             const formatted = manager.formatWorktree(worktree)
             const loomMetadata = metadata.get(worktree.path)
-            logger.info(`  ${formatted.title}`)
+            // Show child loom indicator if this loom has a parent
+            if (loomMetadata?.parentLoom) {
+              logger.info(`  ${formatted.title} (Child of: ${loomMetadata.parentLoom.branchName})`)
+            } else {
+              logger.info(`  ${formatted.title}`)
+            }
             if (loomMetadata?.description) {
               logger.info(`    Description: ${loomMetadata.description}`)
             }
             logger.info(`    Path: ${formatted.path}`)
             logger.info(`    Commit: ${formatted.commit}`)
+            // Show children summary if --children flag is set
+            if (options.children && textSettings && loomMetadata) {
+              const childrenData = await assembleChildrenData(loomMetadata, metadataManager, textSettings)
+              if (childrenData && (childrenData.summary.totalIssues > 0 || childrenData.summary.totalLooms > 0)) {
+                logger.info(`    Child Issues: ${childrenData.summary.totalIssues} (${childrenData.summary.issuesWithLooms} with active looms)`)
+                // Show child issues without looms
+                for (const issue of childrenData.issues) {
+                  if (!issue.hasActiveLoom) {
+                    logger.info(`      [No loom] #${issue.id} - ${issue.title} (${issue.state})`)
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1084,12 +1187,30 @@ program
         }
         logger.info('Finished looms:')
         for (const loom of filteredFinishedLooms) {
-          logger.info(`  ${loom.branchName ?? 'unknown'}`)
+          // Show child loom indicator if this loom has a parent
+          if (loom.parentLoom) {
+            logger.info(`  ${loom.branchName ?? 'unknown'} (Child of: ${loom.parentLoom.branchName})`)
+          } else {
+            logger.info(`  ${loom.branchName ?? 'unknown'}`)
+          }
           if (loom.description) {
             logger.info(`    Description: ${loom.description}`)
           }
           if (loom.finishedAt) {
             logger.info(`    Finished: ${new Date(loom.finishedAt).toLocaleString()}`)
+          }
+          // Show children summary if --children flag is set
+          if (options.children && textSettings) {
+            const childrenData = await assembleChildrenData(loom, metadataManager, textSettings)
+            if (childrenData && (childrenData.summary.totalIssues > 0 || childrenData.summary.totalLooms > 0)) {
+              logger.info(`    Child Issues: ${childrenData.summary.totalIssues} (${childrenData.summary.issuesWithLooms} with active looms)`)
+              // Show child issues without looms
+              for (const issue of childrenData.issues) {
+                if (!issue.hasActiveLoom) {
+                  logger.info(`      [No loom] #${issue.id} - ${issue.title} (${issue.state})`)
+                }
+              }
+            }
           }
         }
       }

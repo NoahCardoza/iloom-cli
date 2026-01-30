@@ -4,6 +4,58 @@ import type { LoomMetadata } from '../lib/MetadataManager.js'
 import type { ProjectCapability } from '../types/loom.js'
 
 /**
+ * Reference to a parent loom for child looms
+ * Matches the structure in LoomMetadata.parentLoom
+ */
+export interface ParentLoomRef {
+  type: 'issue' | 'pr' | 'branch'
+  identifier: string | number
+  branchName: string
+  worktreePath: string
+  databaseBranch?: string
+}
+
+/**
+ * Child issue data for JSON output
+ */
+export interface ChildIssueJson {
+  id: string
+  title: string
+  url: string
+  state: string
+  hasActiveLoom: boolean
+  loomBranch: string | null
+}
+
+/**
+ * Child loom data for JSON output
+ */
+export interface ChildLoomJson {
+  branch: string
+  issueNumbers: string[]
+  hasMatchingIssue: boolean
+}
+
+/**
+ * Summary statistics for children
+ */
+export interface ChildrenSummary {
+  totalIssues: number
+  issuesWithLooms: number
+  totalLooms: number
+  orphanLooms: number
+}
+
+/**
+ * Children data object for parent looms (only populated when --children flag is used)
+ */
+export interface ChildrenJson {
+  issues: ChildIssueJson[]
+  looms: ChildLoomJson[]
+  summary: ChildrenSummary
+}
+
+/**
  * JSON output schema for il list --json
  */
 export interface LoomJsonOutput {
@@ -24,6 +76,12 @@ export interface LoomJsonOutput {
   capabilities?: ProjectCapability[]
   status?: 'active' | 'finished'
   finishedAt?: string | null
+  /** Whether this loom is a child of another loom (has a parentLoom) */
+  isChildLoom: boolean
+  /** Reference to the parent loom if this is a child loom */
+  parentLoom: ParentLoomRef | null
+  /** Children data (only populated when --children flag is used) */
+  children?: ChildrenJson | null
 }
 
 /**
@@ -139,6 +197,8 @@ export function formatLoomForJson(
     issueUrls: metadata?.issueUrls ?? {},
     prUrls: metadata?.prUrls ?? {},
     capabilities: metadata?.capabilities ?? [],
+    isChildLoom: metadata?.parentLoom != null,
+    parentLoom: metadata?.parentLoom ?? null,
   }
 }
 
@@ -186,5 +246,7 @@ export function formatFinishedLoomForJson(metadata: LoomMetadata): LoomJsonOutpu
     capabilities: metadata.capabilities ?? [],
     status: metadata.status ?? 'finished',
     finishedAt: metadata.finishedAt ?? null,
+    isChildLoom: metadata.parentLoom != null,
+    parentLoom: metadata.parentLoom ?? null,
   }
 }

@@ -683,6 +683,8 @@ describe('formatLoomsForJson', () => {
         issueUrls: {},
         prUrls: {},
         capabilities: [],
+        isChildLoom: false,
+        parentLoom: null,
       })
 
       // Issue worktree
@@ -702,6 +704,8 @@ describe('formatLoomsForJson', () => {
         issueUrls: {},
         prUrls: {},
         capabilities: [],
+        isChildLoom: false,
+        parentLoom: null,
       })
 
       // PR worktree
@@ -721,6 +725,8 @@ describe('formatLoomsForJson', () => {
         issueUrls: {},
         prUrls: {},
         capabilities: [],
+        isChildLoom: false,
+        parentLoom: null,
       })
 
       // Linear-style issue
@@ -740,6 +746,8 @@ describe('formatLoomsForJson', () => {
         issueUrls: {},
         prUrls: {},
         capabilities: [],
+        isChildLoom: false,
+        parentLoom: null,
       })
     })
 
@@ -873,6 +881,8 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: '2024-01-20T15:45:00.000Z',
         capabilities: [],
+        isChildLoom: false,
+        parentLoom: null,
       })
     })
 
@@ -1133,6 +1143,8 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: null,
         capabilities: [],
+        isChildLoom: false,
+        parentLoom: null,
       })
     })
 
@@ -1224,6 +1236,8 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: '2024-01-20T15:45:00.000Z',
         capabilities: ['cli'],
+        isChildLoom: false,
+        parentLoom: null,
       })
     })
 
@@ -1308,6 +1322,141 @@ describe('formatFinishedLoomForJson', () => {
       expect(result.issue_numbers).toEqual([])
       expect(result.pr_numbers).toEqual([])
       expect(result.branch).toBe('feat/experimental-feature')
+    })
+  })
+})
+
+describe('formatLoomForJson - child loom fields', () => {
+  const createWorktree = (overrides: Partial<GitWorktree> = {}): GitWorktree => ({
+    path: '/Users/dev/projects/myapp-looms/issue-101__sub-task',
+    branch: 'issue-101__sub-task',
+    commit: 'abc123def456789012345678901234567890abcd',
+    bare: false,
+    detached: false,
+    locked: false,
+    ...overrides,
+  })
+
+  const createMetadataWithParent = (): LoomMetadata => ({
+    description: 'Sub-task for parent issue',
+    created_at: '2024-01-15T10:30:00.000Z',
+    branchName: 'issue-101__sub-task',
+    worktreePath: '/Users/dev/projects/myapp-looms/issue-101__sub-task',
+    issueType: 'issue',
+    issue_numbers: ['101'],
+    pr_numbers: [],
+    issueTracker: 'github',
+    colorHex: '#dcebff',
+    sessionId: 'session-abc123',
+    projectPath: '/Users/dev/projects/myapp',
+    issueUrls: { '101': 'https://github.com/owner/repo/issues/101' },
+    prUrls: {},
+    draftPrNumber: null,
+    capabilities: [],
+    parentLoom: {
+      type: 'issue',
+      identifier: '100',
+      branchName: 'issue-100__parent-feature',
+      worktreePath: '/Users/dev/projects/myapp-looms/issue-100__parent-feature',
+      databaseBranch: 'issue-100',
+    },
+  })
+
+  it('should set isChildLoom: false when parentLoom is null', () => {
+    const worktree = createWorktree()
+    const result = formatLoomForJson(worktree)
+    expect(result.isChildLoom).toBe(false)
+    expect(result.parentLoom).toBeNull()
+  })
+
+  it('should set isChildLoom: true when parentLoom exists', () => {
+    const worktree = createWorktree()
+    const metadata = createMetadataWithParent()
+    const result = formatLoomForJson(worktree, undefined, metadata)
+    expect(result.isChildLoom).toBe(true)
+  })
+
+  it('should include parentLoom reference in output when present', () => {
+    const worktree = createWorktree()
+    const metadata = createMetadataWithParent()
+    const result = formatLoomForJson(worktree, undefined, metadata)
+    expect(result.parentLoom).toEqual({
+      type: 'issue',
+      identifier: '100',
+      branchName: 'issue-100__parent-feature',
+      worktreePath: '/Users/dev/projects/myapp-looms/issue-100__parent-feature',
+      databaseBranch: 'issue-100',
+    })
+  })
+
+  it('should handle parentLoom without optional databaseBranch', () => {
+    const worktree = createWorktree()
+    const metadata: LoomMetadata = {
+      ...createMetadataWithParent(),
+      parentLoom: {
+        type: 'issue',
+        identifier: '100',
+        branchName: 'issue-100__parent-feature',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-100__parent-feature',
+      },
+    }
+    const result = formatLoomForJson(worktree, undefined, metadata)
+    expect(result.isChildLoom).toBe(true)
+    expect(result.parentLoom?.databaseBranch).toBeUndefined()
+  })
+})
+
+describe('formatFinishedLoomForJson - child loom fields', () => {
+  const createFinishedMetadataWithParent = (): LoomMetadata => ({
+    description: 'Finished sub-task',
+    created_at: '2024-01-15T10:30:00.000Z',
+    branchName: 'issue-101__sub-task',
+    worktreePath: '/Users/dev/projects/myapp-looms/issue-101__sub-task',
+    issueType: 'issue',
+    issue_numbers: ['101'],
+    pr_numbers: [],
+    issueTracker: 'github',
+    colorHex: '#dcebff',
+    sessionId: 'session-abc123',
+    projectPath: '/Users/dev/projects/myapp',
+    issueUrls: { '101': 'https://github.com/owner/repo/issues/101' },
+    prUrls: {},
+    draftPrNumber: null,
+    capabilities: [],
+    parentLoom: {
+      type: 'issue',
+      identifier: '100',
+      branchName: 'issue-100__parent-feature',
+      worktreePath: '/Users/dev/projects/myapp-looms/issue-100__parent-feature',
+    },
+    status: 'finished',
+    finishedAt: '2024-01-20T15:45:00.000Z',
+  })
+
+  it('should set isChildLoom: false when parentLoom is null', () => {
+    const metadata: LoomMetadata = {
+      ...createFinishedMetadataWithParent(),
+      parentLoom: null,
+    }
+    const result = formatFinishedLoomForJson(metadata)
+    expect(result.isChildLoom).toBe(false)
+    expect(result.parentLoom).toBeNull()
+  })
+
+  it('should set isChildLoom: true when parentLoom exists', () => {
+    const metadata = createFinishedMetadataWithParent()
+    const result = formatFinishedLoomForJson(metadata)
+    expect(result.isChildLoom).toBe(true)
+  })
+
+  it('should include parentLoom reference in output when present', () => {
+    const metadata = createFinishedMetadataWithParent()
+    const result = formatFinishedLoomForJson(metadata)
+    expect(result.parentLoom).toEqual({
+      type: 'issue',
+      identifier: '100',
+      branchName: 'issue-100__parent-feature',
+      worktreePath: '/Users/dev/projects/myapp-looms/issue-100__parent-feature',
     })
   })
 })
