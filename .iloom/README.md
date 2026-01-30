@@ -120,28 +120,46 @@ Configure per-workflow permission modes for Claude CLI. This allows you to contr
 Configure Claude model preferences for different agent types. This allows you to use more powerful or faster models depending on the task.
 
 **Available models**:
-- `sonnet` - Balanced performance and speed (default)
-- `opus` - Most capable model for complex tasks
+- `opus` - Most capable model for complex tasks (default for workflow agents)
+- `sonnet` - Balanced performance and speed
 - `haiku` - Fastest model for simple tasks
 
 **Available agent types**:
 - `iloom-issue-analyze-and-plan` - Combined analysis and planning for SIMPLE tasks
 - `iloom-issue-analyzer` - Analyzes and researches GitHub issues to identify root causes
-- `iloom-issue-complexity-evaluator` - Quickly assesses issue complexity (SIMPLE or COMPLEX)
+- `iloom-issue-complexity-evaluator` - Quickly assesses issue complexity (uses haiku by default)
 - `iloom-issue-enhancer` - Enhances bug/enhancement reports from Product Manager perspective
 - `iloom-issue-implementer` - Implements GitHub issues exactly as specified
 - `iloom-issue-planner` - Creates detailed implementation plans for issues
 - `iloom-code-reviewer` - Reviews uncommitted code changes
 
-**Example**:
+**Budget-friendly configuration**:
+
+To reduce costs, you can configure agents to use faster, more economical models. Use this command to have Claude suggest budget-optimized settings:
+
+```bash
+iloom config "make my settings more budget friendly"
+```
+
+Or manually configure specific agents:
 ```json
 {
   "agents": {
-    "iloom-issue-implementer": {
-      "model": "opus"
-    },
-    "iloom-issue-complexity-evaluator": {
-      "model": "haiku"
+    "iloom-issue-enhancer": { "model": "sonnet" },
+    "iloom-issue-analyzer": { "model": "sonnet" },
+    "iloom-issue-analyze-and-plan": { "model": "sonnet" },
+    "iloom-issue-planner": { "model": "sonnet" },
+    "iloom-issue-implementer": { "model": "sonnet" }
+  }
+}
+```
+
+**Example** (configure code reviewer with alternative provider):
+```json
+{
+  "agents": {
+    "iloom-code-reviewer": {
+      "providers": { "gemini": "gemini-3-pro-preview" }
     }
   }
 }

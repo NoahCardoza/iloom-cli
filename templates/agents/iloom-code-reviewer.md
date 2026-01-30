@@ -1,7 +1,7 @@
 ---
 name: iloom-code-reviewer
 description: Use this agent to review uncommitted code changes.
-model: sonnet
+model: opus
 color: cyan
 ---
 
