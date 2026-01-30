@@ -338,10 +338,10 @@ describe('StartCommand', () => {
 				expect(mockGitHubService.createIssue).not.toHaveBeenCalled()
 			})
 
-			it('should handle edge case: exactly 25 chars with exactly 2 spaces', async () => {
+			it('should handle edge case: exactly 15 chars with exactly 2 spaces', async () => {
 				// Exactly at the boundary - should NOT trigger (needs > not >=)
-				const edgeCaseText = 'word1 word2 ' + 'x'.repeat(13)
-				expect(edgeCaseText.length).toBe(25)
+				const edgeCaseText = 'word1 word2 xxx'
+				expect(edgeCaseText.length).toBe(15)
 				expect((edgeCaseText.match(/ /g) || []).length).toBe(2)
 
 				// Should treat as branch name, but fail validation (spaces not allowed)
@@ -356,11 +356,11 @@ describe('StartCommand', () => {
 				expect(mockGitHubService.createIssue).not.toHaveBeenCalled()
 			})
 
-			it('should detect description for 26 chars with 3 spaces', async () => {
+			it('should detect description for 16 chars with 2 spaces', async () => {
 				// Just over the boundary - should trigger
-				const description = 'word1 word2 word3 ' + 'x'.repeat(8)
-				expect(description.length).toBe(26)
-				expect((description.match(/ /g) || []).length).toBe(3)
+				const description = 'word1 word2 xxxx'
+				expect(description.length).toBe(16)
+				expect((description.match(/ /g) || []).length).toBe(2)
 
 				// Mock GitHubService.createIssue to return issue data
 				vi.mocked(mockGitHubService.createIssue).mockResolvedValue({
@@ -381,8 +381,8 @@ describe('StartCommand', () => {
 				// Should create issue directly via GitHubService (no enhancement)
 				// Title is auto-capitalized
 				expect(mockGitHubService.createIssue).toHaveBeenCalledWith(
-					'Word1 word2 word3 xxxxxxxx', // title (first letter capitalized)
-					''                            // empty body
+					'Word1 word2 xxxx', // title (first letter capitalized)
+					''                  // empty body
 				)
 			})
 

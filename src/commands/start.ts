@@ -336,10 +336,10 @@ export class StartCommand {
 			throw new Error('Missing required argument: identifier')
 		}
 
-		// Check for description: >25 chars AND has spaces (likely a natural language description)
+		// Check for description: >15 chars AND has spaces (likely a natural language description)
 		// Short inputs with spaces are rejected later as invalid branch names
 		const spaceCount = (trimmedIdentifier.match(/ /g) ?? []).length
-		if (trimmedIdentifier.length > 25 && spaceCount >= 1) {
+		if (trimmedIdentifier.length > 15 && spaceCount >= 1) {
 			// Preserve leading space if present so capitalizeFirstLetter() can detect the override
 			return {
 				type: 'description',
