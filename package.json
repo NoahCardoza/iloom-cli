@@ -80,7 +80,7 @@
     "jsonc-parser": "^3.3.1",
     "omelette": "^0.4.17",
     "ora": "^7.0.1",
-    "string-width": "^8.1.1",
+    "string-width": "^6.1.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
