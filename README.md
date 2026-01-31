@@ -9,7 +9,7 @@ iloom
 
 </div>
 
-> **VS Code extension now available!** Run `il vscode` to install. Get the recap panel to see AI decisions, risks, and assumptions in real-time, plus the loom explorer to manage and switch between active projects and tasks.
+> **[VS Code extension](https://marketplace.visualstudio.com/items?itemName=iloom-ai.iloom-vscode) now available!** Run `il vscode` to install. Get the recap panel to see AI decisions, risks, and assumptions in real-time, plus the loom explorer to manage and switch between active projects and tasks.
 
 <div align="center">
   <img width="600" alt="iloom-ai-screenshot" src="https://raw.githubusercontent.com/iloom-ai/iloom-cli/main/assets/iloom-screenshot.png" />
