@@ -87,7 +87,11 @@ describe('FinishCommand - PR State Detection', () => {
 		mockCommitManager = {
 			detectUncommittedChanges: vi.fn().mockResolvedValue({
 				hasUncommittedChanges: false,
-				files: [],
+				unstagedFiles: [],
+				stagedFiles: [],
+				currentBranch: 'feat-pr-123',
+				isAheadOfRemote: false,
+				isBehindRemote: false,
 			}),
 			commitChanges: vi.fn().mockResolvedValue(undefined),
 		} as unknown as CommitManager
@@ -295,7 +299,11 @@ describe('FinishCommand - Open PR Workflow', () => {
 		// Mock uncommitted changes exist
 		vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
 			hasUncommittedChanges: true,
-			files: ['file1.ts', 'file2.ts'],
+			unstagedFiles: ['file1.ts', 'file2.ts'],
+			stagedFiles: [],
+			currentBranch: 'feat-pr-123',
+			isAheadOfRemote: false,
+			isBehindRemote: false,
 		})
 
 		await finishCommand.execute({
@@ -328,7 +336,11 @@ describe('FinishCommand - Open PR Workflow', () => {
 		// Mock no uncommitted changes
 		vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
 			hasUncommittedChanges: false,
-			files: [],
+			unstagedFiles: [],
+			stagedFiles: [],
+			currentBranch: 'feat-pr-123',
+			isAheadOfRemote: false,
+			isBehindRemote: false,
 		})
 
 		await finishCommand.execute({
@@ -347,7 +359,11 @@ describe('FinishCommand - Open PR Workflow', () => {
 	it('should keep worktree active after push for open PR', async () => {
 		vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
 			hasUncommittedChanges: false,
-			files: [],
+			unstagedFiles: [],
+			stagedFiles: [],
+			currentBranch: 'feat-pr-123',
+			isAheadOfRemote: false,
+			isBehindRemote: false,
 		})
 
 		await finishCommand.execute({
@@ -362,7 +378,11 @@ describe('FinishCommand - Open PR Workflow', () => {
 	it('should handle push failure gracefully for open PR', async () => {
 		vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
 			hasUncommittedChanges: false,
-			files: [],
+			unstagedFiles: [],
+			stagedFiles: [],
+			currentBranch: 'feat-pr-123',
+			isAheadOfRemote: false,
+			isBehindRemote: false,
 		})
 
 		// Mock push failure
@@ -382,7 +402,11 @@ describe('FinishCommand - Open PR Workflow', () => {
 	it('should skip validation for open PR workflow', async () => {
 		vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
 			hasUncommittedChanges: false,
-			files: [],
+			unstagedFiles: [],
+			stagedFiles: [],
+			currentBranch: 'feat-pr-123',
+			isAheadOfRemote: false,
+			isBehindRemote: false,
 		})
 
 		await finishCommand.execute({
@@ -420,6 +444,8 @@ describe('FinishCommand - Child Loom GitHub PR Workflow', () => {
 		body: 'Child issue body',
 		state: 'open',
 		url: 'https://github.com/test/repo/issues/456',
+		labels: [],
+		assignees: [],
 	}
 
 	beforeEach(() => {
@@ -444,7 +470,11 @@ describe('FinishCommand - Child Loom GitHub PR Workflow', () => {
 		mockCommitManager = {
 			detectUncommittedChanges: vi.fn().mockResolvedValue({
 				hasUncommittedChanges: false,
-				files: [],
+				unstagedFiles: [],
+				stagedFiles: [],
+				currentBranch: 'feat-issue-456',
+				isAheadOfRemote: false,
+				isBehindRemote: false,
 			}),
 			commitChanges: vi.fn().mockResolvedValue(undefined),
 		} as unknown as CommitManager
@@ -607,7 +637,11 @@ describe('FinishCommand - Closed PR Workflow', () => {
 	it('should skip all merge steps for closed PR', async () => {
 		vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
 			hasUncommittedChanges: false,
-			files: [],
+			unstagedFiles: [],
+			stagedFiles: [],
+			currentBranch: 'feat-pr-123',
+			isAheadOfRemote: false,
+			isBehindRemote: false,
 		})
 
 		await finishCommand.execute({
@@ -624,7 +658,11 @@ describe('FinishCommand - Closed PR Workflow', () => {
 	it('should call cleanup directly for closed PR', async () => {
 		vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
 			hasUncommittedChanges: false,
-			files: [],
+			unstagedFiles: [],
+			stagedFiles: [],
+			currentBranch: 'feat-pr-123',
+			isAheadOfRemote: false,
+			isBehindRemote: false,
 		})
 
 		await finishCommand.execute({
@@ -648,7 +686,11 @@ describe('FinishCommand - Closed PR Workflow', () => {
 	it('should delete branch for closed PR', async () => {
 		vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
 			hasUncommittedChanges: false,
-			files: [],
+			unstagedFiles: [],
+			stagedFiles: [],
+			currentBranch: 'feat-pr-123',
+			isAheadOfRemote: false,
+			isBehindRemote: false,
 		})
 
 		await finishCommand.execute({
@@ -669,7 +711,11 @@ describe('FinishCommand - Closed PR Workflow', () => {
 		// Mock uncommitted changes exist
 		vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
 			hasUncommittedChanges: true,
-			files: ['file1.ts'],
+			unstagedFiles: ['file1.ts'],
+			stagedFiles: [],
+			currentBranch: 'feat-pr-123',
+			isAheadOfRemote: false,
+			isBehindRemote: false,
 		})
 
 		// Should throw error without --force
@@ -688,7 +734,11 @@ describe('FinishCommand - Closed PR Workflow', () => {
 		// Mock uncommitted changes exist
 		vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
 			hasUncommittedChanges: true,
-			files: ['file1.ts'],
+			unstagedFiles: ['file1.ts'],
+			stagedFiles: [],
+			currentBranch: 'feat-pr-123',
+			isAheadOfRemote: false,
+			isBehindRemote: false,
 		})
 
 		// Should succeed with --force
@@ -752,7 +802,11 @@ describe('FinishCommand - Merged PR Workflow', () => {
 		mockCommitManager = {
 			detectUncommittedChanges: vi.fn().mockResolvedValue({
 				hasUncommittedChanges: false,
-				files: [],
+				unstagedFiles: [],
+				stagedFiles: [],
+				currentBranch: 'feat-pr-123',
+				isAheadOfRemote: false,
+				isBehindRemote: false,
 			}),
 			commitChanges: vi.fn().mockResolvedValue(undefined),
 		} as unknown as CommitManager
@@ -890,7 +944,11 @@ describe('FinishCommand - Dry-Run Mode for PRs', () => {
 		vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockOpenPR)
 		vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
 			hasUncommittedChanges: true,
-			files: ['file1.ts'],
+			unstagedFiles: ['file1.ts'],
+			stagedFiles: [],
+			currentBranch: 'feat-pr-123',
+			isAheadOfRemote: false,
+			isBehindRemote: false,
 		})
 
 		await finishCommand.execute({
@@ -921,7 +979,11 @@ describe('FinishCommand - Dry-Run Mode for PRs', () => {
 		vi.mocked(mockGitHubService.fetchPR).mockResolvedValue(mockClosedPR)
 		vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
 			hasUncommittedChanges: false,
-			files: [],
+			unstagedFiles: [],
+			stagedFiles: [],
+			currentBranch: 'feat-pr-123',
+			isAheadOfRemote: false,
+			isBehindRemote: false,
 		})
 
 		await finishCommand.execute({
@@ -964,6 +1026,8 @@ describe('FinishCommand - Issue Workflow (Regression Tests)', () => {
 		body: 'Test body',
 		state: 'open',
 		url: 'https://github.com/test/repo/issues/45',
+		labels: [],
+		assignees: [],
 	}
 
 	beforeEach(() => {
@@ -988,7 +1052,11 @@ describe('FinishCommand - Issue Workflow (Regression Tests)', () => {
 		mockCommitManager = {
 			detectUncommittedChanges: vi.fn().mockResolvedValue({
 				hasUncommittedChanges: false,
-				files: [],
+				unstagedFiles: [],
+				stagedFiles: [],
+				currentBranch: 'feat-issue-45',
+				isAheadOfRemote: false,
+				isBehindRemote: false,
 			}),
 			commitChanges: vi.fn().mockResolvedValue(undefined),
 		} as unknown as CommitManager
@@ -1054,3 +1122,4 @@ describe('FinishCommand - Issue Workflow (Regression Tests)', () => {
 		expect(pushBranchToRemote).not.toHaveBeenCalled()
 	})
 })
+

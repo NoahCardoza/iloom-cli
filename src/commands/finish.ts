@@ -775,22 +775,14 @@ export class FinishCommand {
 				}
 			}
 
-			// Push final commits (use force-with-lease if we rewrote history)
-			const needsForceWithLease = isHeadPlaceholder || placeholderSha
+			// Push final commits - always use force-with-lease in draft PR mode
+			// Rebase onto main (line 611) changes commit SHAs, causing local history to diverge from remote
+			// Even if placeholder wasn't removed, the rebased commits need force push
 			if (!options.dryRun) {
 				getLogger().info('Pushing final commits to remote...')
-				if (needsForceWithLease) {
-					// Force push required after history rewrite
-					await executeGitCommand(['push', '--force-with-lease', 'origin', worktree.branch], { cwd: worktree.path })
-				} else {
-					await pushBranchToRemote(worktree.branch, worktree.path, { dryRun: false })
-				}
+				await executeGitCommand(['push', '--force-with-lease', 'origin', worktree.branch], { cwd: worktree.path })
 			} else {
-				if (needsForceWithLease) {
-					getLogger().info('[DRY RUN] Would force push final commits to remote (history rewritten)')
-				} else {
-					getLogger().info('[DRY RUN] Would push final commits to remote')
-				}
+				getLogger().info('[DRY RUN] Would force push final commits to remote (rebased history)')
 			}
 
 			// Mark draft PR as ready
