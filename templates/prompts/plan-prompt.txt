@@ -420,16 +420,14 @@ Use `mcp__issue_management__create_comment` to post this summary to the parent e
 
 After creating issues successfully, you MUST end with a clear next steps message.
 
-Identify the **first child issue** to work on - this is the child issue that:
-- Has no dependencies (nothing blocks it), OR
-- Is first in execution order if all issues have dependencies
+Direct the user to **open the epic issue** - this is the parent issue that contains all the child issues you just created. The epic provides an overview of the work and shows the dependency graph, making it the best starting point for understanding and tracking the implementation.
 
 {{#if IS_VSCODE_MODE}}
 **Next Steps Message (VS Code Mode):**
-End your summary with: "Exit this session, then use the iloom explorer panel to create a new loom for issue [FIRST_ISSUE_NUMBER] to get started"
+End your summary with: "Exit this session and open the epic at [EPIC_URL] to review the plan and child issues. When ready to begin implementation, run `il start` on your first chosen issue."
 {{else}}
 **Next Steps Message (CLI Mode):**
-End your summary with: "Exit this session and run `il start [FIRST_ISSUE_NUMBER]` to get started"
+End your summary with: "Exit this session and open the epic at [EPIC_URL] to review the plan and child issues. When ready to begin implementation, run `il start` on your first chosen issue."
 {{/if}}
 
-Replace `[FIRST_ISSUE_NUMBER]` with the actual issue number (just the number, without the `#` prefix) of the first child issue to work on. For example: `il start 123` or "issue 456", not `il start #123`.
+Replace `[EPIC_URL]` with the actual URL of the epic issue you created.
