@@ -5,6 +5,7 @@ import type { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import * as claudeUtils from '../utils/claude.js'
 import * as githubUtils from '../utils/github.js'
 import * as gitUtils from '../utils/git.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
 
 // Mock MetadataManager to return proper metadata for recap MCP tests
 vi.mock('../lib/MetadataManager.js', () => ({
@@ -208,7 +209,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			// Mock MetadataManager to return web capability
-			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			// Use statically imported MetadataManager (mocked at top of file)
 			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
 				readMetadata: vi.fn().mockResolvedValue({
 					description: 'Test loom',
@@ -1593,7 +1594,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			// Mock MetadataManager to return metadata with oneShot: 'noReview'
-			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			// Use statically imported MetadataManager (mocked at top of file)
 			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
 				readMetadata: vi.fn().mockResolvedValue({
 					description: 'Test loom',
@@ -1633,7 +1634,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			// Mock MetadataManager to return metadata with oneShot: 'noReview'
-			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			// Use statically imported MetadataManager (mocked at top of file)
 			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
 				readMetadata: vi.fn().mockResolvedValue({
 					description: 'Test loom',
@@ -1674,7 +1675,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			// Mock MetadataManager to return metadata with oneShot: 'noReview'
-			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			// Use statically imported MetadataManager (mocked at top of file)
 			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
 				readMetadata: vi.fn().mockResolvedValue({
 					description: 'Test loom',
@@ -1716,7 +1717,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			// Mock MetadataManager to return metadata with oneShot: 'bypassPermissions'
-			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			// Use statically imported MetadataManager (mocked at top of file)
 			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
 				readMetadata: vi.fn().mockResolvedValue({
 					description: 'Test loom',
@@ -1756,7 +1757,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			// Mock MetadataManager to return metadata without oneShot field
-			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			// Use statically imported MetadataManager (mocked at top of file)
 			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
 				readMetadata: vi.fn().mockResolvedValue({
 					description: 'Test loom',
@@ -1891,7 +1892,7 @@ describe('IgniteCommand', () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 
 			// Get MetadataManager and reset its mock to return metadata without sessionId
-			const { MetadataManager } = await import('../lib/MetadataManager.js')
+			// Use statically imported MetadataManager (mocked at top of file)
 			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
 				readMetadata: vi.fn().mockResolvedValue({
 					description: 'Test loom',
@@ -2119,6 +2120,429 @@ describe('IgniteCommand', () => {
 				// Content should be strings (even if empty due to file not found in test env)
 				expect(typeof templateCall[1].README_CONTENT).toBe('string')
 				expect(typeof templateCall[1].SETTINGS_SCHEMA_CONTENT).toBe('string')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+	})
+
+	describe('AUTO_COMMIT_PUSH template variable', () => {
+		it('should set AUTO_COMMIT_PUSH true when draft PR mode and autoCommitPush not explicitly false', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with draftPrNumber
+			// Use statically imported MetadataManager (mocked at top of file)
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-498__auto-commit',
+					worktreePath: '/path/to/feat/issue-498__auto-commit',
+					issueType: 'issue',
+					issue_numbers: ['498'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					draftPrNumber: 42, // Draft PR mode enabled
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			// Mock settings with autoCommitPush undefined (should default to true)
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					mergeBehavior: {
+						mode: 'github-draft-pr',
+						// autoCommitPush not set - should default to true
+					},
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({}),
+				formatForCli: vi.fn((agents) => agents),
+			}
+
+			const commandWithDraftPr = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-498__auto-commit')
+
+			try {
+				await commandWithDraftPr.execute()
+
+				// Verify template manager was called with AUTO_COMMIT_PUSH=true
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						DRAFT_PR_MODE: true,
+						DRAFT_PR_NUMBER: 42,
+						AUTO_COMMIT_PUSH: true,
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should set AUTO_COMMIT_PUSH false when autoCommitPush explicitly false', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with draftPrNumber
+			// Use statically imported MetadataManager (mocked at top of file)
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-498__no-auto-commit',
+					worktreePath: '/path/to/feat/issue-498__no-auto-commit',
+					issueType: 'issue',
+					issue_numbers: ['498'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					draftPrNumber: 43, // Draft PR mode enabled
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			// Mock settings with autoCommitPush explicitly false
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					mergeBehavior: {
+						mode: 'github-draft-pr',
+						autoCommitPush: false, // Explicitly disabled
+					},
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({}),
+				formatForCli: vi.fn((agents) => agents),
+			}
+
+			const commandWithDraftPr = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-498__no-auto-commit')
+
+			try {
+				await commandWithDraftPr.execute()
+
+				// Verify template manager was called with AUTO_COMMIT_PUSH=false
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						DRAFT_PR_MODE: true,
+						DRAFT_PR_NUMBER: 43,
+						AUTO_COMMIT_PUSH: false,
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should not set AUTO_COMMIT_PUSH when not in draft PR mode', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata WITHOUT draftPrNumber
+			// Use statically imported MetadataManager (mocked at top of file)
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-498__standard',
+					worktreePath: '/path/to/feat/issue-498__standard',
+					issueType: 'issue',
+					issue_numbers: ['498'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					// No draftPrNumber - standard issue mode
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			// Mock settings with autoCommitPush true (shouldn't matter since not in draft PR mode)
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					mergeBehavior: {
+						mode: 'local',
+						autoCommitPush: true,
+					},
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({}),
+				formatForCli: vi.fn((agents) => agents),
+			}
+
+			const commandStandard = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-498__standard')
+
+			try {
+				await commandStandard.execute()
+
+				// Verify template manager was called with STANDARD_ISSUE_MODE and NO AUTO_COMMIT_PUSH
+				const templateCall = vi.mocked(mockTemplateManager.getPrompt).mock.calls[0]
+				expect(templateCall[1].STANDARD_ISSUE_MODE).toBe(true)
+				expect(templateCall[1].DRAFT_PR_MODE).toBeUndefined()
+				expect(templateCall[1].AUTO_COMMIT_PUSH).toBeUndefined()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+	})
+
+	describe('GIT_REMOTE validation', () => {
+		it('should accept valid remote names with alphanumeric characters, underscores, and hyphens', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with draftPrNumber
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-498__remote-test',
+					worktreePath: '/path/to/feat/issue-498__remote-test',
+					issueType: 'issue',
+					issue_numbers: ['498'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					draftPrNumber: 42,
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			// Mock settings with valid remote names
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					mergeBehavior: {
+						mode: 'github-draft-pr',
+						remote: 'my_remote-123',
+					},
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({}),
+				formatForCli: vi.fn((agents) => agents),
+			}
+
+			const commandWithValidRemote = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-498__remote-test')
+
+			try {
+				await commandWithValidRemote.execute()
+
+				// Verify template manager was called with the valid remote
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						GIT_REMOTE: 'my_remote-123',
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should throw error for remote names with invalid characters', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with draftPrNumber
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-498__invalid-remote',
+					worktreePath: '/path/to/feat/issue-498__invalid-remote',
+					issueType: 'issue',
+					issue_numbers: ['498'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					draftPrNumber: 42,
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			// Mock settings with invalid remote name (contains shell injection)
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					mergeBehavior: {
+						mode: 'github-draft-pr',
+						remote: 'origin; rm -rf /',
+					},
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({}),
+				formatForCli: vi.fn((agents) => agents),
+			}
+
+			const commandWithInvalidRemote = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-498__invalid-remote')
+
+			try {
+				await expect(commandWithInvalidRemote.execute()).rejects.toThrow(
+					'Invalid git remote name: "origin; rm -rf /". Remote names can only contain alphanumeric characters, underscores, and hyphens.'
+				)
+
+				// Verify launchClaude was NOT called
+				expect(launchClaudeSpy).not.toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should throw error for remote names with spaces', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with draftPrNumber
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-498__space-remote',
+					worktreePath: '/path/to/feat/issue-498__space-remote',
+					issueType: 'issue',
+					issue_numbers: ['498'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					draftPrNumber: 42,
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			// Mock settings with invalid remote name containing spaces
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					mergeBehavior: {
+						mode: 'github-draft-pr',
+						remote: 'my remote',
+					},
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({}),
+				formatForCli: vi.fn((agents) => agents),
+			}
+
+			const commandWithSpaceRemote = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-498__space-remote')
+
+			try {
+				await expect(commandWithSpaceRemote.execute()).rejects.toThrow(
+					'Invalid git remote name: "my remote". Remote names can only contain alphanumeric characters, underscores, and hyphens.'
+				)
+
+				// Verify launchClaude was NOT called
+				expect(launchClaudeSpy).not.toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('should use default origin remote when no remote is configured', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Mock MetadataManager to return metadata with draftPrNumber
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: vi.fn().mockResolvedValue({
+					description: 'Test loom',
+					created_at: '2025-01-01T00:00:00Z',
+					branchName: 'feat/issue-498__default-remote',
+					worktreePath: '/path/to/feat/issue-498__default-remote',
+					issueType: 'issue',
+					issue_numbers: ['498'],
+					sessionId: '12345678-1234-4567-8901-123456789012',
+					draftPrNumber: 42,
+				}),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+			}))
+
+			// Mock settings without remote configured
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					mergeBehavior: {
+						mode: 'github-draft-pr',
+						// remote not set - should default to 'origin'
+					},
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({}),
+				formatForCli: vi.fn((agents) => agents),
+			}
+
+			const commandWithDefaultRemote = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+			)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-498__default-remote')
+
+			try {
+				await commandWithDefaultRemote.execute()
+
+				// Verify template manager was called with default 'origin' remote
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						GIT_REMOTE: 'origin',
+					})
+				)
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()

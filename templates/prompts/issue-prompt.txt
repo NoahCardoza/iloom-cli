@@ -211,7 +211,16 @@ You are orchestrating a set of agents through a development process, with human 
 15. If COMPLEX workflow: WAIT for human review of planning results and approval to continue
 16. Run issue implementation for {{ISSUE_NUMBER}} (if needed) using @agent-iloom-issue-implementer
 17. Run code review using @agent-iloom-code-reviewer
+{{#if DRAFT_PR_MODE}}
+{{#if AUTO_COMMIT_PUSH}}
+18. Auto-commit and push changes to draft PR (STEP 5.5)
+19. Provide final summary with links to all issue comments created. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analyiss or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent.
+{{else}}
 18. Provide final summary with links to all issue comments created. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analyiss or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent.
+{{/if}}
+{{else}}
+18. Provide final summary with links to all issue comments created. Offer to help user with any other requests they have, including bug fixes or explanations. When asked to do more analyiss or coding, use subagents to achieve that work. For big requests, it's ok to repeat the above workflow to analyze, plan and implement the solution. For simple tasks, use a generalized subagent.
+{{/if}}
 
 ## Workflow Details
 
@@ -696,9 +705,127 @@ This is NOT optional - if the reviewer requests Claude Local Review, it must be 
 5. Mark todos #17 and #18 as completed
 6. Proceed to Post-Workflow Help
 
+{{#if DRAFT_PR_MODE}}
+{{#if AUTO_COMMIT_PUSH}}
 ---
 
+## STEP 5.5 - Auto-Commit and Push (Draft PR Mode)
+
+**IMPORTANT**: This step executes automatically after code review completes in draft PR mode.
+
+1. **Check for uncommitted changes:**
+   ```bash
+   git status --porcelain
+   ```
+   - If no changes exist, skip to Post-Workflow Help
+   - If changes exist, proceed with commit
+
+2. **Check for placeholder commit on the branch:**
+   ```bash
+   git log -1 --format=%s
+   ```
+   - A commit is a **placeholder commit** ONLY if its message starts with `[iloom-placeholder]`. This is the specific marker that iloom uses when creating placeholder commits to keep draft PRs open.
+   - Do NOT treat other commit messages (like "initial", "draft", "wip", etc.) as placeholders - only the exact `[iloom-placeholder]` prefix.
+   - **IMPORTANT**: We must NOT remove the placeholder from remote first (that would close the PR). Instead, we fix locally then force push to atomically replace it.
+
+3. **If PLACEHOLDER COMMIT detected:**
+
+   a. **Reset the placeholder commit locally (keeps changes staged):**
+      ```bash
+      git reset --soft HEAD~1
+      ```
+      This undoes the placeholder commit but keeps all changes staged.
+
+   b. **Stage any additional implementation changes:**
+      ```bash
+      git add -A
+      ```
+
+   c. **Create the real implementation commit:**
+      - Generate a commit message summarizing the implementation work
+      - Include reference to Issue #{{ISSUE_NUMBER}}
+      - Format: `feat(issue-{{ISSUE_NUMBER}}): [summary of changes]`
+      ```bash
+      git commit -m "feat(issue-{{ISSUE_NUMBER}}): [generated summary]"
+      ```
+
+   d. **Force push to atomically replace the placeholder:**
+      ```bash
+      git push --force-with-lease {{GIT_REMOTE}} HEAD
+      ```
+      **NOTE**: `--force-with-lease` is safe here because we are replacing our own placeholder commit, not overwriting others' work. This atomically replaces the placeholder on the remote.
+
+4. **If NO placeholder commit detected (normal case):**
+
+   a. **Stage all changes:**
+      ```bash
+      git add -A
+      ```
+
+   b. **Create commit with descriptive message:**
+      - Generate a commit message summarizing the implementation work
+      - Include reference to Issue #{{ISSUE_NUMBER}}
+      - Format: `feat(issue-{{ISSUE_NUMBER}}): [summary of changes]`
+      ```bash
+      git commit -m "feat(issue-{{ISSUE_NUMBER}}): [generated summary]"
+      ```
+
+   c. **Push to remote:**
+      ```bash
+      git push {{GIT_REMOTE}} HEAD
+      ```
+      **IMPORTANT**: Do NOT use `--force` or `--force-with-lease` for normal pushes. If the push fails due to non-fast-forward (rejected), stop and notify the user - they may need to pull remote changes first.
+
+5. **Check for CI/CD and deployment URLs (after successful push):**
+
+   Wait a moment for GitHub to register the push, then check for available URLs:
+
+   a. **Check recent workflow runs:**
+      ```bash
+      gh run list --branch HEAD --limit 5
+      ```
+      This shows recent GitHub Actions workflow runs. Note any running or completed workflows.
+
+   b. **Check PR for deployment URLs:**
+      ```bash
+      gh pr view {{DRAFT_PR_NUMBER}} --json deployments --jq '.deployments[].url'
+      ```
+      This retrieves preview deployment URLs (e.g., Vercel, Netlify, Cloudflare Pages).
+
+   c. **Check commit statuses for additional URLs:**
+      ```bash
+      gh api repos/{owner}/{repo}/commits/HEAD/statuses --jq '.[].target_url'
+      ```
+      This retrieves status check URLs that may include build artifacts or external service links.
+
+   d. **Display available URLs to user:**
+      - If deployment URLs found: "Preview deployment: [URL]"
+      - If workflow runs found: "CI/CD workflow: [run URL]"
+      - If no URLs available yet: "CI/CD is likely still initializing. Check the PR page for updates: https://github.com/{owner}/{repo}/pull/{{DRAFT_PR_NUMBER}}"
+
+6. **Handle errors gracefully:**
+   - If commit fails: Log error, inform user that manual commit is needed
+   - If push fails: Log error, inform user that manual push is needed (changes are still committed locally)
+   - Do NOT retry automatically - let user handle conflicts/issues manually
+   - **Force push safety**: `--force-with-lease` is ONLY allowed for replacing placeholder commits on draft PRs (step 3d). Regular `--force` is still forbidden. For normal pushes (step 4c), if rejected, inform user and stop.
+
+7. **Notify completion:**
+   - Log: "Auto-commit and push complete. Changes pushed to draft PR #{{DRAFT_PR_NUMBER}}."
+   - Proceed to Post-Workflow Help
+
+{{/if}}
+{{/if}}
+---
+
+{{#if DRAFT_PR_MODE}}
+{{#if AUTO_COMMIT_PUSH}}
+**MANDATORY CHECKPOINT: You MUST complete STEP 5.5 - Auto-Commit and Push before proceeding below. Do NOT skip the auto-commit/push.**
+{{else}}
 **MANDATORY CHECKPOINT: You MUST complete STEP 5 - Review Phase before proceeding below. Do NOT skip the review.**
+{{/if}}
+{{else}}
+**MANDATORY CHECKPOINT: You MUST complete STEP 5 - Review Phase before proceeding below. Do NOT skip the review.**
+{{/if}}
 
 ---
 

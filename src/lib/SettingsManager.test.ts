@@ -2878,6 +2878,74 @@ const error: { code?: string; message: string } = {
 		})
 	})
 
+	describe('mergeBehavior.autoCommitPush', () => {
+		it('should accept boolean true for autoCommitPush', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mergeBehavior: {
+					mode: 'github-draft-pr' as const,
+					autoCommitPush: true,
+				},
+			}
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.mergeBehavior?.autoCommitPush).toBe(true)
+		})
+
+		it('should accept boolean false for autoCommitPush', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mergeBehavior: {
+					mode: 'github-draft-pr' as const,
+					autoCommitPush: false,
+				},
+			}
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.mergeBehavior?.autoCommitPush).toBe(false)
+		})
+
+		it('should accept undefined for autoCommitPush (optional)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				mergeBehavior: {
+					mode: 'github-draft-pr' as const,
+					// autoCommitPush intentionally omitted
+				},
+			}
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+			.mockRejectedValueOnce(error) // global settings
+			.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+			.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.mergeBehavior?.autoCommitPush).toBeUndefined()
+		})
+	})
+
 	describe('getPlanReviewer', () => {
 		it('should return none by default when plan not configured', () => {
 			const settings = { sourceEnvOnStart: false }

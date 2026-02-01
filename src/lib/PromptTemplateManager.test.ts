@@ -397,6 +397,49 @@ const obj = { key: "value" }
 
 			expect(result).toBe(`${readmeWithCodeBlocks}\nVersion: 1.0.0`)
 		})
+
+		it('should include conditional section when AUTO_COMMIT_PUSH is true', () => {
+			const template = 'Start{{#if AUTO_COMMIT_PUSH}} auto-commit enabled {{/if}}End'
+			const variables: TemplateVariables = { AUTO_COMMIT_PUSH: true }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('Start auto-commit enabled End')
+		})
+
+		it('should exclude conditional section when AUTO_COMMIT_PUSH is false', () => {
+			const template = 'Start{{#if AUTO_COMMIT_PUSH}} auto-commit enabled {{/if}}End'
+			const variables: TemplateVariables = { AUTO_COMMIT_PUSH: false }
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('StartEnd')
+		})
+
+		it('should exclude conditional section when AUTO_COMMIT_PUSH is undefined', () => {
+			const template = 'Start{{#if AUTO_COMMIT_PUSH}} auto-commit enabled {{/if}}End'
+			const variables: TemplateVariables = {}
+
+			const result = manager.substituteVariables(template, variables)
+
+			expect(result).toBe('StartEnd')
+		})
+
+		it('should handle nested DRAFT_PR_MODE and AUTO_COMMIT_PUSH conditionals', () => {
+			const template = `{{#if DRAFT_PR_MODE}}Draft PR{{#if AUTO_COMMIT_PUSH}} with auto-commit{{/if}}{{/if}}`
+
+			// Both true
+			const resultBothTrue = manager.substituteVariables(template, { DRAFT_PR_MODE: true, AUTO_COMMIT_PUSH: true })
+			expect(resultBothTrue).toBe('Draft PR with auto-commit')
+
+			// DRAFT_PR_MODE true, AUTO_COMMIT_PUSH false
+			const resultDraftOnly = manager.substituteVariables(template, { DRAFT_PR_MODE: true, AUTO_COMMIT_PUSH: false })
+			expect(resultDraftOnly).toBe('Draft PR')
+
+			// DRAFT_PR_MODE false (nested content not evaluated)
+			const resultNoDraft = manager.substituteVariables(template, { DRAFT_PR_MODE: false, AUTO_COMMIT_PUSH: true })
+			expect(resultNoDraft).toBe('')
+		})
 	})
 
 	describe('getPrompt', () => {

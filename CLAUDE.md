@@ -177,3 +177,35 @@ Each workspace gets a unique port calculated as `3000 + issue/PR number`. This p
 ## Database Branch Isolation
 
 Uses Neon database branching to create isolated database copies per workspace. Each branch gets independent schema and data, preventing conflicts between features under development.
+
+## Agent Workflow Todo Lists
+
+The todo list in `templates/prompts/issue-prompt.txt` is critical for ensuring agents follow the implementation plan correctly.
+
+**Why the Todo List Matters:**
+- Agents use the todo list as both a progress tracker and an execution checklist
+- Each numbered item represents a workflow step that must be completed
+- Agents check off items as they complete each step, providing visibility into progress
+- The todo list serves as the source of truth for what steps need to be executed
+
+**When Adding New Workflow Steps:**
+- New workflow steps MUST be added to the todo list to ensure they are executed
+- Position the item appropriately based on when it should run in the workflow
+- Use Handlebars conditionals (e.g., `{{#if FLAG_NAME}}`) when steps are conditional
+- Ensure numbering remains sequential within each conditional branch
+
+**Example - Adding a Conditional Step:**
+```handlebars
+{{#if SOME_MODE}}
+{{#if SOME_FLAG}}
+17. Execute conditional step (STEP X.X)
+18. Next step...
+{{else}}
+17. Next step...
+{{/if}}
+{{else}}
+17. Next step...
+{{/if}}
+```
+
+Without the todo list entry, agents may skip steps even if they are fully documented elsewhere in the prompt.

@@ -378,6 +378,12 @@ export const IloomSettingsSchema = z.object({
 		.object({
 			mode: z.enum(['local', 'github-pr', 'github-draft-pr']).default('local'),
 			remote: z.string().optional(),
+			autoCommitPush: z
+				.boolean()
+				.optional()
+				.describe(
+					'Auto-commit and push after code review in draft PR mode. Defaults to true when mode is github-draft-pr.'
+				),
 		})
 		.optional()
 		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), or github-draft-pr (create draft PR at start, mark ready on finish)'),
@@ -561,6 +567,12 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.object({
 			mode: z.enum(['local', 'github-pr', 'github-draft-pr']).optional(),
 			remote: z.string().optional(),
+			autoCommitPush: z
+				.boolean()
+				.optional()
+				.describe(
+					'Auto-commit and push after code review in draft PR mode. Defaults to true when mode is github-draft-pr.'
+				),
 		})
 		.optional()
 		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), or github-draft-pr (create draft PR at start, mark ready on finish)'),

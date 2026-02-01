@@ -453,6 +453,16 @@ export class IgniteCommand {
 		if (draftPrNumber !== undefined) {
 			variables.DRAFT_PR_MODE = true
 			variables.DRAFT_PR_NUMBER = draftPrNumber
+			// Set AUTO_COMMIT_PUSH when in draft PR mode and not explicitly disabled
+			// Default is true (enabled) for draft PR mode
+			const autoCommitPushEnabled = this.settings?.mergeBehavior?.autoCommitPush !== false
+			variables.AUTO_COMMIT_PUSH = autoCommitPushEnabled
+			// Set GIT_REMOTE from settings or default to 'origin'
+			const remote = this.settings?.mergeBehavior?.remote ?? 'origin'
+			if (!/^[a-zA-Z0-9_-]+$/.test(remote)) {
+				throw new Error(`Invalid git remote name: "${remote}". Remote names can only contain alphanumeric characters, underscores, and hyphens.`)
+			}
+			variables.GIT_REMOTE = remote
 		} else {
 			variables.STANDARD_ISSUE_MODE = true
 		}

@@ -47,6 +47,7 @@ export interface TemplateVariables {
 	// Draft PR mode variables - mutually exclusive with standard issue mode
 	DRAFT_PR_NUMBER?: number  // PR number for draft PR workflow
 	DRAFT_PR_MODE?: boolean   // True when using github-draft-pr merge mode
+	AUTO_COMMIT_PUSH?: boolean  // True when auto-commit/push is enabled for draft PR mode
 	STANDARD_ISSUE_MODE?: boolean  // True when using standard issue commenting (not draft PR)
 	// VS Code environment detection
 	IS_VSCODE_MODE?: boolean  // True when ILOOM_VSCODE=1 environment variable is set
@@ -81,6 +82,8 @@ export interface TemplateVariables {
 	USE_GEMINI_REVIEWER?: boolean
 	USE_CODEX_REVIEWER?: boolean
 	HAS_REVIEWER?: boolean
+	// Git remote configuration
+	GIT_REMOTE?: string  // Remote name for push (defaults to 'origin')
 }
 
 export class PromptTemplateManager {
