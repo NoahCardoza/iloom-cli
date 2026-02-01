@@ -424,10 +424,10 @@ Direct the user to **open the epic issue** - this is the parent issue that conta
 
 {{#if IS_VSCODE_MODE}}
 **Next Steps Message (VS Code Mode):**
-End your summary with: "Exit this session and open Epic #[EPIC_ISSUE_NUMBER] in GitHub to review the plan and child issues. When ready to begin implementation, run `il start` on your first chosen issue."
+End your summary with: "Exit this session and open Epic #[EPIC_ISSUE_NUMBER] to review the plan and child issues. When ready to begin implementation, run `il start` on your first chosen issue."
 {{else}}
 **Next Steps Message (CLI Mode):**
-End your summary with: "Exit this session and open Epic #[EPIC_ISSUE_NUMBER] in GitHub to review the plan and child issues. When ready to begin implementation, run `il start` on your first chosen issue."
+End your summary with: "Exit this session and open Epic #[EPIC_ISSUE_NUMBER] to review the plan and child issues. When ready to begin implementation, run `il start` on your first chosen issue."
 {{/if}}
 
 Replace `[EPIC_ISSUE_NUMBER]` with the actual epic issue number. For example: "Epic #123", not "Epic 123" or "Epic ##123".
