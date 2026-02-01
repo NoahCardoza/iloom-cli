@@ -20,5 +20,8 @@
     "terminal": true,
     "vscode": true
   },
-  "attribution": "on"
+  "attribution": "on",
+  "mergeBehavior": {
+    "mode": "github-draft-pr"
+  }
 }
