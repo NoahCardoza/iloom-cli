@@ -108,14 +108,16 @@ vi.mock('./LoomLauncher.js', () => ({
 }))
 
 // Mock PRManager for draft PR creation tests
-// Shared mock function for verification in tests
+// Shared mock functions for verification in tests
 const mockCreateDraftPR = vi.fn()
+const mockCheckForExistingPR = vi.fn()
 vi.mock('./PRManager.js', () => {
   // Use a class-like factory that creates fresh instances
   // This avoids issues with mockReset clearing the constructor implementation
   return {
     PRManager: class MockPRManager {
       createDraftPR = mockCreateDraftPR
+      checkForExistingPR = mockCheckForExistingPR
     },
   }
 })
@@ -188,6 +190,7 @@ describe('LoomManager', () => {
     mockDeleteMetadata.mockResolvedValue(undefined)
     mockListAllMetadata.mockResolvedValue([])
     mockCreateDraftPR.mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' })
+    mockCheckForExistingPR.mockResolvedValue(null) // No existing PR by default
   })
 
   describe('createIloom', () => {
@@ -536,6 +539,7 @@ describe('LoomManager', () => {
     it('should create draft PR for branch mode when mergeBehavior is github-draft-pr', async () => {
       // Ensure PRManager mock is set up for this test
       mockCreateDraftPR.mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' })
+      mockCheckForExistingPR.mockResolvedValue(null) // No existing PR
 
       // Mock settings with github-draft-pr mode
       vi.mocked(mockSettings.loadSettings).mockResolvedValue({
@@ -579,6 +583,63 @@ describe('LoomManager', () => {
         expectedPath,
         expect.objectContaining({
           draftPrNumber: 99,
+        })
+      )
+    })
+
+    it('should reuse existing PR instead of creating new one in github-draft-pr mode', async () => {
+      // Mock settings with github-draft-pr mode
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        mainBranch: 'main',
+        worktreeDir: '/test/worktrees',
+        mergeBehavior: {
+          mode: 'github-draft-pr',
+        },
+      })
+
+      // Mock issue fetch
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test Issue',
+        body: 'Test description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/123',
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-issue-123'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+      // Mock that an existing PR already exists
+      mockCheckForExistingPR.mockResolvedValue({
+        number: 42,
+        url: 'https://github.com/owner/repo/pull/42',
+      })
+
+      const result = await manager.createIloom(baseInput)
+
+      // Verify loom was created successfully
+      expect(result.path).toBe(expectedPath)
+      expect(result.type).toBe('issue')
+
+      // Verify existing PR was checked
+      expect(mockCheckForExistingPR).toHaveBeenCalledWith(
+        expect.any(String), // branch name
+        expectedPath // worktree path
+      )
+
+      // Verify createDraftPR was NOT called since we're reusing existing PR
+      expect(mockCreateDraftPR).not.toHaveBeenCalled()
+
+      // Verify existing PR number was stored in metadata
+      expect(mockWriteMetadata).toHaveBeenCalledWith(
+        expectedPath,
+        expect.objectContaining({
+          draftPrNumber: 42,
         })
       )
     })
@@ -846,7 +907,8 @@ describe('LoomManager', () => {
       await manager.createIloom(input)
 
       // branchExists IS called for PRs to determine if we need to reset to match remote
-      expect(branchExists).toHaveBeenCalledWith('pr-branch')
+      // Now passes false for includeRemote to only check local branches
+      expect(branchExists).toHaveBeenCalledWith('pr-branch', process.cwd(), false)
     })
 
     it('should create worktree when branch does not exist', async () => {

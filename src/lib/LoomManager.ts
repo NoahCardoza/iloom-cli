@@ -11,7 +11,7 @@ import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { VSCodeIntegration } from './VSCodeIntegration.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager, type WriteMetadataInput } from './MetadataManager.js'
-import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit, extractPRNumber } from '../utils/git.js'
+import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit, extractPRNumber, PLACEHOLDER_COMMIT_PREFIX, pushBranchToRemote, GitCommandError } from '../utils/git.js'
 import { GitHubService } from './GitHubService.js'
 import { generateRandomSessionId } from '../utils/claude.js'
 import { installDependencies } from '../utils/package-manager.js'
@@ -23,6 +23,7 @@ import type { Loom, CreateLoomInput } from '../types/loom.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import { getLogger } from '../utils/logger-context.js'
+import { PRManager } from './PRManager.js'
 
 /**
  * LoomManager orchestrates the creation and management of looms (isolated workspaces)
@@ -208,50 +209,90 @@ export class LoomManager {
     const mergeBehavior = settingsData.mergeBehavior ?? { mode: 'local' }
 
     if (mergeBehavior.mode === 'github-draft-pr' && (input.type === 'issue' || input.type === 'branch')) {
-      // Create placeholder commit to enable draft PR creation
-      // GitHub requires at least one commit ahead of base branch
-      getLogger().info('Creating placeholder commit for draft PR...')
-      const { executeGitCommand, PLACEHOLDER_COMMIT_PREFIX, pushBranchToRemote } = await import('../utils/git.js')
-      await executeGitCommand(
-        [
-          'commit',
-          '--allow-empty',
-          '--no-verify',
-          '-m',
-          `${PLACEHOLDER_COMMIT_PREFIX} Temporary commit for draft PR (will be removed on finish)`
-        ],
-        { cwd: worktreePath }
-      )
-      getLogger().debug('Placeholder commit created')
-
-      // Push branch to remote first (required for draft PR creation)
-      getLogger().info('Pushing branch to remote for draft PR...')
-      await pushBranchToRemote(branchName, worktreePath, { dryRun: false })
-
-      // Import PRManager dynamically to avoid circular deps
-      const { PRManager } = await import('./PRManager.js')
       const prManager = new PRManager(settingsData)
 
-      // Generate PR title and body
-      // For issue mode: use issue title and reference issue number
-      // For branch mode: use branch name and generic description
-      const prTitle = issueData?.title ?? `Work on ${branchName}`
-      const prBody = input.type === 'issue'
-        ? `PR for issue #${input.identifier}\n\nThis PR was created automatically by iloom.`
-        : `Branch: ${branchName}\n\nThis PR was created automatically by iloom.`
+      // Fetch from origin to get latest remote branch state
+      getLogger().info('Fetching from origin...')
+      await executeGitCommand(['fetch', 'origin'], { cwd: worktreePath })
 
-      // Create draft PR
-      getLogger().info('Creating draft PR...')
-      const prResult = await prManager.createDraftPR(
-        branchName,
-        prTitle,
-        prBody,
-        worktreePath
-      )
+      // Check if remote branch already exists
+      let remoteBranchExists = false
+      try {
+        await executeGitCommand(['rev-parse', '--verify', `origin/${branchName}`], { cwd: worktreePath })
+        remoteBranchExists = true
+        getLogger().info(`Remote branch origin/${branchName} already exists, resetting local to match...`)
+      } catch (error: unknown) {
+        // Only treat as "branch doesn't exist" if it's a GitCommandError with the expected error patterns
+        // Git rev-parse returns exit code 128 for missing refs with messages like:
+        // "fatal: Needed a single revision" or "unknown revision"
+        if (error instanceof GitCommandError &&
+            (error.stderr.includes('unknown revision') ||
+             error.stderr.includes('Needed a single revision') ||
+             error.stderr.includes('bad revision'))) {
+          // Remote branch doesn't exist - this is the normal case for new branches
+          getLogger().debug(`Remote branch origin/${branchName} does not exist`)
+        } else {
+          // Re-throw unexpected errors (e.g., git crash, permissions, lock file issues)
+          throw error
+        }
+      }
 
-      draftPrNumber = prResult.number
-      draftPrUrl = prResult.url
-      getLogger().success(`Draft PR created: ${prResult.url}`)
+      // If remote branch exists, reset local branch to match it (preserves previous work)
+      if (remoteBranchExists) {
+        await executeGitCommand(['reset', '--hard', `origin/${branchName}`], { cwd: worktreePath })
+        await executeGitCommand(['branch', '--set-upstream-to', `origin/${branchName}`], { cwd: worktreePath })
+        getLogger().success('Local branch reset to match remote')
+      } else {
+        // Only create placeholder commit if remote branch didn't exist
+        // (if we reset to remote, we already have commits)
+        getLogger().info('Creating placeholder commit for draft PR...')
+        await executeGitCommand(
+          [
+            'commit',
+            '--allow-empty',
+            '--no-verify',
+            '-m',
+            `${PLACEHOLDER_COMMIT_PREFIX} Temporary commit for draft PR (will be removed on finish)`
+          ],
+          { cwd: worktreePath }
+        )
+        getLogger().debug('Placeholder commit created')
+
+        // Push branch to remote (required for draft PR creation)
+        getLogger().info('Pushing branch to remote for draft PR...')
+        await pushBranchToRemote(branchName, worktreePath, { dryRun: false })
+      }
+
+      // Check for existing draft PR before creating a new one
+      const existingPR = await prManager.checkForExistingPR(branchName, worktreePath)
+
+      if (existingPR) {
+        // Reuse existing PR
+        draftPrNumber = existingPR.number
+        draftPrUrl = existingPR.url
+        getLogger().success(`Found existing PR: ${existingPR.url}`)
+      } else {
+        // Generate PR title and body
+        // For issue mode: use issue title and reference issue number
+        // For branch mode: use branch name and generic description
+        const prTitle = issueData?.title ?? `Work on ${branchName}`
+        const prBody = input.type === 'issue'
+          ? `PR for issue #${input.identifier}\n\nThis PR was created automatically by iloom.`
+          : `Branch: ${branchName}\n\nThis PR was created automatically by iloom.`
+
+        // Create draft PR
+        getLogger().info('Creating draft PR...')
+        const prResult = await prManager.createDraftPR(
+          branchName,
+          prTitle,
+          prBody,
+          worktreePath
+        )
+
+        draftPrNumber = prResult.number
+        draftPrUrl = prResult.url
+        getLogger().success(`Draft PR created: ${prResult.url}`)
+      }
     }
 
     // 11. Select color with collision avoidance
@@ -649,8 +690,10 @@ export class LoomManager {
       }
     }
 
-    // Check if branch exists locally (used for different purposes depending on type)
-    const branchExistedLocally = await branchExists(branchName)
+    // Check if branch exists locally only (used for different purposes depending on type)
+    // Pass false for includeRemote to only check local branches - remote branch existence
+    // is handled separately in github-draft-pr mode
+    const branchExistedLocally = await branchExists(branchName, process.cwd(), false)
 
     // For non-PRs, throw error if branch exists
     // For PRs, we'll use this to determine if we need to reset later
