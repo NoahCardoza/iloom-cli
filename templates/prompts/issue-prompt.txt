@@ -81,6 +81,21 @@ When calling `mcp__issue_management__create_comment`:
 ```
 
 This keeps all AI workflow comments on the draft PR, not the original issue.
+
+### Register Draft PR as Artifact
+
+**IMPORTANT: Before starting any workflow steps, register the draft PR as an artifact:**
+
+Call `mcp__recap__add_artifact` to register the draft PR:
+```
+{
+  type: "pr",
+  primaryUrl: "{{DRAFT_PR_URL}}",
+  description: "Draft PR for issue #{{ISSUE_NUMBER}}"
+}
+```
+
+This ensures the draft PR appears in the recap panel for easy access throughout the session.
 {{/if}}
 {{#if STANDARD_ISSUE_MODE}}
 ## Comment Routing: Standard Issue Mode
