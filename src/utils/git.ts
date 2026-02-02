@@ -770,6 +770,28 @@ export async function pushBranchToRemote(
 }
 
 /**
+ * Fetch from origin to ensure we have latest refs
+ * Used before branching and rebasing operations to stay current with remote
+ *
+ * @param cwd - Working directory to run git command in
+ * @throws Error if fetch fails (network issues, access denied, etc.)
+ */
+export async function fetchOrigin(cwd: string): Promise<void> {
+  try {
+    await executeGitCommand(['fetch', 'origin'], {
+      cwd,
+      timeout: 60000, // 60 second timeout for fetch operations
+    })
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    throw new Error(
+      `Failed to fetch from origin: ${errorMessage}\n\n` +
+      `Check your network connection and repository access.`
+    )
+  }
+}
+
+/**
  * Check if a file is tracked by git
  * Uses git ls-files to check if file is in the index
  * @param filePath - Absolute or relative path to the file

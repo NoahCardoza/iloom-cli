@@ -1,4 +1,4 @@
-import { executeGitCommand, findMainWorktreePathWithSettings, findWorktreeForBranch, getMergeTargetBranch } from '../utils/git.js'
+import { executeGitCommand, fetchOrigin, findMainWorktreePathWithSettings, findWorktreeForBranch, getMergeTargetBranch } from '../utils/git.js'
 import { getLogger } from '../utils/logger-context.js'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { SettingsManager } from './SettingsManager.js'
@@ -46,17 +46,24 @@ export class MergeManager {
 		const { dryRun = false, force = false } = options
 		const mainBranch = await this.getMainBranch(worktreePath)
 
-		getLogger().info(`Starting rebase on ${mainBranch} branch...`)
+		// Fetch from origin to get latest refs
+		getLogger().info('Fetching from origin...')
+		await fetchOrigin(worktreePath)
 
-		// Step 1: Check if main branch exists
+		// Use origin/{mainBranch} for remote reference
+		const remoteBranch = `origin/${mainBranch}`
+
+		getLogger().info(`Starting rebase on ${remoteBranch}...`)
+
+		// Step 1: Check if remote branch exists
 		try {
-			await executeGitCommand(['show-ref', '--verify', '--quiet', `refs/heads/${mainBranch}`], {
+			await executeGitCommand(['show-ref', '--verify', '--quiet', `refs/remotes/${remoteBranch}`], {
 				cwd: worktreePath,
 			})
 		} catch {
 			throw new Error(
-				`Main branch "${mainBranch}" does not exist. Cannot rebase.\n` +
-					`Ensure the repository has a "${mainBranch}" branch or create it first.`
+				`Remote branch "${remoteBranch}" does not exist. Cannot rebase.\n` +
+					`Ensure the repository has a "${mainBranch}" branch on origin.`
 			)
 		}
 
@@ -72,21 +79,21 @@ export class MergeManager {
 			getLogger().debug(`Created WIP commit: ${wipCommitHash}`)
 		}
 
-		// Step 3: Check if rebase is needed by comparing merge-base with main HEAD
-		const mergeBase = await executeGitCommand(['merge-base', mainBranch, 'HEAD'], {
+		// Step 3: Check if rebase is needed by comparing merge-base with remote HEAD
+		const mergeBase = await executeGitCommand(['merge-base', remoteBranch, 'HEAD'], {
 			cwd: worktreePath,
 		})
 
-		const mainHead = await executeGitCommand(['rev-parse', mainBranch], {
+		const remoteHead = await executeGitCommand(['rev-parse', remoteBranch], {
 			cwd: worktreePath,
 		})
 
 		const mergeBaseTrimmed = mergeBase.trim()
-		const mainHeadTrimmed = mainHead.trim()
+		const remoteHeadTrimmed = remoteHead.trim()
 
-		// If merge-base matches main HEAD, branch is already up to date
-		if (mergeBaseTrimmed === mainHeadTrimmed) {
-			getLogger().success(`Branch is already up to date with ${mainBranch}. No rebase needed.`)
+		// If merge-base matches remote HEAD, branch is already up to date
+		if (mergeBaseTrimmed === remoteHeadTrimmed) {
+			getLogger().success(`Branch is already up to date with ${remoteBranch}. No rebase needed.`)
 			// Restore WIP commit if created (soft reset to remove temporary commit)
 			if (wipCommitHash) {
 				await this.restoreWipCommit(worktreePath, wipCommitHash)
@@ -95,7 +102,7 @@ export class MergeManager {
 		}
 
 		// Step 4: Show commits to be rebased (for informational purposes)
-		const commitsOutput = await executeGitCommand(['log', '--oneline', `${mainBranch}..HEAD`], {
+		const commitsOutput = await executeGitCommand(['log', '--oneline', `${remoteBranch}..HEAD`], {
 			cwd: worktreePath,
 		})
 
@@ -107,8 +114,8 @@ export class MergeManager {
 			getLogger().info(`Found ${commitLines.length} commit(s) to rebase:`)
 			commitLines.forEach((commit) => getLogger().info(`  ${commit}`))
 		} else {
-			// Main has moved forward but branch has no new commits
-			getLogger().info(`${mainBranch} branch has moved forward. Rebasing to update branch...`)
+			// Remote has moved forward but branch has no new commits
+			getLogger().info(`${remoteBranch} has moved forward. Rebasing to update branch...`)
 		}
 
 		// Step 5: User confirmation (unless force mode or dry-run)
@@ -120,7 +127,7 @@ export class MergeManager {
 
 		// Step 6: Execute rebase (unless dry-run)
 		if (dryRun) {
-			getLogger().info(`[DRY RUN] Would execute: git rebase ${mainBranch}`)
+			getLogger().info(`[DRY RUN] Would execute: git rebase ${remoteBranch}`)
 			if (commitLines.length > 0) {
 				getLogger().info(`[DRY RUN] This would rebase ${commitLines.length} commit(s)`)
 			}
@@ -131,7 +138,7 @@ export class MergeManager {
 		// Use -c core.hooksPath=/dev/null to disable hooks during rebase
 		// This prevents pre-commit hooks from running when commits are re-applied
 		try {
-			await executeGitCommand(['-c', 'core.hooksPath=/dev/null', 'rebase', mainBranch], { cwd: worktreePath })
+			await executeGitCommand(['-c', 'core.hooksPath=/dev/null', 'rebase', remoteBranch], { cwd: worktreePath })
 			getLogger().success('Rebase completed successfully!')
 
 			// Restore WIP commit if created
