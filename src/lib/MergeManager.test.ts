@@ -37,12 +37,12 @@ describe('MergeManager', () => {
 	let mockMetadataManager: MetadataManager
 
 	beforeEach(() => {
-		// Create a mock SettingsManager
+		// Create a mock SettingsManager - default to github-pr mode (uses origin/)
 		mockSettingsManager = {
-			loadSettings: vi.fn().mockResolvedValue({}),
+			loadSettings: vi.fn().mockResolvedValue({ mergeBehavior: { mode: 'github-pr' } }),
 		} as unknown as SettingsManager
 
-		// Create a mock MetadataManager
+		// Create a mock MetadataManager - default to non-child loom
 		mockMetadataManager = {
 			readMetadata: vi.fn().mockResolvedValue(null),
 		} as unknown as MetadataManager
@@ -252,6 +252,153 @@ describe('MergeManager', () => {
 			)
 			expect(git.executeGitCommand).toHaveBeenCalledWith(
 				['reset', 'HEAD'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+		})
+	})
+
+	describe('Conditional Origin/Local Branch Target', () => {
+		it('should use origin/{mainBranch} in github-pr mode (non-child)', async () => {
+			// Setup: github-pr mode (already default), non-child loom
+			// Mock: successful rebase on origin/main
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref: origin/main exists
+				.mockResolvedValueOnce('') // status --porcelain: clean
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse origin/main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // rebase origin/main: success
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: fetchOrigin was called
+			expect(git.fetchOrigin).toHaveBeenCalledWith('/test/worktree')
+
+			// Verify: show-ref checked remote ref
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['show-ref', '--verify', '--quiet', 'refs/remotes/origin/main'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+
+			// Verify: rebase used origin/main
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['-c', 'core.hooksPath=/dev/null', 'rebase', 'origin/main'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+		})
+
+		it('should use origin/{mainBranch} in github-draft-pr mode (non-child)', async () => {
+			// Setup: github-draft-pr mode
+			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({ mergeBehavior: { mode: 'github-draft-pr' } })
+
+			// Mock: successful rebase on origin/main
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref: origin/main exists
+				.mockResolvedValueOnce('') // status --porcelain: clean
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse origin/main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // rebase
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: fetchOrigin was called
+			expect(git.fetchOrigin).toHaveBeenCalledWith('/test/worktree')
+
+			// Verify: rebase used origin/main
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['-c', 'core.hooksPath=/dev/null', 'rebase', 'origin/main'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+		})
+
+		it('should use local {mainBranch} in local mode (no fetch)', async () => {
+			// Setup: local mode
+			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({ mergeBehavior: { mode: 'local' } })
+
+			// Mock: successful rebase on local main
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref: local main exists
+				.mockResolvedValueOnce('') // status --porcelain: clean
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // rebase main: success
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: fetchOrigin was NOT called
+			expect(git.fetchOrigin).not.toHaveBeenCalled()
+
+			// Verify: show-ref checked local ref (not remote)
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['show-ref', '--verify', '--quiet', 'refs/heads/main'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+
+			// Verify: rebase used local main (no origin/ prefix)
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['-c', 'core.hooksPath=/dev/null', 'rebase', 'main'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+		})
+
+		it('should use local parent branch for child looms (any mode, no fetch)', async () => {
+			// Setup: github-pr mode BUT child loom (has parent)
+			mockMetadataManager.readMetadata = vi.fn().mockResolvedValue({
+				parentLoom: { branchName: 'fix/parent-branch', identifier: 'issue-100' }
+			})
+			// getMergeTargetBranch will return the parent branch name
+			vi.mocked(git.getMergeTargetBranch).mockResolvedValue('fix/parent-branch')
+
+			// Mock: successful rebase on local parent branch
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref: local parent branch exists
+				.mockResolvedValueOnce('') // status --porcelain: clean
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse parent branch
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // rebase parent: success
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: fetchOrigin was NOT called (child loom uses local parent)
+			expect(git.fetchOrigin).not.toHaveBeenCalled()
+
+			// Verify: show-ref checked local ref (not remote)
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['show-ref', '--verify', '--quiet', 'refs/heads/fix/parent-branch'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+
+			// Verify: rebase used local parent branch (no origin/ prefix)
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['-c', 'core.hooksPath=/dev/null', 'rebase', 'fix/parent-branch'],
+				expect.objectContaining({ cwd: '/test/worktree' })
+			)
+		})
+
+		it('should default to local mode when mergeBehavior not configured', async () => {
+			// Setup: no mergeBehavior in settings
+			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({})
+
+			// Mock: successful rebase on local main
+			vi.mocked(git.executeGitCommand)
+				.mockResolvedValueOnce('') // show-ref: local main exists
+				.mockResolvedValueOnce('') // status --porcelain: clean
+				.mockResolvedValueOnce('abc123') // merge-base
+				.mockResolvedValueOnce('def456') // rev-parse main
+				.mockResolvedValueOnce('abc123 Commit 1') // log
+				.mockResolvedValueOnce('') // rebase main: success
+
+			await manager.rebaseOnMain('/test/worktree', { force: true })
+
+			// Verify: fetchOrigin was NOT called (defaults to local mode)
+			expect(git.fetchOrigin).not.toHaveBeenCalled()
+
+			// Verify: rebase used local main
+			expect(git.executeGitCommand).toHaveBeenCalledWith(
+				['-c', 'core.hooksPath=/dev/null', 'rebase', 'main'],
 				expect.objectContaining({ cwd: '/test/worktree' })
 			)
 		})
