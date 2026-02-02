@@ -55,6 +55,43 @@ Use these Recap MCP tools:
 
 ---
 
+{{#if DRAFT_PR_MODE}}
+## Comment Routing: Draft PR Mode
+
+**IMPORTANT: This loom is using draft PR mode in branch workflow.**
+
+- **This is branch mode** - there is no associated GitHub issue
+- **Write ALL workflow comments** to PR #{{DRAFT_PR_NUMBER}} using `type: "pr"`
+
+When calling `mcp__issue_management__get_pr` to read the draft PR:
+```
+{
+  number: "{{DRAFT_PR_NUMBER}}",
+  includeComments: true
+}
+```
+
+When calling `mcp__issue_management__create_comment`:
+```
+{
+  number: "{{DRAFT_PR_NUMBER}}",
+  body: "your comment content",
+  type: "pr"
+}
+```
+
+This keeps all AI workflow comments on the draft PR for visibility and traceability.
+{{/if}}
+{{#if STANDARD_BRANCH_MODE}}
+## Comment Routing: Standard Branch Mode
+
+- **This is branch mode** - there is no associated GitHub issue
+- Comments are not persisted between sessions in branch mode
+- Context from this session is ephemeral
+{{/if}}
+
+---
+
 {{#if FIRST_TIME_USER}}
 ## First-Time User Context
 

@@ -463,7 +463,11 @@ export class IgniteCommand {
 				throw new Error(`Invalid git remote name: "${remote}". Remote names can only contain alphanumeric characters, underscores, and hyphens.`)
 			}
 			variables.GIT_REMOTE = remote
+		} else if (context.type === 'regular') {
+			// Branch mode without draft PR
+			variables.STANDARD_BRANCH_MODE = true
 		} else {
+			// Issue/PR mode without draft PR
 			variables.STANDARD_ISSUE_MODE = true
 		}
 

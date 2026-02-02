@@ -49,6 +49,7 @@ export interface TemplateVariables {
 	DRAFT_PR_MODE?: boolean   // True when using github-draft-pr merge mode
 	AUTO_COMMIT_PUSH?: boolean  // True when auto-commit/push is enabled for draft PR mode
 	STANDARD_ISSUE_MODE?: boolean  // True when using standard issue commenting (not draft PR)
+	STANDARD_BRANCH_MODE?: boolean // True when using standard branch mode (not draft PR)
 	// VS Code environment detection
 	IS_VSCODE_MODE?: boolean  // True when ILOOM_VSCODE=1 environment variable is set
 	// Multi-language support variables - mutually exclusive
