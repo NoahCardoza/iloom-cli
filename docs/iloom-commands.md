@@ -62,6 +62,7 @@ il start "<issue-description>"
 | Flag | Values | Description |
 |------|--------|-------------|
 | `--one-shot` | `default`, `noReview`, `bypassPermissions` | Automation level for Claude CLI workflow |
+| `--yolo` | - | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
 | `--child-loom` | - | Force create as child loom (skip prompt, requires parent loom) |
 | `--no-child-loom` | - | Force create as independent loom (skip prompt) |
 | `--claude` / `--no-claude` | - | Enable/disable Claude integration (default: enabled) |
@@ -103,6 +104,9 @@ il start "Add dark mode toggle to settings"
 
 # Start with full automation (skip all prompts)
 il start 25 --one-shot=bypassPermissions
+
+# Start with full automation using shorthand
+il start 25 --yolo
 
 # Force create as child loom when working inside another loom
 il start 42 --child-loom
@@ -484,6 +488,7 @@ il spin [options]
 | Flag | Values | Description |
 |------|--------|-------------|
 | `--one-shot` | `noReview`, `bypassPermissions` | Automation level (same as `il start`) |
+| `--yolo` | - | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
 
 **Behavior:**
 
@@ -506,6 +511,9 @@ il spin
 
 # Launch with full automation
 il spin --one-shot=bypassPermissions
+
+# Launch with full automation using shorthand
+il spin --yolo
 ```
 
 ---
@@ -1494,6 +1502,7 @@ Some flags work across multiple commands:
 | Flag | Commands | Description |
 |------|----------|-------------|
 | `--one-shot` | `start`, `spin` | Automation level for Claude workflows |
+| `--yolo` | `start`, `spin`, `plan` | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
 | `--force`, `-f` | `finish`, `rebase` | Skip confirmation prompts |
 | `--dry-run`, `-n` | `finish`, `rebase` | Preview without executing |
 | `--help`, `-h` | All commands | Display command help |
