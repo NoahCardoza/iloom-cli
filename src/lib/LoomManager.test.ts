@@ -111,10 +111,12 @@ vi.mock('./LoomLauncher.js', () => ({
 // Shared mock function for verification in tests
 const mockCreateDraftPR = vi.fn()
 vi.mock('./PRManager.js', () => {
+  // Use a class-like factory that creates fresh instances
+  // This avoids issues with mockReset clearing the constructor implementation
   return {
-    PRManager: vi.fn().mockImplementation(() => ({
-      createDraftPR: mockCreateDraftPR,
-    })),
+    PRManager: class MockPRManager {
+      createDraftPR = mockCreateDraftPR
+    },
   }
 })
 
@@ -519,6 +521,56 @@ describe('LoomManager', () => {
         expect.any(String), // branch name
         'Test Linear Issue', // PR title from issue
         expect.stringContaining('PR for issue'), // PR body
+        expectedPath // worktree path
+      )
+
+      // Verify draft PR number was stored in metadata
+      expect(mockWriteMetadata).toHaveBeenCalledWith(
+        expectedPath,
+        expect.objectContaining({
+          draftPrNumber: 99,
+        })
+      )
+    })
+
+    it('should create draft PR for branch mode when mergeBehavior is github-draft-pr', async () => {
+      // Ensure PRManager mock is set up for this test
+      mockCreateDraftPR.mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' })
+
+      // Mock settings with github-draft-pr mode
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        mainBranch: 'main',
+        worktreeDir: '/test/worktrees',
+        mergeBehavior: {
+          mode: 'github-draft-pr',
+        },
+      })
+
+      // Branch mode input - no issue fetch needed
+      const branchInput: CreateLoomInput = {
+        type: 'branch',
+        identifier: 'my-feature',
+        originalInput: 'my-feature',
+      }
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-my-feature'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3042)
+
+      const result = await manager.createIloom(branchInput)
+
+      // Verify loom was created successfully
+      expect(result.path).toBe(expectedPath)
+      expect(result.type).toBe('branch')
+      expect(result.identifier).toBe('my-feature')
+
+      // Verify draft PR was created via PRManager
+      expect(mockCreateDraftPR).toHaveBeenCalledWith(
+        'my-feature', // branch name
+        'Work on my-feature', // PR title from branch name (no issue data)
+        expect.stringContaining('Branch: my-feature'), // PR body for branch mode
         expectedPath // worktree path
       )
 

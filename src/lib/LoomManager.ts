@@ -207,7 +207,7 @@ export class LoomManager {
 
     const mergeBehavior = settingsData.mergeBehavior ?? { mode: 'local' }
 
-    if (mergeBehavior.mode === 'github-draft-pr' && input.type === 'issue') {
+    if (mergeBehavior.mode === 'github-draft-pr' && (input.type === 'issue' || input.type === 'branch')) {
       // Create placeholder commit to enable draft PR creation
       // GitHub requires at least one commit ahead of base branch
       getLogger().info('Creating placeholder commit for draft PR...')
@@ -233,8 +233,12 @@ export class LoomManager {
       const prManager = new PRManager(settingsData)
 
       // Generate PR title and body
+      // For issue mode: use issue title and reference issue number
+      // For branch mode: use branch name and generic description
       const prTitle = issueData?.title ?? `Work on ${branchName}`
-      const prBody = `PR for issue #${input.identifier}\n\nThis PR was created automatically by iloom.`
+      const prBody = input.type === 'issue'
+        ? `PR for issue #${input.identifier}\n\nThis PR was created automatically by iloom.`
+        : `Branch: ${branchName}\n\nThis PR was created automatically by iloom.`
 
       // Create draft PR
       getLogger().info('Creating draft PR...')
