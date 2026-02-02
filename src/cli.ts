@@ -379,7 +379,12 @@ program
       .choices(['default', 'noReview', 'bypassPermissions'])
       .default('default')
   )
-  .action(async (identifier: string | undefined, options: StartOptions) => {
+  .option('--yolo', 'Enable autonomous mode (shorthand for --one-shot=bypassPermissions)')
+  .action(async (identifier: string | undefined, options: StartOptions & { yolo?: boolean }) => {
+    // Handle --yolo flag: set oneShot to bypassPermissions
+    if (options.yolo) {
+      options.oneShot = 'bypassPermissions'
+    }
     const executeAction = async (): Promise<void> => {
       try {
         let finalIdentifier = identifier
@@ -668,7 +673,12 @@ program
     new Option('--one-shot <mode>', 'One-shot automation mode')
       .choices(['default', 'noReview', 'bypassPermissions'])
   )
-  .action(async (options: { oneShot?: import('./types/index.js').OneShotMode }) => {
+  .option('--yolo', 'Enable autonomous mode (shorthand for --one-shot=bypassPermissions)')
+  .action(async (options: { oneShot?: import('./types/index.js').OneShotMode; yolo?: boolean }) => {
+    // Handle --yolo flag: set oneShot to bypassPermissions
+    if (options.yolo) {
+      options.oneShot = 'bypassPermissions'
+    }
     try {
       const { IgniteCommand } = await import('./commands/ignite.js')
       const command = new IgniteCommand()

@@ -112,8 +112,10 @@ Instead of a single generic prompt, iloom uses a pipeline of specialized agents:
 You are in the loop at every stage. You can review the AI's analysis, edit the plan in GitHub/Linear, and adjust course before implementation begins.
 
 *   **Default Mode:** You approve each phase (Enhance → Plan → Implement).
-    
-*   **--one-shot Mode:** Feeling lucky? Automate the entire pipeline from start to finish without prompts.
+
+*   **--one-shot Mode:** Automate the pipeline with different levels of control.
+
+*   **--yolo Mode:** Feeling lucky? Shorthand for `--one-shot=bypassPermissions` - full automation without prompts.
     
 
 ### 3. The Environment
