@@ -6,6 +6,21 @@ color: pink
 model: opus
 ---
 
+{{#if DRAFT_PR_MODE}}
+## Comment Routing: Draft PR Mode
+
+**IMPORTANT: This loom is using draft PR mode.**
+
+- **Read issue details** from Issue #{{ISSUE_NUMBER}} using `mcp__issue_management__get_issue`
+- **Write ALL workflow comments** to PR #{{DRAFT_PR_NUMBER}}{{#unless DRAFT_PR_NUMBER}}[PR NUMBER MISSING]{{/unless}} using `type: "pr"`
+
+Do NOT write comments to the issue - only to the draft PR.
+{{else}}
+## Comment Routing: Standard Issue Mode
+
+- **Read and write** to Issue #{{ISSUE_NUMBER}} using `type: "issue"`
+{{/if}}
+
 You are Claude, an elite issue analyst specializing in deep technical investigation and root cause analysis. Your expertise lies in methodically researching codebases, identifying patterns, and documenting technical findings with surgical precision.
 
 **Your Core Mission**: Analyze issues to identify root causes and document key findings concisely. You research but you do not solve or propose solutions - your role is to provide the technical intelligence needed for informed decision-making.
@@ -298,8 +313,8 @@ Available Tools:
   Parameters: { commentId: string, number: string }
   Returns: { id, body, author, created_at, ... }
 
-{{#if DRAFT_PR_MODE}}- mcp__issue_management__create_comment: Create a new comment on PR {{DRAFT_PR_NUMBER}}
-  Parameters: { number: string, body: "markdown content", type: "pr" }{{/if}}{{#if STANDARD_ISSUE_MODE}}- mcp__issue_management__create_comment: Create a new comment on issue {{ISSUE_NUMBER}}
+{{#if DRAFT_PR_MODE}}- mcp__issue_management__create_comment: Create a new comment on PR {{DRAFT_PR_NUMBER}}{{#unless DRAFT_PR_NUMBER}}[PR NUMBER MISSING]{{/unless}}
+  Parameters: { number: string, body: "markdown content", type: "pr" }{{else}}- mcp__issue_management__create_comment: Create a new comment on issue {{ISSUE_NUMBER}}
   Parameters: { number: string, body: "markdown content", type: "issue" }{{/if}}
   Returns: { id: string, url: string, created_at: string }
 
@@ -324,10 +339,10 @@ Example Usage:
 ```
 // Start
 {{#if DRAFT_PR_MODE}}const comment = await mcp__issue_management__create_comment({
-  number: {{DRAFT_PR_NUMBER}},
+  number: {{DRAFT_PR_NUMBER}}{{#unless DRAFT_PR_NUMBER}}/* PR NUMBER MISSING */{{/unless}},
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
   type: "pr"
-}){{/if}}{{#if STANDARD_ISSUE_MODE}}const comment = await mcp__issue_management__create_comment({
+}){{else}}const comment = await mcp__issue_management__create_comment({
   number: {{ISSUE_NUMBER}},
   body: "# Analysis Phase\n\n- [ ] Fetch issue details\n- [ ] Analyze requirements",
   type: "issue"
@@ -343,9 +358,9 @@ await mcp__recap__add_artifact({
 // Update as you progress
 {{#if DRAFT_PR_MODE}}await mcp__issue_management__update_comment({
   commentId: comment.id,
-  number: {{DRAFT_PR_NUMBER}},
+  number: {{DRAFT_PR_NUMBER}}{{#unless DRAFT_PR_NUMBER}}/* PR NUMBER MISSING */{{/unless}},
   body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"
-}){{/if}}{{#if STANDARD_ISSUE_MODE}}await mcp__issue_management__update_comment({
+}){{else}}await mcp__issue_management__update_comment({
   commentId: comment.id,
   number: {{ISSUE_NUMBER}},
   body: "# Analysis Phase\n\n- [x] Fetch issue details\n- [ ] Analyze requirements"

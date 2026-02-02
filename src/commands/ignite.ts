@@ -149,10 +149,14 @@ export class IgniteCommand {
 
 			logger.info('📝 Loading prompt template and preparing Claude...')
 
-			// Step 2: Read metadata early to get draftPrNumber for templates and MCP config
+			// Step 2: Read metadata early to get draftPrNumber and draftPrUrl for templates and MCP config
 			const metadataManager = new MetadataManager()
 			const metadata = await metadataManager.readMetadata(context.workspacePath)
 			const draftPrNumber = metadata?.draftPrNumber ?? undefined
+			// Extract draft PR URL from prUrls map if available
+			const draftPrUrl = draftPrNumber && metadata?.prUrls?.[String(draftPrNumber)]
+				? metadata.prUrls[String(draftPrNumber)]
+				: undefined
 
 			// Step 2.0.4: Determine effective oneShot mode
 			// If oneShot is provided (any value including 'default'), use it
@@ -179,7 +183,7 @@ export class IgniteCommand {
 			}
 
 			// Step 2.1: Get prompt template with variable substitution
-			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber)
+			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl)
 
 			// Step 2.5: Add first-time user context if needed
 			if (isFirstRun) {
@@ -389,7 +393,8 @@ export class IgniteCommand {
 	private buildTemplateVariables(
 		context: ClaudeWorkflowOptions,
 		oneShot: OneShotMode,
-		draftPrNumber?: number
+		draftPrNumber?: number,
+		draftPrUrl?: string
 	): TemplateVariables {
 		const variables: TemplateVariables = {
 			WORKSPACE_PATH: context.workspacePath,
@@ -453,6 +458,9 @@ export class IgniteCommand {
 		if (draftPrNumber !== undefined) {
 			variables.DRAFT_PR_MODE = true
 			variables.DRAFT_PR_NUMBER = draftPrNumber
+			if (draftPrUrl) {
+				variables.DRAFT_PR_URL = draftPrUrl
+			}
 			// Set AUTO_COMMIT_PUSH when in draft PR mode and not explicitly disabled
 			// Default is true (enabled) for draft PR mode
 			const autoCommitPushEnabled = this.settings?.mergeBehavior?.autoCommitPush !== false
