@@ -10,7 +10,7 @@ import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import type { CreateLoomInput } from '../types/loom.js'
 import { installDependencies } from '../utils/package-manager.js'
-import { branchExists, ensureRepositoryHasCommits, isFileTrackedByGit } from '../utils/git.js'
+import { branchExists, ensureRepositoryHasCommits, isFileTrackedByGit, fetchOrigin } from '../utils/git.js'
 import fs from 'fs-extra'
 import fg from 'fast-glob'
 
@@ -65,6 +65,7 @@ vi.mock('../utils/git.js', () => ({
   isEmptyRepository: vi.fn().mockResolvedValue(false),
   isFileTrackedByGit: vi.fn().mockResolvedValue(false),
   pushBranchToRemote: vi.fn().mockResolvedValue(undefined),
+  fetchOrigin: vi.fn().mockResolvedValue(undefined),
   PLACEHOLDER_COMMIT_PREFIX: '[iloom:placeholder]',
   extractIssueNumber: vi.fn((branchName: string) => {
     // Match the real implementation logic for test compatibility
@@ -93,6 +94,12 @@ vi.mock('../utils/git.js', () => ({
     }
     return null
   }),
+  GitCommandError: class GitCommandError extends Error {
+    constructor(message: string, public command: string, public exitCode: number, public stderr: string) {
+      super(message)
+      this.name = 'GitCommandError'
+    }
+  },
 }))
 
 // Mock package-manager utilities
@@ -642,6 +649,284 @@ describe('LoomManager', () => {
           draftPrNumber: 42,
         })
       )
+    })
+
+    describe('Fetch Before Branch Creation (PR Modes)', () => {
+      it('should fetch from origin before creating branch in github-pr mode', async () => {
+        // Mock settings with github-pr mode
+        vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+          mainBranch: 'main',
+          worktreeDir: '/test/worktrees',
+          mergeBehavior: {
+            mode: 'github-pr',
+          },
+        })
+
+        // Mock issue fetch
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 123,
+          title: 'Test Issue',
+          body: 'Test description',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://github.com/owner/repo/issues/123',
+        })
+
+        // Mock worktree creation
+        const expectedPath = '/test/worktree-issue-123'
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+        await manager.createIloom(baseInput)
+
+        // Verify fetchOrigin was called
+        expect(fetchOrigin).toHaveBeenCalled()
+
+        // Verify createWorktree was called with origin/main as baseBranch
+        expect(mockGitWorktree.createWorktree).toHaveBeenCalledWith(
+          expect.objectContaining({
+            baseBranch: 'origin/main',
+          })
+        )
+      })
+
+      it('should fetch from origin before creating branch in github-draft-pr mode', async () => {
+        // Mock settings with github-draft-pr mode
+        vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+          mainBranch: 'main',
+          worktreeDir: '/test/worktrees',
+          mergeBehavior: {
+            mode: 'github-draft-pr',
+          },
+        })
+
+        // Mock issue fetch
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 123,
+          title: 'Test Issue',
+          body: 'Test description',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://github.com/owner/repo/issues/123',
+        })
+
+        // Mock worktree creation
+        const expectedPath = '/test/worktree-issue-123'
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+        await manager.createIloom(baseInput)
+
+        // Verify fetchOrigin was called
+        expect(fetchOrigin).toHaveBeenCalled()
+
+        // Verify createWorktree was called with origin/main as baseBranch
+        expect(mockGitWorktree.createWorktree).toHaveBeenCalledWith(
+          expect.objectContaining({
+            baseBranch: 'origin/main',
+          })
+        )
+      })
+
+      it('should NOT fetch for child looms (use parent local branch)', async () => {
+        // Mock settings with github-pr mode
+        vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+          mainBranch: 'main',
+          worktreeDir: '/test/worktrees',
+          mergeBehavior: {
+            mode: 'github-pr',
+          },
+        })
+
+        // Mock issue fetch
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 456,
+          title: 'Child Issue',
+          body: 'Child description',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://github.com/owner/repo/issues/456',
+        })
+
+        // Mock worktree creation
+        const expectedPath = '/test/worktree-issue-456'
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3456)
+
+        // Create child loom input with parent
+        const childInput: CreateLoomInput = {
+          type: 'issue',
+          identifier: 456,
+          originalInput: '456',
+          parentLoom: {
+            branchName: 'feat/parent-branch',
+            path: '/test/worktree-parent',
+          },
+        }
+
+        await manager.createIloom(childInput)
+
+        // Verify fetchOrigin was NOT called for child loom
+        expect(fetchOrigin).not.toHaveBeenCalled()
+
+        // Verify createWorktree was called with parent's branch as baseBranch
+        expect(mockGitWorktree.createWorktree).toHaveBeenCalledWith(
+          expect.objectContaining({
+            baseBranch: 'feat/parent-branch',
+          })
+        )
+      })
+
+      it('should NOT fetch for local merge mode', async () => {
+        // Mock settings with local mode (default)
+        vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+          mainBranch: 'main',
+          worktreeDir: '/test/worktrees',
+          mergeBehavior: {
+            mode: 'local',
+          },
+        })
+
+        // Mock issue fetch
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 123,
+          title: 'Test Issue',
+          body: 'Test description',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://github.com/owner/repo/issues/123',
+        })
+
+        // Mock worktree creation
+        const expectedPath = '/test/worktree-issue-123'
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+        await manager.createIloom(baseInput)
+
+        // Verify fetchOrigin was NOT called for local mode
+        expect(fetchOrigin).not.toHaveBeenCalled()
+      })
+
+      it('should handle fetch failure with clear error message', async () => {
+        // Mock settings with github-pr mode
+        vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+          mainBranch: 'main',
+          worktreeDir: '/test/worktrees',
+          mergeBehavior: {
+            mode: 'github-pr',
+          },
+        })
+
+        // Mock issue fetch
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 123,
+          title: 'Test Issue',
+          body: 'Test description',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://github.com/owner/repo/issues/123',
+        })
+
+        // Mock worktree path generation (needed before fetchOrigin is called)
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue('/test/worktree-issue-123')
+
+        // Mock fetchOrigin to fail with network error
+        vi.mocked(fetchOrigin).mockRejectedValueOnce(
+          new Error('Failed to fetch from origin: Could not resolve host: github.com\n\nCheck your network connection and repository access.')
+        )
+
+        // Verify that createIloom throws with the fetch error
+        await expect(manager.createIloom(baseInput)).rejects.toThrow('Failed to fetch from origin')
+      })
+
+      it('should NOT fetch when input type is PR (working with existing PR)', async () => {
+        // Mock settings with github-pr mode
+        vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+          mainBranch: 'main',
+          worktreeDir: '/test/worktrees',
+          mergeBehavior: {
+            mode: 'github-pr',
+          },
+        })
+
+        // Mock PR fetch (not issue fetch - working with existing PR)
+        vi.mocked(mockGitHub.fetchPR).mockResolvedValue({
+          number: 789,
+          title: 'Existing PR',
+          body: 'PR description',
+          state: 'open',
+          branch: 'feature/existing-pr-branch',
+          baseBranch: 'main',
+          url: 'https://github.com/owner/repo/pull/789',
+          isDraft: false,
+        })
+
+        // Mock worktree creation
+        const expectedPath = '/test/worktree-existing-pr'
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3789)
+
+        // Create PR-type loom (working with existing PR)
+        const prInput: CreateLoomInput = {
+          type: 'pr',
+          identifier: 789,
+          originalInput: 'pr/789',
+        }
+
+        await manager.createIloom(prInput)
+
+        // Verify fetchOrigin was NOT called when working with existing PR
+        // (PR type fetches in createWorktreeOnly via executeGitCommand instead)
+        expect(fetchOrigin).not.toHaveBeenCalled()
+      })
+
+      it('should use configured mainBranch from settings for origin ref', async () => {
+        // Mock settings with custom mainBranch
+        vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+          mainBranch: 'develop',
+          worktreeDir: '/test/worktrees',
+          mergeBehavior: {
+            mode: 'github-pr',
+          },
+        })
+
+        // Mock issue fetch
+        vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+          number: 123,
+          title: 'Test Issue',
+          body: 'Test description',
+          state: 'open',
+          labels: [],
+          assignees: [],
+          url: 'https://github.com/owner/repo/issues/123',
+        })
+
+        // Mock worktree creation
+        const expectedPath = '/test/worktree-issue-123'
+        vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+        vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+        vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+        await manager.createIloom(baseInput)
+
+        // Verify createWorktree was called with origin/develop (custom mainBranch)
+        expect(mockGitWorktree.createWorktree).toHaveBeenCalledWith(
+          expect.objectContaining({
+            baseBranch: 'origin/develop',
+          })
+        )
+      })
     })
   })
 

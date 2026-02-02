@@ -1,4 +1,4 @@
-import { executeGitCommand, findMainWorktreePathWithSettings, findWorktreeForBranch, getMergeTargetBranch } from '../utils/git.js'
+import { executeGitCommand, fetchOrigin, findMainWorktreePathWithSettings, findWorktreeForBranch, getMergeTargetBranch } from '../utils/git.js'
 import { getLogger } from '../utils/logger-context.js'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { SettingsManager } from './SettingsManager.js'
@@ -46,18 +46,49 @@ export class MergeManager {
 		const { dryRun = false, force = false } = options
 		const mainBranch = await this.getMainBranch(worktreePath)
 
-		getLogger().info(`Starting rebase on ${mainBranch} branch...`)
+		// Determine whether to use remote (origin/) or local branch reference
+		// - Child looms: always use local parent branch (parent may not be pushed)
+		// - PR modes (github-pr, github-draft-pr) for non-child: fetch and use origin/{branch}
+		// - Local mode: use local branch (no fetch)
+		const metadata = await this.metadataManager.readMetadata(worktreePath)
+		const isChildLoom = !!metadata?.parentLoom
+		const settings = await this.settingsManager.loadSettings(worktreePath)
+		const mergeBehaviorMode = settings.mergeBehavior?.mode ?? 'local'
+		const isPRMode = mergeBehaviorMode === 'github-pr' || mergeBehaviorMode === 'github-draft-pr'
+		const useRemote = isPRMode && !isChildLoom
 
-		// Step 1: Check if main branch exists
+		let targetBranch: string
+		if (useRemote) {
+			// PR modes (non-child): fetch and use origin/{branch}
+			getLogger().info('Fetching from origin...')
+			await fetchOrigin(worktreePath)
+			targetBranch = `origin/${mainBranch}`
+		} else {
+			// Local mode or child loom: use local branch
+			getLogger().info(`Using local branch ${mainBranch} for rebase...`)
+			targetBranch = mainBranch
+		}
+
+		getLogger().info(`Starting rebase on ${targetBranch}...`)
+
+		// Step 1: Check if branch exists (remote ref for origin/, local ref otherwise)
+		const refPath = useRemote ? `refs/remotes/${targetBranch}` : `refs/heads/${targetBranch}`
 		try {
-			await executeGitCommand(['show-ref', '--verify', '--quiet', `refs/heads/${mainBranch}`], {
+			await executeGitCommand(['show-ref', '--verify', '--quiet', refPath], {
 				cwd: worktreePath,
 			})
 		} catch {
-			throw new Error(
-				`Main branch "${mainBranch}" does not exist. Cannot rebase.\n` +
-					`Ensure the repository has a "${mainBranch}" branch or create it first.`
-			)
+			if (useRemote) {
+				throw new Error(
+					`Remote branch "${targetBranch}" does not exist. Cannot rebase.\n` +
+						`Ensure the repository has a "${mainBranch}" branch on origin.`
+				)
+			} else {
+				throw new Error(
+					`Local branch "${targetBranch}" does not exist. Cannot rebase.\n` +
+						`Ensure the branch exists locally.`
+				)
+			}
 		}
 
 		// Step 2: Check for uncommitted changes and create WIP commit if needed
@@ -72,21 +103,21 @@ export class MergeManager {
 			getLogger().debug(`Created WIP commit: ${wipCommitHash}`)
 		}
 
-		// Step 3: Check if rebase is needed by comparing merge-base with main HEAD
-		const mergeBase = await executeGitCommand(['merge-base', mainBranch, 'HEAD'], {
+		// Step 3: Check if rebase is needed by comparing merge-base with target HEAD
+		const mergeBase = await executeGitCommand(['merge-base', targetBranch, 'HEAD'], {
 			cwd: worktreePath,
 		})
 
-		const mainHead = await executeGitCommand(['rev-parse', mainBranch], {
+		const targetHead = await executeGitCommand(['rev-parse', targetBranch], {
 			cwd: worktreePath,
 		})
 
 		const mergeBaseTrimmed = mergeBase.trim()
-		const mainHeadTrimmed = mainHead.trim()
+		const targetHeadTrimmed = targetHead.trim()
 
-		// If merge-base matches main HEAD, branch is already up to date
-		if (mergeBaseTrimmed === mainHeadTrimmed) {
-			getLogger().success(`Branch is already up to date with ${mainBranch}. No rebase needed.`)
+		// If merge-base matches target HEAD, branch is already up to date
+		if (mergeBaseTrimmed === targetHeadTrimmed) {
+			getLogger().success(`Branch is already up to date with ${targetBranch}. No rebase needed.`)
 			// Restore WIP commit if created (soft reset to remove temporary commit)
 			if (wipCommitHash) {
 				await this.restoreWipCommit(worktreePath, wipCommitHash)
@@ -95,7 +126,7 @@ export class MergeManager {
 		}
 
 		// Step 4: Show commits to be rebased (for informational purposes)
-		const commitsOutput = await executeGitCommand(['log', '--oneline', `${mainBranch}..HEAD`], {
+		const commitsOutput = await executeGitCommand(['log', '--oneline', `${targetBranch}..HEAD`], {
 			cwd: worktreePath,
 		})
 
@@ -107,8 +138,8 @@ export class MergeManager {
 			getLogger().info(`Found ${commitLines.length} commit(s) to rebase:`)
 			commitLines.forEach((commit) => getLogger().info(`  ${commit}`))
 		} else {
-			// Main has moved forward but branch has no new commits
-			getLogger().info(`${mainBranch} branch has moved forward. Rebasing to update branch...`)
+			// Target has moved forward but branch has no new commits
+			getLogger().info(`${targetBranch} has moved forward. Rebasing to update branch...`)
 		}
 
 		// Step 5: User confirmation (unless force mode or dry-run)
@@ -120,7 +151,7 @@ export class MergeManager {
 
 		// Step 6: Execute rebase (unless dry-run)
 		if (dryRun) {
-			getLogger().info(`[DRY RUN] Would execute: git rebase ${mainBranch}`)
+			getLogger().info(`[DRY RUN] Would execute: git rebase ${targetBranch}`)
 			if (commitLines.length > 0) {
 				getLogger().info(`[DRY RUN] This would rebase ${commitLines.length} commit(s)`)
 			}
@@ -131,7 +162,7 @@ export class MergeManager {
 		// Use -c core.hooksPath=/dev/null to disable hooks during rebase
 		// This prevents pre-commit hooks from running when commits are re-applied
 		try {
-			await executeGitCommand(['-c', 'core.hooksPath=/dev/null', 'rebase', mainBranch], { cwd: worktreePath })
+			await executeGitCommand(['-c', 'core.hooksPath=/dev/null', 'rebase', targetBranch], { cwd: worktreePath })
 			getLogger().success('Rebase completed successfully!')
 
 			// Restore WIP commit if created

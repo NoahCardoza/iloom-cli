@@ -11,7 +11,7 @@ import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { VSCodeIntegration } from './VSCodeIntegration.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager, type WriteMetadataInput } from './MetadataManager.js'
-import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit, extractPRNumber, PLACEHOLDER_COMMIT_PREFIX, pushBranchToRemote, GitCommandError } from '../utils/git.js'
+import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit, extractPRNumber, PLACEHOLDER_COMMIT_PREFIX, pushBranchToRemote, GitCommandError, fetchOrigin } from '../utils/git.js'
 import { GitHubService } from './GitHubService.js'
 import { generateRandomSessionId } from '../utils/claude.js'
 import { installDependencies } from '../utils/package-manager.js'
@@ -704,8 +704,31 @@ export class LoomManager {
       )
     }
 
-    // Determine base branch: use parent's branch for child looms, otherwise use explicit baseBranch or default (main)
-    const baseBranch = input.parentLoom?.branchName ?? input.baseBranch
+    // Determine base branch based on loom type and merge mode:
+    // - Child looms: use parent's local branch (parent may not be pushed yet)
+    // - PR modes (github-pr, github-draft-pr) for non-child, non-PR type: fetch and use origin/{mainBranch}
+    // - Local mode or PR type: use explicit baseBranch or default (main)
+    const mergeBehavior = settingsData.mergeBehavior ?? { mode: 'local' }
+    const isPRMode = mergeBehavior.mode === 'github-pr' || mergeBehavior.mode === 'github-draft-pr'
+    const isChildLoom = !!input.parentLoom
+
+    let baseBranch: string | undefined
+
+    if (isChildLoom) {
+      // Child looms: use parent's local branch (no fetch - parent may not be pushed)
+      baseBranch = input.parentLoom?.branchName ?? input.baseBranch
+    } else if (isPRMode && input.type !== 'pr') {
+      // PR modes (non-child, non-PR type): fetch origin and branch from origin/{mainBranch}
+      getLogger().info('Fetching from origin to ensure latest main branch...')
+      await fetchOrigin(this.gitWorktree.workingDirectory)
+
+      const mainBranch = settingsData.mainBranch ?? 'main'
+      baseBranch = `origin/${mainBranch}`
+      getLogger().info(`Branching from ${baseBranch}`)
+    } else {
+      // Local mode or PR type: use explicit baseBranch or default (main)
+      baseBranch = input.baseBranch
+    }
 
     await this.gitWorktree.createWorktree({
       path: worktreePath,
