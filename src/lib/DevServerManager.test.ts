@@ -41,10 +41,9 @@ describe('DevServerManager', () => {
 		// Reset all mocks
 		vi.clearAllMocks()
 
-		// Default: mock readPackageJson to return a package.json with dev script
-		vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValue({
-			name: 'test-project',
-			scripts: { dev: 'pnpm dev' },
+		// Default: mock getPackageScripts to return scripts with dev script
+		vi.mocked(packageJsonUtils.getPackageScripts).mockResolvedValue({
+			dev: { command: 'pnpm dev', source: 'package-manager' },
 		})
 	})
 
@@ -244,16 +243,15 @@ describe('DevServerManager', () => {
 			expect(mockProcess.unref).toHaveBeenCalled()
 		})
 
-		it('should skip server start and return true if package.json has no dev script', async () => {
+		it('should skip server start and return true if no dev script exists', async () => {
 			const port = 3087
 
 			// Mock server not running
 			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValue(null)
 
-			// Mock package.json exists but no dev script
-			vi.mocked(packageJsonUtils.readPackageJson).mockResolvedValue({
-				name: 'test-project',
-				scripts: { build: 'tsc' },
+			// Mock no dev script (only build script exists)
+			vi.mocked(packageJsonUtils.getPackageScripts).mockResolvedValue({
+				build: { command: 'tsc', source: 'package-manager' },
 			})
 
 			const result = await manager.ensureServerRunning(mockWorktreePath, port)
@@ -265,16 +263,14 @@ describe('DevServerManager', () => {
 			expect(execa).not.toHaveBeenCalled()
 		})
 
-		it('should skip server start and return true if package.json does not exist', async () => {
+		it('should skip server start and return true if no package files exist', async () => {
 			const port = 3087
 
 			// Mock server not running
 			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValue(null)
 
-			// Mock package.json doesn't exist (readPackageJson throws)
-			vi.mocked(packageJsonUtils.readPackageJson).mockRejectedValue(
-				new Error('package.json not found')
-			)
+			// Mock no scripts at all (neither package.json nor package.iloom.json)
+			vi.mocked(packageJsonUtils.getPackageScripts).mockResolvedValue({})
 
 			const result = await manager.ensureServerRunning(mockWorktreePath, port)
 

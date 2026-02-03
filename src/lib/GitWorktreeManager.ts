@@ -138,7 +138,8 @@ export class GitWorktreeManager {
       args.push(options.baseBranch)
     }
 
-    await executeGitCommand(args, { cwd: this._workingDirectory })
+    // 5 minute timeout for repos with LFS that need to download large files
+    await executeGitCommand(args, { cwd: this._workingDirectory, timeout: 300000 })
     return absolutePath
   }
 
