@@ -3,7 +3,7 @@ import { setTimeout } from 'timers/promises'
 import { ProcessManager } from './process/ProcessManager.js'
 import { buildDevServerCommand } from '../utils/dev-server.js'
 import { runScript } from '../utils/package-manager.js'
-import { readPackageJson } from '../utils/package-json.js'
+import { getPackageScripts } from '../utils/package-json.js'
 import { logger } from '../utils/logger.js'
 
 export interface DevServerManagerOptions {
@@ -78,18 +78,10 @@ export class DevServerManager {
 	 * Start dev server in background and wait for it to be ready
 	 */
 	private async startDevServer(worktreePath: string, port: number): Promise<void> {
-		// Guard: Check if package.json exists and has a dev script
-		// Note: buildDevServerCommand only supports package.json via package managers,
-		// not package.iloom.json. See #406 for multi-language support.
-		try {
-			const packageJson = await readPackageJson(worktreePath)
-			if (!packageJson.scripts?.['dev']) {
-				logger.warn('Skipping auto-start: no "dev" script found in package.json')
-				return
-			}
-		} catch {
-			// package.json doesn't exist - skip auto-start silently
-			logger.debug('Skipping auto-start: no package.json found')
+		// Guard: Check if a dev script exists in package.json or package.iloom.json
+		const scripts = await getPackageScripts(worktreePath)
+		if (!scripts['dev']) {
+			logger.warn('Skipping auto-start: no "dev" script found in package.json or package.iloom.json')
 			return
 		}
 
