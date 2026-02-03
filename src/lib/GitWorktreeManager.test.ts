@@ -256,7 +256,7 @@ describe('GitWorktreeManager', () => {
       expect(result).toBe(path.resolve('/test/new-worktree'))
       expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(
         ['worktree', 'add', '-b', 'new-feature', path.resolve('/test/new-worktree'), 'main'],
-        { cwd: mockRepoPath }
+        { cwd: mockRepoPath, timeout: 300000 }
       )
     })
 
@@ -311,7 +311,7 @@ describe('GitWorktreeManager', () => {
 
       expect(gitUtils.executeGitCommand).toHaveBeenCalledWith(
         ['worktree', 'add', path.resolve('/test/new-worktree'), 'existing-branch'],
-        { cwd: mockRepoPath }
+        { cwd: mockRepoPath, timeout: 300000 }
       )
     })
   })
