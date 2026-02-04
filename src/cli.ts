@@ -674,7 +674,23 @@ program
       .choices(['default', 'noReview', 'bypassPermissions'])
   )
   .option('--yolo', 'Enable autonomous mode (shorthand for --one-shot=bypassPermissions)')
-  .action(async (options: { oneShot?: import('./types/index.js').OneShotMode; yolo?: boolean }) => {
+  .option('-p, --print', 'Enable print/headless mode for CI/CD (uses bypassPermissions)')
+  .addOption(
+    new Option('--output-format <format>', 'Output format for Claude CLI (requires --print)')
+      .choices(['json', 'stream-json', 'text'])
+  )
+  .option('--verbose', 'Enable verbose output (requires --print)')
+  .option('--json', 'Output final result as JSON object (requires --print)')
+  .option('--json-stream', 'Stream JSONL output to stdout in real-time (requires --print)')
+  .action(async (options: {
+    oneShot?: import('./types/index.js').OneShotMode
+    yolo?: boolean
+    print?: boolean
+    outputFormat?: 'json' | 'stream-json' | 'text'
+    verbose?: boolean
+    json?: boolean
+    jsonStream?: boolean
+  }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {
       options.oneShot = 'bypassPermissions'
@@ -682,7 +698,33 @@ program
     try {
       const { IgniteCommand } = await import('./commands/ignite.js')
       const command = new IgniteCommand()
-      await command.execute(options.oneShot)
+
+      // Validate mutually exclusive flags
+      if (options.json && options.jsonStream) {
+        logger.error('--json and --json-stream are mutually exclusive')
+        process.exit(1)
+      }
+
+      // If output-format or verbose specified without --print, warn and ignore
+      if (!options.print && (options.outputFormat !== undefined || options.verbose !== undefined)) {
+        logger.warn('--output-format and --verbose flags are ignored without --print')
+      }
+
+      // If --json or --json-stream specified without --print, warn and ignore
+      if (!options.print && (options.json || options.jsonStream)) {
+        logger.warn('--json and --json-stream flags are ignored without --print')
+      }
+
+      const printOptions = options.print
+        ? {
+            print: true,
+            ...(options.outputFormat !== undefined && { outputFormat: options.outputFormat }),
+            ...(options.verbose !== undefined && { verbose: options.verbose }),
+            ...(options.json && { json: true }),
+            ...(options.jsonStream && { jsonStream: true }),
+          }
+        : undefined
+      await command.execute(options.oneShot, printOptions)
     } catch (error) {
       logger.error(`Failed to spin up loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
@@ -1311,11 +1353,55 @@ program
   .option('--yolo', 'Enable autonomous mode - Claude proceeds without user interaction')
   .option('--planner <provider>', 'AI provider for planning: claude, gemini, codex (default: claude)')
   .option('--reviewer <provider>', 'AI provider for review: claude, gemini, codex, none (default: none)')
-  .action(async (prompt?: string, options?: { model?: string; yolo?: boolean; planner?: string; reviewer?: string }) => {
+  .option('-p, --print', 'Enable print/headless mode for CI/CD (uses bypassPermissions)')
+  .addOption(
+    new Option('--output-format <format>', 'Output format for Claude CLI (requires --print)')
+      .choices(['json', 'stream-json', 'text'])
+  )
+  .option('--verbose', 'Enable verbose output (requires --print)')
+  .option('--json', 'Output final result as JSON object (requires --print)')
+  .option('--json-stream', 'Stream JSONL output to stdout in real-time (requires --print)')
+  .action(async (prompt?: string, options?: {
+    model?: string
+    yolo?: boolean
+    planner?: string
+    reviewer?: string
+    print?: boolean
+    outputFormat?: 'json' | 'stream-json' | 'text'
+    verbose?: boolean
+    json?: boolean
+    jsonStream?: boolean
+  }) => {
     try {
       const { PlanCommand } = await import('./commands/plan.js')
       const command = new PlanCommand()
-      await command.execute(prompt, options?.model, options?.yolo, options?.planner, options?.reviewer)
+
+      // Validate mutually exclusive flags
+      if (options?.json && options?.jsonStream) {
+        logger.error('--json and --json-stream are mutually exclusive')
+        process.exit(1)
+      }
+
+      // If output-format or verbose specified without --print, warn and ignore
+      if (!options?.print && (options?.outputFormat !== undefined || options?.verbose !== undefined)) {
+        logger.warn('--output-format and --verbose flags are ignored without --print')
+      }
+
+      // If --json or --json-stream specified without --print, warn and ignore
+      if (!options?.print && (options?.json || options?.jsonStream)) {
+        logger.warn('--json and --json-stream flags are ignored without --print')
+      }
+
+      const printOptions = options?.print
+        ? {
+            print: true,
+            ...(options?.outputFormat !== undefined && { outputFormat: options.outputFormat }),
+            ...(options?.verbose !== undefined && { verbose: options.verbose }),
+            ...(options?.json && { json: true }),
+            ...(options?.jsonStream && { jsonStream: true }),
+          }
+        : undefined
+      await command.execute(prompt, options?.model, options?.yolo, options?.planner, options?.reviewer, printOptions)
     } catch (error) {
       logger.error(`Planning session failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)

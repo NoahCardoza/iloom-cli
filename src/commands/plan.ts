@@ -1,4 +1,5 @@
-import { logger } from '../utils/logger.js'
+import { logger, createStderrLogger } from '../utils/logger.js'
+import { withLogger } from '../utils/logger-context.js'
 import chalk from 'chalk'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { PromptTemplateManager, type TemplateVariables } from '../lib/PromptTemplateManager.js'
@@ -75,8 +76,49 @@ export class PlanCommand {
 	 * @param yolo - Optional flag to enable autonomous mode (skip permission prompts)
 	 * @param planner - Optional planner provider (defaults to 'claude')
 	 * @param reviewer - Optional reviewer provider (defaults to 'none')
+	 * @param printOptions - Print mode options for headless/CI execution
 	 */
-	public async execute(prompt?: string, model?: string, yolo?: boolean, planner?: string, reviewer?: string): Promise<void> {
+	public async execute(
+		prompt?: string,
+		model?: string,
+		yolo?: boolean,
+		planner?: string,
+		reviewer?: string,
+		printOptions?: {
+			print?: boolean
+			outputFormat?: 'json' | 'stream-json' | 'text'
+			verbose?: boolean
+			json?: boolean
+			jsonStream?: boolean
+		}
+	): Promise<void> {
+		// Wrap execution in stderr logger for JSON modes to keep stdout clean
+		const isJsonMode = (printOptions?.json ?? false) || (printOptions?.jsonStream ?? false)
+		if (isJsonMode) {
+			const jsonLogger = createStderrLogger()
+			return withLogger(jsonLogger, () => this.executeInternal(prompt, model, yolo, planner, reviewer, printOptions))
+		}
+
+		return this.executeInternal(prompt, model, yolo, planner, reviewer, printOptions)
+	}
+
+	/**
+	 * Internal execution method (separated for withLogger wrapping)
+	 */
+	private async executeInternal(
+		prompt?: string,
+		model?: string,
+		yolo?: boolean,
+		planner?: string,
+		reviewer?: string,
+		printOptions?: {
+			print?: boolean
+			outputFormat?: 'json' | 'stream-json' | 'text'
+			verbose?: boolean
+			json?: boolean
+			jsonStream?: boolean
+		}
+	): Promise<void> {
 		// Validate and normalize planner CLI argument
 		let normalizedPlanner: PlannerProvider | undefined
 		if (planner) {
@@ -384,19 +426,43 @@ export class PlanCommand {
 			'Bash(git show:*)',
 		]
 
+		// Determine if we're in print/headless mode
+		const isHeadless = printOptions?.print ?? false
+
 		// Build Claude options
-		const claudeOptions = {
+		const claudeOptions: Parameters<typeof launchClaude>[1] = {
 			model: effectiveModel,
-			headless: false,
+			headless: isHeadless,
 			appendSystemPrompt: architectPrompt,
 			mcpConfig,
 			addDir: process.cwd(),
 			allowedTools,
 		}
 
+		// Add output format and verbose options if provided (print mode only)
+		if (printOptions?.outputFormat !== undefined) {
+			claudeOptions.outputFormat = printOptions.outputFormat
+		}
+		if (printOptions?.verbose !== undefined) {
+			claudeOptions.verbose = printOptions.verbose
+		}
+
+		// Add JSON mode if specified (requires print mode)
+		if (printOptions?.json) {
+			claudeOptions.jsonMode = 'json'
+			claudeOptions.outputFormat = 'stream-json' // Force stream-json for parsing
+		} else if (printOptions?.jsonStream) {
+			claudeOptions.jsonMode = 'stream'
+			claudeOptions.outputFormat = 'stream-json' // Force stream-json for streaming
+		}
+
+		// Force yolo mode when print mode is enabled (headless execution requires autonomous mode)
+		const effectiveYolo = (yolo ?? false) || isHeadless
+
 		// Handle --yolo mode
-		if (yolo) {
-			if (!prompt) {
+		if (effectiveYolo) {
+			// Only require prompt for explicit --yolo flag, not for print mode auto-yolo
+			if (yolo && !prompt) {
 				throw new Error('--yolo requires a prompt or issue identifier (e.g., il plan --yolo "add gitlab support" or il plan --yolo 42)')
 			}
 			logger.warn(
@@ -410,6 +476,7 @@ export class PlanCommand {
 			hasSystemPrompt: !!claudeOptions.appendSystemPrompt,
 			addDir: claudeOptions.addDir,
 			yolo,
+			print: isHeadless,
 		})
 
 		// Launch Claude in interactive mode
@@ -426,8 +493,8 @@ export class PlanCommand {
 			initialMessage = 'Help me plan a feature or decompose work into issues.'
 		}
 
-		// Apply yolo mode wrapper if enabled
-		if (yolo) {
+		// Apply yolo mode wrapper if enabled (includes print mode)
+		if (effectiveYolo) {
 			initialMessage = `[AUTONOMOUS MODE]
 Proceed through the flow without requiring user interaction. Make and document your assumptions and proceed to create the epic and child issues and dependencies if necessary. This guidance supersedes all previous guidance.
 
@@ -435,10 +502,19 @@ Proceed through the flow without requiring user interaction. Make and document y
 ${initialMessage}`
 		}
 
-		await launchClaude(initialMessage, {
+		const claudeResult = await launchClaude(initialMessage, {
 			...claudeOptions,
-			...(yolo && { permissionMode: 'bypassPermissions' as const }),
+			...(effectiveYolo && { permissionMode: 'bypassPermissions' as const }),
 		})
+
+		// Output final JSON for --json mode (--json-stream already streamed to stdout)
+		if (printOptions?.json) {
+			// eslint-disable-next-line no-console
+			console.log(JSON.stringify({
+				success: true,
+				output: claudeResult ?? ''
+			}))
+		}
 
 		logger.debug('Claude session completed')
 		logger.info(chalk.green('Planning session ended.'))
