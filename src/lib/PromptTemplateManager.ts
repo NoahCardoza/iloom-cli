@@ -4,6 +4,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import Handlebars from 'handlebars'
 import { logger } from '../utils/logger.js'
+import type { AgentSettings } from './SettingsManager.js'
 
 // Register raw helper to handle content with curly braces (e.g., JSON)
 // Usage: {{{{raw}}}}{{VARIABLE}}{{{{/raw}}}}
@@ -107,7 +108,7 @@ export interface TemplateVariables {
  * Build review-related template variables from settings.
  * Used by both the ignite command (for prompt templates) and AgentManager (for agent prompts).
  */
-export function buildReviewTemplateVariables(agents?: Record<string, any> | null): Partial<TemplateVariables> {
+export function buildReviewTemplateVariables(agents?: Record<string, AgentSettings> | null): Partial<TemplateVariables> {
 	const variables: Partial<TemplateVariables> = {}
 
 	// Code reviewer configuration
