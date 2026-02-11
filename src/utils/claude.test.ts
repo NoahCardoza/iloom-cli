@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { execa } from 'execa'
 import { existsSync } from 'node:fs'
-import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow, generateDeterministicSessionId, generateRandomSessionId } from './claude.js'
+import { detectClaudeCli, getClaudeVersion, launchClaude, generateBranchName, launchClaudeInNewTerminalWindow, generateDeterministicSessionId, generateRandomSessionId, acceptClaudeTrustDialog } from './claude.js'
+import fse from 'fs-extra'
+import path from 'node:path'
+import os from 'node:os'
 import { logger } from './logger.js'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type MockExecaReturn = any
 
 const mockLogger = {
 	debug: vi.fn(),
@@ -2204,6 +2210,128 @@ describe('claude utils', () => {
 
 			// Should accept the lowercase branch name, not fall back
 			expect(result).toBe('feat/issue-mark-1__nextjs-vercel')
+		})
+	})
+
+	describe('acceptClaudeTrustDialog', () => {
+		let tmpDir: string
+		const originalEnv = process.env.CLAUDE_CONFIG_DIR
+
+		beforeEach(async () => {
+			tmpDir = await fse.mkdtemp(path.join(os.tmpdir(), 'claude-test-'))
+			process.env.CLAUDE_CONFIG_DIR = tmpDir
+		})
+
+		afterEach(async () => {
+			if (originalEnv === undefined) {
+				delete process.env.CLAUDE_CONFIG_DIR
+			} else {
+				process.env.CLAUDE_CONFIG_DIR = originalEnv
+			}
+			await fse.remove(tmpDir)
+		})
+
+		it('should create .claude.json with trust flag when file does not exist', async () => {
+			const worktreePath = '/tmp/test-worktree'
+
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			await acceptClaudeTrustDialog(worktreePath)
+
+			const claudeJson = await fse.readJson(path.join(tmpDir, '.claude.json'))
+			expect(claudeJson.projects[worktreePath].hasTrustDialogAccepted).toBe(true)
+		})
+
+		it('should add project entry to existing .claude.json without clobbering', async () => {
+			const existingPath = '/tmp/existing-project'
+			const newPath = '/tmp/new-worktree'
+
+			// Pre-create .claude.json with existing project
+			await fse.writeJson(path.join(tmpDir, '.claude.json'), {
+				projects: {
+					[existingPath]: { hasTrustDialogAccepted: true, someOtherField: 'value' },
+				},
+			}, { spaces: 2 })
+
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			await acceptClaudeTrustDialog(newPath)
+
+			const claudeJson = await fse.readJson(path.join(tmpDir, '.claude.json'))
+			// New project added
+			expect(claudeJson.projects[newPath].hasTrustDialogAccepted).toBe(true)
+			// Existing project preserved
+			expect(claudeJson.projects[existingPath].hasTrustDialogAccepted).toBe(true)
+			expect(claudeJson.projects[existingPath].someOtherField).toBe('value')
+		})
+
+		it('should handle existing entry for same path by setting trust flag', async () => {
+			const worktreePath = '/tmp/existing-worktree'
+
+			// Pre-create with existing data for the same path
+			await fse.writeJson(path.join(tmpDir, '.claude.json'), {
+				projects: {
+					[worktreePath]: { someExistingData: 42 },
+				},
+			}, { spaces: 2 })
+
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			await acceptClaudeTrustDialog(worktreePath)
+
+			const claudeJson = await fse.readJson(path.join(tmpDir, '.claude.json'))
+			expect(claudeJson.projects[worktreePath].hasTrustDialogAccepted).toBe(true)
+			expect(claudeJson.projects[worktreePath].someExistingData).toBe(42)
+		})
+
+		it('should call claude CLI with correct flags and cwd', async () => {
+			const worktreePath = '/tmp/test-worktree'
+
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			await acceptClaudeTrustDialog(worktreePath)
+
+			expect(execa).toHaveBeenCalledWith(
+				'claude',
+				['--dangerously-skip-permissions', '--no-session-persistence', '--print'],
+				expect.objectContaining({
+					cwd: worktreePath,
+					timeout: 10000,
+					reject: false,
+				})
+			)
+		})
+
+		it('should handle .claude.json with no projects key', async () => {
+			const worktreePath = '/tmp/test-worktree'
+
+			// Pre-create .claude.json with unrelated data
+			await fse.writeJson(path.join(tmpDir, '.claude.json'), {
+				someOtherConfig: true,
+			}, { spaces: 2 })
+
+			vi.mocked(execa).mockResolvedValueOnce({
+				stdout: '',
+				exitCode: 0,
+			} as MockExecaReturn)
+
+			await acceptClaudeTrustDialog(worktreePath)
+
+			const claudeJson = await fse.readJson(path.join(tmpDir, '.claude.json'))
+			expect(claudeJson.someOtherConfig).toBe(true)
+			expect(claudeJson.projects[worktreePath].hasTrustDialogAccepted).toBe(true)
 		})
 	})
 })

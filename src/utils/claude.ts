@@ -1,7 +1,10 @@
 import { execa } from 'execa'
 import { existsSync } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { join } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
+import fs from 'fs-extra'
 import { logger } from './logger.js'
 import { getLogger } from './logger-context.js'
 import { openTerminalWindow } from './terminal.js'
@@ -580,4 +583,58 @@ Generate a git branch name for the following issue:
 function isValidBranchName(name: string, issueNumber: string | number): boolean {
 	const pattern = new RegExp(`^(feat|fix|docs|refactor|test|chore)/issue-${issueNumber}__[a-z0-9-]+$`, 'i')
 	return pattern.test(name) && name.length <= 50
+}
+
+/**
+ * Pre-accept Claude Code trust dialog for a worktree path
+ * This allows Claude to launch without the interactive trust confirmation
+ *
+ * Uses CLAUDE_CONFIG_DIR env var for config directory, falling back to os.homedir()
+ *
+ * @param worktreePath - The path to the worktree to trust
+ */
+export async function acceptClaudeTrustDialog(worktreePath: string): Promise<void> {
+	const configDir = process.env.CLAUDE_CONFIG_DIR ?? os.homedir()
+	const claudeJsonPath = path.join(configDir, '.claude.json')
+
+	// 1. Run claude command to register the project path (will fail but updates config)
+	try {
+		await execa('claude', [
+			'--dangerously-skip-permissions',
+			'--no-session-persistence',
+			'--print'
+		], {
+			cwd: worktreePath,
+			timeout: 10000,
+			reject: false, // Don't throw on non-zero exit
+		})
+	} catch {
+		// Expected to fail - we just need it to register the path
+	}
+
+	// 2. Read .claude.json and set hasTrustDialogAccepted
+	try {
+		let claudeJson: Record<string, unknown> = {}
+		if (await fs.pathExists(claudeJsonPath)) {
+			claudeJson = await fs.readJson(claudeJsonPath)
+		}
+
+		// Ensure projects object exists (structure: { projects: { ... } })
+		if (!claudeJson.projects || typeof claudeJson.projects !== 'object') {
+			claudeJson.projects = {}
+		}
+		const projects = claudeJson.projects as Record<string, Record<string, unknown>>
+
+		// Ensure project entry exists
+		projects[worktreePath] ??= {}
+
+		// Set trust flag
+		projects[worktreePath].hasTrustDialogAccepted = true
+
+		// Write back
+		await fs.writeJson(claudeJsonPath, claudeJson, { spaces: 2 })
+		getLogger().debug(`Accepted Claude trust dialog for: ${worktreePath}`)
+	} catch (error) {
+		getLogger().warn(`Failed to accept Claude trust dialog: ${error instanceof Error ? error.message : 'Unknown error'}`)
+	}
 }

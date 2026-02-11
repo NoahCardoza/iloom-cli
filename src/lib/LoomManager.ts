@@ -1,8 +1,6 @@
 import path from 'path'
-import os from 'os'
 import fs from 'fs-extra'
 import fg from 'fast-glob'
-import { execa } from 'execa'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import type { IssueTracker } from './IssueTracker.js'
 import type { BranchNamingService } from './BranchNamingService.js'
@@ -15,7 +13,7 @@ import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager, type WriteMetadataInput } from './MetadataManager.js'
 import { branchExists, executeGitCommand, ensureRepositoryHasCommits, extractIssueNumber, isFileTrackedByGit, extractPRNumber, PLACEHOLDER_COMMIT_PREFIX, pushBranchToRemote, GitCommandError, fetchOrigin } from '../utils/git.js'
 import { GitHubService } from './GitHubService.js'
-import { generateRandomSessionId } from '../utils/claude.js'
+import { generateRandomSessionId, acceptClaudeTrustDialog } from '../utils/claude.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateColorFromBranchName, selectDistinctColor, hexToRgb, type ColorData } from '../utils/color.js'
 import { detectDarkMode } from '../utils/terminal.js'
@@ -206,7 +204,7 @@ export class LoomManager {
 
     // 10.1. Pre-accept Claude trust dialog if Claude is enabled
     if (input.options?.enableClaude !== false) {
-      await this.acceptClaudeTrustDialog(worktreePath)
+      await acceptClaudeTrustDialog(worktreePath)
     }
 
     // 10.5. Handle github-draft-pr mode - push branch and create draft PR
@@ -1151,57 +1149,6 @@ export class LoomManager {
   }
 
   /**
-   * Pre-accept Claude Code trust dialog for a worktree path
-   * This allows Claude to launch without the interactive trust confirmation
-   *
-   * @param worktreePath - The path to the worktree to trust
-   */
-  private async acceptClaudeTrustDialog(worktreePath: string): Promise<void> {
-    const claudeJsonPath = path.join(os.homedir(), '.claude.json')
-
-    // 1. Run claude command to register the project path (will fail but updates config)
-    try {
-      await execa('claude', [
-        '--dangerously-skip-permissions',
-        '--no-session-persistence',
-        '--print'
-      ], {
-        cwd: worktreePath,
-        timeout: 10000,
-        reject: false, // Don't throw on non-zero exit
-      })
-    } catch {
-      // Expected to fail - we just need it to register the path
-    }
-
-    // 2. Read ~/.claude.json and set hasTrustDialogAccepted
-    try {
-      let claudeJson: Record<string, unknown> = {}
-      if (await fs.pathExists(claudeJsonPath)) {
-        claudeJson = await fs.readJson(claudeJsonPath)
-      }
-
-      // Ensure projects object exists (structure: { projects: { ... } })
-      if (!claudeJson.projects || typeof claudeJson.projects !== 'object') {
-        claudeJson.projects = {}
-      }
-      const projects = claudeJson.projects as Record<string, Record<string, unknown>>
-
-      // Ensure project entry exists
-      projects[worktreePath] ??= {}
-
-      // Set trust flag
-      projects[worktreePath].hasTrustDialogAccepted = true
-
-      // Write back
-      await fs.writeJson(claudeJsonPath, claudeJson, { spaces: 2 })
-      getLogger().debug(`Accepted Claude trust dialog for: ${worktreePath}`)
-    } catch (error) {
-      getLogger().warn(`Failed to accept Claude trust dialog: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    }
-  }
-
-  /**
    * Map worktrees to loom objects
    * Reads loom metadata from MetadataManager with branch name parsing as fallback
    */
@@ -1382,7 +1329,7 @@ export class LoomManager {
     // 6.5. Pre-accept Claude trust dialog if Claude is enabled
     const enableClaude = input.options?.enableClaude !== false
     if (enableClaude) {
-      await this.acceptClaudeTrustDialog(worktreePath)
+      await acceptClaudeTrustDialog(worktreePath)
     }
 
     // 7. Launch components (same as new worktree)
