@@ -160,6 +160,7 @@ export class CommitCommand {
 			skipVerifySilent: input.wipCommit === true,  // Don't warn for --wip-commit
 			noReview: input.noReview ?? false,
 			trailerType,
+			timeout: settings.git?.commitTimeout,
 			...(commitMessage && { message: commitMessage }),
 			...(detected.issueNumber !== undefined && { issueNumber: detected.issueNumber }),
 		}
