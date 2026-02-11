@@ -204,13 +204,14 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 	 */
 	async createComment(input: CreateCommentInput): Promise<CommentResult> {
 		const { number, body } = input
+		const normalizedKey = this.tracker.normalizeIdentifier(number)
 
 		// Jira doesn't distinguish between issue and PR comments
-		const comment = await this.tracker.addComment(number, body)
+		const comment = await this.tracker.addComment(normalizedKey, body)
 
 		return {
 			id: comment.id,
-			url: `${this.tracker.getConfig().host}/browse/${number}?focusedCommentId=${comment.id}`,
+			url: `${this.tracker.getConfig().host}/browse/${normalizedKey}?focusedCommentId=${comment.id}`,
 			created_at: new Date().toISOString(),
 		}
 	}
@@ -220,13 +221,14 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 	 */
 	async updateComment(input: UpdateCommentInput): Promise<CommentResult> {
 		const { commentId, number, body } = input
+		const normalizedKey = this.tracker.normalizeIdentifier(number)
 
 		// Update comment via tracker
-		await this.tracker.updateComment(number, commentId, body)
+		await this.tracker.updateComment(normalizedKey, commentId, body)
 
 		return {
 			id: commentId,
-			url: `${this.tracker.getConfig().host}/browse/${number}?focusedCommentId=${commentId}`,
+			url: `${this.tracker.getConfig().host}/browse/${normalizedKey}?focusedCommentId=${commentId}`,
 			updated_at: new Date().toISOString(),
 		}
 	}

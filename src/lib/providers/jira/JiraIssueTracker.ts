@@ -41,19 +41,27 @@ export class JiraIssueTracker implements IssueTracker {
 	}
 
 	/**
+	 * Normalize identifier to canonical uppercase form
+	 * Jira issue keys are case-sensitive in the API (must be uppercase)
+	 */
+	normalizeIdentifier(identifier: string | number): string {
+		return String(identifier).toUpperCase()
+	}
+
+	/**
 	 * Detect input type from user input
-	 * Jira issues follow pattern: PROJECTKEY-123
+	 * Jira issues follow pattern: PROJECTKEY-123 (case-insensitive)
 	 */
 	async detectInputType(input: string): Promise<IssueTrackerInputDetection> {
-		// Pattern: PROJECTKEY-123
-		const jiraPattern = /^([A-Z][A-Z0-9]+)-(\d+)$/
+		// Pattern: PROJECTKEY-123 (case-insensitive to accept lowercase from branch names or user input)
+		const jiraPattern = /^([A-Z][A-Z0-9]+)-(\d+)$/i
 		const match = input.match(jiraPattern)
 
 		if (!match) {
 			return { type: 'unknown', identifier: null, rawInput: input }
 		}
 
-		const issueKey = input
+		const issueKey = this.normalizeIdentifier(input)
 		getLogger().debug('Checking if input is a Jira issue', { issueKey })
 
 		// Verify the issue exists
@@ -70,7 +78,7 @@ export class JiraIssueTracker implements IssueTracker {
 	 * Fetch issue details
 	 */
 	async fetchIssue(identifier: string | number): Promise<Issue> {
-		const issueKey = String(identifier)
+		const issueKey = this.normalizeIdentifier(identifier)
 		getLogger().debug('Fetching Jira issue', { issueKey })
 
 		const jiraIssue = await this.client.getIssue(issueKey)
@@ -135,7 +143,7 @@ export class JiraIssueTracker implements IssueTracker {
 	 * Get issue URL
 	 */
 	async getIssueUrl(identifier: string | number): Promise<string> {
-		const issueKey = String(identifier)
+		const issueKey = this.normalizeIdentifier(identifier)
 		return `${this.config.host}/browse/${issueKey}`
 	}
 
@@ -144,7 +152,7 @@ export class JiraIssueTracker implements IssueTracker {
 	 * Uses configured transition mapping or default transition name
 	 */
 	async moveIssueToInProgress(identifier: string | number): Promise<void> {
-		const issueKey = String(identifier)
+		const issueKey = this.normalizeIdentifier(identifier)
 		getLogger().debug('Moving Jira issue to In Progress', { issueKey })
 
 		// Get available transitions
@@ -177,7 +185,7 @@ export class JiraIssueTracker implements IssueTracker {
 	 * Uses configured transition mapping or default transition name
 	 */
 	async moveIssueToReadyForReview(identifier: string | number): Promise<void> {
-		const issueKey = String(identifier)
+		const issueKey = this.normalizeIdentifier(identifier)
 		getLogger().debug('Moving Jira issue to Ready for Review', { issueKey })
 
 		// Get available transitions
@@ -238,7 +246,7 @@ ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''
 		createdAt: string
 		updatedAt: string
 	}>> {
-		const issueKey = String(identifier)
+		const issueKey = this.normalizeIdentifier(identifier)
 		getLogger().debug('Fetching Jira comments', { issueKey })
 
 		const comments = await this.client.getComments(issueKey)
@@ -257,7 +265,7 @@ ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''
 	 * Add a comment to an issue
 	 */
 	async addComment(identifier: string | number, body: string): Promise<{ id: string }> {
-		const issueKey = String(identifier)
+		const issueKey = this.normalizeIdentifier(identifier)
 		getLogger().debug('Adding Jira comment', { issueKey })
 
 		const comment = await this.client.addComment(issueKey, body)
@@ -268,7 +276,7 @@ ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''
 	 * Update an existing comment
 	 */
 	async updateComment(identifier: string | number, commentId: string, body: string): Promise<void> {
-		const issueKey = String(identifier)
+		const issueKey = this.normalizeIdentifier(identifier)
 		getLogger().debug('Updating Jira comment', { issueKey, commentId })
 
 		await this.client.updateComment(issueKey, commentId, body)

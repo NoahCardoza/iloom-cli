@@ -42,6 +42,10 @@ export interface IssueTracker {
 	moveIssueToInProgress?(identifier: string | number): Promise<void>
 	moveIssueToReadyForReview?(identifier: string | number): Promise<void>
 
+	// Identifier normalization - ensures identifiers are in canonical form
+	// GitHub: returns String(id), Linear/Jira: returns uppercase (e.g., "PROJ-123")
+	normalizeIdentifier(identifier: string | number): string
+
 	// Context extraction - formats issue/PR for AI prompts
 	extractContext(entity: Issue | PullRequest): string
 }

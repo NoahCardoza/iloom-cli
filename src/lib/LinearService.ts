@@ -203,6 +203,15 @@ export class LinearService implements IssueTracker {
   }
 
   /**
+   * Normalize identifier to canonical form (uppercase for Linear keys)
+   * @param identifier - Linear issue identifier (e.g., "eng-123" or "ENG-123")
+   * @returns Uppercase identifier (e.g., "ENG-123")
+   */
+  public normalizeIdentifier(identifier: string | number): string {
+    return String(identifier).toUpperCase()
+  }
+
+  /**
    * Extract issue context for AI prompts
    * @param entity - Issue (Linear doesn't have PRs)
    * @returns Formatted context string

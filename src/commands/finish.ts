@@ -352,8 +352,9 @@ export class FinishCommand {
 				const { MetadataManager } = await import('../lib/MetadataManager.js')
 				const metadataManager = new MetadataManager()
 				const metadata = await metadataManager.readMetadata(worktree.path)
-				if (metadata?.issue_numbers?.[0]) {
-					result.number = metadata.issue_numbers[0]
+				const canonicalKey = metadata?.issueKey ?? metadata?.issue_numbers?.[0]
+				if (canonicalKey) {
+					result.number = canonicalKey
 				}
 			}
 		}
@@ -394,8 +395,8 @@ export class FinishCommand {
 		const issueNumber = extractIssueNumber(currentDir)
 
 		if (issueNumber !== null) {
-			// Use issue key from metadata if available (original case), otherwise use extracted (lowercase)
-			const originalIssueKey = metadata?.issue_numbers?.[0] ?? issueNumber
+			// Use issueKey from metadata (canonical case), then issue_numbers, then extracted (lowercase)
+			const originalIssueKey = metadata?.issueKey ?? metadata?.issue_numbers?.[0] ?? issueNumber
 			getLogger().debug(
 				`Auto-detected issue #${originalIssueKey} from directory: ${currentDir}`
 			)
@@ -421,8 +422,8 @@ export class FinishCommand {
 		// Try to extract issue from branch name
 		const branchIssueNumber = extractIssueNumber(currentBranch)
 		if (branchIssueNumber !== null) {
-			// Use issue key from metadata if available (original case), otherwise use extracted (lowercase)
-			const originalIssueKey = metadata?.issue_numbers?.[0] ?? branchIssueNumber
+			// Use issueKey from metadata (canonical case), then issue_numbers, then extracted (lowercase)
+			const originalIssueKey = metadata?.issueKey ?? metadata?.issue_numbers?.[0] ?? branchIssueNumber
 			getLogger().debug(
 				`Auto-detected issue #${originalIssueKey} from branch: ${currentBranch}`
 			)

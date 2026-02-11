@@ -378,6 +378,11 @@ export class GitHubService implements IssueTracker {
 		}
 	}
 
+	// Identifier normalization - GitHub identifiers are numeric, just stringify
+	public normalizeIdentifier(identifier: string | number): string {
+		return String(identifier)
+	}
+
 	// Utility methods
 	public extractContext(entity: Issue | PullRequest): string {
 		if ('branch' in entity) {

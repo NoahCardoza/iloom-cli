@@ -152,7 +152,7 @@ export class SummaryCommand {
 				return {
 					worktree: issueWorktree,
 					loomType: metadata?.issueType ?? 'issue',
-					issueNumber: metadata?.issue_numbers?.[0] ?? String(issueNumber),
+					issueNumber: metadata?.issueKey ?? metadata?.issue_numbers?.[0] ?? String(issueNumber),
 				}
 			}
 
@@ -180,7 +180,7 @@ export class SummaryCommand {
 				return {
 					worktree: issueWorktree,
 					loomType: metadata?.issueType ?? 'issue',
-					issueNumber: metadata?.issue_numbers?.[0] ?? alphanumericId,
+					issueNumber: metadata?.issueKey ?? metadata?.issue_numbers?.[0] ?? alphanumericId,
 				}
 			}
 			throw new Error(`No loom found for identifier: ${identifier}`)
@@ -194,8 +194,8 @@ export class SummaryCommand {
 
 			// For branch looms, try to get issue number from metadata
 			let issueNumber: string | number | undefined
-			if (loomType === 'issue' && metadata?.issue_numbers?.[0]) {
-				issueNumber = metadata.issue_numbers[0]
+			if (loomType === 'issue' && (metadata?.issueKey || metadata?.issue_numbers?.[0])) {
+				issueNumber = metadata?.issueKey ?? metadata?.issue_numbers?.[0]
 			} else if (loomType === 'pr' && metadata?.pr_numbers?.[0]) {
 				issueNumber = metadata.pr_numbers[0]
 			}
@@ -256,7 +256,7 @@ export class SummaryCommand {
 				return {
 					worktree,
 					loomType: metadata?.issueType ?? 'issue',
-					issueNumber: metadata?.issue_numbers?.[0] ?? String(issueNumber),
+					issueNumber: metadata?.issueKey ?? metadata?.issue_numbers?.[0] ?? String(issueNumber),
 				}
 			}
 			throw new Error(`No loom found for auto-detected issue #${issueNumber}`)
@@ -284,7 +284,7 @@ export class SummaryCommand {
 				return {
 					worktree,
 					loomType: metadata?.issueType ?? 'issue',
-					issueNumber: metadata?.issue_numbers?.[0] ?? String(branchIssueNumber),
+					issueNumber: metadata?.issueKey ?? metadata?.issue_numbers?.[0] ?? String(branchIssueNumber),
 				}
 			}
 		}
@@ -297,8 +297,8 @@ export class SummaryCommand {
 
 			// For branch looms, try to get issue number from metadata
 			let resolvedIssueNumber: string | number | undefined
-			if (loomType === 'issue' && metadata?.issue_numbers?.[0]) {
-				resolvedIssueNumber = metadata.issue_numbers[0]
+			if (loomType === 'issue' && (metadata?.issueKey || metadata?.issue_numbers?.[0])) {
+				resolvedIssueNumber = metadata?.issueKey ?? metadata?.issue_numbers?.[0]
 			} else if (loomType === 'pr' && metadata?.pr_numbers?.[0]) {
 				resolvedIssueNumber = metadata.pr_numbers[0]
 			}
