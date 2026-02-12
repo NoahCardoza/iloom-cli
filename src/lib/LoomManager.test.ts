@@ -10,7 +10,7 @@ import { CLIIsolationManager } from './CLIIsolationManager.js'
 import { SettingsManager } from './SettingsManager.js'
 import type { CreateLoomInput } from '../types/loom.js'
 import { installDependencies } from '../utils/package-manager.js'
-import { branchExists, ensureRepositoryHasCommits, isFileTrackedByGit, fetchOrigin } from '../utils/git.js'
+import { branchExists, ensureRepositoryHasCommits, isFileTrackedByGit, fetchOrigin, executeGitCommand } from '../utils/git.js'
 import fs from 'fs-extra'
 import fg from 'fast-glob'
 
@@ -286,6 +286,97 @@ describe('LoomManager', () => {
 
       // Verify installDependencies was called with the correct path and quiet=true
       expect(installDependencies).toHaveBeenCalledWith(expectedPath, true, true)
+    })
+
+    it('should fetch PR ref and create worktree from FETCH_HEAD for fork PRs', async () => {
+      const prInput: CreateLoomInput = {
+        type: 'pr',
+        identifier: 586,
+        originalInput: 'pr/586',
+      }
+
+      // Mock GitHub PR fetch returning a fork PR
+      vi.mocked(mockGitHub.fetchPR).mockResolvedValue({
+        number: 586,
+        title: 'Add git commit timeout',
+        body: 'PR from fork',
+        state: 'open',
+        branch: 'feature/git-commit-timeout',
+        baseBranch: 'main',
+        url: 'https://github.com/owner/repo/pull/586',
+        isDraft: false,
+        isFork: true,
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-fork-pr'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3586)
+
+      const result = await manager.createIloom(prInput)
+
+      expect(result.type).toBe('pr')
+      expect(result.identifier).toBe(586)
+      expect(result.branch).toBe('feature/git-commit-timeout')
+
+      // Verify git fetch was called with refs/pull/586/head (fork PR ref)
+      expect(executeGitCommand).toHaveBeenCalledWith(
+        ['fetch', 'origin', 'refs/pull/586/head'],
+        expect.any(Object)
+      )
+
+      // Verify worktree was created with createBranch: true and baseBranch: 'FETCH_HEAD'
+      expect(mockGitWorktree.createWorktree).toHaveBeenCalledWith(
+        expect.objectContaining({
+          branch: 'feature/git-commit-timeout',
+          createBranch: true,
+          baseBranch: 'FETCH_HEAD',
+        })
+      )
+    })
+
+    it('should use existing branch for same-repo PRs (existing behavior)', async () => {
+      const prInput: CreateLoomInput = {
+        type: 'pr',
+        identifier: 456,
+        originalInput: 'pr/456',
+      }
+
+      // Mock GitHub PR fetch returning a same-repo PR (no isFork or isFork: false)
+      vi.mocked(mockGitHub.fetchPR).mockResolvedValue({
+        number: 456,
+        title: 'Test PR',
+        body: 'Test PR description',
+        state: 'open',
+        branch: 'feature-branch',
+        baseBranch: 'main',
+        url: 'https://github.com/owner/repo/pull/456',
+        isDraft: false,
+        isFork: false,
+      })
+
+      // Mock worktree creation
+      const expectedPath = '/test/worktree-feature-branch'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3456)
+
+      await manager.createIloom(prInput)
+
+      // Verify git fetch was called with just 'origin' (not a specific PR ref)
+      expect(executeGitCommand).toHaveBeenCalledWith(
+        ['fetch', 'origin'],
+        expect.any(Object)
+      )
+
+      // Verify worktree was created with createBranch: false (existing branch)
+      expect(mockGitWorktree.createWorktree).toHaveBeenCalledWith(
+        expect.objectContaining({
+          branch: 'feature-branch',
+          createBranch: false,
+        })
+      )
     })
 
     it('should populate both issueUrls and prUrls for PR with issue branch', async () => {
