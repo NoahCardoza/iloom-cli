@@ -331,6 +331,7 @@ export interface CommitOptions {
 	skipVerify?: boolean  // Skip pre-commit hooks (--no-verify flag)
 	skipVerifySilent?: boolean  // Skip without warning (for --wip-commit)
 	trailerType?: 'Refs' | 'Fixes'  // Trailer type: "Refs" references issue, "Fixes" closes it (default: 'Fixes' for backward compat)
+	timeout?: number      // Timeout in milliseconds for commit operation
 }
 
 /**

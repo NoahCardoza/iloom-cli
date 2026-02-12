@@ -664,6 +664,7 @@ export class FinishCommand {
 					dryRun: options.dryRun ?? false,
 					skipVerify,
 					issuePrefix,
+					timeout: settings.git?.commitTimeout,
 				}
 
 				// Only add issueNumber if it's an issue
@@ -938,6 +939,7 @@ export class FinishCommand {
 							dryRun: false,
 							skipVerify,
 							issuePrefix,
+							timeout: settings.git?.commitTimeout,
 							// Do NOT pass issueNumber for PRs - no "Fixes #" trailer needed
 						})
 						getLogger().success('Changes committed')

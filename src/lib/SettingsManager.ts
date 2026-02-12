@@ -438,6 +438,17 @@ export const IloomSettingsSchema = z.object({
 				'"upstreamOnly" - only show for contributions to external repositories (e.g., open source). ' +
 				'"on" - always show attribution.'
 		),
+	git: z
+		.object({
+			commitTimeout: z
+				.number()
+				.min(1000, 'Commit timeout must be at least 1000ms')
+				.max(600000, 'Commit timeout cannot exceed 600000ms (10 minutes)')
+				.default(60000)
+				.describe('Timeout in milliseconds for git commit operations. Increase for long-running pre-commit hooks.'),
+		})
+		.default({ }) // ensures the object always exists and uses default for the inner properties
+		.describe('Git operation settings'),
 })
 
 /**
@@ -627,6 +638,17 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'"upstreamOnly" - only show for contributions to external repositories (e.g., open source). ' +
 				'"on" - always show attribution.'
 		),
+	git: z
+		.object({
+			commitTimeout: z
+				.number()
+				.min(1000, 'Commit timeout must be at least 1000ms')
+				.max(600000, 'Commit timeout cannot exceed 600000ms (10 minutes)')
+				.optional()
+				.describe('Timeout in milliseconds for git commit operations. Increase for long-running pre-commit hooks.'),
+		})
+		.optional()
+		.describe('Git operation settings'),
 })
 
 /**
