@@ -142,7 +142,7 @@ export async function fetchGhPR(
 		'view',
 		String(prNumber),
 		'--json',
-		'number,title,body,state,headRefName,baseRefName,url,isDraft,mergeable,createdAt,updatedAt',
+		'number,title,body,state,headRefName,baseRefName,url,isDraft,isCrossRepository,mergeable,createdAt,updatedAt',
 	]
 
 	if (repo) {

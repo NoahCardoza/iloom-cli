@@ -68,6 +68,7 @@ export interface PullRequest {
   baseBranch: string
   url: string
   isDraft: boolean
+  isFork?: boolean
 }
 
 // Issue Tracker types

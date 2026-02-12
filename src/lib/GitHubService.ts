@@ -352,6 +352,7 @@ export class GitHubService implements IssueTracker {
 			baseBranch: ghPR.baseRefName,
 			url: ghPR.url,
 			isDraft: ghPR.isDraft,
+			isFork: ghPR.isCrossRepository,
 		}
 	}
 
