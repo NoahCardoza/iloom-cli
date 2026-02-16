@@ -48,18 +48,13 @@ cd ../<repo-name>_quick-fix_<branch-name>
 git stash pop
 ```
 
-### 5. Validate Changes
+### 5. Install Dependencies
 
-Worktrees don't have `node_modules` and Husky pre-commit hooks won't run, so we must validate manually.
-
-Install dependencies, then run lint, type-check, and tests. **If any step fails, stop and fix before committing.**
+Worktrees don't have `node_modules`, so install dependencies to enable Husky pre-commit hooks:
 
 ```bash
 cd ../<repo-name>_quick-fix_<branch-name>
 pnpm install
-pnpm run lint
-pnpm run compile
-pnpm run test
 ```
 
 ### 6. Stage and Commit Changes
@@ -106,8 +101,8 @@ pnpm build
 
 ## Notes
 
-- Worktrees don't have `node_modules` or Husky hooks, so step 5 installs deps and validates manually
-- Do NOT skip step 5 — it is the only thing preventing broken code from being merged
+- Worktrees don't have `node_modules`, so step 5 installs deps to enable Husky pre-commit hooks
+- Do NOT skip step 5 — without it, pre-commit hooks won't run and broken code can be merged
 - Uses a worktree to isolate changes from the main working directory
 - The PR is merged with squash to keep history clean
 - Remote branch is automatically deleted after merge
