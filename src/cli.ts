@@ -1332,7 +1332,9 @@ program
   .argument('[project-path]', 'Path to project root (auto-detected if omitted)')
   .option('--json', 'Output as JSON (default behavior)')
   .option('--limit <n>', 'Max issues to return', '100')
-  .action(async (projectPath?: string, options?: { json?: boolean; limit?: string }) => {
+  .option('--sprint <name>', 'Jira only: filter by sprint name (e.g., "Sprint 17") or "current" for active sprint')
+  .option('--mine', 'Jira only: show only issues assigned to me')
+  .action(async (projectPath?: string, options?: { json?: boolean; limit?: string; sprint?: string; mine?: boolean }) => {
     try {
       const { IssuesCommand } = await import('./commands/issues.js')
       const command = new IssuesCommand()
@@ -1341,6 +1343,8 @@ program
       const result = await command.execute({
         ...(projectPath ? { projectPath } : {}),
         limit,
+        sprint: options?.sprint,
+        mine: options?.mine,
       })
       console.log(JSON.stringify(result, null, 2))
     } catch (error) {
@@ -1889,6 +1893,83 @@ program
       await withLogger(jsonLogger, executeAction)
     } else {
       await executeAction()
+    }
+  })
+
+// Test command for Jira integration
+const testJiraCommand = program
+  .command('test-jira')
+  .description('Test Jira integration methods against a real Jira instance')
+
+testJiraCommand
+  .command('child-issue')
+  .description('Create a test child issue under a parent')
+  .argument('<parentKey>', 'Parent issue key (e.g., PROJ-123)')
+  .action(async (parentKey: string) => {
+    try {
+      const { TestJiraCommand } = await import('./commands/test-jira.js')
+      await new TestJiraCommand().createChildIssue(parentKey)
+    } catch (error) {
+      logger.error(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+testJiraCommand
+  .command('create-dep')
+  .description('Create a "Blocks" dependency between two issues')
+  .argument('<blockingKey>', 'Issue key that blocks (e.g., PROJ-100)')
+  .argument('<blockedKey>', 'Issue key being blocked (e.g., PROJ-200)')
+  .action(async (blockingKey: string, blockedKey: string) => {
+    try {
+      const { TestJiraCommand } = await import('./commands/test-jira.js')
+      await new TestJiraCommand().createDependency(blockingKey, blockedKey)
+    } catch (error) {
+      logger.error(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+testJiraCommand
+  .command('get-deps')
+  .description('Fetch and print dependencies for an issue')
+  .argument('<issueKey>', 'Issue key (e.g., PROJ-123)')
+  .action(async (issueKey: string) => {
+    try {
+      const { TestJiraCommand } = await import('./commands/test-jira.js')
+      await new TestJiraCommand().getDependencies(issueKey)
+    } catch (error) {
+      logger.error(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+testJiraCommand
+  .command('remove-dep')
+  .description('Remove a "Blocks" dependency between two issues')
+  .argument('<blockingKey>', 'Issue key that blocks (e.g., PROJ-100)')
+  .argument('<blockedKey>', 'Issue key being blocked (e.g., PROJ-200)')
+  .action(async (blockingKey: string, blockedKey: string) => {
+    try {
+      const { TestJiraCommand } = await import('./commands/test-jira.js')
+      await new TestJiraCommand().removeDependency(blockingKey, blockedKey)
+    } catch (error) {
+      logger.error(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
+    }
+  })
+
+testJiraCommand
+  .command('get-children')
+  .description('List child issues of a parent')
+  .argument('<issueKey>', 'Parent issue key (e.g., PROJ-123)')
+  .action(async (issueKey: string) => {
+    try {
+      const { TestJiraCommand } = await import('./commands/test-jira.js')
+      await new TestJiraCommand().getChildIssues(issueKey)
+    } catch (error) {
+      logger.error(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      process.exit(1)
     }
   })
 
