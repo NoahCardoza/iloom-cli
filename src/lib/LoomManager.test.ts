@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import type { TestOptions } from 'vitest'
 import { LoomManager } from './LoomManager.js'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { GitHubService } from './GitHubService.js'
@@ -13,6 +14,10 @@ import { installDependencies } from '../utils/package-manager.js'
 import { branchExists, ensureRepositoryHasCommits, isFileTrackedByGit, fetchOrigin, executeGitCommand } from '../utils/git.js'
 import fs from 'fs-extra'
 import fg from 'fast-glob'
+
+// Increase per-test timeout for this large suite (98 tests with heavy mock setup)
+// Under parallel execution, the default 10s can be exceeded due to CPU contention
+const testOptions: TestOptions = { timeout: 30_000 }
 
 // Mock all dependencies
 vi.mock('./GitWorktreeManager.js')
@@ -136,7 +141,7 @@ vi.mock('../utils/vscode.js', () => ({
   openVSCodeWindow: vi.fn().mockResolvedValue(undefined),
 }))
 
-describe('LoomManager', () => {
+describe('LoomManager', testOptions, () => {
   let manager: LoomManager
   let mockGitWorktree: vi.Mocked<GitWorktreeManager>
   let mockGitHub: vi.Mocked<GitHubService>
