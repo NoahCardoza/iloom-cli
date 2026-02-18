@@ -43,6 +43,41 @@ bash pty:true command:"il init"
 
 `il init` launches an interactive Claude-guided configuration wizard. It requires foreground PTY and is designed for human interaction — **not recommended for AI agents** due to nested interactive prompts and timeout sensitivity.
 
+## GitHub Remote Configuration (Fork Workflows)
+
+When a project has **multiple git remotes** (e.g., `origin` + `fork`, or `upstream` + `origin`), iloom needs to know which remote to use for issue management and which to push to.
+
+**Do NOT auto-configure `issueManagement.github.remote`.** Instead, **ask the user** which remote to target. The correct choice depends on:
+
+- Whether the user has write access to the upstream repo
+- Whether issues live on the upstream or the fork
+- Whether PRs should target the upstream or the fork
+
+**Use `.iloom/settings.local.json`** (not the shared `settings.json`) for per-developer remote configuration, since this is a personal preference that shouldn't be committed:
+
+```json
+{
+  "issueManagement": {
+    "github": {
+      "remote": "upstream"
+    }
+  },
+  "mergeBehavior": {
+    "remote": "origin"
+  }
+}
+```
+
+**Standard remote naming convention:**
+- `origin` = your fork (where you have push access)
+- `upstream` = the original repo (where issues live)
+
+iloom assumes `origin` is yours by default. If remotes are named differently, configure `issueManagement.github.remote` and `mergeBehavior.remote` explicitly.
+
+Common patterns:
+- **Fork workflow:** Issues on `upstream`, push/PR from `origin` (your fork)
+- **Direct access (no fork):** Both issues and push on `origin` — no extra config needed
+
 ## Workflow: Choosing the Right Approach
 
 ### Sizeable Changes (multiple issues, architectural work)
@@ -59,7 +94,7 @@ For anything non-trivial, use the **plan → review → start → spin** workflo
 
 3. **Start:** Create the workspace without launching Claude or dev server
    ```bash
-   bash pty:true command:"il start <issue#> --yolo --no-code --no-dev-server --no-claude --json"
+   bash pty:true command:"il start <issue#> --yolo --no-code --no-dev-server --no-claude --no-terminal --json"
    ```
 
 4. **Spin:** Launch Claude separately with streaming output
