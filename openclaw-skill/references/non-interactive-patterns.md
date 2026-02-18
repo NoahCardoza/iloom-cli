@@ -2,33 +2,42 @@
 
 How to run iloom commands autonomously without hitting interactive prompts.
 
-## PTY Requirement
+## Execution Modes
 
-iloom is an interactive terminal application built with Node.js. It uses colored output, spinners, and readline-based prompts that require a pseudo-terminal.
+iloom commands fall into three categories based on their execution requirements:
 
-**Always use `pty:true`** for every iloom command:
+### No PTY needed (plain exec)
+
+These commands return clean JSON output and complete quickly. No PTY or background mode required:
 
 ```bash
-# Correct
-bash pty:true command:"il list --json"
-
-# Wrong - output may break or command may hang
 bash command:"il list --json"
+bash command:"il issues --json"
+bash command:"il projects --json"
+bash command:"il recap --json"
+bash command:"il --version"
+bash command:"il start <issue#> --no-claude --no-code --no-dev-server --json"
+bash command:"il cleanup --issue 42 --force --json"
+bash command:"il finish --force --cleanup --no-browser --json"
+bash command:"il commit --no-review --json"
+bash command:"il build"
+bash command:"il test"
+bash command:"il lint"
+bash command:"il compile"
+bash command:"il add-issue 'description' --json"
 ```
 
----
+### Background mode required (long-running, launches Claude)
 
-## Background vs Foreground Commands
+These commands spawn Claude Code sessions that can run 1-10+ minutes. Always use `background:true`:
 
-### Background Commands (use `background:true`)
-
-These commands launch Claude Code and run for extended periods. **Always run in background** to avoid timeout kills:
-
-| Command | Recommended Invocation |
-|---------|----------------------|
-| `il start` | `bash pty:true background:true command:"il start 42 --yolo --no-code --json"` |
-| `il spin` | `bash pty:true background:true command:"il spin --yolo --print --json-stream"` |
-| `il plan` | `bash pty:true background:true command:"il plan --yolo --print --json-stream"` |
+```bash
+bash background:true command:"il plan --yolo --print --json-stream"
+bash background:true command:"il spin --yolo --print --json-stream"
+bash background:true command:"il start <issue#> --yolo --json"  # with Claude (default)
+bash background:true command:"il summary --json"
+bash background:true command:"il enhance <N> --no-browser --json"
+```
 
 **Why `--print --json-stream` for `plan` and `spin`?**
 - `--print` enables headless/non-interactive output mode
@@ -36,33 +45,15 @@ These commands launch Claude Code and run for extended periods. **Always run in 
 - Without `--json-stream`, `--print` buffers ALL output until completion (no visibility into what Claude is doing)
 - These commands can easily run 3-10+ minutes with Opus analyzing a codebase — foreground timeouts will kill them
 
-### Foreground Commands (no `background:true`)
+### Foreground PTY only (interactive, not for AI agents)
 
-These commands complete quickly and return structured output:
-
-| Command | Recommended Invocation |
-|---------|----------------------|
-| `il list` | `bash pty:true command:"il list --json"` |
-| `il commit` | `bash pty:true command:"il commit --no-review --json"` |
-| `il finish` | `bash pty:true command:"il finish --force --cleanup --no-browser --json"` |
-| `il cleanup` | `bash pty:true command:"il cleanup --issue 42 --force --json"` |
-| `il build` | `bash pty:true command:"il build"` |
-| `il test` | `bash pty:true command:"il test"` |
-| `il lint` | `bash pty:true command:"il lint"` |
-| `il compile` | `bash pty:true command:"il compile"` |
-| `il issues` | `bash pty:true command:"il issues --json"` |
-| `il add-issue` | `bash pty:true command:"il add-issue 'description' --json"` |
-| `il enhance` | `bash pty:true command:"il enhance 42 --no-browser --json"` |
-| `il summary` | `bash pty:true command:"il summary --json"` |
-| `il recap` | `bash pty:true command:"il recap --json"` |
-
-### Special: Foreground Only (no background, no JSON)
+These require a real terminal and human interaction:
 
 | Command | Note |
 |---------|------|
-| `il init` | Interactive wizard, must run foreground. **Not recommended for AI agents** — use manual setup instead (see `{baseDir}/references/initialization.md`) |
-| `il rebase` | May need Claude for conflict resolution |
+| `il init` | Interactive wizard — **use manual setup instead** (see `{baseDir}/references/initialization.md`) |
 | `il shell` | Opens interactive subshell |
+| `il rebase` | May need Claude for conflict resolution |
 
 ---
 
@@ -70,7 +61,7 @@ These commands complete quickly and return structured output:
 
 ```bash
 # 1. Start the command in background
-bash pty:true background:true command:"il start 42 --yolo --no-code --json"
+bash background:true command:"il start 42 --yolo --no-code --json"
 # Returns: sessionId
 
 # 2. Check if still running
@@ -122,17 +113,27 @@ Every interactive prompt in iloom and the flag(s) that bypass it:
 ### Full Autonomous Start (create workspace)
 
 ```bash
-bash pty:true background:true command:"il start <issue> --yolo --no-code --json"
+bash command:"il start <issue> --yolo --no-code --no-claude --no-dev-server --json"
 ```
 
 - `--yolo`: bypass all permission prompts
 - `--no-code`: don't open VS Code
+- `--no-claude`: don't launch Claude (use when you want to spin separately)
+- `--no-dev-server`: skip dev server
 - `--json`: structured output
+
+### Full Autonomous Start (with Claude)
+
+```bash
+bash background:true command:"il start <issue> --yolo --no-code --json"
+```
+
+- Same as above but launches Claude — needs `background:true`
 
 ### Full Autonomous Finish (merge and cleanup)
 
 ```bash
-bash pty:true command:"il finish --force --cleanup --no-browser --json"
+bash command:"il finish --force --cleanup --no-browser --json"
 ```
 
 - `--force`: skip all confirmations
@@ -143,7 +144,7 @@ bash pty:true command:"il finish --force --cleanup --no-browser --json"
 ### Headless Planning
 
 ```bash
-bash pty:true background:true command:"il plan --yolo --print --json-stream"
+bash background:true command:"il plan --yolo --print --json-stream"
 # Monitor: process action:poll sessionId:XXX
 # Full log: process action:log sessionId:XXX
 ```
@@ -156,7 +157,7 @@ bash pty:true background:true command:"il plan --yolo --print --json-stream"
 ### Non-Interactive Commit
 
 ```bash
-bash pty:true command:"il commit --no-review --json"
+bash command:"il commit --no-review --json"
 ```
 
 - `--no-review`: skip message review
@@ -165,7 +166,7 @@ bash pty:true command:"il commit --no-review --json"
 ### Quick Cleanup
 
 ```bash
-bash pty:true command:"il cleanup --issue <number> --force --json"
+bash command:"il cleanup --issue <number> --force --json"
 ```
 
 - `--force`: skip confirmation
@@ -201,7 +202,7 @@ Commands that support `--json` for machine-parseable output:
 For long-running background tasks, append a wake trigger so OpenClaw gets notified when iloom finishes:
 
 ```bash
-bash pty:true background:true command:"il start 42 --yolo --no-code --json && openclaw system event --text 'Done: Loom created for issue #42' --mode now"
+bash background:true command:"il start 42 --yolo --no-code --json && openclaw system event --text 'Done: Loom created for issue #42' --mode now"
 ```
 
 This triggers an immediate wake event instead of waiting for the next heartbeat.

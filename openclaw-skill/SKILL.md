@@ -8,16 +8,45 @@ metadata: { "openclaw": { "emoji": "🧵", "requires": { "anyBins": ["il", "iloo
 
 Manage isolated Git worktrees with AI-assisted development workflows.
 
-## PTY Mode Required
+## PTY and Background Requirements
 
-iloom is an **interactive terminal application**. Always use `pty:true` when running iloom commands:
+Not all iloom commands need PTY or background mode. Use the right mode for each command:
+
+### No PTY needed (plain exec)
+
+These return clean JSON and complete quickly:
 
 ```bash
-# Correct - with PTY
-bash pty:true command:"il list --json"
-
-# Wrong - may break output or hang
 bash command:"il list --json"
+bash command:"il issues --json"
+bash command:"il projects --json"
+bash command:"il recap --json"
+bash command:"il --version"
+bash command:"il start <issue#> --no-claude --no-code --no-dev-server --json"
+bash command:"il cleanup --issue <N> --force --json"
+bash command:"il finish --force --cleanup --no-browser --json"
+bash command:"il commit --no-review --json"
+```
+
+### Background mode required (long-running, launches Claude)
+
+These spawn Claude Code sessions that can run 1-10+ minutes. Always use `background:true`:
+
+```bash
+bash background:true command:"il plan --yolo --print --json-stream"
+bash background:true command:"il spin --yolo --print --json-stream"
+bash background:true command:"il start <issue#> --yolo --json"  # with Claude (default)
+bash background:true command:"il summary --json"
+bash background:true command:"il enhance <N> --no-browser --json"
+# Monitor: process action:poll sessionId:XXX
+```
+
+### Foreground PTY only (interactive, not for AI agents)
+
+```bash
+il init    # Interactive wizard — use manual setup instead
+il shell   # Opens interactive subshell
+il rebase  # May need Claude for conflict resolution
 ```
 
 ## Project Initialization (First-Time Setup)
@@ -51,7 +80,7 @@ For anything non-trivial, use the **plan → review → start → spin** workflo
 
 1. **Plan:** Decompose the work into issues
    ```bash
-   bash pty:true background:true command:"il plan --yolo --print --json-stream"
+   bash background:true command:"il plan --yolo --print --json-stream"
    # Monitor: process action:poll sessionId:XXX
    ```
 
@@ -59,18 +88,18 @@ For anything non-trivial, use the **plan → review → start → spin** workflo
 
 3. **Start:** Create the workspace without launching Claude or dev server
    ```bash
-   bash pty:true command:"il start <issue#> --yolo --no-code --no-dev-server --no-claude --json"
+   bash command:"il start <issue#> --yolo --no-code --no-dev-server --no-claude --json"
    ```
 
 4. **Spin:** Launch Claude separately with streaming output
    ```bash
-   bash pty:true background:true command:"il spin --yolo --print --json-stream"
+   bash background:true command:"il spin --yolo --print --json-stream"
    # Monitor: process action:poll sessionId:XXX
    ```
 
 5. **Finish:** Merge and clean up
    ```bash
-   bash pty:true command:"il finish --force --cleanup --no-browser --json"
+   bash command:"il finish --force --cleanup --no-browser --json"
    ```
 
 ### Small Changes (single issue, quick fix)
@@ -78,7 +107,7 @@ For anything non-trivial, use the **plan → review → start → spin** workflo
 For small, self-contained tasks, use inline start with a description:
 
 ```bash
-bash pty:true background:true command:"il start 'Add dark mode support to the settings page' --yolo --no-code --json"
+bash background:true command:"il start 'Add dark mode support to the settings page' --yolo --no-code --json"
 # Monitor: process action:poll sessionId:XXX
 ```
 
@@ -89,13 +118,13 @@ This creates the issue, workspace, and launches Claude in one step.
 ### Check active workspaces
 
 ```bash
-bash pty:true command:"il list --json"
+bash command:"il list --json"
 ```
 
 ### Commit with AI-generated message
 
 ```bash
-bash pty:true command:"il commit --no-review --json"
+bash command:"il commit --no-review --json"
 ```
 
 ## Ideation and Planning
@@ -103,7 +132,7 @@ bash pty:true command:"il commit --no-review --json"
 When the user has an idea for an improvement, new feature, or wants to decompose work into issues, use `il plan`:
 
 ```bash
-bash pty:true background:true command:"il plan --yolo --print --json-stream"
+bash background:true command:"il plan --yolo --print --json-stream"
 # Monitor: process action:poll sessionId:XXX
 # Full log: process action:log sessionId:XXX
 ```
@@ -123,8 +152,8 @@ bash pty:true background:true command:"il plan --yolo --print --json-stream"
 
 ## Safety Rules
 
-1. **Always use `pty:true`** for every iloom command.
-2. **Use `background:true`** for commands that launch Claude: `start`, `spin`, `plan`.
+1. **Use the right execution mode** for each command — see PTY and Background Requirements above. Most commands work without PTY.
+2. **Use `background:true`** for commands that launch Claude: `start` (with Claude), `spin`, `plan`, `summary`, `enhance`.
 3. **Never run `il finish` without `--force`** in autonomous mode — it will hang on confirmation prompts.
 4. **Always pass explicit flags** to avoid interactive prompts. See `{baseDir}/references/non-interactive-patterns.md` for the complete decision bypass map.
 5. **Use `--json`** when you need to parse command output programmatically.
