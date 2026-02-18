@@ -183,6 +183,7 @@ export interface FinishOptions {
   cleanup?: boolean   // --cleanup / --no-cleanup - Control worktree cleanup after finishing
   json?: boolean      // --json - Output result as JSON
   skipToPr?: boolean  // --skip-to-pr - Skip rebase/validation/commit, go directly to PR creation (debug)
+  jsonStream?: boolean // --json-stream - Stream JSONL output for Claude conflict resolution
 }
 
 /**
@@ -259,6 +260,20 @@ export interface SummaryResult {
   issueNumber?: string | number
   branchName: string
   loomType: 'issue' | 'pr' | 'branch'
+}
+
+export interface RebaseResult {
+  success: boolean
+  conflictsDetected: boolean
+  claudeLaunched: boolean
+  conflictsResolved?: boolean
+  error?: string
+}
+
+export interface RebaseOutcome {
+  conflictsDetected: boolean
+  claudeLaunched: boolean
+  conflictsResolved: boolean
 }
 
 // Deprecated: Result types - use exception-based error handling instead
@@ -352,6 +367,7 @@ export interface MergeOptions {
 	dryRun?: boolean      // Preview actions without executing
 	force?: boolean       // Skip confirmation prompts
 	repoRoot?: string     // Repository root path (optional, auto-detected if not provided)
+	jsonStream?: boolean  // When true, run Claude headless and stream JSONL for conflict resolution
 }
 
 export interface MergeResult {

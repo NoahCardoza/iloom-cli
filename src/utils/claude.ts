@@ -73,6 +73,7 @@ export interface ClaudeCliOptions {
 	outputFormat?: 'json' | 'stream-json' | 'text' // Output format for Claude CLI (headless mode)
 	verbose?: boolean // Enable verbose output (headless mode) - defaults to true when headless
 	jsonMode?: 'json' | 'stream' // JSON output mode: 'json' for final object, 'stream' for real-time JSONL
+	passthroughStdout?: boolean // In headless mode, pipe stdout to process.stdout instead of capturing
 }
 
 /**
@@ -145,7 +146,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode } = options
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout } = options
 	const log = getLogger()
 
 	// Build command arguments
@@ -217,6 +218,20 @@ export async function launchClaude(
 	}
 
 	try {
+		if (headless && passthroughStdout) {
+			// Headless + passthrough: Claude's stdout goes directly to process.stdout
+			// Used for --json-stream where JSONL must reach the caller's stdout
+			const subprocess = execa('claude', args, {
+				input: prompt,
+				timeout: 0,
+				...(addDir && { cwd: addDir }),
+				stdio: ['pipe', 'inherit', 'pipe'], // stdin: pipe (for prompt), stdout: inherit (passthrough), stderr: pipe (capture errors)
+			})
+
+			await subprocess
+			return // No output to return - it went directly to stdout
+		}
+
 		if (headless) {
 			// Headless mode: capture and return output
 			const isDebugMode = logger.isDebugEnabled()

@@ -564,7 +564,16 @@ program
   .option('--cleanup', 'Clean up worktree after finishing (default in local mode)')
   .option('--no-cleanup', 'Keep worktree after finishing')
   .option('--json', 'Output result as JSON')
+  .option('--json-stream', 'Stream JSONL output; runs Claude headless for conflict resolution')
   .action(async (identifier: string | undefined, options: FinishOptions) => {
+    // Mutual exclusivity guard
+    if (options.json && options.jsonStream) {
+      logger.error('--json and --json-stream are mutually exclusive')
+      process.exit(1)
+    }
+
+    const isAnyJsonMode = options.json ?? options.jsonStream
+
     const executeAction = async (): Promise<void> => {
       try {
         const settingsManager = new SettingsManager()
@@ -572,13 +581,14 @@ program
         const issueTracker = IssueTrackerFactory.create(settings)
         const command = new FinishCommand(issueTracker)
         const result = await command.execute({ identifier, options })
-        if (options.json && result) {
-          console.log(JSON.stringify(result, null, 2))
+        if (isAnyJsonMode && result) {
+          console.log(options.jsonStream ? JSON.stringify(result) : JSON.stringify(result, null, 2))
         }
         process.exit(0)
       } catch (error) {
-        if (options.json) {
-          console.log(JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
+        if (isAnyJsonMode) {
+          const errorJson = { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+          console.log(options.jsonStream ? JSON.stringify(errorJson) : JSON.stringify(errorJson, null, 2))
         } else {
           logger.error(`Failed to finish workspace: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
@@ -591,8 +601,8 @@ program
       }
     }
 
-    // Wrap execution in logger context for JSON mode
-    if (options.json) {
+    // Wrap execution in logger context for any JSON mode
+    if (isAnyJsonMode) {
       const jsonLogger = createStderrLogger()
       await withLogger(jsonLogger, executeAction)
     } else {
@@ -654,14 +664,37 @@ program
   .description('Rebase current branch on main with Claude-assisted conflict resolution')
   .option('-f, --force', 'Skip confirmation prompts')
   .option('-n, --dry-run', 'Preview actions without executing')
-  .action(async (options: { force?: boolean; dryRun?: boolean }) => {
-    try {
-      const { RebaseCommand } = await import('./commands/rebase.js')
-      const command = new RebaseCommand()
-      await command.execute(options)
-    } catch (error) {
-      logger.error(`Failed to rebase: ${error instanceof Error ? error.message : 'Unknown error'}`)
-      process.exit(1)
+  .option('--json-stream', 'Stream JSONL output; runs Claude headless for conflict resolution')
+  .action(async (options: { force?: boolean; dryRun?: boolean; jsonStream?: boolean }) => {
+    const executeAction = async (): Promise<void> => {
+      try {
+        const { RebaseCommand } = await import('./commands/rebase.js')
+        const command = new RebaseCommand()
+        const result = await command.execute(options)
+        if (options.jsonStream && result) {
+          console.log(JSON.stringify(result))
+        }
+        process.exit(0)
+      } catch (error) {
+        if (options.jsonStream) {
+          console.log(JSON.stringify({
+            success: false,
+            conflictsDetected: false,
+            claudeLaunched: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }, null, 2))
+        } else {
+          logger.error(`Failed to rebase: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+        process.exit(1)
+      }
+    }
+
+    if (options.jsonStream) {
+      const jsonLogger = createStderrLogger()
+      await withLogger(jsonLogger, executeAction)
+    } else {
+      await executeAction()
     }
   })
 

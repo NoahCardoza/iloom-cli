@@ -415,6 +415,75 @@ describe('claude utils', () => {
 				expect(result).toBe('Hello World')
 			})
 
+			it('should pipe stdout to process.stdout when headless and passthroughStdout are both true', async () => {
+				const prompt = 'Resolve conflicts headlessly'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				})
+
+				const result = await launchClaude(prompt, {
+					headless: true,
+					passthroughStdout: true,
+					addDir: '/workspace',
+				})
+
+				// passthroughStdout returns void (output goes directly to process.stdout)
+				expect(result).toBeUndefined()
+
+				// Verify stdio configuration: stdin=pipe, stdout=inherit, stderr=pipe
+				expect(execa).toHaveBeenCalledWith(
+					'claude',
+					['-p', '--output-format', 'stream-json', '--verbose', '--add-dir', '/workspace', '--add-dir', '/tmp'],
+					expect.objectContaining({
+						input: prompt,
+						timeout: 0,
+						cwd: '/workspace',
+						stdio: ['pipe', 'inherit', 'pipe'],
+					})
+				)
+			})
+
+			it('should not set cwd when passthroughStdout is true but addDir is not specified', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: '',
+					exitCode: 0,
+				})
+
+				await launchClaude(prompt, {
+					headless: true,
+					passthroughStdout: true,
+				})
+
+				const execaCall = vi.mocked(execa).mock.calls[0]
+				expect(execaCall[2]).not.toHaveProperty('cwd')
+				expect(execaCall[2]).toHaveProperty('stdio', ['pipe', 'inherit', 'pipe'])
+			})
+
+			it('should use normal headless mode when passthroughStdout is false', async () => {
+				const prompt = 'Test prompt'
+
+				mockExeca().mockResolvedValueOnce({
+					stdout: '{"type":"result","result":"output text"}',
+					exitCode: 0,
+				})
+
+				const result = await launchClaude(prompt, {
+					headless: true,
+					passthroughStdout: false,
+				})
+
+				// Normal headless mode returns parsed output
+				expect(result).toBe('output text')
+
+				// Should NOT use inherited stdio
+				const execaCall = vi.mocked(execa).mock.calls[0]
+				expect(execaCall[2]).not.toHaveProperty('stdio', ['pipe', 'inherit', 'pipe'])
+			})
+
 			it('should throw error with context when Claude CLI fails', async () => {
 				const prompt = 'Test prompt'
 				mockExeca().mockRejectedValueOnce({

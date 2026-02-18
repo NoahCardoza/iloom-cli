@@ -5,11 +5,12 @@ import { SettingsManager } from '../lib/SettingsManager.js'
 import { BuildRunner } from '../lib/BuildRunner.js'
 import { isValidGitRepo, getWorktreeRoot } from '../utils/git.js'
 import { installDependencies } from '../utils/package-manager.js'
-import type { MergeOptions } from '../types/index.js'
+import type { MergeOptions, RebaseResult } from '../types/index.js'
 
 export interface RebaseOptions {
 	force?: boolean
 	dryRun?: boolean
+	jsonStream?: boolean
 }
 
 /**
@@ -101,7 +102,7 @@ export class RebaseCommand {
 		return worktreeRoot
 	}
 
-	async execute(options: RebaseOptions = {}): Promise<void> {
+	async execute(options: RebaseOptions = {}): Promise<RebaseResult | void> {
 		// Set ILOOM=1 so hooks know this is an iloom session
 		process.env.ILOOM = '1'
 
@@ -110,6 +111,9 @@ export class RebaseCommand {
 		try {
 			worktreePath = await this.validateWorktreeContext()
 		} catch (error) {
+			if (options.jsonStream && error instanceof WorktreeValidationError) {
+				return { success: false, conflictsDetected: false, claudeLaunched: false, error: error.message }
+			}
 			if (error instanceof WorktreeValidationError) {
 				logger.error(error.message)
 				logger.info(error.suggestion)
@@ -121,6 +125,7 @@ export class RebaseCommand {
 		const mergeOptions: MergeOptions = {
 			dryRun: options.dryRun ?? false,
 			force: options.force ?? false,
+			jsonStream: options.jsonStream ?? false,
 		}
 
 		// MergeManager.rebaseOnMain() handles:
@@ -129,7 +134,7 @@ export class RebaseCommand {
 		// - Checking if already up-to-date
 		// - Executing rebase
 		// - Claude-assisted conflict resolution
-		await this.mergeManager.rebaseOnMain(worktreePath, mergeOptions)
+		const outcome = await this.mergeManager.rebaseOnMain(worktreePath, mergeOptions)
 
 		// Install dependencies after successful rebase
 		if (!options.dryRun) {
@@ -148,6 +153,16 @@ export class RebaseCommand {
 
 		// Run build for CLI projects after successful rebase
 		await this.runPostRebaseBuild(worktreePath, options)
+
+		// Return result if jsonStream mode
+		if (options.jsonStream) {
+			return {
+				success: true,
+				conflictsDetected: outcome.conflictsDetected,
+				claudeLaunched: outcome.claudeLaunched,
+				conflictsResolved: outcome.conflictsResolved,
+			}
+		}
 	}
 
 	/**
