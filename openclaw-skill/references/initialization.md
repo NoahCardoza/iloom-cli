@@ -62,7 +62,30 @@ This file contains per-developer preferences that should NOT be committed:
 }
 ```
 
-### 4. Update `.gitignore`
+### 4. Configure GitHub Remote (Fork Workflows)
+
+If the project has **multiple git remotes** (e.g., a fork workflow), configure which remote iloom uses for issue tracking vs. pushing. **Do not guess — ask the user.**
+
+Add to `.iloom/settings.local.json` (not `settings.json`, since this is per-developer):
+
+```json
+{
+  "issueManagement": {
+    "github": {
+      "remote": "upstream"
+    }
+  },
+  "mergeBehavior": {
+    "remote": "origin"
+  }
+}
+```
+
+**Standard convention:** `origin` = your fork, `upstream` = the original repo. iloom assumes `origin` is yours by default.
+
+`issueManagement.github.remote` controls where issues are read/created. `mergeBehavior.remote` controls where branches are pushed and PRs are created. In fork workflows, issues live on `upstream` while you push to `origin`.
+
+### 5. Update `.gitignore`
 
 Ensure local/personal files are not tracked:
 
@@ -72,7 +95,7 @@ echo '.iloom/settings.local.json' >> .gitignore
 echo '.vscode/settings.json' >> .gitignore   # Only if colors.vscode is true
 ```
 
-### 5. Validate the configuration
+### 6. Validate the configuration
 
 Run any iloom command to verify settings are loaded:
 
@@ -82,7 +105,7 @@ il list --json
 
 If settings are valid, this returns a JSON array of looms. If there are errors, iloom will report them.
 
-### 6. (Optional) Validate against JSON Schema
+### 7. (Optional) Validate against JSON Schema
 
 The settings JSON schema is bundled at `<iloom-install-path>/dist/schema/settings.schema.json`. You can validate your settings programmatically:
 
