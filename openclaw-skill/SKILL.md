@@ -130,3 +130,4 @@ bash pty:true background:true command:"il plan --yolo --print --json-stream"
 5. **Use `--json`** when you need to parse command output programmatically.
 6. **Prefer manual initialization** over `il init` — create `.iloom/settings.json` directly. See `{baseDir}/references/initialization.md`.
 7. **Respect worktree isolation** — each loom is an independent workspace. Run commands from within the correct worktree directory.
+8. **NEVER kill a background session you did not start.** Other looms may be running from separate planning or development sessions (the user's own work, other agents, or prior conversations). When you see unfamiliar background sessions, **leave them alone**. Only kill sessions you explicitly launched in the current workflow. If unsure, ask the user.
