@@ -22,48 +22,74 @@ bash command:"il list --json"
 
 ## Project Initialization (First-Time Setup)
 
-Before using any iloom commands, the project must be initialized:
+Before using any iloom commands, the project must have a `.iloom/settings.json` file.
+
+**Preferred: Manual setup (recommended for AI agents)**
+
+Create the settings files directly — no interactive wizard needed:
 
 ```bash
-# 1. Initialize your project (if not already done)
-bash pty:true command:"pnpm init"    # or npm init, cargo init, etc.
+mkdir -p .iloom
+echo '{"mainBranch": "main"}' > .iloom/settings.json
+```
 
-# 2. Initialize git (if not already done)
-bash pty:true command:"git init && git add -A && git commit -m 'Initial commit'"
+See `{baseDir}/references/initialization.md` for the complete settings schema, all configuration options, and example configurations.
 
-# 3. Initialize iloom (interactive setup wizard)
+**Alternative: Interactive wizard (for humans at a terminal)**
+
+```bash
 bash pty:true command:"il init"
 ```
 
-`il init` launches an interactive configuration wizard. It must run in the foreground with PTY.
+`il init` launches an interactive Claude-guided configuration wizard. It requires foreground PTY and is designed for human interaction — **not recommended for AI agents** due to nested interactive prompts and timeout sensitivity.
 
-## Quick Start
+## Workflow: Choosing the Right Approach
+
+### Sizeable Changes (multiple issues, architectural work)
+
+For anything non-trivial, use the **plan → review → start → spin** workflow:
+
+1. **Plan:** Decompose the work into issues
+   ```bash
+   bash pty:true background:true command:"il plan --yolo --print --json-stream"
+   # Monitor: process action:poll sessionId:XXX
+   ```
+
+2. **Review:** Present the created epic to the user for review (unless they've said to proceed without review). Wait for approval before continuing.
+
+3. **Start:** Create the workspace without launching Claude or dev server
+   ```bash
+   bash pty:true command:"il start <issue#> --yolo --no-code --no-dev-server --no-claude --json"
+   ```
+
+4. **Spin:** Launch Claude separately with streaming output
+   ```bash
+   bash pty:true background:true command:"il spin --yolo --print --json-stream"
+   # Monitor: process action:poll sessionId:XXX
+   ```
+
+5. **Finish:** Merge and clean up
+   ```bash
+   bash pty:true command:"il finish --force --cleanup --no-browser --json"
+   ```
+
+### Small Changes (single issue, quick fix)
+
+For small, self-contained tasks, use inline start with a description:
+
+```bash
+bash pty:true background:true command:"il start 'Add dark mode support to the settings page' --yolo --no-code --json"
+# Monitor: process action:poll sessionId:XXX
+```
+
+This creates the issue, workspace, and launches Claude in one step.
+
+## Quick Reference
 
 ### Check active workspaces
 
 ```bash
 bash pty:true command:"il list --json"
-```
-
-### Start a loom for an issue (launches Claude in background)
-
-```bash
-bash pty:true background:true command:"il start 42 --yolo --no-code --json"
-# Monitor: process action:log sessionId:XXX
-# Check:   process action:poll sessionId:XXX
-```
-
-### Finish and merge a loom
-
-```bash
-bash pty:true command:"il finish --force --cleanup --no-browser --json"
-```
-
-### Launch Claude in existing loom
-
-```bash
-bash pty:true background:true command:"il spin --yolo"
-# Monitor: process action:log sessionId:XXX
 ```
 
 ### Commit with AI-generated message
@@ -77,15 +103,18 @@ bash pty:true command:"il commit --no-review --json"
 When the user has an idea for an improvement, new feature, or wants to decompose work into issues, use `il plan`:
 
 ```bash
-bash pty:true background:true command:"il plan --yolo"
-# Or for headless output:
-bash pty:true command:"il plan --yolo --print --output-format json"
+bash pty:true background:true command:"il plan --yolo --print --json-stream"
+# Monitor: process action:poll sessionId:XXX
+# Full log: process action:log sessionId:XXX
 ```
 
-`il plan` launches an interactive AI planning session that creates structured issues with dependencies. Always prefer this over manually creating issues.
+`il plan` launches an autonomous AI planning session that reads the codebase and creates structured issues with dependencies. Always prefer this over manually creating issues.
+
+**Important:** Both `plan` and `spin` should always be run in **background mode** (`background:true`) with `--print --json-stream`. These commands can run for several minutes (especially with Opus) as they analyze the codebase, and foreground timeouts will kill them. The `--json-stream` flag ensures incremental output is visible via `process action:poll`.
 
 ## References
 
+- **Project initialization and settings schema:** See `{baseDir}/references/initialization.md`
 - **Core lifecycle commands (init, start, finish, cleanup, list):** See `{baseDir}/references/core-workflow.md`
 - **Development commands (spin, commit, rebase, build, test, etc.):** See `{baseDir}/references/development-commands.md`
 - **Planning and issue management (plan, add-issue, enhance, issues):** See `{baseDir}/references/planning-and-issues.md`
@@ -99,5 +128,5 @@ bash pty:true command:"il plan --yolo --print --output-format json"
 3. **Never run `il finish` without `--force`** in autonomous mode — it will hang on confirmation prompts.
 4. **Always pass explicit flags** to avoid interactive prompts. See `{baseDir}/references/non-interactive-patterns.md` for the complete decision bypass map.
 5. **Use `--json`** when you need to parse command output programmatically.
-6. **Do not run `il init` in background mode** — it requires foreground interactive setup.
+6. **Prefer manual initialization** over `il init` — create `.iloom/settings.json` directly. See `{baseDir}/references/initialization.md`.
 7. **Respect worktree isolation** — each loom is an independent workspace. Run commands from within the correct worktree directory.

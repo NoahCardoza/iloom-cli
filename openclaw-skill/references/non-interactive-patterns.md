@@ -22,13 +22,19 @@ bash command:"il list --json"
 
 ### Background Commands (use `background:true`)
 
-These commands launch Claude Code and run for extended periods:
+These commands launch Claude Code and run for extended periods. **Always run in background** to avoid timeout kills:
 
 | Command | Recommended Invocation |
 |---------|----------------------|
 | `il start` | `bash pty:true background:true command:"il start 42 --yolo --no-code --json"` |
-| `il spin` | `bash pty:true background:true command:"il spin --yolo"` |
-| `il plan` | `bash pty:true background:true command:"il plan --yolo"` |
+| `il spin` | `bash pty:true background:true command:"il spin --yolo --print --json-stream"` |
+| `il plan` | `bash pty:true background:true command:"il plan --yolo --print --json-stream"` |
+
+**Why `--print --json-stream` for `plan` and `spin`?**
+- `--print` enables headless/non-interactive output mode
+- `--json-stream` streams JSONL incrementally so you can monitor progress via `process action:poll`
+- Without `--json-stream`, `--print` buffers ALL output until completion (no visibility into what Claude is doing)
+- These commands can easily run 3-10+ minutes with Opus analyzing a codebase — foreground timeouts will kill them
 
 ### Foreground Commands (no `background:true`)
 
@@ -54,7 +60,7 @@ These commands complete quickly and return structured output:
 
 | Command | Note |
 |---------|------|
-| `il init` | Interactive wizard, must run foreground |
+| `il init` | Interactive wizard, must run foreground. **Not recommended for AI agents** — use manual setup instead (see `{baseDir}/references/initialization.md`) |
 | `il rebase` | May need Claude for conflict resolution |
 | `il shell` | Opens interactive subshell |
 
@@ -133,12 +139,15 @@ bash pty:true command:"il finish --force --cleanup --no-browser --json"
 ### Headless Planning
 
 ```bash
-bash pty:true command:"il plan --yolo --print --output-format json"
+bash pty:true background:true command:"il plan --yolo --print --json-stream"
+# Monitor: process action:poll sessionId:XXX
+# Full log: process action:log sessionId:XXX
 ```
 
 - `--yolo`: autonomous mode
 - `--print`: headless output
-- `--output-format json`: structured JSON response
+- `--json-stream`: stream JSONL incrementally (visible via poll/log)
+- `background:true`: **required** — planning sessions can run 3-10+ minutes
 
 ### Non-Interactive Commit
 
