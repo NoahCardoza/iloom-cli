@@ -618,23 +618,33 @@ program
   .option('--fixes', 'Use "Fixes #N" trailer instead of "Refs #N" (closes issue)')
   .option('--no-review', 'Skip commit message review prompt')
   .option('--json', 'Output result as JSON (implies --no-review)')
+  .option('--json-stream', 'Stream JSONL output; runs Claude headless for validation fixes')
   .option('--wip-commit', 'Quick WIP commit: skip validations and pre-commit hooks')
-  .action(async (options: { message?: string; fixes?: boolean; review?: boolean; json?: boolean; wipCommit?: boolean }) => {
+  .action(async (options: { message?: string; fixes?: boolean; review?: boolean; json?: boolean; jsonStream?: boolean; wipCommit?: boolean }) => {
+    // Mutual exclusivity guard
+    if (options.json && options.jsonStream) {
+      logger.error('--json and --json-stream are mutually exclusive')
+      process.exit(1)
+    }
+
+    const isAnyJsonMode = options.json ?? options.jsonStream
+
     const executeAction = async (): Promise<void> => {
       try {
         const { CommitCommand } = await import('./commands/commit.js')
         const command = new CommitCommand()
-        // --json implies --no-review
-        const noReview = options.review === false || options.json === true
+        // --json and --json-stream imply --no-review
+        const noReview = options.review === false || options.json === true || options.jsonStream === true
         const result = await command.execute({
           message: options.message,
           fixes: options.fixes ?? false,
           noReview,
           json: options.json ?? false,
+          jsonStream: options.jsonStream ?? false,
           wipCommit: options.wipCommit ?? false,
         })
-        if (options.json && result) {
-          console.log(JSON.stringify(result, null, 2))
+        if (isAnyJsonMode && result) {
+          console.log(options.jsonStream ? JSON.stringify(result) : JSON.stringify(result, null, 2))
         }
         process.exit(0)
       } catch (error) {
@@ -642,16 +652,17 @@ program
         if (error instanceof UserAbortedCommitError) {
           process.exit(130)
         }
-        if (options.json) {
-          console.log(JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
+        if (isAnyJsonMode) {
+          const errorJson = { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+          console.log(options.jsonStream ? JSON.stringify(errorJson) : JSON.stringify(errorJson, null, 2))
         } else {
           logger.error(`Commit failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
         process.exit(1)
       }
     }
-    // Wrap in logger context for JSON mode
-    if (options.json) {
+    // Wrap in logger context for any JSON mode
+    if (isAnyJsonMode) {
       const jsonLogger = createStderrLogger()
       await withLogger(jsonLogger, executeAction)
     } else {

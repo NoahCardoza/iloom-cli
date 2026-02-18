@@ -1,5 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import type { TestOptions } from 'vitest'
+import { describe, it, expect, beforeEach, vi, type TestOptions } from 'vitest'
 import { LoomManager } from './LoomManager.js'
 import { GitWorktreeManager } from './GitWorktreeManager.js'
 import { GitHubService } from './GitHubService.js'

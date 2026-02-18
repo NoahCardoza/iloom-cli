@@ -321,6 +321,7 @@ export interface ValidationOptions {
 	skipTypecheck?: boolean
 	skipLint?: boolean
 	skipTests?: boolean
+	jsonStream?: boolean
 }
 
 export interface ValidationStepResult {

@@ -145,6 +145,7 @@ il commit [options]
 | `--fixes` | Use "Fixes #N" trailer instead of "Refs #N" (closes the issue) |
 | `--no-review` | Skip commit message review prompt |
 | `--json` | Output result as JSON (implies `--no-review`) |
+| `--json-stream` | Stream JSONL output; runs Claude headless for validation fixes (implies `--no-review`, mutually exclusive with `--json`) |
 
 **Behavior:**
 

@@ -653,6 +653,7 @@ export class FinishCommand {
 
 				await this.validationRunner.runValidations(worktree.path, {
 					dryRun: options.dryRun ?? false,
+					jsonStream: options.jsonStream ?? false,
 				})
 				getLogger().success('All validations passed')
 				result.operations.push({

@@ -28,11 +28,14 @@ export class ValidationRunner {
 		const startTime = Date.now()
 		const steps: ValidationStepResult[] = []
 
+		const { jsonStream } = options
+
 		// Run typecheck
 		if (!options.skipTypecheck) {
 			const typecheckResult = await this.runTypecheck(
 				worktreePath,
-				options.dryRun ?? false
+				options.dryRun ?? false,
+				{ jsonStream }
 			)
 			steps.push(typecheckResult)
 
@@ -47,7 +50,7 @@ export class ValidationRunner {
 
 		// Run lint
 		if (!options.skipLint) {
-			const lintResult = await this.runLint(worktreePath, options.dryRun ?? false)
+			const lintResult = await this.runLint(worktreePath, options.dryRun ?? false, { jsonStream })
 			steps.push(lintResult)
 
 			if (!lintResult.passed && !lintResult.skipped) {
@@ -59,7 +62,8 @@ export class ValidationRunner {
 		if (!options.skipTests) {
 			const testResult = await this.runTests(
 				worktreePath,
-				options.dryRun ?? false
+				options.dryRun ?? false,
+				{ jsonStream }
 			)
 			steps.push(testResult)
 
@@ -77,7 +81,8 @@ export class ValidationRunner {
 	 */
 	private async runTypecheck(
 		worktreePath: string,
-		dryRun: boolean
+		dryRun: boolean,
+		options: { jsonStream?: boolean | undefined } = {}
 	): Promise<ValidationStepResult> {
 		const stepStartTime = Date.now()
 
@@ -152,7 +157,8 @@ export class ValidationRunner {
 			const fixed = await this.attemptClaudeFix(
 				scriptToRun,
 				worktreePath,
-				packageManager
+				packageManager,
+				{ jsonStream: options.jsonStream }
 			)
 
 			if (fixed) {
@@ -184,7 +190,8 @@ export class ValidationRunner {
 	 */
 	private async runLint(
 		worktreePath: string,
-		dryRun: boolean
+		dryRun: boolean,
+		options: { jsonStream?: boolean | undefined } = {}
 	): Promise<ValidationStepResult> {
 		const stepStartTime = Date.now()
 
@@ -248,7 +255,8 @@ export class ValidationRunner {
 			const fixed = await this.attemptClaudeFix(
 				'lint',
 				worktreePath,
-				packageManager
+				packageManager,
+				{ jsonStream: options.jsonStream }
 			)
 
 			if (fixed) {
@@ -278,7 +286,8 @@ export class ValidationRunner {
 	 */
 	private async runTests(
 		worktreePath: string,
-		dryRun: boolean
+		dryRun: boolean,
+		options: { jsonStream?: boolean | undefined } = {}
 	): Promise<ValidationStepResult> {
 		const stepStartTime = Date.now()
 
@@ -342,7 +351,8 @@ export class ValidationRunner {
 			const fixed = await this.attemptClaudeFix(
 				'test',
 				worktreePath,
-				packageManager
+				packageManager,
+				{ jsonStream: options.jsonStream }
 			)
 
 			if (fixed) {
@@ -379,7 +389,8 @@ export class ValidationRunner {
 	private async attemptClaudeFix(
 		validationType: 'compile' | 'typecheck' | 'lint' | 'test',
 		worktreePath: string,
-		packageManager: string
+		packageManager: string,
+		options: { jsonStream?: boolean | undefined } = {}
 	): Promise<boolean> {
 		// Check if Claude CLI is available
 		const isClaudeAvailable = await detectClaudeCli()
@@ -398,13 +409,15 @@ export class ValidationRunner {
 		getLogger().info(`Launching Claude to help fix ${validationTypeCapitalized} errors...`)
 
 		try {
-			// Launch Claude in interactive mode with acceptEdits permission
+			// When jsonStream is true, run Claude headless with stdout passthrough for JSONL streaming
+			// Otherwise, launch interactively in the current terminal
 			await launchClaude(prompt, {
 				addDir: worktreePath,
-				headless: false, // Interactive mode
-				permissionMode: 'acceptEdits', // Auto-accept edits
-				model: 'sonnet', // Use Sonnet model
-				noSessionPersistence: true, // Utility operation - no session persistence needed
+				headless: !!options.jsonStream,
+				permissionMode: options.jsonStream ? 'bypassPermissions' : 'acceptEdits',
+				model: 'sonnet',
+				noSessionPersistence: true,
+				...(options.jsonStream && { passthroughStdout: true }),
 			})
 
 			// After Claude completes, re-run validation to verify fix
