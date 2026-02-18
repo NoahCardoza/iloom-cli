@@ -85,9 +85,13 @@ process action:submit sessionId:XXX data:"yes"
 # 5. Send raw data without newline
 process action:write sessionId:XXX data:"y"
 
-# 6. Terminate if needed
+# 6. Terminate if needed (YOUR sessions only — see warning below)
 process action:kill sessionId:XXX
 ```
+
+> ⚠️ **CRITICAL: Never kill a session you did not start.**
+>
+> When listing background processes, you may see sessions from other workflows — the user's own planning sessions, other agents, or prior conversations. These are **not yours to manage**. Only kill sessions you explicitly launched in the current workflow. If you're unsure whether a session is yours, **ask the user** before terminating it. Killing someone else's long-running `plan` or `spin` session destroys work in progress that cannot be recovered.
 
 ---
 
