@@ -331,8 +331,8 @@ export class JiraApiClient {
 
 	/**
 	 * Create an issue link (dependency/relationship between issues)
-	 * @param inwardKey - The issue key for the inward side (e.g., the blocked issue)
-	 * @param outwardKey - The issue key for the outward side (e.g., the blocking issue)
+	 * @param inwardKey - The issue key for the inward side (e.g., the blocking/blocker issue)
+	 * @param outwardKey - The issue key for the outward side (e.g., the blocked issue)
 	 * @param linkType - The link type name (e.g., "Blocks")
 	 */
 	async createIssueLink(inwardKey: string, outwardKey: string, linkType: string): Promise<void> {

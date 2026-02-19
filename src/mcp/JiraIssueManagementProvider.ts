@@ -305,9 +305,9 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 		const blockingKey = this.tracker.normalizeIdentifier(input.blockingIssue)
 		const blockedKey = this.tracker.normalizeIdentifier(input.blockedIssue)
 
-		// In Jira "Blocks" link type: outward = "blocks", inward = "is blocked by"
-		// outwardIssue blocks inwardIssue
-		await this.tracker.getApiClient().createIssueLink(blockedKey, blockingKey, 'Blocks')
+		// In Jira "Blocks" link type: inward = "is blocked by", outward = "blocks"
+		// inwardIssue is the blocker, outwardIssue is the blocked issue
+		await this.tracker.getApiClient().createIssueLink(blockingKey, blockedKey, 'Blocks')
 	}
 
 	/**
@@ -327,25 +327,23 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 		for (const link of links) {
 			if (link.type.name !== 'Blocks') continue
 
-			// inwardIssue present = the other issue is the inward ("is blocked by") side
-			// → this issue blocks that issue → blocking
-			if (link.inwardIssue) {
-				blocking.push({
-					id: link.inwardIssue.key,
-					title: link.inwardIssue.fields.summary,
-					url: `${host}/browse/${link.inwardIssue.key}`,
-					state: link.inwardIssue.fields.status.name.toLowerCase(),
-				})
-			}
-
-			// outwardIssue present = the other issue is the outward ("blocks") side
-			// → that issue blocks this issue → blockedBy
+			// outwardIssue present = this issue "blocks" that issue → blocking
 			if (link.outwardIssue) {
-				blockedBy.push({
+				blocking.push({
 					id: link.outwardIssue.key,
 					title: link.outwardIssue.fields.summary,
 					url: `${host}/browse/${link.outwardIssue.key}`,
 					state: link.outwardIssue.fields.status.name.toLowerCase(),
+				})
+			}
+
+			// inwardIssue present = that issue "blocks" this issue → blockedBy
+			if (link.inwardIssue) {
+				blockedBy.push({
+					id: link.inwardIssue.key,
+					title: link.inwardIssue.fields.summary,
+					url: `${host}/browse/${link.inwardIssue.key}`,
+					state: link.inwardIssue.fields.status.name.toLowerCase(),
 				})
 			}
 		}
@@ -372,7 +370,7 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 		const links = issue.fields.issuelinks ?? []
 
 		const matchingLink = links.find(link =>
-			link.type.name === 'Blocks' && link.outwardIssue?.key === blockingKey
+			link.type.name === 'Blocks' && link.inwardIssue?.key === blockingKey
 		)
 
 		if (!matchingLink) {
