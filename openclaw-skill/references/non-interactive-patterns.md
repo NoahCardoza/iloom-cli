@@ -26,7 +26,7 @@ These commands launch Claude Code and run for extended periods. **Always run in 
 
 | Command | Recommended Invocation |
 |---------|----------------------|
-| `il start` | `bash pty:true background:true command:"il start 42 --yolo --no-code --json"` |
+| `il start` | `bash pty:true background:true command:"il start 42 --yolo --no-code --no-terminal --json"` |
 | `il spin` | `bash pty:true background:true command:"il spin --yolo --print --json-stream"` |
 | `il plan` | `bash pty:true background:true command:"il plan --yolo --print --json-stream"` |
 
@@ -104,6 +104,7 @@ Every interactive prompt in iloom and the flag(s) that bypass it:
 | `start` | "Enter issue number..." | Provide `[identifier]` argument |
 | `start` | "Create as a child loom?" | `--child-loom` or `--no-child-loom` |
 | `start` | "bypassPermissions warning" | Already implied by `--yolo`; or `--no-claude` |
+| `start` | Opens terminal window | `--no-terminal` |
 | `finish` | "Clean up worktree?" | `--cleanup` or `--no-cleanup` |
 | `finish` | Commit message review | `--force` |
 | `finish` | General confirmations | `--force` |
@@ -122,11 +123,12 @@ Every interactive prompt in iloom and the flag(s) that bypass it:
 ### Full Autonomous Start (create workspace)
 
 ```bash
-bash pty:true background:true command:"il start <issue> --yolo --no-code --json"
+bash pty:true background:true command:"il start <issue> --yolo --no-code --no-terminal --json"
 ```
 
 - `--yolo`: bypass all permission prompts
 - `--no-code`: don't open VS Code
+- `--no-terminal`: don't open a terminal window
 - `--json`: structured output
 
 ### Full Autonomous Finish (merge and cleanup)
