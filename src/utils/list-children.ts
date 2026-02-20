@@ -348,9 +348,9 @@ export async function fetchChildIssueDetails(
  * @param providerName - Provider type
  * @returns Prefixed number: "#123" for GitHub, "ENG-123" for Linear (already prefixed)
  */
-function formatIssueNumber(issueId: string, providerName: string): string {
+export function formatIssueNumber(issueId: string, providerName: string): string {
   if (providerName === 'github') {
-    return `#${issueId}`
+    return issueId.startsWith('#') ? issueId : `#${issueId}`
   }
   // Linear and Jira identifiers are already prefixed (e.g., "ENG-123", "PROJ-456")
   return issueId
