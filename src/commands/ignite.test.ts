@@ -961,10 +961,15 @@ describe('IgniteCommand', () => {
 					'mcp__issue_management__create_comment',
 					'mcp__issue_management__update_comment',
 					'mcp__issue_management__create_issue',
+					'mcp__issue_management__close_issue',
+					'mcp__issue_management__reopen_issue',
+					'mcp__issue_management__edit_issue',
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
 					'mcp__recap__add_artifact',
 					'mcp__recap__set_complexity',
+					'mcp__recap__set_loom_state',
+					'mcp__recap__get_loom_state',
 				])
 			} finally {
 				process.cwd = originalCwd
@@ -1018,10 +1023,15 @@ describe('IgniteCommand', () => {
 					'mcp__issue_management__create_comment',
 					'mcp__issue_management__update_comment',
 					'mcp__issue_management__create_issue',
+					'mcp__issue_management__close_issue',
+					'mcp__issue_management__reopen_issue',
+					'mcp__issue_management__edit_issue',
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
 					'mcp__recap__add_artifact',
 					'mcp__recap__set_complexity',
+					'mcp__recap__set_loom_state',
+					'mcp__recap__get_loom_state',
 					'mcp__issue_management__get_pr',
 					'mcp__recap__set_goal',
 				])
@@ -1075,6 +1085,8 @@ describe('IgniteCommand', () => {
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
 					'mcp__recap__set_complexity',
+					'mcp__recap__set_loom_state',
+					'mcp__recap__get_loom_state',
 				])
 				expect(launchClaudeCall[1].disallowedTools).toBeUndefined()
 			} finally {
@@ -1109,10 +1121,15 @@ describe('IgniteCommand', () => {
 					'mcp__issue_management__create_comment',
 					'mcp__issue_management__update_comment',
 					'mcp__issue_management__create_issue',
+					'mcp__issue_management__close_issue',
+					'mcp__issue_management__reopen_issue',
+					'mcp__issue_management__edit_issue',
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
 					'mcp__recap__add_artifact',
 					'mcp__recap__set_complexity',
+					'mcp__recap__set_loom_state',
+					'mcp__recap__get_loom_state',
 				])
 				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)'])
 			} finally {

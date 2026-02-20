@@ -20,9 +20,10 @@ import { hasMultipleRemotes } from './utils/remote.js'
 import { getIdeConfig, isIdeAvailable, getInstallHint } from './utils/ide.js'
 import { fileURLToPath } from 'url'
 import { realpathSync } from 'fs'
-import { formatLoomsForJson, formatFinishedLoomForJson } from './utils/loom-formatter.js'
+import { formatLoomsForJson, formatFinishedLoomForJson, enrichSwarmIssues } from './utils/loom-formatter.js'
 import { assembleChildrenData, type ChildrenData } from './utils/list-children.js'
 import { findMainWorktreePathWithSettings, GitCommandError, isValidGitRepo } from './utils/git.js'
+import chalk from 'chalk'
 import fs from 'fs-extra'
 import { VersionMigrationManager } from './lib/VersionMigrationManager.js'
 
@@ -372,6 +373,8 @@ program
   .option('--no-terminal', 'Disable terminal')
   .option('--child-loom', 'Force create as child loom (skip prompt)')
   .option('--no-child-loom', 'Force create as independent loom (skip prompt)')
+  .option('--epic', 'Create as epic loom with child issues (skip prompt; ignored if no children)')
+  .option('--no-epic', 'Skip epic loom creation even if issue has children (ignored if no children)')
   .option('--body <text>', 'Body text for issue (skips AI enhancement)')
   .option('--json', 'Output result as JSON')
   .addOption(
@@ -929,6 +932,20 @@ program
     }
   })
 
+/**
+ * Apply color coding to a swarm state value for terminal display
+ */
+function colorizeState(state: string): string {
+  switch (state) {
+    case 'pending': return chalk.gray(state)
+    case 'in_progress': return chalk.yellow(state)
+    case 'code_review': return chalk.blue(state)
+    case 'done': return chalk.green(state)
+    case 'failed': return chalk.red(state)
+    default: return chalk.gray(state)
+  }
+}
+
 program
   .command('list')
   .description('Show active workspaces')
@@ -1057,26 +1074,40 @@ program
         if (showActive) {
           if (options.global) {
             // Format global active looms from metadata (similar to finished looms format)
-            activeJson = globalActiveLooms.map(loom => ({
-              name: loom.branchName ?? loom.worktreePath ?? 'unknown',
-              worktreePath: loom.worktreePath,
-              branch: loom.branchName,
-              type: loom.issueType ?? 'branch',
-              issue_numbers: loom.issue_numbers,
-              pr_numbers: loom.pr_numbers,
-              isMainWorktree: false, // Global looms from other projects are never the main worktree
-              description: loom.description ?? null,
-              created_at: loom.created_at ?? null,
-              issueTracker: loom.issueTracker ?? null,
-              colorHex: loom.colorHex ?? null,
-              projectPath: loom.projectPath ?? null,
-              issueUrls: loom.issueUrls ?? {},
-              prUrls: loom.prUrls ?? {},
-              status: 'active' as const,
-              finishedAt: null,
-              isChildLoom: loom.parentLoom != null,
-              parentLoom: loom.parentLoom ?? null,
-            }))
+            activeJson = globalActiveLooms.map(loom => {
+              const isEpic = (loom.issueType ?? 'branch') === 'epic'
+              const swarmIssues = isEpic && loom.childIssues && loom.childIssues.length > 0
+                ? enrichSwarmIssues(loom.childIssues, globalActiveLooms)
+                : isEpic ? [] : undefined
+              const depMap = isEpic
+                ? (loom.dependencyMap && Object.keys(loom.dependencyMap).length > 0
+                    ? loom.dependencyMap
+                    : {})
+                : undefined
+              return {
+                name: loom.branchName ?? loom.worktreePath ?? 'unknown',
+                worktreePath: loom.worktreePath,
+                branch: loom.branchName,
+                type: loom.issueType ?? 'branch',
+                issue_numbers: loom.issue_numbers,
+                pr_numbers: loom.pr_numbers,
+                isMainWorktree: false, // Global looms from other projects are never the main worktree
+                description: loom.description ?? null,
+                created_at: loom.created_at ?? null,
+                issueTracker: loom.issueTracker ?? null,
+                colorHex: loom.colorHex ?? null,
+                projectPath: loom.projectPath ?? null,
+                issueUrls: loom.issueUrls ?? {},
+                prUrls: loom.prUrls ?? {},
+                status: 'active' as const,
+                finishedAt: null,
+                state: loom.state ?? null,
+                isChildLoom: loom.parentLoom != null,
+                parentLoom: loom.parentLoom ?? null,
+                ...(swarmIssues !== undefined && { swarmIssues }),
+                ...(depMap !== undefined && { dependencyMap: depMap }),
+              }
+            })
           } else {
             // Format worktrees from current repo
             activeJson = formatLoomsForJson(worktrees, mainWorktreePath, metadata).map(loom => ({
@@ -1095,8 +1126,13 @@ program
           )
         }
 
+        // Collect all active metadata for enriching epic swarm issues
+        const allActiveMetadata = options.global
+          ? globalActiveLooms
+          : Array.from(metadata.values()).filter((m): m is LoomMetadata => m != null)
+
         // Format finished looms
-        let finishedJson = finishedLooms.map(formatFinishedLoomForJson)
+        let finishedJson = finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata))
 
         // Filter finished looms by project (include looms with null/undefined projectPath for legacy support)
         if (currentProjectPath) {
@@ -1107,9 +1143,10 @@ program
 
         // Fetch children data if --children flag is set
         if (options.children) {
-          // Load settings for determining issue tracker provider
+          // Load settings and create issue tracker for fetching children
           const settingsManager = new SettingsManager()
           const settings = await settingsManager.loadSettings()
+          const issueTracker = IssueTrackerFactory.create(settings)
 
           // Fetch children for all active looms in parallel using Promise.allSettled
           const activeChildrenResults = await Promise.allSettled(
@@ -1122,7 +1159,7 @@ program
               if (!loomMetadata) {
                 return { index, children: null }
               }
-              const children = await assembleChildrenData(loomMetadata, metadataManager, settings)
+              const children = await assembleChildrenData(loomMetadata, metadataManager, issueTracker)
               return { index, children }
             })
           )
@@ -1145,7 +1182,7 @@ program
               if (!loomMetadata) {
                 return { index, children: null }
               }
-              const children = await assembleChildrenData(loomMetadata, metadataManager, settings)
+              const children = await assembleChildrenData(loomMetadata, metadataManager, issueTracker)
               return { index, children }
             })
           )
@@ -1183,11 +1220,12 @@ program
         return
       }
 
-      // Load settings for children fetching if --children flag is set
-      let textSettings: import('./lib/SettingsManager.js').IloomSettings | null = null
+      // Load settings and create issue tracker for children fetching if --children flag is set
+      let textIssueTracker: import('./lib/IssueTracker.js').IssueTracker | null = null
       if (options.children) {
         const settingsManager = new SettingsManager()
-        textSettings = await settingsManager.loadSettings()
+        const textSettings = await settingsManager.loadSettings()
+        textIssueTracker = IssueTrackerFactory.create(textSettings)
       }
 
       // Show active workspaces
@@ -1205,6 +1243,9 @@ program
             if (loom.description) {
               logger.info(`    Description: ${loom.description}`)
             }
+            if (loom.state) {
+              logger.info(`    State: ${colorizeState(loom.state)}`)
+            }
             if (loom.worktreePath) {
               logger.info(`    Path: ${loom.worktreePath}`)
             }
@@ -1212,8 +1253,8 @@ program
               logger.info(`    Project: ${loom.projectPath}`)
             }
             // Show children summary if --children flag is set
-            if (options.children && textSettings) {
-              const childrenData = await assembleChildrenData(loom, metadataManager, textSettings)
+            if (options.children && textIssueTracker) {
+              const childrenData = await assembleChildrenData(loom, metadataManager, textIssueTracker)
               if (childrenData && (childrenData.summary.totalIssues > 0 || childrenData.summary.totalLooms > 0)) {
                 logger.info(`    Child Issues: ${childrenData.summary.totalIssues} (${childrenData.summary.issuesWithLooms} with active looms)`)
                 // Show child issues without looms
@@ -1239,11 +1280,14 @@ program
             if (loomMetadata?.description) {
               logger.info(`    Description: ${loomMetadata.description}`)
             }
+            if (loomMetadata?.state) {
+              logger.info(`    State: ${colorizeState(loomMetadata.state)}`)
+            }
             logger.info(`    Path: ${formatted.path}`)
             logger.info(`    Commit: ${formatted.commit}`)
             // Show children summary if --children flag is set
-            if (options.children && textSettings && loomMetadata) {
-              const childrenData = await assembleChildrenData(loomMetadata, metadataManager, textSettings)
+            if (options.children && textIssueTracker && loomMetadata) {
+              const childrenData = await assembleChildrenData(loomMetadata, metadataManager, textIssueTracker)
               if (childrenData && (childrenData.summary.totalIssues > 0 || childrenData.summary.totalLooms > 0)) {
                 logger.info(`    Child Issues: ${childrenData.summary.totalIssues} (${childrenData.summary.issuesWithLooms} with active looms)`)
                 // Show child issues without looms
@@ -1274,12 +1318,15 @@ program
           if (loom.description) {
             logger.info(`    Description: ${loom.description}`)
           }
+          if (loom.state) {
+            logger.info(`    State: ${colorizeState(loom.state)}`)
+          }
           if (loom.finishedAt) {
             logger.info(`    Finished: ${new Date(loom.finishedAt).toLocaleString()}`)
           }
           // Show children summary if --children flag is set
-          if (options.children && textSettings) {
-            const childrenData = await assembleChildrenData(loom, metadataManager, textSettings)
+          if (options.children && textIssueTracker) {
+            const childrenData = await assembleChildrenData(loom, metadataManager, textIssueTracker)
             if (childrenData && (childrenData.summary.totalIssues > 0 || childrenData.summary.totalLooms > 0)) {
               logger.info(`    Child Issues: ${childrenData.summary.totalIssues} (${childrenData.summary.issuesWithLooms} with active looms)`)
               // Show child issues without looms
