@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { IgniteCommand, WorktreeValidationError } from './ignite.js'
 import type { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import type { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import type { SwarmSetupService } from '../lib/SwarmSetupService.js'
 import * as claudeUtils from '../utils/claude.js'
 import * as githubUtils from '../utils/github.js'
 import * as gitUtils from '../utils/git.js'
@@ -42,6 +43,23 @@ vi.mock('../lib/MetadataManager.js', () => ({
 			sessionId: '12345678-1234-4567-8901-123456789012', // Required for spin command
 		}),
 		getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+		updateMetadata: vi.fn().mockResolvedValue(undefined),
+	})),
+}))
+
+// Mock SwarmSetupService for swarm mode tests
+vi.mock('../lib/SwarmSetupService.js', () => ({
+	SwarmSetupService: vi.fn(() => ({
+		setupSwarm: vi.fn().mockResolvedValue({
+			epicWorktreePath: '/path/to/epic',
+			epicBranch: 'feat/epic-branch',
+			childWorktrees: [
+				{ issueId: '101', worktreePath: '/path/to/child-101', branch: 'feat/issue-101', success: true },
+				{ issueId: '102', worktreePath: '/path/to/child-102', branch: 'feat/issue-102', success: true },
+			],
+			agentsRendered: [],
+			workerAgentRendered: false,
+		}),
 	})),
 }))
 
@@ -3020,15 +3038,17 @@ describe('IgniteCommand', () => {
 			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__child-epic')
 
 			const { SwarmSetupService } = await import('../lib/SwarmSetupService.js')
-			vi.spyOn(SwarmSetupService.prototype, 'setupSwarm').mockResolvedValue({
-				epicWorktreePath: '/path/to/child-epic',
-				epicBranch: 'feat/issue-100__child-epic',
-				childWorktrees: [
-					{ issueId: '301', worktreePath: '/path/to/child-301', branch: 'feat/issue-301', success: true },
-				],
-				agentsRendered: [],
-				workerAgentRendered: true,
-			})
+			vi.mocked(SwarmSetupService).mockImplementation(() => ({
+				setupSwarm: vi.fn().mockResolvedValue({
+					epicWorktreePath: '/path/to/child-epic',
+					epicBranch: 'feat/issue-100__child-epic',
+					childWorktrees: [
+						{ issueId: '301', worktreePath: '/path/to/child-301', branch: 'feat/issue-301', success: true },
+					],
+					agentsRendered: [],
+					workerAgentRendered: true,
+				}),
+			}) as unknown as SwarmSetupService)
 
 			const readMetadataMock = vi.fn()
 			const parentLoom = {
@@ -3195,16 +3215,18 @@ describe('IgniteCommand', () => {
 
 			// Mock SwarmSetupService.setupSwarm
 			const { SwarmSetupService } = await import('../lib/SwarmSetupService.js')
-			vi.spyOn(SwarmSetupService.prototype, 'setupSwarm').mockResolvedValue({
-				epicWorktreePath: '/path/to/epic',
-				epicBranch: 'feat/issue-100__epic',
-				childWorktrees: [
-					{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
-					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
-				],
-				agentsRendered: [],
-				workerAgentRendered: true,
-			})
+			vi.mocked(SwarmSetupService).mockImplementation(() => ({
+				setupSwarm: vi.fn().mockResolvedValue({
+					epicWorktreePath: '/path/to/epic',
+					epicBranch: 'feat/issue-100__epic',
+					childWorktrees: [
+						{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
+						{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
+					],
+					agentsRendered: [],
+					workerAgentRendered: true,
+				}),
+			}) as unknown as SwarmSetupService)
 		})
 
 		afterEach(() => {
@@ -3450,6 +3472,189 @@ describe('IgniteCommand', () => {
 				launchClaudeSpy.mockRestore()
 				isValidGitRepoSpy.mockRestore()
 				getWorktreeRootSpy.mockRestore()
+			}
+		})
+	})
+
+	describe('--skip-cleanup flag threading', () => {
+		// Epic metadata that triggers swarm mode: has issue_numbers, no parentLoom, and childIssues
+		const epicMetadata = {
+			description: 'Epic loom',
+			created_at: '2025-01-01T00:00:00Z',
+			branchName: 'feat/issue-100__epic',
+			worktreePath: '/path/to/feat/issue-100__epic',
+			issueType: 'epic' as const,
+			issue_numbers: ['100'],
+			pr_numbers: [],
+			childIssueNumbers: ['101', '102'],
+			parentLoom: null,
+			parentLoomBranch: null,
+			databaseBranchName: null,
+			sessionId: '12345678-1234-4567-8901-123456789012',
+			childIssues: [
+				{ number: '101', title: 'Child 1', body: 'Body 1', url: 'https://github.com/test/repo/issues/101' },
+				{ number: '102', title: 'Child 2', body: 'Body 2', url: 'https://github.com/test/repo/issues/102' },
+			],
+			dependencyMap: {},
+			capabilities: [],
+			state: null,
+			issueKey: null,
+			issueTracker: null,
+			colorHex: null,
+			projectPath: null,
+			issueUrls: {},
+			prUrls: {},
+			draftPrNumber: null,
+			oneShot: null,
+			mcpConfigPath: null,
+			status: 'active' as const,
+			finishedAt: null,
+		}
+
+		function setupSwarmModeMocks() {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const findMainWorktreeSpy = vi.spyOn(gitUtils, 'findMainWorktreePathWithSettings').mockResolvedValue('/path/to/main')
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__epic')
+
+			// Override MetadataManager mock to return epic metadata
+			vi.mocked(MetadataManager).mockImplementation(() => ({
+				readMetadata: vi.fn().mockResolvedValue(epicMetadata),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/epic-metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+			}) as unknown as MetadataManager)
+
+			const localMockTemplateManager = {
+				getPrompt: vi.fn().mockResolvedValue('mocked orchestrator prompt'),
+			} as unknown as PromptTemplateManager
+
+			const localMockGitWorktreeManager = {
+				getRepoInfo: vi.fn().mockResolvedValue({
+					currentBranch: 'feat/issue-100__epic',
+				}),
+			} as unknown as GitWorktreeManager
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					issueManagement: { provider: 'github' },
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({}),
+				formatForCli: vi.fn().mockReturnValue({}),
+			}
+
+			const mockFirstRunManager = {
+				isFirstRun: vi.fn().mockResolvedValue(false),
+				markAsRun: vi.fn().mockResolvedValue(undefined),
+			}
+
+			const mockHookManager = {
+				installHooks: vi.fn().mockResolvedValue(undefined),
+			}
+
+			const commandForSwarm = new IgniteCommand(
+				localMockTemplateManager,
+				localMockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+				mockFirstRunManager as never,
+				mockHookManager as never,
+			)
+
+			return {
+				commandForSwarm,
+				localMockTemplateManager,
+				launchClaudeSpy,
+				findMainWorktreeSpy,
+				originalCwd,
+			}
+		}
+
+		it('should pass NO_CLEANUP=true to template variables when skipCleanup is true', async () => {
+			const { commandForSwarm, localMockTemplateManager, launchClaudeSpy, findMainWorktreeSpy, originalCwd } = setupSwarmModeMocks()
+
+			try {
+				await commandForSwarm.execute('default', undefined, true)
+
+				// Verify templateManager.getPrompt was called with 'swarm-orchestrator' and NO_CLEANUP: true
+				expect(localMockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'swarm-orchestrator',
+					expect.objectContaining({
+						NO_CLEANUP: true,
+						EPIC_ISSUE_NUMBER: '100',
+					}),
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				findMainWorktreeSpy.mockRestore()
+			}
+		})
+
+		it('should not include NO_CLEANUP in template variables when skipCleanup is false', async () => {
+			const { commandForSwarm, localMockTemplateManager, launchClaudeSpy, findMainWorktreeSpy, originalCwd } = setupSwarmModeMocks()
+
+			try {
+				await commandForSwarm.execute('default', undefined, false)
+
+				// Verify templateManager.getPrompt was called with 'swarm-orchestrator'
+				expect(localMockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'swarm-orchestrator',
+					expect.any(Object),
+				)
+
+				// Verify NO_CLEANUP is not present in the variables
+				const templateCall = vi.mocked(localMockTemplateManager.getPrompt).mock.calls[0]
+				expect(templateCall[1]).not.toHaveProperty('NO_CLEANUP')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				findMainWorktreeSpy.mockRestore()
+			}
+		})
+
+		it('should not include NO_CLEANUP in template variables when skipCleanup is undefined', async () => {
+			const { commandForSwarm, localMockTemplateManager, launchClaudeSpy, findMainWorktreeSpy, originalCwd } = setupSwarmModeMocks()
+
+			try {
+				await commandForSwarm.execute('default', undefined, undefined)
+
+				// Verify templateManager.getPrompt was called with 'swarm-orchestrator'
+				expect(localMockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'swarm-orchestrator',
+					expect.any(Object),
+				)
+
+				// Verify NO_CLEANUP is not present in the variables
+				const templateCall = vi.mocked(localMockTemplateManager.getPrompt).mock.calls[0]
+				expect(templateCall[1]).not.toHaveProperty('NO_CLEANUP')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				findMainWorktreeSpy.mockRestore()
+			}
+		})
+
+		it('should accept skipCleanup parameter in execute()', async () => {
+			const { commandForSwarm, launchClaudeSpy, findMainWorktreeSpy, originalCwd } = setupSwarmModeMocks()
+
+			try {
+				// Verify execute() accepts skipCleanup without throwing a type error
+				await commandForSwarm.execute('default', undefined, true)
+				expect(launchClaudeSpy).toHaveBeenCalled()
+
+				// Also verify with false
+				launchClaudeSpy.mockClear()
+				await commandForSwarm.execute('default', undefined, false)
+				expect(launchClaudeSpy).toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				findMainWorktreeSpy.mockRestore()
 			}
 		})
 	})

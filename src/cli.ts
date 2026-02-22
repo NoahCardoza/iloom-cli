@@ -738,6 +738,7 @@ program
   .option('--json', 'Output final result as JSON object (requires --print)')
   .option('--json-stream', 'Stream JSONL output to stdout in real-time (requires --print)')
   .option('--set <key=value>', 'Override settings (repeatable, e.g., --set workflows.issue.permissionMode=bypassPermissions)')
+  .option('--skip-cleanup', 'Skip automatic cleanup of child worktrees after they complete in swarm mode')
   .action(async (options: {
     oneShot?: import('./types/index.js').OneShotMode
     yolo?: boolean
@@ -746,6 +747,7 @@ program
     verbose?: boolean
     json?: boolean
     jsonStream?: boolean
+    skipCleanup?: boolean
   }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {
@@ -780,7 +782,7 @@ program
             ...(options.jsonStream && { jsonStream: true }),
           }
         : undefined
-      await command.execute(options.oneShot, printOptions)
+      await command.execute(options.oneShot, printOptions, options.skipCleanup)
     } catch (error) {
       logger.error(`Failed to spin up loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
@@ -948,6 +950,7 @@ program
   .option('-f, --force', 'Skip confirmations and force removal')
   .option('--dry-run', 'Show what would be done without doing it')
   .option('--json', 'Output result as JSON')
+  .option('--archive', 'Archive metadata instead of deleting (preserves loom in il list --finished)')
   .option('--defer <ms>', 'Wait specified milliseconds before cleanup', parseInt)
   .action(async (identifier?: string, options?: CleanupOptions) => {
     const executeAction = async (): Promise<void> => {
@@ -1093,11 +1096,10 @@ program
         }
       }
 
-      // Get finished looms if needed
-      let finishedLooms: LoomMetadata[] = []
-      if (showFinished) {
-        finishedLooms = await metadataManager.listFinishedMetadata()
-      }
+      // Get finished looms if needed for display, and always for swarm issue enrichment
+      // Finished metadata is needed to populate state for child looms that have been
+      // cleaned up/archived but whose state should still appear in the epic's swarmIssues
+      const finishedLooms = await metadataManager.listFinishedMetadata()
 
       // Filter by current project for text output (include looms with null projectPath for legacy support)
       // When --global is set, globalActiveLooms is used instead of worktrees, and no project filtering is applied
@@ -1122,6 +1124,12 @@ program
           // Settings validation failed - continue without main worktree path
         }
 
+        // Collect all active metadata for enriching epic swarm issues
+        // (must be computed before formatting so it's available for swarmIssues enrichment)
+        const allActiveMetadata = options.global
+          ? globalActiveLooms
+          : Array.from(metadata.values()).filter((m): m is LoomMetadata => m != null)
+
         // Format active looms
         let activeJson: ReturnType<typeof formatLoomsForJson> extends (infer T)[] ? (T & { status: 'active'; finishedAt: null })[] : never = []
         if (showActive) {
@@ -1130,7 +1138,7 @@ program
             activeJson = globalActiveLooms.map(loom => {
               const isEpic = (loom.issueType ?? 'branch') === 'epic'
               const swarmIssues = isEpic && loom.childIssues && loom.childIssues.length > 0
-                ? enrichSwarmIssues(loom.childIssues, globalActiveLooms)
+                ? enrichSwarmIssues(loom.childIssues, globalActiveLooms, finishedLooms)
                 : isEpic ? [] : undefined
               const depMap = isEpic
                 ? (loom.dependencyMap && Object.keys(loom.dependencyMap).length > 0
@@ -1163,7 +1171,7 @@ program
             })
           } else {
             // Format worktrees from current repo
-            activeJson = formatLoomsForJson(worktrees, mainWorktreePath, metadata).map(loom => ({
+            activeJson = formatLoomsForJson(worktrees, mainWorktreePath, metadata, allActiveMetadata, finishedLooms).map(loom => ({
               ...loom,
               status: 'active' as const,
               finishedAt: null,
@@ -1179,13 +1187,10 @@ program
           )
         }
 
-        // Collect all active metadata for enriching epic swarm issues
-        const allActiveMetadata = options.global
-          ? globalActiveLooms
-          : Array.from(metadata.values()).filter((m): m is LoomMetadata => m != null)
-
-        // Format finished looms
-        let finishedJson = finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata))
+        // Format finished looms (only when --finished or --all is set)
+        let finishedJson = showFinished
+          ? finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms))
+          : []
 
         // Filter finished looms by project (include looms with null/undefined projectPath for legacy support)
         if (currentProjectPath) {

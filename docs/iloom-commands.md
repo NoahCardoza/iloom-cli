@@ -418,6 +418,7 @@ il cleanup [options] [identifier]
 | `-i`, `--issue` | Cleanup by issue number |
 | `-f`, `--force` | Skip confirmations and force removal |
 | `--dry-run` | Show what would be done without doing it |
+| `--archive` | Archive metadata instead of deleting (preserves loom in `il list --finished`) |
 
 **Workflow:**
 
@@ -447,6 +448,9 @@ il cleanup --all
 
 # Force cleanup without confirmation
 il cleanup 25 --force
+
+# Archive metadata instead of deleting (keeps loom visible in il list --finished)
+il cleanup 25 --archive
 ```
 
 **Safety:**
@@ -555,6 +559,7 @@ il spin [options]
 | `--output-format` | `json`, `stream-json`, `text` | Output format for Claude CLI (requires `--print`) |
 | `--verbose` | | Enable verbose output (requires `--print`) |
 | `--set` | `key=value` | Override settings using dot notation (repeatable). Same as global `--set` flag. |
+| `--skip-cleanup` | | Skip automatic cleanup of child worktrees in swarm mode |
 
 **Behavior:**
 
@@ -588,6 +593,16 @@ The orchestrator then:
 - Newly unblocked issues are spawned as their dependencies complete
 - Failed children are isolated and do not block unrelated issues
 
+**Child Worktree Cleanup:**
+
+After each child agent's work is successfully merged into the epic branch, the orchestrator automatically runs `il cleanup --archive` on the child worktree to archive its metadata and remove the worktree and branch from disk. Archived child looms remain visible via `il list --finished`. Failed children are preserved for debugging and can be inspected manually.
+
+To disable automatic cleanup and keep all child worktrees after swarm completion, use the `--skip-cleanup` flag:
+
+```bash
+il spin --skip-cleanup
+```
+
 **Examples:**
 
 ```bash
@@ -605,6 +620,9 @@ il spin --print
 
 # Headless mode with JSON output format
 il spin --print --output-format=json
+
+# Keep child worktrees after swarm mode completes
+il spin --skip-cleanup
 ```
 
 ---
