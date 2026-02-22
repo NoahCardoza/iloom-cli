@@ -12,9 +12,9 @@ import { logger } from '../utils/logger.js'
 const PROJECT_CAPABILITIES = ['cli', 'web'] as const
 
 /**
- * Zod schema for agent settings
+ * Zod schema for base agent settings (without nested agents)
  */
-export const AgentSettingsSchema = z.object({
+export const BaseAgentSettingsSchema = z.object({
 	model: z
 		.enum(['sonnet', 'opus', 'haiku'])
 		.optional()
@@ -34,6 +34,16 @@ export const AgentSettingsSchema = z.object({
 		.boolean()
 		.optional()
 		.describe('Whether artifacts from this agent should be reviewed before posting (defaults to false)'),
+})
+
+/**
+ * Zod schema for agent settings, extends base with optional nested agents sub-record.
+ * The nested agents field is used for swarm-specific per-agent overrides under iloom-swarm-worker.
+ */
+export const AgentSettingsSchema = BaseAgentSettingsSchema.extend({
+	agents: z.record(z.string(), BaseAgentSettingsSchema)
+		.optional()
+		.describe('Nested per-agent model overrides for swarm mode. Configure under agents.iloom-swarm-worker.agents.<agent-name>.model to set a different model for phase agents when running inside swarm workers. Fallback chain: swarm-specific agent model > explicit swarm worker model > base agent model. Only meaningful under the iloom-swarm-worker agent entry.'),
 })
 
 /**
@@ -337,7 +347,8 @@ export const IloomSettingsSchema = z.object({
 				'iloom-issue-implementer (implements code changes), ' +
 				'iloom-code-reviewer (reviews code changes against requirements), ' +
 				'iloom-artifact-reviewer (reviews artifacts before posting), ' +
-				'iloom-swarm-worker (swarm worker agent, dynamically generated)',
+				'iloom-swarm-worker (swarm worker agent, dynamically generated). ' +
+				'The iloom-swarm-worker agent supports a nested "agents" sub-record for configuring phase agent models specifically in swarm mode.',
 		),
 	spin: SpinAgentSettingsSchema.optional().describe(
 		'Spin orchestrator configuration. Model defaults to opus when not configured.',
@@ -582,7 +593,8 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'iloom-issue-implementer (implements code changes), ' +
 				'iloom-code-reviewer (reviews code changes against requirements), ' +
 				'iloom-artifact-reviewer (reviews artifacts before posting), ' +
-				'iloom-swarm-worker (swarm worker agent, dynamically generated)',
+				'iloom-swarm-worker (swarm worker agent, dynamically generated). ' +
+				'The iloom-swarm-worker agent supports a nested "agents" sub-record for configuring phase agent models specifically in swarm mode.',
 		),
 	spin: z
 		.object({
