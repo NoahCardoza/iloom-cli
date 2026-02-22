@@ -3011,6 +3011,102 @@ describe('IgniteCommand', () => {
 		})
 	})
 
+	describe('child epic swarm mode', () => {
+		it('enters swarm mode for child looms that are also epics', async () => {
+			// Regression test: a loom with parentLoom AND issueType 'epic' must still enter swarm mode
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			vi.spyOn(gitUtils, 'findMainWorktreePathWithSettings').mockResolvedValue('/test/main')
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__child-epic')
+
+			const { SwarmSetupService } = await import('../lib/SwarmSetupService.js')
+			vi.spyOn(SwarmSetupService.prototype, 'setupSwarm').mockResolvedValue({
+				epicWorktreePath: '/path/to/child-epic',
+				epicBranch: 'feat/issue-100__child-epic',
+				childWorktrees: [
+					{ issueId: '301', worktreePath: '/path/to/child-301', branch: 'feat/issue-301', success: true },
+				],
+				agentsRendered: 0,
+				workerAgentRendered: true,
+			})
+
+			const readMetadataMock = vi.fn()
+			const parentLoom = {
+				type: 'epic' as const,
+				identifier: 50,
+				branchName: 'feat/issue-50__parent-epic',
+				worktreePath: '/path/to/parent-epic',
+			}
+			// First call: initial metadata read in executeInternal (Step 2)
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Child epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__child-epic',
+				worktreePath: '/path/to/child-epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				parentLoom,
+				childIssues: [
+					{ number: '#301', title: 'Grandchild 1', body: 'Body 1' },
+				],
+				sessionId: 'child-epic-session-id',
+			})
+			// Second call: fresh metadata re-read in executeInternal (Step 2.1.1)
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Child epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__child-epic',
+				worktreePath: '/path/to/child-epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				parentLoom,
+				childIssues: [
+					{ number: '#301', title: 'Grandchild 1', body: 'Body 1' },
+				],
+				dependencyMap: {},
+				sessionId: 'child-epic-session-id',
+			})
+			// Child metadata for telemetry
+			readMetadataMock.mockResolvedValueOnce({
+				state: 'done',
+				created_at: '2025-01-01T00:00:00Z',
+			})
+
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: readMetadataMock,
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+			}) as unknown as MetadataManager)
+
+			const cmd = new IgniteCommand(
+				mockTemplateManager,
+				{
+					getRepoInfo: vi.fn().mockResolvedValue({
+						currentBranch: 'feat/issue-100__child-epic',
+					}),
+				} as unknown as GitWorktreeManager,
+				{
+					loadAgents: vi.fn().mockResolvedValue([]),
+					formatForCli: vi.fn().mockReturnValue({}),
+				} as never,
+				{
+					loadSettings: vi.fn().mockResolvedValue({
+						issueTracker: { provider: 'github' },
+					}),
+					getSpinModel: vi.fn().mockReturnValue('opus'),
+				} as never,
+			)
+
+			await cmd.execute()
+
+			// Should have entered swarm mode — orchestrator launched via launchClaude
+			expect(launchClaudeSpy).toHaveBeenCalled()
+
+			process.cwd = originalCwd
+			launchClaudeSpy.mockRestore()
+		})
+	})
+
 	describe('swarm telemetry', () => {
 		// Helper to create an IgniteCommand that enters swarm mode
 		function createSwarmCommand(
