@@ -3026,7 +3026,7 @@ describe('IgniteCommand', () => {
 				childWorktrees: [
 					{ issueId: '301', worktreePath: '/path/to/child-301', branch: 'feat/issue-301', success: true },
 				],
-				agentsRendered: 0,
+				agentsRendered: [],
 				workerAgentRendered: true,
 			})
 
@@ -3202,7 +3202,7 @@ describe('IgniteCommand', () => {
 					{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
 					{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
 				],
-				agentsRendered: 0,
+				agentsRendered: [],
 				workerAgentRendered: true,
 			})
 		})
