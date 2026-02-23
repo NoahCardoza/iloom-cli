@@ -557,18 +557,11 @@ describe('RebaseCommand', () => {
 			expect(result).toBeUndefined()
 		})
 
-		it('should return error JSON on WorktreeValidationError when jsonStream is true', async () => {
+		it('should throw WorktreeValidationError when jsonStream is true so cli.ts can format error and exit(1)', async () => {
 			process.cwd = vi.fn().mockReturnValue('/tmp/not-a-repo')
 			vi.mocked(isValidGitRepo).mockResolvedValue(false)
 
-			const result = await command.execute({ jsonStream: true })
-
-			expect(result).toEqual({
-				success: false,
-				conflictsDetected: false,
-				claudeLaunched: false,
-				error: 'Not a git repository.',
-			})
+			await expect(command.execute({ jsonStream: true })).rejects.toThrow(WorktreeValidationError)
 		})
 
 		it('should return RebaseResult with no conflicts when rebase is clean', async () => {

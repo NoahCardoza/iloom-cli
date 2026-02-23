@@ -750,7 +750,7 @@ program
             conflictsDetected: false,
             claudeLaunched: false,
             error: error instanceof Error ? error.message : 'Unknown error'
-          }, null, 2))
+          }))
         } else {
           logger.error(`Failed to rebase: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }

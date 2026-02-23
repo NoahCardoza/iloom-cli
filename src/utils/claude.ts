@@ -229,6 +229,7 @@ export async function launchClaude(
 				input: prompt,
 				timeout: 0,
 				...(addDir && { cwd: addDir }),
+				env: { ...claudeEnv, ...extraEnv }, // CLAUDECODE=0 + any extra env vars
 				stdio: ['pipe', 'inherit', 'pipe'], // stdin: pipe (for prompt), stdout: inherit (passthrough), stderr: pipe (capture errors)
 			})
 

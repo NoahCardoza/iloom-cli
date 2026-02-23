@@ -111,9 +111,6 @@ export class RebaseCommand {
 		try {
 			worktreePath = await this.validateWorktreeContext()
 		} catch (error) {
-			if (options.jsonStream && error instanceof WorktreeValidationError) {
-				return { success: false, conflictsDetected: false, claudeLaunched: false, error: error.message }
-			}
 			if (error instanceof WorktreeValidationError) {
 				logger.error(error.message)
 				logger.info(error.suggestion)
