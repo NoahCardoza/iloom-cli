@@ -60,6 +60,21 @@ describe('ClaudeService', () => {
 	})
 
 	describe('launchForWorkflow', () => {
+		let originalIloomVscode: string | undefined
+
+		beforeEach(() => {
+			originalIloomVscode = process.env.ILOOM_VSCODE
+			delete process.env.ILOOM_VSCODE
+		})
+
+		afterEach(() => {
+			if (originalIloomVscode === undefined) {
+				delete process.env.ILOOM_VSCODE
+			} else {
+				process.env.ILOOM_VSCODE = originalIloomVscode
+			}
+		})
+
 		describe('issue workflow', () => {
 			it('should launch Claude with acceptEdits permission mode (no model specified)', async () => {
 				// Create a service with a mocked SettingsManager to avoid loading real settings.json
