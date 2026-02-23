@@ -616,11 +616,21 @@ program
   .option('--no-cleanup', 'Keep worktree after finishing')
   .option('--review', 'Review commit message before committing (default: auto-commit without review)')
   .option('--json', 'Output result as JSON')
+  .option('--json-stream', 'Stream JSONL output; runs Claude headless for conflict resolution')
   .action(async (identifier: string | undefined, options: FinishOptions & { browser?: boolean }) => {
     // Commander.js --no-browser creates browser:false, map to noBrowser for FinishOptions
     if (options.browser === false) {
       options.noBrowser = true
     }
+
+    // Mutual exclusivity guard
+    if (options.json && options.jsonStream) {
+      logger.error('--json and --json-stream are mutually exclusive')
+      process.exit(1)
+    }
+
+    const isAnyJsonMode = options.json ?? options.jsonStream
+
     const executeAction = async (): Promise<void> => {
       try {
         const settingsManager = new SettingsManager()
@@ -628,13 +638,14 @@ program
         const issueTracker = IssueTrackerFactory.create(settings)
         const command = new FinishCommand(issueTracker)
         const result = await command.execute({ identifier, options })
-        if (options.json && result) {
-          console.log(JSON.stringify(result, null, 2))
+        if (isAnyJsonMode && result) {
+          console.log(options.jsonStream ? JSON.stringify(result) : JSON.stringify(result, null, 2))
         }
         process.exit(0)
       } catch (error) {
-        if (options.json) {
-          console.log(JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
+        if (isAnyJsonMode) {
+          const errorJson = { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+          console.log(options.jsonStream ? JSON.stringify(errorJson) : JSON.stringify(errorJson, null, 2))
         } else {
           logger.error(`Failed to finish workspace: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
@@ -647,8 +658,8 @@ program
       }
     }
 
-    // Wrap execution in logger context for JSON mode
-    if (options.json) {
+    // Wrap execution in logger context for any JSON mode
+    if (isAnyJsonMode) {
       const jsonLogger = createStderrLogger()
       await withLogger(jsonLogger, executeAction)
     } else {
@@ -664,23 +675,33 @@ program
   .option('--fixes', 'Use "Fixes #N" trailer instead of "Refs #N" (closes issue)')
   .option('--no-review', 'Skip commit message review prompt')
   .option('--json', 'Output result as JSON (implies --no-review)')
+  .option('--json-stream', 'Stream JSONL output; runs Claude headless for validation fixes')
   .option('--wip-commit', 'Quick WIP commit: skip validations and pre-commit hooks')
-  .action(async (options: { message?: string; fixes?: boolean; review?: boolean; json?: boolean; wipCommit?: boolean }) => {
+  .action(async (options: { message?: string; fixes?: boolean; review?: boolean; json?: boolean; jsonStream?: boolean; wipCommit?: boolean }) => {
+    // Mutual exclusivity guard
+    if (options.json && options.jsonStream) {
+      logger.error('--json and --json-stream are mutually exclusive')
+      process.exit(1)
+    }
+
+    const isAnyJsonMode = options.json ?? options.jsonStream
+
     const executeAction = async (): Promise<void> => {
       try {
         const { CommitCommand } = await import('./commands/commit.js')
         const command = new CommitCommand()
-        // --json implies --no-review
-        const noReview = options.review === false || options.json === true
+        // --json and --json-stream imply --no-review
+        const noReview = options.review === false || options.json === true || options.jsonStream === true
         const result = await command.execute({
           message: options.message,
           fixes: options.fixes ?? false,
           noReview,
           json: options.json ?? false,
+          jsonStream: options.jsonStream ?? false,
           wipCommit: options.wipCommit ?? false,
         })
-        if (options.json && result) {
-          console.log(JSON.stringify(result, null, 2))
+        if (isAnyJsonMode && result) {
+          console.log(options.jsonStream ? JSON.stringify(result) : JSON.stringify(result, null, 2))
         }
         process.exit(0)
       } catch (error) {
@@ -688,16 +709,17 @@ program
         if (error instanceof UserAbortedCommitError) {
           process.exit(130)
         }
-        if (options.json) {
-          console.log(JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
+        if (isAnyJsonMode) {
+          const errorJson = { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+          console.log(options.jsonStream ? JSON.stringify(errorJson) : JSON.stringify(errorJson, null, 2))
         } else {
           logger.error(`Commit failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
         process.exit(1)
       }
     }
-    // Wrap in logger context for JSON mode
-    if (options.json) {
+    // Wrap in logger context for any JSON mode
+    if (isAnyJsonMode) {
       const jsonLogger = createStderrLogger()
       await withLogger(jsonLogger, executeAction)
     } else {
@@ -710,14 +732,37 @@ program
   .description('Rebase current branch on main with Claude-assisted conflict resolution')
   .option('-f, --force', 'Skip confirmation prompts')
   .option('-n, --dry-run', 'Preview actions without executing')
-  .action(async (options: { force?: boolean; dryRun?: boolean }) => {
-    try {
-      const { RebaseCommand } = await import('./commands/rebase.js')
-      const command = new RebaseCommand()
-      await command.execute(options)
-    } catch (error) {
-      logger.error(`Failed to rebase: ${error instanceof Error ? error.message : 'Unknown error'}`)
-      process.exit(1)
+  .option('--json-stream', 'Stream JSONL output; runs Claude headless for conflict resolution')
+  .action(async (options: { force?: boolean; dryRun?: boolean; jsonStream?: boolean }) => {
+    const executeAction = async (): Promise<void> => {
+      try {
+        const { RebaseCommand } = await import('./commands/rebase.js')
+        const command = new RebaseCommand()
+        const result = await command.execute(options)
+        if (options.jsonStream && result) {
+          console.log(JSON.stringify(result))
+        }
+        process.exit(0)
+      } catch (error) {
+        if (options.jsonStream) {
+          console.log(JSON.stringify({
+            success: false,
+            conflictsDetected: false,
+            claudeLaunched: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }))
+        } else {
+          logger.error(`Failed to rebase: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+        process.exit(1)
+      }
+    }
+
+    if (options.jsonStream) {
+      const jsonLogger = createStderrLogger()
+      await withLogger(jsonLogger, executeAction)
+    } else {
+      await executeAction()
     }
   })
 
