@@ -6,15 +6,9 @@ import deepmerge from 'deepmerge'
 import { logger } from '../utils/logger.js'
 
 /**
- * Valid project capability values for Zod enum validation.
- * When updating this constant, also update ProjectCapability type in src/types/loom.ts
+ * Zod schema for base agent settings (without nested agents)
  */
-const PROJECT_CAPABILITIES = ['cli', 'web'] as const
-
-/**
- * Zod schema for agent settings
- */
-export const AgentSettingsSchema = z.object({
+export const BaseAgentSettingsSchema = z.object({
 	model: z
 		.enum(['sonnet', 'opus', 'haiku'])
 		.optional()
@@ -34,6 +28,22 @@ export const AgentSettingsSchema = z.object({
 		.boolean()
 		.optional()
 		.describe('Whether artifacts from this agent should be reviewed before posting (defaults to false)'),
+})
+
+/**
+ * Zod schema for agent settings, extends base with optional nested agents sub-record.
+ * The nested agents field is used for swarm-specific per-agent overrides under iloom-swarm-worker.
+ */
+export const AgentSettingsSchema = BaseAgentSettingsSchema.extend({
+	agents: z.record(z.string(), BaseAgentSettingsSchema)
+		.optional()
+		.describe('Nested per-agent model overrides for swarm mode. Configure under agents.iloom-swarm-worker.agents.<agent-name>.model to set a different model for phase agents when running inside swarm workers. Fallback chain: swarm-specific agent model > explicit swarm worker model > base agent model. Only meaningful under the iloom-swarm-worker agent entry.'),
+	subAgentTimeout: z
+		.number()
+		.min(1, 'Sub-agent timeout must be at least 1 minute')
+		.max(120, 'Sub-agent timeout cannot exceed 120 minutes')
+		.optional()
+		.describe('Timeout in minutes for sub-agent claude -p invocations in swarm mode. Applies to each phase agent (evaluator, analyzer, planner, implementer) when invoked via the Bash tool. Default: 20 minutes. Only meaningful under the iloom-swarm-worker agent entry.'),
 })
 
 /**
@@ -173,10 +183,6 @@ export const WorkflowsSettingsSchemaNoDefaults = z
  */
 export const CapabilitiesSettingsSchema = z
 	.object({
-		capabilities: z
-			.array(z.enum(PROJECT_CAPABILITIES))
-			.optional()
-			.describe('Explicitly declared project capabilities (auto-detected if not specified)'),
 		web: z
 			.object({
 				basePort: z
@@ -186,7 +192,8 @@ export const CapabilitiesSettingsSchema = z
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
 			})
-			.optional(),
+			.optional()
+			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
 		database: z
 			.object({
 				databaseUrlEnvVarName: z
@@ -206,10 +213,6 @@ export const CapabilitiesSettingsSchema = z
  */
 export const CapabilitiesSettingsSchemaNoDefaults = z
 	.object({
-		capabilities: z
-			.array(z.enum(PROJECT_CAPABILITIES))
-			.optional()
-			.describe('Explicitly declared project capabilities (auto-detected if not specified)'),
 		web: z
 			.object({
 				basePort: z
@@ -219,7 +222,8 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
 			})
-			.optional(),
+			.optional()
+			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
 		database: z
 			.object({
 				databaseUrlEnvVarName: z
@@ -336,7 +340,9 @@ export const IloomSettingsSchema = z.object({
 				'iloom-issue-enhancer (enhances issue descriptions), ' +
 				'iloom-issue-implementer (implements code changes), ' +
 				'iloom-code-reviewer (reviews code changes against requirements), ' +
-				'iloom-artifact-reviewer (reviews artifacts before posting)',
+				'iloom-artifact-reviewer (reviews artifacts before posting), ' +
+				'iloom-swarm-worker (swarm worker agent, dynamically generated). ' +
+				'The iloom-swarm-worker agent supports a nested "agents" sub-record for configuring phase agent models specifically in swarm mode.',
 		),
 	spin: SpinAgentSettingsSchema.optional().describe(
 		'Spin orchestrator configuration. Model defaults to opus when not configured.',
@@ -403,6 +409,18 @@ export const IloomSettingsSchema = z.object({
 						.record(z.string(), z.string())
 						.optional()
 						.describe('Map iloom states to Jira transition names (e.g., {"In Review": "Start Review"})'),
+					defaultIssueType: z
+						.string()
+						.min(1)
+						.optional()
+						.default('Task')
+						.describe('Default Jira issue type name for creating issues (e.g., "Task", "Story", "Bug")'),
+					defaultSubtaskType: z
+						.string()
+						.min(1)
+						.optional()
+						.default('Subtask')
+						.describe('Default Jira issue type name for creating subtasks/child issues (e.g., "Subtask", "Sub-task")'),
 					doneStatuses: z
 						.array(z.string())
 						.optional()
@@ -423,6 +441,12 @@ export const IloomSettingsSchema = z.object({
 				.optional()
 				.describe(
 					'Auto-commit and push after code review in draft PR mode. Defaults to true when mode is github-draft-pr.'
+				),
+			openBrowserOnFinish: z
+				.boolean()
+				.default(true)
+				.describe(
+					'Open the PR in the default browser after finishing in github-pr or github-draft-pr mode. Use --no-browser flag to override.'
 				),
 		})
 		.optional()
@@ -562,7 +586,9 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'iloom-issue-enhancer (enhances issue descriptions), ' +
 				'iloom-issue-implementer (implements code changes), ' +
 				'iloom-code-reviewer (reviews code changes against requirements), ' +
-				'iloom-artifact-reviewer (reviews artifacts before posting)',
+				'iloom-artifact-reviewer (reviews artifacts before posting), ' +
+				'iloom-swarm-worker (swarm worker agent, dynamically generated). ' +
+				'The iloom-swarm-worker agent supports a nested "agents" sub-record for configuring phase agent models specifically in swarm mode.',
 		),
 	spin: z
 		.object({
@@ -639,6 +665,16 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 						.record(z.string(), z.string())
 						.optional()
 						.describe('Map iloom states to Jira transition names (e.g., {"In Review": "Start Review"})'),
+					defaultIssueType: z
+						.string()
+						.min(1)
+						.optional()
+						.describe('Default Jira issue type name for creating issues (e.g., "Task", "Story", "Bug")'),
+					defaultSubtaskType: z
+						.string()
+						.min(1)
+						.optional()
+						.describe('Default Jira issue type name for creating subtasks/child issues (e.g., "Subtask", "Sub-task")'),
 					doneStatuses: z
 						.array(z.string())
 						.optional()
@@ -658,6 +694,12 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				.optional()
 				.describe(
 					'Auto-commit and push after code review in draft PR mode. Defaults to true when mode is github-draft-pr.'
+				),
+			openBrowserOnFinish: z
+				.boolean()
+				.optional()
+				.describe(
+					'Open the PR in the default browser after finishing in github-pr or github-draft-pr mode. Use --no-browser flag to override.'
 				),
 		})
 		.optional()
@@ -778,6 +820,25 @@ export type IloomSettings = z.infer<typeof IloomSettingsSchema>
  */
 export type IloomSettingsInput = z.input<typeof IloomSettingsSchema>
 
+function redactSensitiveFields(obj: unknown): unknown {
+	if (obj === null || obj === undefined) return obj
+	if (typeof obj !== 'object') return obj
+	if (Array.isArray(obj)) return obj.map(redactSensitiveFields)
+	const sensitiveKeys = ['apitoken', 'token', 'secret', 'password']
+	const result: Record<string, unknown> = {}
+	for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+		const lowerKey = key.toLowerCase()
+		if (sensitiveKeys.some(s => lowerKey.includes(s)) && typeof value === 'string') {
+			result[key] = '[REDACTED]'
+		} else if (typeof value === 'object' && value !== null) {
+			result[key] = redactSensitiveFields(value)
+		} else {
+			result[key] = value
+		}
+	}
+	return result
+}
+
 /**
  * Manages project-level settings from .iloom/settings.json
  */
@@ -800,26 +861,26 @@ export class SettingsManager {
 		// Load global settings (lowest priority)
 		const globalSettings = await this.loadGlobalSettingsFile()
 		const globalSettingsPath = this.getGlobalSettingsPath()
-		logger.debug(`🌍 Global settings from ${globalSettingsPath}:`, JSON.stringify(globalSettings, null, 2))
+		logger.debug(`🌍 Global settings from ${globalSettingsPath}:`, JSON.stringify(redactSensitiveFields(globalSettings), null, 2))
 
 		// Load base settings from settings.json
 		const baseSettings = await this.loadSettingsFile(root, 'settings.json')
 		const baseSettingsPath = path.join(root, '.iloom', 'settings.json')
-		logger.debug(`📄 Base settings from ${baseSettingsPath}:`, JSON.stringify(baseSettings, null, 2))
+		logger.debug(`📄 Base settings from ${baseSettingsPath}:`, JSON.stringify(redactSensitiveFields(baseSettings), null, 2))
 
 		// Load local overrides from settings.local.json
 		const localSettings = await this.loadSettingsFile(root, 'settings.local.json')
 		const localSettingsPath = path.join(root, '.iloom', 'settings.local.json')
-		logger.debug(`📄 Local settings from ${localSettingsPath}:`, JSON.stringify(localSettings, null, 2))
+		logger.debug(`📄 Local settings from ${localSettingsPath}:`, JSON.stringify(redactSensitiveFields(localSettings), null, 2))
 
 		// Deep merge with priority: cliOverrides > localSettings > baseSettings > globalSettings
 		let merged = this.mergeSettings(this.mergeSettings(globalSettings, baseSettings), localSettings)
-		logger.debug('🔄 After merging global + base + local settings:', JSON.stringify(merged, null, 2))
+		logger.debug('🔄 After merging global + base + local settings:', JSON.stringify(redactSensitiveFields(merged), null, 2))
 
 		if (cliOverrides && Object.keys(cliOverrides).length > 0) {
-			logger.debug('⚙️ CLI overrides to apply:', JSON.stringify(cliOverrides, null, 2))
+			logger.debug('⚙️ CLI overrides to apply:', JSON.stringify(redactSensitiveFields(cliOverrides), null, 2))
 			merged = this.mergeSettings(merged, cliOverrides)
-			logger.debug('🔄 After applying CLI overrides:', JSON.stringify(merged, null, 2))
+			logger.debug('🔄 After applying CLI overrides:', JSON.stringify(redactSensitiveFields(merged), null, 2))
 		}
 
 		// Validate merged result
@@ -848,7 +909,7 @@ export class SettingsManager {
 	 * Log the final merged configuration for debugging
 	 */
 	private logFinalConfiguration(settings: IloomSettings): void {
-		logger.debug('📋 Final merged configuration:', JSON.stringify(settings, null, 2))
+		logger.debug('📋 Final merged configuration:', JSON.stringify(redactSensitiveFields(settings), null, 2))
 	}
 
 	/**

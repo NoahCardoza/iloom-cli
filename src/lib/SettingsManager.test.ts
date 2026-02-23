@@ -3257,4 +3257,298 @@ const error: { code?: string; message: string } = {
 			expect(result.git?.commitTimeout).toBe(600000)
 		})
 	})
+
+	describe('AgentSettingsSchema with nested swarm agent overrides', () => {
+		it('should accept agents with nested agents sub-record for swarm-worker', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						model: 'sonnet',
+						agents: {
+							'iloom-issue-implementer': { model: 'haiku' },
+						},
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-swarm-worker']?.agents?.['iloom-issue-implementer']?.model).toBe('haiku')
+			expect(result.agents?.['iloom-swarm-worker']?.model).toBe('sonnet')
+		})
+
+		it('should accept agents without nested agents sub-record (backward compat)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						model: 'opus',
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-swarm-worker']?.model).toBe('opus')
+			expect(result.agents?.['iloom-swarm-worker']?.agents).toBeUndefined()
+		})
+
+		it('should validate model enum in nested agent settings', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						model: 'sonnet',
+						agents: {
+							'iloom-issue-implementer': { model: 'invalid' },
+						},
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow('Settings validation failed')
+		})
+
+		it('should merge nested swarm agent overrides from local settings', async () => {
+			const projectRoot = '/test/project'
+			const baseSettings = {
+				agents: {
+					'iloom-swarm-worker': {
+						model: 'sonnet',
+						agents: {
+							'iloom-issue-implementer': { model: 'opus' },
+						},
+					},
+				},
+			}
+			const localSettings = {
+				agents: {
+					'iloom-swarm-worker': {
+						agents: {
+							'iloom-issue-implementer': { model: 'haiku' },
+						},
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(baseSettings)) // settings.json
+				.mockResolvedValueOnce(JSON.stringify(localSettings)) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			// Local override should win
+			expect(result.agents?.['iloom-swarm-worker']?.agents?.['iloom-issue-implementer']?.model).toBe('haiku')
+			// Base model should be preserved via deep merge
+			expect(result.agents?.['iloom-swarm-worker']?.model).toBe('sonnet')
+		})
+
+		it('should accept multiple nested agent overrides under swarm-worker', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						model: 'sonnet',
+						agents: {
+							'iloom-issue-implementer': { model: 'haiku' },
+							'iloom-issue-planner': { model: 'opus' },
+						},
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-swarm-worker']?.agents?.['iloom-issue-implementer']?.model).toBe('haiku')
+			expect(result.agents?.['iloom-swarm-worker']?.agents?.['iloom-issue-planner']?.model).toBe('opus')
+		})
+	})
+
+	describe('AgentSettingsSchema subAgentTimeout', () => {
+		it('should accept valid subAgentTimeout on swarm-worker', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						model: 'sonnet',
+						subAgentTimeout: 30,
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-swarm-worker']?.subAgentTimeout).toBe(30)
+		})
+
+		it('should accept subAgentTimeout of 1 minute (minimum)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						subAgentTimeout: 1,
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-swarm-worker']?.subAgentTimeout).toBe(1)
+		})
+
+		it('should accept subAgentTimeout of 120 minutes (maximum)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						subAgentTimeout: 120,
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-swarm-worker']?.subAgentTimeout).toBe(120)
+		})
+
+		it('should reject subAgentTimeout below 1 minute', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						subAgentTimeout: 0,
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow('Settings validation failed')
+		})
+
+		it('should reject subAgentTimeout above 120 minutes', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						subAgentTimeout: 121,
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow('Settings validation failed')
+		})
+
+		it('should leave subAgentTimeout undefined when not configured', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						model: 'sonnet',
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-swarm-worker']?.subAgentTimeout).toBeUndefined()
+		})
+	})
 })

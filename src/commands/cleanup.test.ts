@@ -6,6 +6,22 @@ import { logger } from '../../src/utils/logger.js'
 import { promptConfirmation } from '../../src/utils/prompt.js'
 import type { CleanupResult, SafetyCheck } from '../../src/types/cleanup.js'
 
+// Mock TelemetryService
+const mockTrack = vi.fn()
+vi.mock('../../src/lib/TelemetryService.js', () => ({
+  TelemetryService: {
+    getInstance: () => ({ track: mockTrack }),
+  },
+}))
+
+// Mock MetadataManager for telemetry duration calculation
+const mockReadMetadata = vi.fn().mockResolvedValue(null)
+vi.mock('../../src/lib/MetadataManager.js', () => ({
+  MetadataManager: vi.fn(() => ({
+    readMetadata: mockReadMetadata,
+  })),
+}))
+
 // Mock dependencies
 vi.mock('../../src/lib/GitWorktreeManager.js')
 vi.mock('../../src/lib/ResourceCleanup.js')
@@ -129,7 +145,7 @@ describe('CleanupCommand', () => {
       })
 
       expect(logger.info).toHaveBeenCalledWith('Cleanup mode: issue')
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #42...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #42...')
     })
 
     it('should handle issue mode with number 1', async () => {
@@ -137,7 +153,7 @@ describe('CleanupCommand', () => {
         options: { issue: 1 }
       })
 
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #1...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #1...')
     })
 
     it('should handle issue mode with large number', async () => {
@@ -145,7 +161,7 @@ describe('CleanupCommand', () => {
         options: { issue: 999 }
       })
 
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #999...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #999...')
     })
   })
 
@@ -157,7 +173,7 @@ describe('CleanupCommand', () => {
       })
 
       expect(logger.info).toHaveBeenCalledWith('Cleanup mode: issue')
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #42...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #42...')
     })
 
     it('should detect "123" as issue number', async () => {
@@ -166,7 +182,7 @@ describe('CleanupCommand', () => {
         options: {}
       })
 
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #123...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #123...')
     })
 
     it('should detect "1" as issue number', async () => {
@@ -175,7 +191,7 @@ describe('CleanupCommand', () => {
         options: {}
       })
 
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #1...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #1...')
     })
 
     it('should detect "0" as issue number (edge case)', async () => {
@@ -184,7 +200,7 @@ describe('CleanupCommand', () => {
         options: {}
       })
 
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #0...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #0...')
     })
 
     it('should parse numeric string to integer correctly', async () => {
@@ -194,7 +210,7 @@ describe('CleanupCommand', () => {
       })
 
       // Should parse as integer 7, not string "007"
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #7...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #7...')
     })
   })
 
@@ -223,7 +239,7 @@ describe('CleanupCommand', () => {
       })
 
       // Should use explicit issue flag (99), not auto-detected (42)
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #99...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #99...')
     })
   })
 
@@ -420,7 +436,7 @@ describe('CleanupCommand', () => {
       })
 
       // Should parse to integer 7
-      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #7...')
+      expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #7...')
     })
 
 
@@ -522,7 +538,8 @@ describe('CleanupCommand', () => {
             force: false,
             deleteBranch: true,  // Now includes branch deletion with safety checks
             keepDatabase: false,
-            checkMergeSafety: true  // Run 5-point safety check before any deletion
+            checkMergeSafety: true,  // Run 5-point safety check before any deletion
+            archive: false,
           }
         )
         // No second prompt - branch deletion is handled atomically with safety checks
@@ -757,7 +774,8 @@ describe('CleanupCommand', () => {
             force: true,
             deleteBranch: true,
             keepDatabase: false,
-            checkMergeSafety: true  // checkMergeSafety is still passed, but force bypasses it in ResourceCleanup
+            checkMergeSafety: true,  // checkMergeSafety is still passed, but force bypasses it in ResourceCleanup
+            archive: false,
           }
         )
       })
@@ -811,7 +829,8 @@ describe('CleanupCommand', () => {
             force: false,
             deleteBranch: true,  // Still includes branch deletion in dry run
             keepDatabase: false,
-            checkMergeSafety: true
+            checkMergeSafety: true,
+            archive: false,
           }
         )
       })
@@ -971,7 +990,8 @@ describe('CleanupCommand', () => {
             force: false,
             deleteBranch: true,  // Now always true to enable safety checks before any deletion
             keepDatabase: false,
-            checkMergeSafety: true  // Run 5-point safety check
+            checkMergeSafety: true,  // Run 5-point safety check
+            archive: false,
           }
         )
       })
@@ -1029,7 +1049,7 @@ describe('CleanupCommand', () => {
           options: { issue: 25 }
         })
 
-        expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to GitHub issue/PR #25...')
+        expect(logger.info).toHaveBeenCalledWith('Finding worktrees related to issue/PR #25...')
         expect(logger.info).toHaveBeenCalledWith('Found 2 worktree(s) related to issue/PR #25:')
       })
 
@@ -1057,7 +1077,7 @@ describe('CleanupCommand', () => {
           options: { issue: 25 }
         })
 
-        expect(logger.warn).toHaveBeenCalledWith('No worktrees found for GitHub issue/PR #25')
+        expect(logger.warn).toHaveBeenCalledWith('No worktrees found for issue/PR #25')
       })
 
       it('should handle no matching worktrees found', async () => {
@@ -1068,7 +1088,7 @@ describe('CleanupCommand', () => {
           options: { issue: 99999 }
         })
 
-        expect(logger.warn).toHaveBeenCalledWith('No worktrees found for GitHub issue/PR #99999')
+        expect(logger.warn).toHaveBeenCalledWith('No worktrees found for issue/PR #99999')
         expect(logger.info).toHaveBeenCalledWith('Searched for worktree paths containing: 99999, _pr_99999, issue-99999, etc.')
       })
 
@@ -1134,7 +1154,9 @@ describe('CleanupCommand', () => {
             force: false,
             deleteBranch: true,  // Now includes branch deletion with safety checks
             keepDatabase: false,
-            checkMergeSafety: true  // Run 5-point safety check BEFORE any deletion
+            checkMergeSafety: true,  // Run 5-point safety check BEFORE any deletion
+            archive: false,
+            worktree: { path: '/repo/issue-25', branch: 'issue-25' },
           }
         )
       })
@@ -1273,6 +1295,110 @@ describe('CleanupCommand', () => {
 
       // Should NOT have logged the waiting message since validation failed first
       expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('Waiting'))
+    })
+  })
+
+  describe('telemetry', () => {
+    let mockResourceCleanup: vi.Mocked<ResourceCleanup>
+
+    beforeEach(() => {
+      mockGitWorktreeManager = new GitWorktreeManager() as vi.Mocked<GitWorktreeManager>
+      const mockProcessManager = {} as vi.Mocked<import('../../src/lib/process/ProcessManager.js').ProcessManager>
+      mockResourceCleanup = new ResourceCleanup(mockGitWorktreeManager, mockProcessManager) as vi.Mocked<ResourceCleanup>
+      command = new CleanupCommand(mockGitWorktreeManager, mockResourceCleanup)
+
+      mockGitWorktreeManager.findWorktreeForBranch = vi.fn()
+      mockGitWorktreeManager.findWorktreeForIssue = vi.fn()
+      mockGitWorktreeManager.findWorktreeForPR = vi.fn()
+    })
+
+    it('should track loom.abandoned for unfinished loom', async () => {
+      const mockWorktree = { path: '/path/to/worktree', branch: 'feat/my-feature', commit: 'abc123', bare: false, detached: false, locked: false }
+      mockGitWorktreeManager.findWorktreeForBranch = vi.fn().mockResolvedValue(mockWorktree)
+
+      // Mock metadata for an unfinished loom
+      mockReadMetadata.mockResolvedValue({
+        created_at: new Date(Date.now() - 30 * 60000).toISOString(), // 30 minutes ago
+        status: 'active',
+        state: 'in_progress',
+      })
+
+      vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
+
+      const mockResult: CleanupResult = {
+        identifier: 'feat/my-feature',
+        success: true,
+        operations: [
+          { type: 'worktree', success: true, message: 'Worktree removed' },
+        ],
+        errors: [],
+      }
+      mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
+
+      await command.execute({ identifier: 'feat/my-feature', options: {} })
+
+      expect(mockTrack).toHaveBeenCalledWith('loom.abandoned', {
+        duration_minutes: expect.any(Number),
+        phase_reached: 'in_progress',
+      })
+    })
+
+    it('should not track loom.abandoned for already-finished loom', async () => {
+      const mockWorktree = { path: '/path/to/worktree', branch: 'feat/my-feature', commit: 'abc123', bare: false, detached: false, locked: false }
+      mockGitWorktreeManager.findWorktreeForBranch = vi.fn().mockResolvedValue(mockWorktree)
+
+      // Mock metadata for a finished loom
+      mockReadMetadata.mockResolvedValue({
+        created_at: new Date(Date.now() - 30 * 60000).toISOString(),
+        status: 'finished',
+        state: 'done',
+      })
+
+      vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
+
+      const mockResult: CleanupResult = {
+        identifier: 'feat/my-feature',
+        success: true,
+        operations: [
+          { type: 'worktree', success: true, message: 'Worktree removed' },
+        ],
+        errors: [],
+      }
+      mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
+
+      await command.execute({ identifier: 'feat/my-feature', options: {} })
+
+      expect(mockTrack).not.toHaveBeenCalled()
+    })
+
+    it('should use unknown phase when state is null', async () => {
+      const mockWorktree = { path: '/path/to/worktree', branch: 'feat/my-feature', commit: 'abc123', bare: false, detached: false, locked: false }
+      mockGitWorktreeManager.findWorktreeForBranch = vi.fn().mockResolvedValue(mockWorktree)
+
+      mockReadMetadata.mockResolvedValue({
+        created_at: new Date(Date.now() - 10 * 60000).toISOString(),
+        status: 'active',
+        state: null,
+      })
+
+      vi.mocked(promptConfirmation).mockResolvedValueOnce(true)
+
+      const mockResult: CleanupResult = {
+        identifier: 'feat/my-feature',
+        success: true,
+        operations: [
+          { type: 'worktree', success: true, message: 'Worktree removed' },
+        ],
+        errors: [],
+      }
+      mockResourceCleanup.cleanupWorktree = vi.fn().mockResolvedValue(mockResult)
+
+      await command.execute({ identifier: 'feat/my-feature', options: {} })
+
+      expect(mockTrack).toHaveBeenCalledWith('loom.abandoned', {
+        duration_minutes: expect.any(Number),
+        phase_reached: 'unknown',
+      })
     })
   })
 })

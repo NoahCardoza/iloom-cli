@@ -149,6 +149,8 @@ export interface StartOptions {
   terminal?: boolean
   // Child loom control flag
   childLoom?: boolean
+  // Epic loom control flag (for issues with child issues)
+  epic?: boolean
   // One-shot automation mode
   oneShot?: OneShotMode
   // Optional body text for issue creation
@@ -184,6 +186,7 @@ export interface FinishOptions {
   json?: boolean      // --json - Output result as JSON
   skipToPr?: boolean  // --skip-to-pr - Skip rebase/validation/commit, go directly to PR creation (debug)
   jsonStream?: boolean // --json-stream - Stream JSONL output for Claude conflict resolution
+  review?: boolean    // --review - Review commit message before committing (default: auto-commit without review)
 }
 
 /**
@@ -205,6 +208,8 @@ export interface CleanupOptions {
   json?: boolean
   /** Wait specified milliseconds before cleanup execution */
   defer?: number
+  /** Archive metadata instead of deleting (preserves loom in il list --finished) */
+  archive?: boolean
 }
 
 export interface ListOptions {
@@ -232,15 +237,16 @@ export interface StartResult {
   path: string
   branch: string
   port?: number
-  type: 'issue' | 'pr' | 'branch'
+  type: 'issue' | 'pr' | 'branch' | 'epic'
   identifier: string | number
   title?: string
   capabilities?: string[]
+  childIssueNumbers?: string[]
 }
 
 export interface FinishResult {
   success: boolean
-  type: 'issue' | 'pr' | 'branch'
+  type: 'issue' | 'pr' | 'branch' | 'epic'
   identifier: string | number
   /** Whether this was a dry-run operation */
   dryRun?: boolean
@@ -259,7 +265,7 @@ export interface SummaryResult {
   sessionId: string
   issueNumber?: string | number
   branchName: string
-  loomType: 'issue' | 'pr' | 'branch'
+  loomType: 'issue' | 'pr' | 'branch' | 'epic'
 }
 
 export interface RebaseResult {
@@ -392,3 +398,6 @@ export interface UpdateCheckResult {
 }
 
 export type InstallationMethod = 'global' | 'local' | 'linked' | 'unknown'
+
+// Telemetry types
+export * from './telemetry.js'

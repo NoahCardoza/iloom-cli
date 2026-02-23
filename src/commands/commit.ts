@@ -238,7 +238,7 @@ export class CommitCommand {
 	 */
 	private async autoDetectIssue(worktreePath: string): Promise<{
 		issueNumber: string | number | undefined
-		loomType: 'issue' | 'pr' | 'branch'
+		loomType: 'issue' | 'pr' | 'branch' | 'epic'
 	}> {
 		const logger = getLogger()
 		const currentDir = path.basename(worktreePath)

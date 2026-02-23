@@ -18,46 +18,17 @@ iloom
 
 #### Links to key sections
 
-[How It Works](#how-it-works-the-multi-agent-workflow) • [Installation](#quick-start) • [Configuration](#configuration) • [Advanced Features](#advanced-features) • [Limitations](#system-requirements--limitations) • [Contributing](#contributing-to-iloom)
+[How It Works](#how-it-works-the-multi-agent-workflow) • [Installation](#quick-start) • [Configuration](#configuration) • [Advanced Features](#advanced-features) • [Swarm Mode](#swarm-mode-epic-orchestration) • [Telemetry](#telemetry) • [Limitations](#system-requirements--limitations) • [Contributing](#contributing-to-iloom)
 
-## Built For Modern Tools...
+## How can your team trust the code your AI wrote, when you don't?
 
-[![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org/)
-[![Neon](https://img.shields.io/badge/Neon-00E699?style=for-the-badge)](https://neon.tech/)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-8A6FFF?style=for-the-badge)](https://claude.ai/)
+Your agent just shipped a 2,000-line PR. Why did it restructure that module? What assumptions did it make about the auth flow? Nobody knows. The reasoning evaporated when the chat session ended, and now your teammate is staring at a diff with zero context. Good luck getting that reviewed.
 
-...To Solve A Very Modern Problem
----------------------------------
+iloom persists the AI's analysis, plans, decisions, and risks as comments in your issue tracker. Not chat logs you'll never reopen. Not markdown files littering the repo. Your actual tracker, where your team can see what happened and why. That mountain of code you're sending for review? Now it comes with the reasoning behind it.
 
-The promise of AI-assisted development is profound: write more code, ship features faster. But there is a hidden cost. **AI agents write code quickly, but they struggle to stay in sync with their humans.**
+This matters because to get the most out of agents, you need to be multitasking across several of them. iloom gives every task its own isolated environment (git worktree, DB branch, unique port), and because all the reasoning is persisted, you can context-switch between tasks without losing the thread. The [VS Code extension](https://marketplace.visualstudio.com/items?itemName=iloom-ai.iloom-vscode) lets you catch up with any agent in seconds. Your teammates can pick up where you left off without a briefing.
 
-The hard part isn't generating code, it's maintaining the shared mental model of _why_ that code exists. When you rely on ephemeral chat windows, friction piles up:
-
-*   You constantly re-brief the AI on the same context.
-    
-*   Hidden assumptions creep in (e.g., "Why did it use Axios instead of fetch?").
-    
-*   You spend more time reviewing and "babysitting" the AI than building.
-    
-
-**The bottleneck isn't output velocity. It's maintaining alignment between human and AI at scale.**
-
-### The iloom Approach: Context as Infrastructure
-
-iloom stops the "Context Window Tetris." It treats context as a first-class concern, persisting your AI's reasoning in **issue comments** rather than temporary chats.
-
-*   **Stop Babysitting, Start Collaborating:** Instead of arguing with Claude in a chat, you review structured analysis plans in your issue tracker _before_ a single line of code is written.
-    
-*   **Scale Understanding:** Because every loom holds its own isolated environment (Git worktree, DB branch, local server), you can switch between 5 complex features without losing your place or your AI's context.
-    
-*   **Visible Reasoning:** The AI's decisions are documented publicly. Your team sees the plan, and "future you" knows exactly why a decision was made.
-
-*   **Automatic Session Summaries:** When you finish a loom, iloom captures key insights, decisions, and lessons learned from your Claude session and posts them to the issue. These summaries become institutional knowledge that informs future tasks.
-
-
-_iloom is not just a tool for managing git worktrees - it's a control plane for maintaining alignment between you and your AI assistant._
+When a task outgrows one agent, `il plan` decomposes it into child issues with dependencies, and swarm mode launches parallel agents to execute them, each in its own worktree, running the full iloom workflow. You can one-shot entire features, entire products, and stay aligned. The VS Code extension gives you a Kanban board and dependency graph so you can see what's running, what's blocked, and what's done. The only real limit is your imagination. And maybe your Claude subscription.
 
 Quick Start
 -----------
@@ -105,6 +76,8 @@ Instead of a single generic prompt, iloom uses a pipeline of specialized agents:
 *   **Planner:** Creates an execution plan with parallelization analysis—identifying which steps can run concurrently vs. sequentially. Plans reference specific files and line numbers, making them actionable and precise.
 
 *   **Implementer:** Executes the plan using the context established in the previous steps. For complex tasks, multiple implementers can run in parallel on independent steps.
+
+*   **Swarm Orchestrator:** For epics with child issues, iloom enters [swarm mode](#swarm-mode-epic-orchestration)—launching parallel agent teams that implement each child issue autonomously in its own worktree, respecting dependency order.
     
 
 ### 2. Interactive Control
@@ -128,6 +101,15 @@ Each loom is a fully isolated container for your work:
 
 *   **Environment Variables:** Each loom has its own environment files (`.env`, `.env.local`, `.env.development`, `.env.development.local`). Uses `development` by default, override with `DOTENV_FLOW_NODE_ENV`. See [Secret Storage Limitations](#multi-language-project-support) for frameworks with encrypted credentials.
 
+    When inside a loom shell (`il shell`), the following environment variables are automatically set:
+
+    | Variable | Description | Example |
+    |----------|-------------|---------|
+    | `ILOOM_LOOM` | Loom identifier for PS1 customization | `issue-87` |
+    | `ILOOM_COLOR_HEX` | Hex color assigned to this loom (if available) | `#dcebff` |
+
+    `ILOOM_COLOR_HEX` is useful for downstream tools that want to visually distinguish looms. For example, a Vite app can read it via `import.meta.env.VITE_ILOOM_COLOR_HEX` to tint the UI. See [Vite Integration Guide](docs/vite-iloom-color.md) for details.
+
 *   **Unique Runtime:**
     
     *   **Web Apps:** Runs on a deterministic port (e.g., base port 3000 + issue #25 = 3025).
@@ -142,13 +124,13 @@ Command Reference
 
 | **Command** | **Alias** |  **Description** |
 | ------ | ----- | -----|
-| `il start` | `new` | Create loom, run analysis agents, and launch IDE. |
+| `il start` | `new` | Create loom, run analysis agents, and launch IDE. Auto-detects epics with child issues for [swarm mode](#swarm-mode-epic-orchestration). |
 | `il commit` | `c` | Commit all files with issue reference (`Refs #N` or `Fixes #N`). |
 | `il finish` | `dn` | Validate tests/lint, commit, handle conflicts, and merge/PR. |
 | `il cleanup` | `remove` | Safely remove a loom and its database branch without merging. |
-| `il list` |  | Show active looms for current project. `--finished` for archived, `--all` for active + archived, `--global` for looms across all projects. |
+| `il list` |  | Show active looms for current project. `--finished` for archived, `--all` for active + archived, `--global` for looms across all projects. JSON output includes `swarmIssues` and `dependencyMap` for epic looms. |
 | `il projects` |  | List configured projects (JSON output). |
-| `il spin` |  | Launch Claude inside the current loom with context auto-detected. |
+| `il spin` |  | Launch Claude inside the current loom with context auto-detected. In epic looms, enters [swarm mode](#swarm-mode-epic-orchestration) with parallel agent orchestration. |
 | `il open` | `run` | Open loom in browser (web) or run your CLI tool. |
 | `il vscode` |  | Install iloom VS Code extension and open workspace in VS Code. |
 | `il dev-server` | `dev` | Start dev server in foreground for a workspace. |
@@ -162,6 +144,7 @@ Command Reference
 | `il init` | `config` | Interactive configuration wizard. |
 | `il feedback` | `f` | Submit bug reports/feedback directly from the CLI. |
 | `il update` |  | Update iloom CLI to the latest version. |
+| `il telemetry` |  | Manage anonymous usage telemetry (`on`, `off`, `status`). |
 
 For detailed documentation including all command options, flags, and examples, see the [Complete Command Reference](docs/iloom-commands.md).
 
@@ -596,6 +579,88 @@ il plan --yolo "Add GitLab integration"
 
 See the [Complete Command Reference](docs/iloom-commands.md#il-plan) for all options including `--model`, `--planner`, and `--reviewer` flags.
 
+### Swarm Mode (Epic Orchestration)
+
+Swarm mode enables automatic, parallel execution of an entire epic by coordinating a team of AI agents. Each child issue gets its own worktree and agent, all working simultaneously while respecting dependency order.
+
+**Prerequisite:** Decompose your epic into child issues with dependencies first, using `il plan` or manually creating child issues and setting up blocking relationships.
+
+**How to trigger:**
+
+```bash
+# Auto-detect: iloom checks for child issues and prompts
+il start 100
+
+# Force epic mode (skip prompt)
+il start 100 --epic
+
+# Force normal loom even if children exist
+il start 100 --no-epic
+```
+
+When you run `il spin` inside the epic loom, swarm mode activates:
+
+1. **Child worktrees** are created for each child issue, branched off the epic branch
+2. **Swarm agents and skill files** are rendered into the epic loom's `.claude/` directory
+3. **Dependency DAG** is fetched from your issue tracker (blocking relationships between children)
+4. **Orchestrator launches** with Claude's experimental agent teams, using `bypassPermissions` mode
+5. **Parallel agents** are spawned for all unblocked child issues simultaneously
+6. As agents complete, their work is **rebased and fast-forward merged** into the epic branch
+7. **Newly unblocked issues** are spawned automatically as their dependencies finish
+8. **Failed children** are isolated — they don't block unrelated issues
+
+**Example workflow:**
+
+```bash
+# 1. Plan and decompose your epic
+il plan 100
+
+# 2. Start the epic loom (auto-detects children)
+il start 100 --epic
+
+# 3. Launch swarm mode
+il spin
+# The orchestrator takes over — parallel agents implement each child issue,
+# merge completed work, and handle failures autonomously.
+```
+
+Each child issue tracks its lifecycle state: `pending` -> `in_progress` -> `done` / `failed`. Use `il list --json` to see `swarmIssues` with per-child states and the `dependencyMap` for epic looms.
+
+For detailed reference on swarm mode behavior, see the [Complete Command Reference](docs/iloom-commands.md#swarm-mode-epic-orchestration).
+
+Telemetry
+---------
+
+iloom collects anonymous usage data to help improve the product. This data helps us understand which features are used, identify common errors, and prioritize development efforts.
+
+**What IS collected:**
+- Anonymous event data: command usage, feature adoption, and error types
+- An anonymous identifier (not linked to your identity)
+
+**What is NOT collected:**
+- GitHub/Linear/Jira usernames or emails
+- Repository names or URLs
+- Issue titles, descriptions, or content
+- File paths or code content
+- Branch names
+- AI analysis or plan content
+- Anything that could identify a specific project or person
+
+**Opt out at any time:**
+
+```bash
+# Disable telemetry
+il telemetry off
+
+# Check current status
+il telemetry status
+
+# Re-enable telemetry
+il telemetry on
+```
+
+On first run, iloom displays a disclosure message informing you that telemetry is enabled and how to opt out.
+
 System Requirements & Limitations
 ---------------------------------
 
@@ -657,6 +722,11 @@ This command:
 
 The draft PR workflow is ideal for open source: as you work, iloom posts the AI's analysis, implementation plan, and progress directly to that draft PR—giving maintainers full context before the code is even ready for review.
 
+Acknowledgments
+----------------
+
+- [@NoahCardoza](https://github.com/NoahCardoza) — Jira Cloud integration (PR [#588](https://github.com/iloom-ai/iloom-cli/pull/588)): JiraApiClient, JiraIssueTracker, ADF/Markdown conversion, MCP provider, sprint/mine filtering, and `il issues` Jira support.
+
 License & Name
 --------------
 
@@ -668,7 +738,7 @@ License & Name
     
 *   ❌ You cannot resell iloom itself as a product or SaaS.
     
-*   Converts to Apache 2.0 on 2030-02-16.
+*   Converts to Apache 2.0 on 2030-02-23.
     
 
 See [LICENSE](https://raw.githubusercontent.com/iloom-ai/iloom-cli/main/LICENSE) for complete terms.

@@ -388,6 +388,46 @@ export async function updateLinearIssueState(
 }
 
 /**
+ * Edit a Linear issue's properties (title, description)
+ * @param identifier - Linear issue identifier (e.g., "ENG-123")
+ * @param updates - Fields to update
+ * @throws LinearServiceError on update failure
+ */
+export async function editLinearIssue(
+  identifier: string,
+  updates: { title?: string; description?: string },
+): Promise<void> {
+  try {
+    logger.debug(`Editing Linear issue ${identifier}`, { updates })
+    const client = createLinearClient()
+
+    // Get issue by identifier
+    const issue = await client.issue(identifier)
+    if (!issue) {
+      throw new LinearServiceError('NOT_FOUND', `Linear issue ${identifier} not found`)
+    }
+
+    // Build update payload
+    const updatePayload: { title?: string; description?: string } = {}
+    if (updates.title !== undefined) {
+      updatePayload.title = updates.title
+    }
+    if (updates.description !== undefined) {
+      updatePayload.description = updates.description
+    }
+
+    if (Object.keys(updatePayload).length > 0) {
+      await client.updateIssue(issue.id, updatePayload)
+    }
+  } catch (error) {
+    if (error instanceof LinearServiceError) {
+      throw error
+    }
+    handleLinearError(error, 'editLinearIssue')
+  }
+}
+
+/**
  * Get a specific comment by ID
  * @param commentId - Linear comment UUID
  * @returns Comment details
@@ -720,12 +760,12 @@ export interface LinearIssueListItem {
  */
 export async function fetchLinearIssueList(
   teamKey: string,
-  options?: { limit?: number; apiToken?: string },
+  options?: { limit?: number; apiToken?: string; mine?: boolean },
 ): Promise<LinearIssueListItem[]> {
   try {
     const limit = options?.limit ?? 100
 
-    logger.debug(`Fetching Linear issue list for team ${teamKey}`, { limit })
+    logger.debug(`Fetching Linear issue list for team ${teamKey}`, { limit, mine: options?.mine })
     const client = createLinearClient(options?.apiToken)
 
     // Get team by key
@@ -736,18 +776,27 @@ export async function fetchLinearIssueList(
       throw new LinearServiceError('NOT_FOUND', `Linear team ${teamKey} not found`)
     }
 
+    // Build filter: always exclude completed/canceled states
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Linear SDK filter types are complex and not fully exported
+    const filter: any = {
+      state: {
+        type: {
+          nin: ['completed', 'canceled'],
+        },
+      },
+    }
+
+    // When --mine is set, filter to issues assigned to the authenticated user
+    if (options?.mine) {
+      filter.assignee = { isMe: { eq: true } }
+    }
+
     // Fetch issues: filter out completed and canceled states, order by updatedAt
     const issues = await team.issues({
       first: limit,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- PaginationOrderBy is a const enum incompatible with isolatedModules
       orderBy: 'updatedAt' as any,
-      filter: {
-        state: {
-          type: {
-            nin: ['completed', 'canceled'],
-          },
-        },
-      },
+      filter,
     })
 
     // Build results, resolving state names in parallel

@@ -7,6 +7,17 @@ color: cyan
 
 You are an expert code reviewer. Your task is to analyze uncommitted code changes and provide actionable feedback.
 
+{{#if SWARM_MODE}}
+## Swarm Mode
+
+**You are running in swarm mode as part of an autonomous workflow.**
+
+- **State transition**: Call `recap.set_loom_state` with state `code_review` at the start of your review. Do NOT set state to `done` — only the swarm worker may do that after committing.
+- **No human interaction**: Do NOT ask the user about critical issues. Report all findings directly to the caller.
+- **Concise output**: Return structured review results suitable for the orchestrator to process.
+- **Autonomous handling**: If critical issues are found, report them but do NOT wait for user confirmation.
+{{/if}}
+
 ## Do NOT Review Temporal Information
 
 **IMPORTANT:** Do NOT flag issues related to information that may have changed since your training data cutoff. This includes:
@@ -164,6 +175,7 @@ Look for:
 - Nested ternary operators (more than 2 levels)
 - Overly complex conditionals that could be simplified
 - Unnecessary abstractions
+- Unnecessary operations (e.g., writing config/state that matches application defaults, creating files the system doesn't need)
 - Code that could be more explicit/readable
 - Duplicated logic that could be extracted
 
@@ -382,6 +394,7 @@ Look for:
 - Nested ternary operators (more than 2 levels)
 - Overly complex conditionals that could be simplified
 - Unnecessary abstractions
+- Unnecessary operations (e.g., writing config/state that matches application defaults, creating files the system doesn't need)
 - Code that could be more explicit/readable
 - Duplicated logic that could be extracted
 
@@ -611,6 +624,7 @@ Look for:
 - Nested ternary operators (more than 2 levels)
 - Overly complex conditionals that could be simplified
 - Unnecessary abstractions
+- Unnecessary operations (e.g., writing config/state that matches application defaults, creating files the system doesn't need)
 - Code that could be more explicit/readable
 - Duplicated logic that could be extracted
 

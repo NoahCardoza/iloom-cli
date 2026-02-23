@@ -1,4 +1,3 @@
-// When updating this type, also update PROJECT_CAPABILITIES in src/lib/SettingsManager.ts
 export type ProjectCapability = 'cli' | 'web'
 export type Capability = ProjectCapability
 
@@ -6,7 +5,7 @@ export interface Loom {
   id: string
   path: string
   branch: string
-  type: 'issue' | 'pr' | 'branch'
+  type: 'issue' | 'pr' | 'branch' | 'epic'
   identifier: string | number
   port: number
   databaseBranch?: string
@@ -25,12 +24,12 @@ export interface Loom {
 }
 
 export interface CreateLoomInput {
-  type: 'issue' | 'pr' | 'branch'
+  type: 'issue' | 'pr' | 'branch' | 'epic'
   identifier: string | number
   originalInput: string
   baseBranch?: string
   parentLoom?: {
-    type: 'issue' | 'pr' | 'branch'
+    type: 'issue' | 'pr' | 'branch' | 'epic'
     identifier: string | number
     branchName: string
     worktreePath: string
@@ -54,6 +53,17 @@ export interface CreateLoomInput {
     executablePath?: string
     // Control .env sourcing in terminal launches
     sourceEnvOnStart?: boolean
+    // Child issue numbers for epic looms
+    childIssueNumbers?: string[]
+    // Rich child issue data for epic looms (number with prefix, title, body, url)
+    childIssues?: Array<{
+      number: string
+      title: string
+      body: string
+      url: string
+    }>
+    // Dependency map for epic looms (issueNumber -> array of blocking issueNumbers)
+    dependencyMap?: Record<string, string[]>
   }
 }
 
@@ -61,7 +71,7 @@ export type LaunchMode = 'editor' | 'terminal' | 'both'
 
 export interface LoomSummary {
   id: string
-  type: 'issue' | 'pr' | 'branch'
+  type: 'issue' | 'pr' | 'branch' | 'epic'
   identifier: string | number
   title?: string
   branch: string
