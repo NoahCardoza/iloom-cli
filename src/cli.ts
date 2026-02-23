@@ -1464,14 +1464,15 @@ program
   .alias('config')
   .description('Initialize iloom configuration')
   .argument('[prompt]', 'Custom initial message to send to Claude (defaults to "Help me configure iloom settings.")')
-  .action(async (prompt?: string) => {
+  .addOption(new Option('--accept-defaults').hideHelp())
+  .action(async (prompt?: string, options?: { acceptDefaults?: boolean }) => {
     try {
       const { InitCommand } = await import('./commands/init.js')
       const command = new InitCommand()
       // Pass custom prompt if provided and non-empty
       const trimmedPrompt = prompt?.trim()
       const customPrompt = trimmedPrompt && trimmedPrompt.length > 0 ? trimmedPrompt : undefined
-      await command.execute(customPrompt)
+      await command.execute(customPrompt, options?.acceptDefaults)
     } catch (error) {
       logger.error(`Failed to initialize: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
