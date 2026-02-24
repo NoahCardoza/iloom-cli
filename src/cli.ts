@@ -20,15 +20,56 @@ import { hasMultipleRemotes } from './utils/remote.js'
 import { getIdeConfig, isIdeAvailable, getInstallHint } from './utils/ide.js'
 import { fileURLToPath } from 'url'
 import { realpathSync } from 'fs'
-import { formatLoomsForJson, formatFinishedLoomForJson } from './utils/loom-formatter.js'
+import { formatLoomsForJson, formatFinishedLoomForJson, enrichSwarmIssues } from './utils/loom-formatter.js'
 import { assembleChildrenData, type ChildrenData } from './utils/list-children.js'
 import { findMainWorktreePathWithSettings, GitCommandError, isValidGitRepo } from './utils/git.js'
+import chalk from 'chalk'
 import fs from 'fs-extra'
 import { VersionMigrationManager } from './lib/VersionMigrationManager.js'
+import { TelemetryManager } from './lib/TelemetryManager.js'
+import { TelemetryService } from './lib/TelemetryService.js'
 
 // Get package.json for version
 const __filename = fileURLToPath(import.meta.url)
 const packageJson = getPackageInfo(__filename)
+
+/**
+ * Handle telemetry lifecycle: first-run disclosure and upgrade detection.
+ * Extracted for testability.
+ */
+export function handleTelemetryLifecycle(currentVersion: string, jsonMode: boolean): void {
+  const service = TelemetryService.getInstance()
+  const telemetryManager = service.getManager()
+
+  // First-run disclosure
+  if (!telemetryManager.hasBeenDisclosed()) {
+    if (!jsonMode) {
+      logger.info('')
+      logger.info('iloom collects anonymous usage data to improve the product.')
+      logger.info('No personal information, repo names, or code is collected.')
+      logger.info('Run "il telemetry off" to disable CLI telemetry at any time.')
+      logger.info('If you also use the iloom VS Code extension, its telemetry is managed separately in VS Code settings.')
+      logger.info('')
+    }
+    telemetryManager.markDisclosed()
+    service.track('cli.installed', {
+      version: currentVersion,
+      os: process.platform,
+      node_version: process.version,
+    })
+  }
+
+  // Upgrade detection
+  const lastVersion = telemetryManager.getLastVersion()
+  if (lastVersion && lastVersion !== currentVersion) {
+    service.track('cli.upgraded', {
+      version: currentVersion,
+      previous_version: lastVersion,
+      os: process.platform,
+    })
+  }
+  telemetryManager.setLastVersion(currentVersion)
+}
 
 // Helper function to parse issue identifiers (numeric or alphanumeric)
 function parseIssueIdentifier(value: string): string | number {
@@ -96,6 +137,14 @@ program
       logger.warn(`Version migration failed: ${error instanceof Error ? error.message : 'Unknown'}`)
     }
 
+    // --- Telemetry: first-run disclosure and lifecycle events ---
+    try {
+      const jsonMode = actionCommand.opts().json === true
+      handleTelemetryLifecycle(packageJson.version, jsonMode)
+    } catch (error) {
+      logger.debug(`Telemetry: ${error instanceof Error ? error.message : String(error)}`)
+    }
+
     // Validate settings for all commands
     await validateSettingsForCommand(actionCommand)
 
@@ -122,7 +171,7 @@ async function validateSettingsForCommand(command: Command): Promise<void> {
   const commandName = command.name()
 
   // Tier 1: Commands that bypass ALL validation
-  const bypassCommands = ['help', 'init', 'update', 'contribute']
+  const bypassCommands = ['help', 'init', 'update', 'contribute', 'telemetry']
 
   if (bypassCommands.includes(commandName)) {
     return
@@ -372,6 +421,8 @@ program
   .option('--no-terminal', 'Disable terminal')
   .option('--child-loom', 'Force create as child loom (skip prompt)')
   .option('--no-child-loom', 'Force create as independent loom (skip prompt)')
+  .option('--epic', 'Create as epic loom with child issues (skip prompt; ignored if no children)')
+  .option('--no-epic', 'Skip epic loom creation even if issue has children (ignored if no children)')
   .option('--body <text>', 'Body text for issue (skips AI enhancement)')
   .option('--json', 'Output result as JSON')
   .addOption(
@@ -560,11 +611,26 @@ program
   .option('-n, --dry-run', 'Preview actions without executing')
   .option('--pr <number>', 'Treat input as PR number', parseFloat)
   .option('--skip-build', 'Skip post-merge build verification')
-  .option('--no-browser', 'Skip opening PR in browser (github-pr mode only)')
+  .option('--no-browser', 'Skip opening PR in browser (github-pr and github-draft-pr modes)')
   .option('--cleanup', 'Clean up worktree after finishing (default in local mode)')
   .option('--no-cleanup', 'Keep worktree after finishing')
+  .option('--review', 'Review commit message before committing (default: auto-commit without review)')
   .option('--json', 'Output result as JSON')
-  .action(async (identifier: string | undefined, options: FinishOptions) => {
+  .option('--json-stream', 'Stream JSONL output; runs Claude headless for conflict resolution')
+  .action(async (identifier: string | undefined, options: FinishOptions & { browser?: boolean }) => {
+    // Commander.js --no-browser creates browser:false, map to noBrowser for FinishOptions
+    if (options.browser === false) {
+      options.noBrowser = true
+    }
+
+    // Mutual exclusivity guard
+    if (options.json && options.jsonStream) {
+      logger.error('--json and --json-stream are mutually exclusive')
+      process.exit(1)
+    }
+
+    const isAnyJsonMode = options.json ?? options.jsonStream
+
     const executeAction = async (): Promise<void> => {
       try {
         const settingsManager = new SettingsManager()
@@ -572,13 +638,14 @@ program
         const issueTracker = IssueTrackerFactory.create(settings)
         const command = new FinishCommand(issueTracker)
         const result = await command.execute({ identifier, options })
-        if (options.json && result) {
-          console.log(JSON.stringify(result, null, 2))
+        if (isAnyJsonMode && result) {
+          console.log(options.jsonStream ? JSON.stringify(result) : JSON.stringify(result, null, 2))
         }
         process.exit(0)
       } catch (error) {
-        if (options.json) {
-          console.log(JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
+        if (isAnyJsonMode) {
+          const errorJson = { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+          console.log(options.jsonStream ? JSON.stringify(errorJson) : JSON.stringify(errorJson, null, 2))
         } else {
           logger.error(`Failed to finish workspace: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
@@ -591,8 +658,8 @@ program
       }
     }
 
-    // Wrap execution in logger context for JSON mode
-    if (options.json) {
+    // Wrap execution in logger context for any JSON mode
+    if (isAnyJsonMode) {
       const jsonLogger = createStderrLogger()
       await withLogger(jsonLogger, executeAction)
     } else {
@@ -608,23 +675,33 @@ program
   .option('--fixes', 'Use "Fixes #N" trailer instead of "Refs #N" (closes issue)')
   .option('--no-review', 'Skip commit message review prompt')
   .option('--json', 'Output result as JSON (implies --no-review)')
+  .option('--json-stream', 'Stream JSONL output; runs Claude headless for validation fixes')
   .option('--wip-commit', 'Quick WIP commit: skip validations and pre-commit hooks')
-  .action(async (options: { message?: string; fixes?: boolean; review?: boolean; json?: boolean; wipCommit?: boolean }) => {
+  .action(async (options: { message?: string; fixes?: boolean; review?: boolean; json?: boolean; jsonStream?: boolean; wipCommit?: boolean }) => {
+    // Mutual exclusivity guard
+    if (options.json && options.jsonStream) {
+      logger.error('--json and --json-stream are mutually exclusive')
+      process.exit(1)
+    }
+
+    const isAnyJsonMode = options.json ?? options.jsonStream
+
     const executeAction = async (): Promise<void> => {
       try {
         const { CommitCommand } = await import('./commands/commit.js')
         const command = new CommitCommand()
-        // --json implies --no-review
-        const noReview = options.review === false || options.json === true
+        // --json and --json-stream imply --no-review
+        const noReview = options.review === false || options.json === true || options.jsonStream === true
         const result = await command.execute({
           message: options.message,
           fixes: options.fixes ?? false,
           noReview,
           json: options.json ?? false,
+          jsonStream: options.jsonStream ?? false,
           wipCommit: options.wipCommit ?? false,
         })
-        if (options.json && result) {
-          console.log(JSON.stringify(result, null, 2))
+        if (isAnyJsonMode && result) {
+          console.log(options.jsonStream ? JSON.stringify(result) : JSON.stringify(result, null, 2))
         }
         process.exit(0)
       } catch (error) {
@@ -632,16 +709,17 @@ program
         if (error instanceof UserAbortedCommitError) {
           process.exit(130)
         }
-        if (options.json) {
-          console.log(JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, null, 2))
+        if (isAnyJsonMode) {
+          const errorJson = { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+          console.log(options.jsonStream ? JSON.stringify(errorJson) : JSON.stringify(errorJson, null, 2))
         } else {
           logger.error(`Commit failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
         process.exit(1)
       }
     }
-    // Wrap in logger context for JSON mode
-    if (options.json) {
+    // Wrap in logger context for any JSON mode
+    if (isAnyJsonMode) {
       const jsonLogger = createStderrLogger()
       await withLogger(jsonLogger, executeAction)
     } else {
@@ -654,14 +732,37 @@ program
   .description('Rebase current branch on main with Claude-assisted conflict resolution')
   .option('-f, --force', 'Skip confirmation prompts')
   .option('-n, --dry-run', 'Preview actions without executing')
-  .action(async (options: { force?: boolean; dryRun?: boolean }) => {
-    try {
-      const { RebaseCommand } = await import('./commands/rebase.js')
-      const command = new RebaseCommand()
-      await command.execute(options)
-    } catch (error) {
-      logger.error(`Failed to rebase: ${error instanceof Error ? error.message : 'Unknown error'}`)
-      process.exit(1)
+  .option('--json-stream', 'Stream JSONL output; runs Claude headless for conflict resolution')
+  .action(async (options: { force?: boolean; dryRun?: boolean; jsonStream?: boolean }) => {
+    const executeAction = async (): Promise<void> => {
+      try {
+        const { RebaseCommand } = await import('./commands/rebase.js')
+        const command = new RebaseCommand()
+        const result = await command.execute(options)
+        if (options.jsonStream && result) {
+          console.log(JSON.stringify(result))
+        }
+        process.exit(0)
+      } catch (error) {
+        if (options.jsonStream) {
+          console.log(JSON.stringify({
+            success: false,
+            conflictsDetected: false,
+            claudeLaunched: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }))
+        } else {
+          logger.error(`Failed to rebase: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+        process.exit(1)
+      }
+    }
+
+    if (options.jsonStream) {
+      const jsonLogger = createStderrLogger()
+      await withLogger(jsonLogger, executeAction)
+    } else {
+      await executeAction()
     }
   })
 
@@ -682,6 +783,8 @@ program
   .option('--verbose', 'Enable verbose output (requires --print)')
   .option('--json', 'Output final result as JSON object (requires --print)')
   .option('--json-stream', 'Stream JSONL output to stdout in real-time (requires --print)')
+  .option('--set <key=value>', 'Override settings (repeatable, e.g., --set workflows.issue.permissionMode=bypassPermissions)')
+  .option('--skip-cleanup', 'Skip automatic cleanup of child worktrees after they complete in swarm mode')
   .action(async (options: {
     oneShot?: import('./types/index.js').OneShotMode
     yolo?: boolean
@@ -690,6 +793,7 @@ program
     verbose?: boolean
     json?: boolean
     jsonStream?: boolean
+    skipCleanup?: boolean
   }) => {
     // Handle --yolo flag: set oneShot to bypassPermissions
     if (options.yolo) {
@@ -724,7 +828,7 @@ program
             ...(options.jsonStream && { jsonStream: true }),
           }
         : undefined
-      await command.execute(options.oneShot, printOptions)
+      await command.execute(options.oneShot, printOptions, options.skipCleanup)
     } catch (error) {
       logger.error(`Failed to spin up loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
@@ -892,6 +996,7 @@ program
   .option('-f, --force', 'Skip confirmations and force removal')
   .option('--dry-run', 'Show what would be done without doing it')
   .option('--json', 'Output result as JSON')
+  .option('--archive', 'Archive metadata instead of deleting (preserves loom in il list --finished)')
   .option('--defer <ms>', 'Wait specified milliseconds before cleanup', parseInt)
   .action(async (identifier?: string, options?: CleanupOptions) => {
     const executeAction = async (): Promise<void> => {
@@ -928,6 +1033,20 @@ program
       await executeAction()
     }
   })
+
+/**
+ * Apply color coding to a swarm state value for terminal display
+ */
+function colorizeState(state: string): string {
+  switch (state) {
+    case 'pending': return chalk.gray(state)
+    case 'in_progress': return chalk.yellow(state)
+    case 'code_review': return chalk.blue(state)
+    case 'done': return chalk.green(state)
+    case 'failed': return chalk.red(state)
+    default: return chalk.gray(state)
+  }
+}
 
 program
   .command('list')
@@ -1023,11 +1142,10 @@ program
         }
       }
 
-      // Get finished looms if needed
-      let finishedLooms: LoomMetadata[] = []
-      if (showFinished) {
-        finishedLooms = await metadataManager.listFinishedMetadata()
-      }
+      // Get finished looms if needed for display, and always for swarm issue enrichment
+      // Finished metadata is needed to populate state for child looms that have been
+      // cleaned up/archived but whose state should still appear in the epic's swarmIssues
+      const finishedLooms = await metadataManager.listFinishedMetadata()
 
       // Filter by current project for text output (include looms with null projectPath for legacy support)
       // When --global is set, globalActiveLooms is used instead of worktrees, and no project filtering is applied
@@ -1052,34 +1170,54 @@ program
           // Settings validation failed - continue without main worktree path
         }
 
+        // Collect all active metadata for enriching epic swarm issues
+        // (must be computed before formatting so it's available for swarmIssues enrichment)
+        const allActiveMetadata = options.global
+          ? globalActiveLooms
+          : Array.from(metadata.values()).filter((m): m is LoomMetadata => m != null)
+
         // Format active looms
         let activeJson: ReturnType<typeof formatLoomsForJson> extends (infer T)[] ? (T & { status: 'active'; finishedAt: null })[] : never = []
         if (showActive) {
           if (options.global) {
             // Format global active looms from metadata (similar to finished looms format)
-            activeJson = globalActiveLooms.map(loom => ({
-              name: loom.branchName ?? loom.worktreePath ?? 'unknown',
-              worktreePath: loom.worktreePath,
-              branch: loom.branchName,
-              type: loom.issueType ?? 'branch',
-              issue_numbers: loom.issue_numbers,
-              pr_numbers: loom.pr_numbers,
-              isMainWorktree: false, // Global looms from other projects are never the main worktree
-              description: loom.description ?? null,
-              created_at: loom.created_at ?? null,
-              issueTracker: loom.issueTracker ?? null,
-              colorHex: loom.colorHex ?? null,
-              projectPath: loom.projectPath ?? null,
-              issueUrls: loom.issueUrls ?? {},
-              prUrls: loom.prUrls ?? {},
-              status: 'active' as const,
-              finishedAt: null,
-              isChildLoom: loom.parentLoom != null,
-              parentLoom: loom.parentLoom ?? null,
-            }))
+            activeJson = globalActiveLooms.map(loom => {
+              const isEpic = (loom.issueType ?? 'branch') === 'epic'
+              const swarmIssues = isEpic && loom.childIssues && loom.childIssues.length > 0
+                ? enrichSwarmIssues(loom.childIssues, globalActiveLooms, finishedLooms, loom.projectPath)
+                : isEpic ? [] : undefined
+              const depMap = isEpic
+                ? (loom.dependencyMap && Object.keys(loom.dependencyMap).length > 0
+                    ? loom.dependencyMap
+                    : {})
+                : undefined
+              return {
+                name: loom.branchName ?? loom.worktreePath ?? 'unknown',
+                worktreePath: loom.worktreePath,
+                branch: loom.branchName,
+                type: loom.issueType ?? 'branch',
+                issue_numbers: loom.issue_numbers,
+                pr_numbers: loom.pr_numbers,
+                isMainWorktree: false, // Global looms from other projects are never the main worktree
+                description: loom.description ?? null,
+                created_at: loom.created_at ?? null,
+                issueTracker: loom.issueTracker ?? null,
+                colorHex: loom.colorHex ?? null,
+                projectPath: loom.projectPath ?? null,
+                issueUrls: loom.issueUrls ?? {},
+                prUrls: loom.prUrls ?? {},
+                status: 'active' as const,
+                finishedAt: null,
+                state: loom.state ?? null,
+                isChildLoom: loom.parentLoom != null,
+                parentLoom: loom.parentLoom ?? null,
+                ...(swarmIssues !== undefined && { swarmIssues }),
+                ...(depMap !== undefined && { dependencyMap: depMap }),
+              }
+            })
           } else {
             // Format worktrees from current repo
-            activeJson = formatLoomsForJson(worktrees, mainWorktreePath, metadata).map(loom => ({
+            activeJson = formatLoomsForJson(worktrees, mainWorktreePath, metadata, allActiveMetadata, finishedLooms).map(loom => ({
               ...loom,
               status: 'active' as const,
               finishedAt: null,
@@ -1095,8 +1233,10 @@ program
           )
         }
 
-        // Format finished looms
-        let finishedJson = finishedLooms.map(formatFinishedLoomForJson)
+        // Format finished looms (only when --finished or --all is set)
+        let finishedJson = showFinished
+          ? finishedLooms.map(loom => formatFinishedLoomForJson(loom, allActiveMetadata, finishedLooms))
+          : []
 
         // Filter finished looms by project (include looms with null/undefined projectPath for legacy support)
         if (currentProjectPath) {
@@ -1107,9 +1247,10 @@ program
 
         // Fetch children data if --children flag is set
         if (options.children) {
-          // Load settings for determining issue tracker provider
+          // Load settings and create issue tracker for fetching children
           const settingsManager = new SettingsManager()
           const settings = await settingsManager.loadSettings()
+          const issueTracker = IssueTrackerFactory.create(settings)
 
           // Fetch children for all active looms in parallel using Promise.allSettled
           const activeChildrenResults = await Promise.allSettled(
@@ -1122,7 +1263,7 @@ program
               if (!loomMetadata) {
                 return { index, children: null }
               }
-              const children = await assembleChildrenData(loomMetadata, metadataManager, settings)
+              const children = await assembleChildrenData(loomMetadata, metadataManager, issueTracker)
               return { index, children }
             })
           )
@@ -1145,7 +1286,7 @@ program
               if (!loomMetadata) {
                 return { index, children: null }
               }
-              const children = await assembleChildrenData(loomMetadata, metadataManager, settings)
+              const children = await assembleChildrenData(loomMetadata, metadataManager, issueTracker)
               return { index, children }
             })
           )
@@ -1183,11 +1324,12 @@ program
         return
       }
 
-      // Load settings for children fetching if --children flag is set
-      let textSettings: import('./lib/SettingsManager.js').IloomSettings | null = null
+      // Load settings and create issue tracker for children fetching if --children flag is set
+      let textIssueTracker: import('./lib/IssueTracker.js').IssueTracker | null = null
       if (options.children) {
         const settingsManager = new SettingsManager()
-        textSettings = await settingsManager.loadSettings()
+        const textSettings = await settingsManager.loadSettings()
+        textIssueTracker = IssueTrackerFactory.create(textSettings)
       }
 
       // Show active workspaces
@@ -1205,6 +1347,9 @@ program
             if (loom.description) {
               logger.info(`    Description: ${loom.description}`)
             }
+            if (loom.state) {
+              logger.info(`    State: ${colorizeState(loom.state)}`)
+            }
             if (loom.worktreePath) {
               logger.info(`    Path: ${loom.worktreePath}`)
             }
@@ -1212,8 +1357,8 @@ program
               logger.info(`    Project: ${loom.projectPath}`)
             }
             // Show children summary if --children flag is set
-            if (options.children && textSettings) {
-              const childrenData = await assembleChildrenData(loom, metadataManager, textSettings)
+            if (options.children && textIssueTracker) {
+              const childrenData = await assembleChildrenData(loom, metadataManager, textIssueTracker)
               if (childrenData && (childrenData.summary.totalIssues > 0 || childrenData.summary.totalLooms > 0)) {
                 logger.info(`    Child Issues: ${childrenData.summary.totalIssues} (${childrenData.summary.issuesWithLooms} with active looms)`)
                 // Show child issues without looms
@@ -1239,11 +1384,14 @@ program
             if (loomMetadata?.description) {
               logger.info(`    Description: ${loomMetadata.description}`)
             }
+            if (loomMetadata?.state) {
+              logger.info(`    State: ${colorizeState(loomMetadata.state)}`)
+            }
             logger.info(`    Path: ${formatted.path}`)
             logger.info(`    Commit: ${formatted.commit}`)
             // Show children summary if --children flag is set
-            if (options.children && textSettings && loomMetadata) {
-              const childrenData = await assembleChildrenData(loomMetadata, metadataManager, textSettings)
+            if (options.children && textIssueTracker && loomMetadata) {
+              const childrenData = await assembleChildrenData(loomMetadata, metadataManager, textIssueTracker)
               if (childrenData && (childrenData.summary.totalIssues > 0 || childrenData.summary.totalLooms > 0)) {
                 logger.info(`    Child Issues: ${childrenData.summary.totalIssues} (${childrenData.summary.issuesWithLooms} with active looms)`)
                 // Show child issues without looms
@@ -1274,12 +1422,15 @@ program
           if (loom.description) {
             logger.info(`    Description: ${loom.description}`)
           }
+          if (loom.state) {
+            logger.info(`    State: ${colorizeState(loom.state)}`)
+          }
           if (loom.finishedAt) {
             logger.info(`    Finished: ${new Date(loom.finishedAt).toLocaleString()}`)
           }
           // Show children summary if --children flag is set
-          if (options.children && textSettings) {
-            const childrenData = await assembleChildrenData(loom, metadataManager, textSettings)
+          if (options.children && textIssueTracker) {
+            const childrenData = await assembleChildrenData(loom, metadataManager, textIssueTracker)
             if (childrenData && (childrenData.summary.totalIssues > 0 || childrenData.summary.totalLooms > 0)) {
               logger.info(`    Child Issues: ${childrenData.summary.totalIssues} (${childrenData.summary.issuesWithLooms} with active looms)`)
               // Show child issues without looms
@@ -1333,7 +1484,7 @@ program
   .option('--json', 'Output as JSON (default behavior)')
   .option('--limit <n>', 'Max issues to return', '100')
   .option('--sprint <name>', 'Jira only: filter by sprint name (e.g., "Sprint 17") or "current" for active sprint')
-  .option('--mine', 'Jira only: show only issues assigned to me')
+  .option('--mine', 'Show only issues and PRs assigned to me')
   .action(async (projectPath?: string, options?: { json?: boolean; limit?: string; sprint?: string; mine?: boolean }) => {
     try {
       const { IssuesCommand } = await import('./commands/issues.js')
@@ -1358,14 +1509,15 @@ program
   .alias('config')
   .description('Initialize iloom configuration')
   .argument('[prompt]', 'Custom initial message to send to Claude (defaults to "Help me configure iloom settings.")')
-  .action(async (prompt?: string) => {
+  .addOption(new Option('--accept-defaults').hideHelp())
+  .action(async (prompt?: string, options?: { acceptDefaults?: boolean }) => {
     try {
       const { InitCommand } = await import('./commands/init.js')
       const command = new InitCommand()
       // Pass custom prompt if provided and non-empty
       const trimmedPrompt = prompt?.trim()
       const customPrompt = trimmedPrompt && trimmedPrompt.length > 0 ? trimmedPrompt : undefined
-      await command.execute(customPrompt)
+      await command.execute(customPrompt, options?.acceptDefaults)
     } catch (error) {
       logger.error(`Failed to initialize: ${error instanceof Error ? error.message : 'Unknown error'}`)
       process.exit(1)
@@ -1896,7 +2048,7 @@ program
     }
   })
 
-// Test command for Jira integration
+// Test command for Jira integration (hidden from help output)
 const testJiraCommand = program
   .command('test-jira')
   .description('Test Jira integration methods against a real Jira instance')
@@ -2059,6 +2211,39 @@ program
     }
   })
 
+// Telemetry management commands
+const telemetryCmd = program
+  .command('telemetry')
+  .description('Manage anonymous usage telemetry')
+
+telemetryCmd
+  .command('off')
+  .description('Disable anonymous usage telemetry')
+  .action(async () => {
+    const manager = new TelemetryManager()
+    manager.disable()
+    logger.info('Telemetry disabled. No usage data will be collected.')
+  })
+
+telemetryCmd
+  .command('on')
+  .description('Enable anonymous usage telemetry')
+  .action(async () => {
+    const manager = new TelemetryManager()
+    manager.enable()
+    logger.info('Telemetry enabled. Anonymous usage data will be collected to improve iloom.')
+  })
+
+telemetryCmd
+  .command('status')
+  .description('Show current telemetry status')
+  .action(async () => {
+    const manager = new TelemetryManager()
+    const status = manager.getStatus()
+    logger.info(`Telemetry: ${status.enabled ? 'enabled' : 'disabled'}`)
+    logger.info(`Anonymous ID: ${status.distinctId}`)
+  })
+
 // Add custom help command in order to get preAction to run (update check handled by preAction hook)
 program
   .command('help')
@@ -2098,9 +2283,30 @@ const isRunDirectly = process.argv[1] && ((): boolean => {
 if (isRunDirectly) {
   try {
     await program.parseAsync()
+    // Flush telemetry on successful exit
+    try {
+      await TelemetryService.getInstance().shutdown()
+    } catch (shutdownError) {
+      logger.debug(`Telemetry shutdown: ${shutdownError instanceof Error ? shutdownError.message : String(shutdownError)}`)
+    }
   } catch (error) {
+    // Track error event
+    try {
+      const commandName = program.args?.[0] ?? 'unknown'
+      TelemetryService.getInstance().track('error.occurred', {
+        error_type: error instanceof Error ? error.constructor.name : 'Unknown',
+        command: commandName,
+        phase: 'execution',
+      })
+      await TelemetryService.getInstance().shutdown()
+    } catch (telemetryError) {
+      logger.debug(`Telemetry error tracking: ${telemetryError instanceof Error ? telemetryError.message : String(telemetryError)}`)
+    }
     if (error instanceof Error) {
       logger.error(`Error: ${error.message}`)
+      process.exit(1)
+    } else {
+      logger.error(`Error: ${String(error)}`)
       process.exit(1)
     }
   }

@@ -5,6 +5,8 @@ import { getLogger } from '../utils/logger-context.js'
 import type { ProjectCapability } from '../types/loom.js'
 import type { OneShotMode } from '../types/index.js'
 
+export type SwarmState = 'pending' | 'in_progress' | 'code_review' | 'done' | 'failed'
+
 /**
  * Schema for metadata JSON file
  * Stored in ~/.config/iloom-ai/looms/
@@ -16,7 +18,7 @@ export interface MetadataFile {
   // Additional metadata fields (v2)
   branchName?: string
   worktreePath?: string
-  issueType?: 'branch' | 'issue' | 'pr'
+  issueType?: 'branch' | 'issue' | 'pr' | 'epic'
   issueKey?: string // Canonical, properly-cased issue key (e.g., "PROJ-123")
   issue_numbers?: string[]
   pr_numbers?: string[]
@@ -29,13 +31,24 @@ export interface MetadataFile {
   draftPrNumber?: number // Draft PR number if github-draft-pr mode was used
   oneShot?: OneShotMode // One-shot automation mode stored during loom creation
   capabilities?: ProjectCapability[] // Detected project capabilities
+  state?: SwarmState // Swarm mode lifecycle state
+  childIssueNumbers?: string[] // Child issue numbers for epic looms
   parentLoom?: {
-    type: 'issue' | 'pr' | 'branch'
+    type: 'issue' | 'pr' | 'branch' | 'epic'
     identifier: string | number
     branchName: string
     worktreePath: string
     databaseBranch?: string
   }
+  // Epic/swarm child issue data (populated during spin setup)
+  childIssues?: Array<{
+    number: string   // Prefixed: "#123" for GitHub, "ENG-123" for Linear
+    title: string
+    body: string
+    url: string
+  }>
+  dependencyMap?: Record<string, string[]> // issueNumber -> array of blocking issueNumbers
+  mcpConfigPath?: string // Path to per-loom MCP config file (for swarm claude -p commands)
 }
 
 /**
@@ -47,7 +60,7 @@ export interface WriteMetadataInput {
   description: string
   branchName: string
   worktreePath: string
-  issueType: 'branch' | 'issue' | 'pr'
+  issueType: 'branch' | 'issue' | 'pr' | 'epic'
   issueKey?: string // Canonical, properly-cased issue key (e.g., "PROJ-123")
   issue_numbers: string[]
   pr_numbers: string[]
@@ -60,13 +73,24 @@ export interface WriteMetadataInput {
   draftPrNumber?: number // Draft PR number for github-draft-pr mode
   oneShot?: OneShotMode // One-shot automation mode to persist
   capabilities: ProjectCapability[] // Detected project capabilities (required for new looms)
+  state?: SwarmState // Swarm mode lifecycle state
+  childIssueNumbers?: string[] // Child issue numbers for epic looms
   parentLoom?: {
-    type: 'issue' | 'pr' | 'branch'
+    type: 'issue' | 'pr' | 'branch' | 'epic'
     identifier: string | number
     branchName: string
     worktreePath: string
     databaseBranch?: string
   }
+  // Epic/swarm child issue data (populated during spin setup)
+  childIssues?: Array<{
+    number: string   // Prefixed: "#123" for GitHub, "ENG-123" for Linear
+    title: string
+    body: string
+    url: string
+  }>
+  dependencyMap?: Record<string, string[]> // issueNumber -> array of blocking issueNumbers
+  mcpConfigPath?: string // Path to per-loom MCP config file (for swarm claude -p commands)
 }
 
 /**
@@ -79,7 +103,7 @@ export interface LoomMetadata {
   created_at: string | null
   branchName: string | null
   worktreePath: string | null
-  issueType: 'branch' | 'issue' | 'pr' | null
+  issueType: 'branch' | 'issue' | 'pr' | 'epic' | null
   issueKey: string | null // Canonical, properly-cased issue key (e.g., "PROJ-123")
   issue_numbers: string[]
   pr_numbers: string[]
@@ -92,13 +116,24 @@ export interface LoomMetadata {
   draftPrNumber: number | null // Draft PR number (null if not draft mode)
   oneShot: OneShotMode | null // One-shot mode (null for legacy looms)
   capabilities: ProjectCapability[] // Detected project capabilities (empty for legacy looms)
+  state: SwarmState | null // Swarm mode lifecycle state (null for non-swarm looms)
+  childIssueNumbers: string[] // Child issue numbers for epic looms (empty for non-epic looms)
   parentLoom: {
-    type: 'issue' | 'pr' | 'branch'
+    type: 'issue' | 'pr' | 'branch' | 'epic'
     identifier: string | number
     branchName: string
     worktreePath: string
     databaseBranch?: string
   } | null
+  // Epic/swarm child issue data (empty arrays/objects for non-epic looms)
+  childIssues: Array<{
+    number: string
+    title: string
+    body: string
+    url: string
+  }>
+  dependencyMap: Record<string, string[]>
+  mcpConfigPath: string | null // Path to per-loom MCP config file (null for non-swarm looms)
 }
 
 /**
@@ -143,7 +178,12 @@ export class MetadataManager {
       draftPrNumber: data.draftPrNumber ?? null,
       oneShot: data.oneShot ?? null,
       capabilities: data.capabilities ?? [],
+      state: data.state ?? null,
+      childIssueNumbers: data.childIssueNumbers ?? [],
       parentLoom: data.parentLoom ?? null,
+      childIssues: data.childIssues ?? [],
+      dependencyMap: data.dependencyMap ?? {},
+      mcpConfigPath: data.mcpConfigPath ?? null,
     }
   }
 
@@ -222,7 +262,12 @@ export class MetadataManager {
         capabilities: input.capabilities,
         ...(input.draftPrNumber && { draftPrNumber: input.draftPrNumber }),
         ...(input.oneShot && { oneShot: input.oneShot }),
+        ...(input.state && { state: input.state }),
+        ...(input.childIssueNumbers && input.childIssueNumbers.length > 0 && { childIssueNumbers: input.childIssueNumbers }),
         ...(input.parentLoom && { parentLoom: input.parentLoom }),
+        ...(input.childIssues && input.childIssues.length > 0 && { childIssues: input.childIssues }),
+        ...(input.dependencyMap && Object.keys(input.dependencyMap).length > 0 && { dependencyMap: input.dependencyMap }),
+        ...(input.mcpConfigPath && { mcpConfigPath: input.mcpConfigPath }),
       }
 
       // 3. Write to slugified filename
@@ -323,6 +368,44 @@ export class MetadataManager {
     }
 
     return results
+  }
+
+  /**
+   * Update existing metadata for a worktree by merging new fields
+   *
+   * Reads the existing metadata file, merges the provided updates,
+   * and writes back. Only provided fields are overwritten.
+   *
+   * @param worktreePath - Absolute path to the worktree
+   * @param updates - Partial metadata fields to merge
+   */
+  async updateMetadata(worktreePath: string, updates: Partial<MetadataFile>): Promise<void> {
+    try {
+      const filePath = this.getFilePath(worktreePath)
+
+      // Check if file exists
+      if (!(await fs.pathExists(filePath))) {
+        getLogger().warn(`No metadata file to update for worktree: ${worktreePath}`)
+        return
+      }
+
+      // Read existing data
+      const content = await fs.readFile(filePath, 'utf8')
+      const data: MetadataFile = JSON.parse(content)
+
+      // Merge updates
+      const merged = { ...data, ...updates }
+
+      // Write back
+      await fs.writeFile(filePath, JSON.stringify(merged, null, 2), { mode: 0o644 })
+
+      getLogger().debug(`Metadata updated for worktree: ${worktreePath}`)
+    } catch (error) {
+      getLogger().warn(
+        `Failed to update metadata for worktree: ${error instanceof Error ? error.message : String(error)}`
+      )
+      throw error
+    }
   }
 
   /**

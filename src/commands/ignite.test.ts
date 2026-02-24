@@ -2,10 +2,31 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { IgniteCommand, WorktreeValidationError } from './ignite.js'
 import type { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import type { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
+import type { SwarmSetupService } from '../lib/SwarmSetupService.js'
 import * as claudeUtils from '../utils/claude.js'
 import * as githubUtils from '../utils/github.js'
 import * as gitUtils from '../utils/git.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
+import * as languageDetector from '../utils/language-detector.js'
+
+// Mock TelemetryService
+vi.mock('../lib/TelemetryService.js', () => {
+	const mockTrack = vi.fn()
+	return {
+		TelemetryService: {
+			getInstance: vi.fn(() => ({
+				track: mockTrack,
+			})),
+			resetInstance: vi.fn(),
+		},
+	}
+})
+
+// Mock detectProjectLanguage
+vi.mock('../utils/language-detector.js', () => ({
+	detectProjectLanguage: vi.fn().mockResolvedValue('typescript'),
+}))
 
 // Mock MetadataManager to return proper metadata for recap MCP tests
 vi.mock('../lib/MetadataManager.js', () => ({
@@ -22,6 +43,23 @@ vi.mock('../lib/MetadataManager.js', () => ({
 			sessionId: '12345678-1234-4567-8901-123456789012', // Required for spin command
 		}),
 		getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+		updateMetadata: vi.fn().mockResolvedValue(undefined),
+	})),
+}))
+
+// Mock SwarmSetupService for swarm mode tests
+vi.mock('../lib/SwarmSetupService.js', () => ({
+	SwarmSetupService: vi.fn(() => ({
+		setupSwarm: vi.fn().mockResolvedValue({
+			epicWorktreePath: '/path/to/epic',
+			epicBranch: 'feat/epic-branch',
+			childWorktrees: [
+				{ issueId: '101', worktreePath: '/path/to/child-101', branch: 'feat/issue-101', success: true },
+				{ issueId: '102', worktreePath: '/path/to/child-102', branch: 'feat/issue-102', success: true },
+			],
+			agentsRendered: [],
+			workerAgentRendered: false,
+		}),
 	})),
 }))
 
@@ -31,6 +69,9 @@ describe('IgniteCommand', () => {
 	let mockGitWorktreeManager: GitWorktreeManager
 
 	beforeEach(() => {
+		// Re-set language detector mock (mockReset clears return values between tests)
+		vi.mocked(languageDetector.detectProjectLanguage).mockResolvedValue('typescript')
+
 		// Mock dependencies
 		mockTemplateManager = {
 			getPrompt: vi.fn().mockResolvedValue('mocked prompt content'),
@@ -520,6 +561,64 @@ describe('IgniteCommand', () => {
 		})
 	})
 
+	describe('VS Code mode detection', () => {
+		it('should pass IS_VSCODE_MODE: true when ILOOM_VSCODE=1', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__vscode-test')
+
+			const originalEnv = process.env.ILOOM_VSCODE
+			process.env.ILOOM_VSCODE = '1'
+
+			try {
+				await command.execute()
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						IS_VSCODE_MODE: true,
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				if (originalEnv === undefined) {
+					delete process.env.ILOOM_VSCODE
+				} else {
+					process.env.ILOOM_VSCODE = originalEnv
+				}
+			}
+		})
+
+		it('should pass IS_VSCODE_MODE: false when ILOOM_VSCODE is not set', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__vscode-test')
+
+			const originalEnv = process.env.ILOOM_VSCODE
+			delete process.env.ILOOM_VSCODE
+
+			try {
+				await command.execute()
+
+				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'issue',
+					expect.objectContaining({
+						IS_VSCODE_MODE: false,
+					})
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				if (originalEnv !== undefined) {
+					process.env.ILOOM_VSCODE = originalEnv
+				}
+			}
+		})
+	})
+
 	describe('Error Handling', () => {
 		it('should handle git command failures gracefully', async () => {
 			// Spy on launchClaude
@@ -961,10 +1060,15 @@ describe('IgniteCommand', () => {
 					'mcp__issue_management__create_comment',
 					'mcp__issue_management__update_comment',
 					'mcp__issue_management__create_issue',
+					'mcp__issue_management__close_issue',
+					'mcp__issue_management__reopen_issue',
+					'mcp__issue_management__edit_issue',
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
 					'mcp__recap__add_artifact',
 					'mcp__recap__set_complexity',
+					'mcp__recap__set_loom_state',
+					'mcp__recap__get_loom_state',
 				])
 			} finally {
 				process.cwd = originalCwd
@@ -988,7 +1092,7 @@ describe('IgniteCommand', () => {
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('disallowedTools')
-				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)'])
+				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*), Bash(gh issue comment:*)'])
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -1011,18 +1115,24 @@ describe('IgniteCommand', () => {
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('allowedTools')
-				// For PR workflows, get_pr and set_goal are included (user's purpose unclear)
+				// For PR workflows, get_pr, get_review_comments, and set_goal are included (user's purpose unclear)
 				expect(launchClaudeCall[1].allowedTools).toEqual([
 					'mcp__issue_management__get_issue',
 					'mcp__issue_management__get_comment',
 					'mcp__issue_management__create_comment',
 					'mcp__issue_management__update_comment',
 					'mcp__issue_management__create_issue',
+					'mcp__issue_management__close_issue',
+					'mcp__issue_management__reopen_issue',
+					'mcp__issue_management__edit_issue',
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
 					'mcp__recap__add_artifact',
 					'mcp__recap__set_complexity',
+					'mcp__recap__set_loom_state',
+					'mcp__recap__get_loom_state',
 					'mcp__issue_management__get_pr',
+					'mcp__issue_management__get_review_comments',
 					'mcp__recap__set_goal',
 				])
 			} finally {
@@ -1047,7 +1157,7 @@ describe('IgniteCommand', () => {
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1]).toHaveProperty('disallowedTools')
-				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)'])
+				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*), Bash(gh issue comment:*)'])
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -1075,6 +1185,8 @@ describe('IgniteCommand', () => {
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
 					'mcp__recap__set_complexity',
+					'mcp__recap__set_loom_state',
+					'mcp__recap__get_loom_state',
 				])
 				expect(launchClaudeCall[1].disallowedTools).toBeUndefined()
 			} finally {
@@ -1109,12 +1221,17 @@ describe('IgniteCommand', () => {
 					'mcp__issue_management__create_comment',
 					'mcp__issue_management__update_comment',
 					'mcp__issue_management__create_issue',
+					'mcp__issue_management__close_issue',
+					'mcp__issue_management__reopen_issue',
+					'mcp__issue_management__edit_issue',
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
 					'mcp__recap__add_artifact',
 					'mcp__recap__set_complexity',
+					'mcp__recap__set_loom_state',
+					'mcp__recap__get_loom_state',
 				])
-				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)'])
+				expect(launchClaudeCall[1].disallowedTools).toEqual(['Bash(gh api:*), Bash(gh issue comment:*)'])
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -1122,7 +1239,7 @@ describe('IgniteCommand', () => {
 			}
 		})
 
-		it('should include mcp__issue_management__get_pr in allowedTools for PR workflows', async () => {
+		it('should include mcp__issue_management__get_pr and get_review_comments in allowedTools for PR workflows', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
 				owner: 'testowner',
@@ -1137,6 +1254,7 @@ describe('IgniteCommand', () => {
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1].allowedTools).toContain('mcp__issue_management__get_pr')
+				expect(launchClaudeCall[1].allowedTools).toContain('mcp__issue_management__get_review_comments')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -1144,7 +1262,7 @@ describe('IgniteCommand', () => {
 			}
 		})
 
-		it('should NOT include mcp__issue_management__get_pr in allowedTools for issue workflows', async () => {
+		it('should NOT include mcp__issue_management__get_pr or get_review_comments in allowedTools for issue workflows', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
 			const getRepoInfoSpy = vi.spyOn(githubUtils, 'getRepoInfo').mockResolvedValue({
 				owner: 'testowner',
@@ -1159,6 +1277,7 @@ describe('IgniteCommand', () => {
 
 				const launchClaudeCall = launchClaudeSpy.mock.calls[0]
 				expect(launchClaudeCall[1].allowedTools).not.toContain('mcp__issue_management__get_pr')
+				expect(launchClaudeCall[1].allowedTools).not.toContain('mcp__issue_management__get_review_comments')
 			} finally {
 				process.cwd = originalCwd
 				launchClaudeSpy.mockRestore()
@@ -2836,6 +2955,428 @@ describe('IgniteCommand', () => {
 		})
 	})
 
+	describe('session.started telemetry', () => {
+		it('tracks session.started with has_neon and language on spin', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-50__telemetry-test')
+
+			const commandWithSettings = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await commandWithSettings.execute()
+
+				const mockTrack = TelemetryService.getInstance().track
+				expect(mockTrack).toHaveBeenCalledWith('session.started', {
+					has_neon: false,
+					language: 'typescript',
+				})
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('has_neon is true when neon settings are configured', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					databaseProviders: {
+						neon: { projectId: 'test-project' },
+					},
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-51__neon-test')
+
+			const commandWithNeon = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await commandWithNeon.execute()
+
+				const mockTrack = TelemetryService.getInstance().track
+				expect(mockTrack).toHaveBeenCalledWith('session.started', {
+					has_neon: true,
+					language: 'typescript',
+				})
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('has_neon is false when neon settings are absent', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					databaseProviders: {},
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-52__no-neon')
+
+			const commandWithoutNeon = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined,
+				mockSettingsManager as never,
+			)
+
+			try {
+				await commandWithoutNeon.execute()
+
+				const mockTrack = TelemetryService.getInstance().track
+				expect(mockTrack).toHaveBeenCalledWith('session.started', {
+					has_neon: false,
+					language: 'typescript',
+				})
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+
+		it('does not throw if telemetry tracking fails', async () => {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+
+			// Make detectProjectLanguage throw
+			vi.mocked(languageDetector.detectProjectLanguage).mockRejectedValueOnce(new Error('detection failed'))
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-53__fail-test')
+
+			const commandFailTelemetry = new IgniteCommand(
+				mockTemplateManager,
+				mockGitWorktreeManager,
+				undefined,
+				mockSettingsManager as never,
+			)
+
+			try {
+				// Should not throw despite telemetry failure
+				await expect(commandFailTelemetry.execute()).resolves.not.toThrow()
+				expect(launchClaudeSpy).toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+			}
+		})
+	})
+
+	describe('child epic swarm mode', () => {
+		it('enters swarm mode for child looms that are also epics', async () => {
+			// Regression test: a loom with parentLoom AND issueType 'epic' must still enter swarm mode
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			vi.spyOn(gitUtils, 'findMainWorktreePathWithSettings').mockResolvedValue('/test/main')
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__child-epic')
+
+			const { SwarmSetupService } = await import('../lib/SwarmSetupService.js')
+			vi.mocked(SwarmSetupService).mockImplementation(() => ({
+				setupSwarm: vi.fn().mockResolvedValue({
+					epicWorktreePath: '/path/to/child-epic',
+					epicBranch: 'feat/issue-100__child-epic',
+					childWorktrees: [
+						{ issueId: '301', worktreePath: '/path/to/child-301', branch: 'feat/issue-301', success: true },
+					],
+					agentsRendered: [],
+					workerAgentRendered: true,
+				}),
+			}) as unknown as SwarmSetupService)
+
+			const readMetadataMock = vi.fn()
+			const parentLoom = {
+				type: 'epic' as const,
+				identifier: 50,
+				branchName: 'feat/issue-50__parent-epic',
+				worktreePath: '/path/to/parent-epic',
+			}
+			// First call: initial metadata read in executeInternal (Step 2)
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Child epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__child-epic',
+				worktreePath: '/path/to/child-epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				parentLoom,
+				childIssues: [
+					{ number: '#301', title: 'Grandchild 1', body: 'Body 1' },
+				],
+				sessionId: 'child-epic-session-id',
+			})
+			// Second call: fresh metadata re-read in executeInternal (Step 2.1.1)
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Child epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__child-epic',
+				worktreePath: '/path/to/child-epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				parentLoom,
+				childIssues: [
+					{ number: '#301', title: 'Grandchild 1', body: 'Body 1' },
+				],
+				dependencyMap: {},
+				sessionId: 'child-epic-session-id',
+			})
+			// Child metadata for telemetry
+			readMetadataMock.mockResolvedValueOnce({
+				state: 'done',
+				created_at: '2025-01-01T00:00:00Z',
+			})
+
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: readMetadataMock,
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+			}) as unknown as MetadataManager)
+
+			const cmd = new IgniteCommand(
+				mockTemplateManager,
+				{
+					getRepoInfo: vi.fn().mockResolvedValue({
+						currentBranch: 'feat/issue-100__child-epic',
+					}),
+				} as unknown as GitWorktreeManager,
+				{
+					loadAgents: vi.fn().mockResolvedValue([]),
+					formatForCli: vi.fn().mockReturnValue({}),
+				} as never,
+				{
+					loadSettings: vi.fn().mockResolvedValue({
+						issueTracker: { provider: 'github' },
+					}),
+					getSpinModel: vi.fn().mockReturnValue('opus'),
+				} as never,
+			)
+
+			await cmd.execute()
+
+			// Should have entered swarm mode — orchestrator launched via launchClaude
+			expect(launchClaudeSpy).toHaveBeenCalled()
+
+			process.cwd = originalCwd
+			launchClaudeSpy.mockRestore()
+		})
+	})
+
+	describe('swarm telemetry', () => {
+		// Helper to create an IgniteCommand that enters swarm mode
+		function createSwarmCommand(
+			templateMgr: PromptTemplateManager,
+			childMetadataStates: Array<{ state: string; created_at: string }>,
+		) {
+			const readMetadataMock = vi.fn()
+			// First call: initial metadata read in executeInternal (Step 2)
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__epic',
+				worktreePath: '/path/to/epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				childIssues: [
+					{ number: '#201', title: 'Child 1', body: 'Body 1' },
+					{ number: '#202', title: 'Child 2', body: 'Body 2' },
+				],
+				sessionId: 'epic-session-id',
+			})
+			// Second call: fresh metadata re-read in executeInternal (Step 2.1.1)
+			readMetadataMock.mockResolvedValueOnce({
+				description: 'Epic loom',
+				created_at: '2025-01-01T00:00:00Z',
+				branchName: 'feat/issue-100__epic',
+				worktreePath: '/path/to/epic',
+				issueType: 'epic',
+				issue_numbers: ['100'],
+				childIssues: [
+					{ number: '#201', title: 'Child 1', body: 'Body 1' },
+					{ number: '#202', title: 'Child 2', body: 'Body 2' },
+				],
+				dependencyMap: {},
+				sessionId: 'epic-session-id',
+			})
+			// Subsequent calls: child metadata reads for telemetry
+			for (const childMeta of childMetadataStates) {
+				readMetadataMock.mockResolvedValueOnce({
+					state: childMeta.state,
+					created_at: childMeta.created_at,
+				})
+			}
+
+			vi.mocked(MetadataManager).mockImplementationOnce(() => ({
+				readMetadata: readMetadataMock,
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+			}) as unknown as MetadataManager)
+
+			const mockGitWorktreeManagerSwarm = {
+				getRepoInfo: vi.fn().mockResolvedValue({
+					currentBranch: 'feat/issue-100__epic',
+				}),
+			} as unknown as GitWorktreeManager
+
+			const mockSettingsManagerSwarm = {
+				loadSettings: vi.fn().mockResolvedValue({
+					issueTracker: { provider: 'github' },
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue([]),
+				formatForCli: vi.fn().mockReturnValue({}),
+			}
+
+			return new IgniteCommand(
+				templateMgr,
+				mockGitWorktreeManagerSwarm,
+				mockAgentManager as never,
+				mockSettingsManagerSwarm as never,
+			)
+		}
+
+		let launchClaudeSpy: ReturnType<typeof vi.spyOn>
+		let findMainWorktreePathSpy: ReturnType<typeof vi.spyOn>
+		let originalCwd: typeof process.cwd
+
+		beforeEach(async () => {
+			launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			findMainWorktreePathSpy = vi.spyOn(gitUtils, 'findMainWorktreePathWithSettings').mockResolvedValue('/test/main')
+			originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__epic')
+
+			// Mock SwarmSetupService.setupSwarm
+			const { SwarmSetupService } = await import('../lib/SwarmSetupService.js')
+			vi.mocked(SwarmSetupService).mockImplementation(() => ({
+				setupSwarm: vi.fn().mockResolvedValue({
+					epicWorktreePath: '/path/to/epic',
+					epicBranch: 'feat/issue-100__epic',
+					childWorktrees: [
+						{ issueId: '201', worktreePath: '/path/to/child-201', branch: 'feat/issue-201', success: true },
+						{ issueId: '202', worktreePath: '/path/to/child-202', branch: 'feat/issue-202', success: true },
+					],
+					agentsRendered: [],
+					workerAgentRendered: true,
+				}),
+			}) as unknown as SwarmSetupService)
+		})
+
+		afterEach(() => {
+			process.cwd = originalCwd
+			launchClaudeSpy.mockRestore()
+			findMainWorktreePathSpy.mockRestore()
+		})
+
+		it('tracks swarm.started with child_count and tracker before launching orchestrator', async () => {
+			const swarmCommand = createSwarmCommand(mockTemplateManager, [
+				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
+				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
+			])
+
+			await swarmCommand.execute()
+
+			const mockTrack = TelemetryService.getInstance().track
+			expect(mockTrack).toHaveBeenCalledWith('swarm.started', {
+				child_count: 2,
+				tracker: 'github',
+			})
+		})
+
+		it('tracks swarm.completed with total_children, succeeded, failed, duration_minutes', async () => {
+			const swarmCommand = createSwarmCommand(mockTemplateManager, [
+				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
+				{ state: 'failed', created_at: '2025-01-01T00:00:00Z' },
+			])
+
+			await swarmCommand.execute()
+
+			const mockTrack = TelemetryService.getInstance().track
+			expect(mockTrack).toHaveBeenCalledWith('swarm.completed', expect.objectContaining({
+				total_children: 2,
+				succeeded: 1,
+				failed: 1,
+			}))
+			// duration_minutes should be a number
+			const completedCall = vi.mocked(mockTrack).mock.calls.find(
+				(call) => call[0] === 'swarm.completed'
+			)
+			expect(completedCall).toBeDefined()
+			expect(typeof completedCall![1].duration_minutes).toBe('number')
+		})
+
+		it('tracks swarm.child_completed for each child with success and duration_minutes', async () => {
+			const swarmCommand = createSwarmCommand(mockTemplateManager, [
+				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
+				{ state: 'failed', created_at: '2025-01-01T00:00:00Z' },
+			])
+
+			await swarmCommand.execute()
+
+			const mockTrack = TelemetryService.getInstance().track
+			const childCompletedCalls = vi.mocked(mockTrack).mock.calls.filter(
+				(call) => call[0] === 'swarm.child_completed'
+			)
+			expect(childCompletedCalls).toHaveLength(2)
+
+			// First child: done
+			expect(childCompletedCalls[0][1]).toEqual(expect.objectContaining({
+				success: true,
+			}))
+			expect(typeof childCompletedCalls[0][1].duration_minutes).toBe('number')
+
+			// Second child: failed
+			expect(childCompletedCalls[1][1]).toEqual(expect.objectContaining({
+				success: false,
+			}))
+			expect(typeof childCompletedCalls[1][1].duration_minutes).toBe('number')
+		})
+
+		it('handles telemetry failures gracefully', async () => {
+			// Make track throw for swarm events
+			const mockTrack = TelemetryService.getInstance().track as ReturnType<typeof vi.fn>
+			mockTrack.mockImplementation((event: string) => {
+				if (event === 'swarm.started') throw new Error('telemetry failed')
+			})
+
+			const swarmCommand = createSwarmCommand(mockTemplateManager, [
+				{ state: 'done', created_at: '2025-01-01T00:00:00Z' },
+			])
+
+			// Should not throw despite telemetry failure
+			await expect(swarmCommand.execute()).resolves.not.toThrow()
+			expect(launchClaudeSpy).toHaveBeenCalled()
+		})
+	})
+
 	describe('Main worktree validation', () => {
 		it('should throw WorktreeValidationError when running from main worktree', async () => {
 			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
@@ -2992,6 +3533,189 @@ describe('IgniteCommand', () => {
 				launchClaudeSpy.mockRestore()
 				isValidGitRepoSpy.mockRestore()
 				getWorktreeRootSpy.mockRestore()
+			}
+		})
+	})
+
+	describe('--skip-cleanup flag threading', () => {
+		// Epic metadata that triggers swarm mode: has issue_numbers, no parentLoom, and childIssues
+		const epicMetadata = {
+			description: 'Epic loom',
+			created_at: '2025-01-01T00:00:00Z',
+			branchName: 'feat/issue-100__epic',
+			worktreePath: '/path/to/feat/issue-100__epic',
+			issueType: 'epic' as const,
+			issue_numbers: ['100'],
+			pr_numbers: [],
+			childIssueNumbers: ['101', '102'],
+			parentLoom: null,
+			parentLoomBranch: null,
+			databaseBranchName: null,
+			sessionId: '12345678-1234-4567-8901-123456789012',
+			childIssues: [
+				{ number: '101', title: 'Child 1', body: 'Body 1', url: 'https://github.com/test/repo/issues/101' },
+				{ number: '102', title: 'Child 2', body: 'Body 2', url: 'https://github.com/test/repo/issues/102' },
+			],
+			dependencyMap: {},
+			capabilities: [],
+			state: null,
+			issueKey: null,
+			issueTracker: null,
+			colorHex: null,
+			projectPath: null,
+			issueUrls: {},
+			prUrls: {},
+			draftPrNumber: null,
+			oneShot: null,
+			mcpConfigPath: null,
+			status: 'active' as const,
+			finishedAt: null,
+		}
+
+		function setupSwarmModeMocks() {
+			const launchClaudeSpy = vi.spyOn(claudeUtils, 'launchClaude').mockResolvedValue(undefined)
+			const findMainWorktreeSpy = vi.spyOn(gitUtils, 'findMainWorktreePathWithSettings').mockResolvedValue('/path/to/main')
+
+			const originalCwd = process.cwd
+			process.cwd = vi.fn().mockReturnValue('/path/to/feat/issue-100__epic')
+
+			// Override MetadataManager mock to return epic metadata
+			vi.mocked(MetadataManager).mockImplementation(() => ({
+				readMetadata: vi.fn().mockResolvedValue(epicMetadata),
+				getMetadataFilePath: vi.fn().mockReturnValue('/path/to/epic-metadata.json'),
+				updateMetadata: vi.fn().mockResolvedValue(undefined),
+			}) as unknown as MetadataManager)
+
+			const localMockTemplateManager = {
+				getPrompt: vi.fn().mockResolvedValue('mocked orchestrator prompt'),
+			} as unknown as PromptTemplateManager
+
+			const localMockGitWorktreeManager = {
+				getRepoInfo: vi.fn().mockResolvedValue({
+					currentBranch: 'feat/issue-100__epic',
+				}),
+			} as unknown as GitWorktreeManager
+
+			const mockSettingsManager = {
+				loadSettings: vi.fn().mockResolvedValue({
+					issueManagement: { provider: 'github' },
+				}),
+				getSpinModel: vi.fn().mockReturnValue('opus'),
+			}
+
+			const mockAgentManager = {
+				loadAgents: vi.fn().mockResolvedValue({}),
+				formatForCli: vi.fn().mockReturnValue({}),
+			}
+
+			const mockFirstRunManager = {
+				isFirstRun: vi.fn().mockResolvedValue(false),
+				markAsRun: vi.fn().mockResolvedValue(undefined),
+			}
+
+			const mockHookManager = {
+				installHooks: vi.fn().mockResolvedValue(undefined),
+			}
+
+			const commandForSwarm = new IgniteCommand(
+				localMockTemplateManager,
+				localMockGitWorktreeManager,
+				mockAgentManager as never,
+				mockSettingsManager as never,
+				mockFirstRunManager as never,
+				mockHookManager as never,
+			)
+
+			return {
+				commandForSwarm,
+				localMockTemplateManager,
+				launchClaudeSpy,
+				findMainWorktreeSpy,
+				originalCwd,
+			}
+		}
+
+		it('should pass NO_CLEANUP=true to template variables when skipCleanup is true', async () => {
+			const { commandForSwarm, localMockTemplateManager, launchClaudeSpy, findMainWorktreeSpy, originalCwd } = setupSwarmModeMocks()
+
+			try {
+				await commandForSwarm.execute('default', undefined, true)
+
+				// Verify templateManager.getPrompt was called with 'swarm-orchestrator' and NO_CLEANUP: true
+				expect(localMockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'swarm-orchestrator',
+					expect.objectContaining({
+						NO_CLEANUP: true,
+						EPIC_ISSUE_NUMBER: '100',
+					}),
+				)
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				findMainWorktreeSpy.mockRestore()
+			}
+		})
+
+		it('should not include NO_CLEANUP in template variables when skipCleanup is false', async () => {
+			const { commandForSwarm, localMockTemplateManager, launchClaudeSpy, findMainWorktreeSpy, originalCwd } = setupSwarmModeMocks()
+
+			try {
+				await commandForSwarm.execute('default', undefined, false)
+
+				// Verify templateManager.getPrompt was called with 'swarm-orchestrator'
+				expect(localMockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'swarm-orchestrator',
+					expect.any(Object),
+				)
+
+				// Verify NO_CLEANUP is not present in the variables
+				const templateCall = vi.mocked(localMockTemplateManager.getPrompt).mock.calls[0]
+				expect(templateCall[1]).not.toHaveProperty('NO_CLEANUP')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				findMainWorktreeSpy.mockRestore()
+			}
+		})
+
+		it('should not include NO_CLEANUP in template variables when skipCleanup is undefined', async () => {
+			const { commandForSwarm, localMockTemplateManager, launchClaudeSpy, findMainWorktreeSpy, originalCwd } = setupSwarmModeMocks()
+
+			try {
+				await commandForSwarm.execute('default', undefined, undefined)
+
+				// Verify templateManager.getPrompt was called with 'swarm-orchestrator'
+				expect(localMockTemplateManager.getPrompt).toHaveBeenCalledWith(
+					'swarm-orchestrator',
+					expect.any(Object),
+				)
+
+				// Verify NO_CLEANUP is not present in the variables
+				const templateCall = vi.mocked(localMockTemplateManager.getPrompt).mock.calls[0]
+				expect(templateCall[1]).not.toHaveProperty('NO_CLEANUP')
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				findMainWorktreeSpy.mockRestore()
+			}
+		})
+
+		it('should accept skipCleanup parameter in execute()', async () => {
+			const { commandForSwarm, launchClaudeSpy, findMainWorktreeSpy, originalCwd } = setupSwarmModeMocks()
+
+			try {
+				// Verify execute() accepts skipCleanup without throwing a type error
+				await commandForSwarm.execute('default', undefined, true)
+				expect(launchClaudeSpy).toHaveBeenCalled()
+
+				// Also verify with false
+				launchClaudeSpy.mockClear()
+				await commandForSwarm.execute('default', undefined, false)
+				expect(launchClaudeSpy).toHaveBeenCalled()
+			} finally {
+				process.cwd = originalCwd
+				launchClaudeSpy.mockRestore()
+				findMainWorktreeSpy.mockRestore()
 			}
 		})
 	})

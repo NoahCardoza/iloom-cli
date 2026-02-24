@@ -28,6 +28,8 @@ import { UserAbortedCommitError, type FinishResult } from '../types/index.js'
 import type { FinishOptions, GitWorktree, CommitOptions, MergeOptions, PullRequest } from '../types/index.js'
 import type { ResourceCleanupOptions, CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
 import path from 'path'
 
 export interface FinishCommandInput {
@@ -36,7 +38,7 @@ export interface FinishCommandInput {
 }
 
 export interface ParsedFinishInput {
-	type: 'issue' | 'pr' | 'branch'
+	type: 'issue' | 'pr' | 'branch' | 'epic'
 	number?: string | number // For issues and PRs
 	branchName?: string // For branch inputs
 	originalInput: string // Raw input for error messages
@@ -191,7 +193,7 @@ export class FinishCommand {
 		// Set ILOOM=1 so hooks know this is an iloom session
 		process.env.ILOOM = '1'
 
-		const isJsonMode = input.options.json === true
+		const isJsonMode = input.options.json === true || input.options.jsonStream === true
 
 		// Initialize result object for JSON mode
 		const result: FinishResult = {
@@ -249,6 +251,17 @@ export class FinishCommand {
 		if (!worktree) {
 			throw new Error('No worktree found')
 		}
+
+		// Read metadata BEFORE workflow execution (cleanup may delete the worktree)
+		let preFinishCreatedAt: string | undefined
+		try {
+			const metadataManager = new MetadataManager()
+			const metadata = await metadataManager.readMetadata(worktree.path)
+			preFinishCreatedAt = metadata?.created_at ?? undefined
+		} catch (error: unknown) {
+			getLogger().debug(`Failed to read metadata for telemetry: ${error instanceof Error ? error.message : String(error)}`)
+		}
+
 		// Step 4: Branch based on input type
 		if (parsed.type === 'pr') {
 			// Fetch PR to get current state
@@ -268,6 +281,19 @@ export class FinishCommand {
 
 		// Mark overall success if we got here without throwing
 		result.success = true
+
+		// Track loom.finished telemetry event
+		try {
+			const durationMinutes = preFinishCreatedAt
+				? Math.round((Date.now() - new Date(preFinishCreatedAt).getTime()) / 60000)
+				: 0
+			TelemetryService.getInstance().track('loom.finished', {
+				merge_behavior: (settings.mergeBehavior?.mode as 'local' | 'github-pr' | 'github-draft-pr') ?? 'local',
+				duration_minutes: isNaN(durationMinutes) ? 0 : durationMinutes,
+			})
+		} catch (error: unknown) {
+			getLogger().debug(`Failed to track loom.finished telemetry: ${error instanceof Error ? error.message : String(error)}`)
+		}
 
 		// Return result in JSON mode
 		if (isJsonMode) {
@@ -627,6 +653,7 @@ export class FinishCommand {
 		const mergeOptions: MergeOptions = {
 			dryRun: options.dryRun ?? false,
 			force: options.force ?? false,
+			jsonStream: options.jsonStream ?? false,
 		}
 
 		// Skip rebase/validation/commit steps if --skip-to-pr flag is set (debug mode)
@@ -645,6 +672,21 @@ export class FinishCommand {
 				success: true,
 			})
 
+			// Install dependencies after successful rebase (Issue #692)
+			if (!options.dryRun) {
+				getLogger().info('Installing dependencies...')
+				try {
+					await installDependencies(worktree.path, true, true) // frozen=true, quiet=true
+				} catch (error) {
+					// Log warning but don't fail - rebase succeeded, user can fix deps manually
+					const message = error instanceof Error ? error.message : 'Unknown error'
+					getLogger().warn(`Dependency installation failed: ${message}`)
+					getLogger().warn('Please run your package manager install command manually')
+				}
+			} else {
+				getLogger().info('[DRY RUN] Would install dependencies')
+			}
+
 			// Step 2: Run pre-merge validations AFTER rebase (Issue #344)
 			// Validates code with latest main changes integrated
 			if (!options.dryRun) {
@@ -652,6 +694,7 @@ export class FinishCommand {
 
 				await this.validationRunner.runValidations(worktree.path, {
 					dryRun: options.dryRun ?? false,
+					jsonStream: options.jsonStream ?? false,
 				})
 				getLogger().success('All validations passed')
 				result.operations.push({
@@ -694,6 +737,7 @@ export class FinishCommand {
 						skipVerify,
 						issuePrefix,
 						timeout: settings.git?.commitTimeout,
+						noReview: options.review !== true || options.json === true,
 					}
 
 					// Only add issueNumber if it's an issue
@@ -830,6 +874,15 @@ export class FinishCommand {
 			const prUrl = metadata.prUrls?.[String(metadata.draftPrNumber)]
 			if (prUrl) {
 				result.prUrl = prUrl
+			}
+
+			// Open PR in browser if configured and not suppressed
+			const shouldOpenBrowser = !options.dryRun
+				&& !options.noBrowser
+				&& !options.json
+				&& settings.mergeBehavior?.openBrowserOnFinish !== false
+			if (shouldOpenBrowser && prUrl) {
+				await prManager.openPRInBrowser(prUrl)
 			}
 
 			result.operations.push({
@@ -971,6 +1024,7 @@ export class FinishCommand {
 							skipVerify,
 							issuePrefix,
 							timeout: settings.git?.commitTimeout,
+							noReview: options.review !== true || options.json === true,
 							// Do NOT pass issueNumber for PRs - no "Fixes #" trailer needed
 						})
 						getLogger().success('Changes committed')
@@ -1066,7 +1120,9 @@ export class FinishCommand {
 				success: true,
 			})
 		} else {
-			const openInBrowser = options.noBrowser !== true
+			const openInBrowser = !options.noBrowser
+				&& !options.json
+				&& settings.mergeBehavior?.openBrowserOnFinish !== false
 
 			const prResult = await prManager.createOrOpenPR(
 				worktree.branch,
@@ -1189,6 +1245,7 @@ export class FinishCommand {
 			deleteBranch: false, // Don't delete branch - PR still needs it
 			keepDatabase: false, // Clean up database
 			force: options.force ?? false,
+			worktree: { path: worktree.path, branch: worktree.branch },
 		}
 
 		try {
@@ -1294,6 +1351,7 @@ export class FinishCommand {
 			// rather than checkRemoteBranch, since the remote branch may still exist
 			// but local may have additional commits
 			checkRemoteBranch: false,
+			worktree: { path: worktree.path, branch: worktree.branch },
 		}
 
 		try {
@@ -1463,6 +1521,7 @@ export class FinishCommand {
 			deleteBranch: true, // Delete branch after successful merge
 			keepDatabase: false, // Clean up database after merge
 			force: options.force ?? false,
+			worktree: { path: worktree.path, branch: worktree.branch },
 		}
 
 		try {

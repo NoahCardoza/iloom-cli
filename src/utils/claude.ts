@@ -73,6 +73,8 @@ export interface ClaudeCliOptions {
 	outputFormat?: 'json' | 'stream-json' | 'text' // Output format for Claude CLI (headless mode)
 	verbose?: boolean // Enable verbose output (headless mode) - defaults to true when headless
 	jsonMode?: 'json' | 'stream' // JSON output mode: 'json' for final object, 'stream' for real-time JSONL
+	passthroughStdout?: boolean // In headless mode, pipe stdout to process.stdout instead of capturing
+	env?: Record<string, string> // Additional environment variables to pass to the Claude process
 }
 
 /**
@@ -145,7 +147,7 @@ export async function launchClaude(
 	prompt: string,
 	options: ClaudeCliOptions = {}
 ): Promise<string | void> {
-	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode } = options
+	const { model, permissionMode, addDir, headless = false, appendSystemPrompt, mcpConfig, allowedTools, disallowedTools, agents, sessionId, noSessionPersistence, outputFormat, verbose, jsonMode, passthroughStdout, env: extraEnv } = options
 	const log = getLogger()
 
 	// Build command arguments
@@ -216,7 +218,25 @@ export async function launchClaude(
 		args.push('--no-session-persistence')
 	}
 
+	// Set CLAUDECODE=0 to prevent Claude from detecting it's running inside Claude Code
+	const claudeEnv = { ...process.env, CLAUDECODE: '0' }
+
 	try {
+		if (headless && passthroughStdout) {
+			// Headless + passthrough: Claude's stdout goes directly to process.stdout
+			// Used for --json-stream where JSONL must reach the caller's stdout
+			const subprocess = execa('claude', args, {
+				input: prompt,
+				timeout: 0,
+				...(addDir && { cwd: addDir }),
+				env: { ...claudeEnv, ...extraEnv }, // CLAUDECODE=0 + any extra env vars
+				stdio: ['pipe', 'inherit', 'pipe'], // stdin: pipe (for prompt), stdout: inherit (passthrough), stderr: pipe (capture errors)
+			})
+
+			await subprocess
+			return // No output to return - it went directly to stdout
+		}
+
 		if (headless) {
 			// Headless mode: capture and return output
 			const isDebugMode = logger.isDebugEnabled()
@@ -227,6 +247,7 @@ export async function launchClaude(
 				timeout: 0, // Disable timeout for long responses
 				...(addDir && { cwd: addDir }), // Run Claude in the worktree directory
 				verbose: isDebugMode,
+				env: { ...claudeEnv, ...extraEnv }, // CLAUDECODE=0 + any extra env vars
 				...(isDebugMode && { stdio: ['pipe', 'pipe', 'pipe'] as const }), // Enable streaming in debug mode
 			}
 
@@ -306,6 +327,7 @@ export async function launchClaude(
 					stdio: ['inherit', 'inherit', 'pipe'], // Capture stderr to detect session conflicts
 					timeout: 0, // Disable timeout
 					verbose: logger.isDebugEnabled(),
+					env: { ...claudeEnv, ...extraEnv }, // CLAUDECODE=0 + any extra env vars
 				})
 				return
 			} catch (interactiveError) {
@@ -333,6 +355,7 @@ export async function launchClaude(
 						stdio: 'inherit',
 						timeout: 0,
 						verbose: logger.isDebugEnabled(),
+						env: claudeEnv,
 					})
 					return
 				}
@@ -376,6 +399,7 @@ export async function launchClaude(
 						timeout: 0,
 						...(addDir && { cwd: addDir }),
 						verbose: isDebugMode,
+						env: claudeEnv,
 						...(isDebugMode && { stdio: ['pipe', 'pipe', 'pipe'] as const }),
 					}
 
@@ -435,6 +459,7 @@ export async function launchClaude(
 						stdio: 'inherit',
 						timeout: 0,
 						verbose: logger.isDebugEnabled(),
+						env: claudeEnv,
 					})
 					return
 				}

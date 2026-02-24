@@ -20,6 +20,27 @@ import { findMainWorktreePathWithSettings, pushBranchToRemote } from '../utils/g
 import { logger } from '../utils/logger.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
+import { PRManager } from '../lib/PRManager.js'
+
+// Mock TelemetryService
+const mockTrack = vi.fn()
+vi.mock('../lib/TelemetryService.js', () => ({
+	TelemetryService: {
+		getInstance: () => ({ track: mockTrack }),
+	},
+}))
+
+// Mock MetadataManager for telemetry duration calculation
+const mockReadMetadata = vi.fn().mockResolvedValue({
+	created_at: new Date(Date.now() - 60 * 60000).toISOString(), // 60 minutes ago
+	status: 'active',
+})
+vi.mock('../lib/MetadataManager.js', () => ({
+	MetadataManager: vi.fn(() => ({
+		readMetadata: mockReadMetadata,
+		archiveMetadata: vi.fn().mockResolvedValue(undefined),
+	})),
+}))
 
 // Mock dependencies
 vi.mock('../lib/GitHubService.js')
@@ -34,6 +55,14 @@ vi.mock('../lib/BuildRunner.js')
 vi.mock('../lib/DatabaseManager.js')
 vi.mock('../lib/providers/NeonProvider.js')
 vi.mock('../lib/EnvironmentManager.js')
+vi.mock('../lib/PRManager.js')
+vi.mock('../lib/MetadataManager.js', () => {
+	class MockMetadataManager {
+		async readMetadata() { return null }
+		async archiveMetadata() { return undefined }
+	}
+	return { MetadataManager: MockMetadataManager }
+})
 vi.mock('../utils/env.js')
 vi.mock('../lib/SettingsManager.js', () => {
 	return {
@@ -59,6 +88,11 @@ vi.mock('../utils/git.js', async () => {
 		...actual,
 		pushBranchToRemote: vi.fn().mockResolvedValue(undefined),
 		findMainWorktreePathWithSettings: vi.fn().mockResolvedValue('/test/main'),
+		getMergeTargetBranch: vi.fn().mockResolvedValue('main'),
+		isPlaceholderCommit: vi.fn().mockResolvedValue(false),
+		findPlaceholderCommitSha: vi.fn().mockResolvedValue(null),
+		removePlaceholderCommitFromHead: vi.fn().mockResolvedValue(undefined),
+		removePlaceholderCommitFromHistory: vi.fn().mockResolvedValue(undefined),
 		// Prevent real git commands from running during tests
 		executeGitCommand: vi.fn().mockResolvedValue(''),
 	}
@@ -454,6 +488,10 @@ describe('FinishCommand', () => {
 					executionOrder.push('rebase')
 				})
 
+				vi.mocked(installDependencies).mockImplementationOnce(async () => {
+					executionOrder.push('installDeps')
+				})
+
 				vi.mocked(mockMergeManager.performFastForwardMerge).mockImplementation(async () => {
 					executionOrder.push('merge')
 				})
@@ -463,8 +501,8 @@ describe('FinishCommand', () => {
 					options: {},
 				})
 
-				// Verify all steps executed in correct order (Issue #344: rebase first)
-				expect(executionOrder).toEqual(['rebase', 'validation', 'detectChanges', 'merge'])
+				// Verify all steps executed in correct order (Issue #344: rebase first, Issue #692: install deps before validation)
+				expect(executionOrder).toEqual(['rebase', 'installDeps', 'validation', 'detectChanges', 'merge'])
 			})
 
 			it('should run validation BEFORE detecting and committing changes', async () => {
@@ -523,6 +561,56 @@ describe('FinishCommand', () => {
 				expect(mockCommitManager.detectUncommittedChanges).not.toHaveBeenCalled()
 			})
 
+			describe('--review flag behavior', () => {
+				beforeEach(() => {
+					// Ensure uncommitted changes exist so commitChanges is called
+					vi.mocked(mockCommitManager.detectUncommittedChanges).mockResolvedValue({
+						hasUncommittedChanges: true,
+						unstagedFiles: ['test.ts'],
+						stagedFiles: [],
+						currentBranch: 'feat/issue-123',
+						isAheadOfRemote: false,
+						isBehindRemote: false,
+					})
+				})
+
+				it('should pass noReview: true when --review is not specified', async () => {
+					await command.execute({
+						identifier: '123',
+						options: {},
+					})
+
+					expect(mockCommitManager.commitChanges).toHaveBeenCalledWith(
+						mockWorktree.path,
+						expect.objectContaining({ noReview: true })
+					)
+				})
+
+				it('should pass noReview: false when --review is specified', async () => {
+					await command.execute({
+						identifier: '123',
+						options: { review: true },
+					})
+
+					expect(mockCommitManager.commitChanges).toHaveBeenCalledWith(
+						mockWorktree.path,
+						expect.objectContaining({ noReview: false })
+					)
+				})
+
+				it('should force noReview: true when --json is used with --review', async () => {
+					await command.execute({
+						identifier: '123',
+						options: { json: true, review: true },
+					})
+
+					expect(mockCommitManager.commitChanges).toHaveBeenCalledWith(
+						mockWorktree.path,
+						expect.objectContaining({ noReview: true })
+					)
+				})
+			})
+
 			it('should pass correct options to MergeManager', async () => {
 				await command.execute({
 					identifier: '123',
@@ -538,6 +626,7 @@ describe('FinishCommand', () => {
 					{
 						dryRun: true,
 						force: true,
+						jsonStream: false,
 					}
 				)
 
@@ -548,8 +637,54 @@ describe('FinishCommand', () => {
 					{
 						dryRun: true,
 						force: true,
+						jsonStream: false,
 					}
 				)
+			})
+
+			it('should pass jsonStream through mergeOptions to rebaseOnMain', async () => {
+				await command.execute({
+					identifier: '123',
+					options: {
+						jsonStream: true,
+					},
+				})
+
+				// Verify rebaseOnMain received jsonStream: true in mergeOptions
+				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalledWith(
+					mockWorktree.path,
+					expect.objectContaining({
+						jsonStream: true,
+					})
+				)
+			})
+
+			it('should return FinishResult when jsonStream is true', async () => {
+				const result = await command.execute({
+					identifier: '123',
+					options: {
+						jsonStream: true,
+					},
+				})
+
+				expect(result).toBeDefined()
+				expect(result).toEqual(expect.objectContaining({
+					success: true,
+					type: 'issue',
+				}))
+			})
+
+			it('should work with jsonStream without json flag', async () => {
+				const result = await command.execute({
+					identifier: '123',
+					options: {
+						jsonStream: true,
+					},
+				})
+
+				// jsonStream alone should return result (like json mode)
+				expect(result).toBeDefined()
+				expect(result!.success).toBe(true)
 			})
 
 			it('should handle rebase conflicts and stop workflow', async () => {
@@ -3354,6 +3489,47 @@ describe('FinishCommand', () => {
 			})
 		})
 
+		describe('telemetry', () => {
+			it('should track loom.finished on successful finish', async () => {
+				const mockIssue: Issue = {
+					number: 123,
+					title: 'Test issue',
+					body: 'Test body',
+					state: 'open',
+					labels: [],
+					assignees: [],
+					url: 'https://github.com/test/repo/issues/123',
+				}
+
+				const mockWorktree: GitWorktree = {
+					path: '/test/worktree',
+					branch: 'feat/issue-123',
+					commit: 'abc123',
+					bare: false,
+					detached: false,
+					locked: false,
+				}
+
+				vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+					type: 'issue',
+					number: 123,
+					originalInput: '123',
+				})
+				vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+				vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+
+				await command.execute({
+					identifier: '123',
+					options: {},
+				})
+
+				expect(mockTrack).toHaveBeenCalledWith('loom.finished', {
+					merge_behavior: 'local',
+					duration_minutes: expect.any(Number),
+				})
+			})
+		})
+
 		describe('Provider-aware guards for Linear', () => {
 			const mockIssue: Issue = {
 				number: 123,
@@ -3484,6 +3660,206 @@ describe('FinishCommand', () => {
 				// Should complete local merge workflow successfully
 				expect(mockMergeManager.rebaseOnMain).toHaveBeenCalled()
 				expect(mockMergeManager.performFastForwardMerge).toHaveBeenCalled()
+			})
+		})
+	})
+
+	describe('browser opening on finish', () => {
+		const mockIssue: Issue = {
+			number: 42,
+			title: 'Test Issue',
+			body: 'Test description',
+			state: 'open',
+			url: 'https://github.com/test/repo/issues/42',
+		}
+
+		const mockWorktree: GitWorktree = {
+			path: '/test/worktree',
+			branch: 'feat/issue-42',
+			commit: 'abc123',
+			isPR: false,
+			issueNumber: 42,
+		}
+
+		beforeEach(() => {
+			mockGitHubService.supportsPullRequests = true
+			mockGitHubService.providerName = 'github'
+			vi.mocked(mockGitHubService.fetchIssue).mockResolvedValue(mockIssue)
+			vi.mocked(mockGitWorktreeManager.findWorktreeForIssue).mockResolvedValue(mockWorktree)
+			vi.mocked(mockIdentifierParser.parseForPatternDetection).mockResolvedValue({
+				type: 'issue',
+				number: 42,
+				originalInput: '42',
+			})
+
+			// Mock PRManager methods
+			vi.mocked(PRManager.prototype.openPRInBrowser).mockResolvedValue(undefined)
+			vi.mocked(PRManager.prototype.markPRReady).mockResolvedValue(undefined)
+			vi.mocked(PRManager.prototype.createOrOpenPR).mockResolvedValue({
+				url: 'https://github.com/test/repo/pull/99',
+				number: 99,
+				wasExisting: false,
+			})
+		})
+
+		describe('draft PR mode', () => {
+			beforeEach(async () => {
+				// Override MetadataManager prototype to return draft PR metadata
+				const { MetadataManager } = await import('../lib/MetadataManager.js')
+				vi.spyOn(MetadataManager.prototype, 'readMetadata').mockResolvedValue({
+					draftPrNumber: 55,
+					prUrls: { '55': 'https://github.com/test/repo/pull/55' },
+					issueNumber: 42,
+					branchName: 'feat/issue-42',
+				} as never)
+			})
+
+			it('should open browser after marking PR ready by default', async () => {
+				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+					mainBranch: 'main',
+					worktreeDir: '/test/worktrees',
+					mergeBehavior: { mode: 'github-draft-pr' },
+				})
+				// Spy on handlePRCleanupPrompt to avoid user prompts
+				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
+				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
+
+				await command.execute({ identifier: '42', options: {} })
+
+				expect(PRManager.prototype.markPRReady).toHaveBeenCalledWith(55, '/test/worktree')
+				expect(PRManager.prototype.openPRInBrowser).toHaveBeenCalledWith('https://github.com/test/repo/pull/55')
+			})
+
+			it('should not open browser when openBrowserOnFinish is false', async () => {
+				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+					mainBranch: 'main',
+					worktreeDir: '/test/worktrees',
+					mergeBehavior: { mode: 'github-draft-pr', openBrowserOnFinish: false },
+				})
+				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
+				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
+
+				await command.execute({ identifier: '42', options: {} })
+
+				expect(PRManager.prototype.markPRReady).toHaveBeenCalled()
+				expect(PRManager.prototype.openPRInBrowser).not.toHaveBeenCalled()
+			})
+
+			it('should not open browser when --no-browser flag is set', async () => {
+				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+					mainBranch: 'main',
+					worktreeDir: '/test/worktrees',
+					mergeBehavior: { mode: 'github-draft-pr' },
+				})
+				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
+				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
+
+				await command.execute({ identifier: '42', options: { noBrowser: true } })
+
+				expect(PRManager.prototype.markPRReady).toHaveBeenCalled()
+				expect(PRManager.prototype.openPRInBrowser).not.toHaveBeenCalled()
+			})
+
+			it('should not open browser in dry-run mode', async () => {
+				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+					mainBranch: 'main',
+					worktreeDir: '/test/worktrees',
+					mergeBehavior: { mode: 'github-draft-pr' },
+				})
+				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
+				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
+
+				await command.execute({ identifier: '42', options: { dryRun: true } })
+
+				expect(PRManager.prototype.markPRReady).not.toHaveBeenCalled()
+				expect(PRManager.prototype.openPRInBrowser).not.toHaveBeenCalled()
+			})
+
+			it('should not open browser in json mode', async () => {
+				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+					mainBranch: 'main',
+					worktreeDir: '/test/worktrees',
+					mergeBehavior: { mode: 'github-draft-pr' },
+				})
+				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
+				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
+
+				// JSON mode with github-draft-pr requires --cleanup or --no-cleanup
+				await command.execute({ identifier: '42', options: { json: true, cleanup: false } })
+
+				expect(PRManager.prototype.markPRReady).toHaveBeenCalled()
+				expect(PRManager.prototype.openPRInBrowser).not.toHaveBeenCalled()
+			})
+		})
+
+		describe('github-pr mode', () => {
+			it('should respect openBrowserOnFinish=false setting', async () => {
+				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+					mainBranch: 'main',
+					worktreeDir: '/test/worktrees',
+					mergeBehavior: { mode: 'github-pr', openBrowserOnFinish: false },
+				})
+				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
+				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
+
+				await command.execute({ identifier: '42', options: {} })
+
+				// Verify openInBrowser (6th arg) is false when setting is disabled
+				const calls = vi.mocked(PRManager.prototype.createOrOpenPR).mock.calls
+				expect(calls).toHaveLength(1)
+				expect(calls[0]![5]).toBe(false)
+			})
+
+			it('should not open browser when --no-browser flag is set', async () => {
+				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+					mainBranch: 'main',
+					worktreeDir: '/test/worktrees',
+					mergeBehavior: { mode: 'github-pr' },
+				})
+				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
+				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
+
+				await command.execute({ identifier: '42', options: { noBrowser: true } })
+
+				// Verify openInBrowser (6th arg) is false when --no-browser is set
+				const calls = vi.mocked(PRManager.prototype.createOrOpenPR).mock.calls
+				expect(calls).toHaveLength(1)
+				expect(calls[0]![5]).toBe(false)
+			})
+
+			it('should not open browser in json mode', async () => {
+				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+					mainBranch: 'main',
+					worktreeDir: '/test/worktrees',
+					mergeBehavior: { mode: 'github-pr' },
+				})
+				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
+				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
+
+				// JSON mode with github-pr requires --cleanup or --no-cleanup
+				await command.execute({ identifier: '42', options: { json: true, cleanup: false } })
+
+				// Verify openInBrowser (6th arg) is false in json mode
+				const calls = vi.mocked(PRManager.prototype.createOrOpenPR).mock.calls
+				expect(calls).toHaveLength(1)
+				expect(calls[0]![5]).toBe(false)
+			})
+
+			it('should open browser by default', async () => {
+				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
+					mainBranch: 'main',
+					worktreeDir: '/test/worktrees',
+					mergeBehavior: { mode: 'github-pr' },
+				})
+				vi.spyOn(command as never, 'handlePRCleanupPrompt' as never).mockResolvedValue(undefined as never)
+				vi.spyOn(command as never, 'generateSessionSummaryIfConfigured' as never).mockResolvedValue(undefined as never)
+
+				await command.execute({ identifier: '42', options: {} })
+
+				// Verify openInBrowser (6th arg) is true by default
+				const calls = vi.mocked(PRManager.prototype.createOrOpenPR).mock.calls
+				expect(calls).toHaveLength(1)
+				expect(calls[0]![5]).toBe(true)
 			})
 		})
 	})

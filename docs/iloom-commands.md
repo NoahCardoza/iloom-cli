@@ -28,11 +28,13 @@ Complete documentation for all iloom CLI commands, options, and flags.
   - [il issues](#il-issues)
   - [il add-issue](#il-add-issue)
   - [il enhance](#il-enhance)
+- [Swarm Mode (Epic Orchestration)](#swarm-mode-epic-orchestration)
 - [Configuration & Maintenance](#configuration--maintenance)
   - [il init / il config](#il-init--il-config)
   - [il update](#il-update)
   - [il feedback](#il-feedback)
   - [il contribute](#il-contribute)
+  - [il telemetry](#il-telemetry)
 
 ---
 
@@ -66,6 +68,8 @@ il start "<issue-description>"
 | `--yolo` | - | Shorthand for `--one-shot=bypassPermissions` (autonomous mode) |
 | `--child-loom` | - | Force create as child loom (skip prompt, requires parent loom) |
 | `--no-child-loom` | - | Force create as independent loom (skip prompt) |
+| `--epic` | - | Force create as epic loom with child issues (skip prompt; ignored if no children) |
+| `--no-epic` | - | Skip epic loom creation even if issue has children (ignored if no children) |
 | `--claude` / `--no-claude` | - | Enable/disable Claude integration (default: enabled) |
 | `--code` / `--no-code` | - | Enable/disable VS Code launch (default: enabled) |
 | `--dev-server` / `--no-dev-server` | - | Enable/disable dev server in terminal (default: enabled) |
@@ -82,14 +86,15 @@ il start "<issue-description>"
 The `il start` command orchestrates multiple AI agents:
 
 1. **Fetch** - Retrieves issue/PR details from GitHub or Linear
-2. **Enhance** (conditional) - Expands brief issues into detailed requirements
-3. **Evaluate** - Assesses complexity and determines workflow approach (Simple vs Complex)
-4. **Analyze** (complex issues only) - Investigates root causes and technical constraints
-5. **Plan** - Creates implementation roadmap
+2. **Epic Detection** - Checks for child issues; prompts for epic loom creation (or uses `--epic`/`--no-epic` flags). If creating as epic, fetches child issue details and builds dependency map.
+3. **Enhance** (conditional) - Expands brief issues into detailed requirements
+4. **Evaluate** - Assesses complexity and determines workflow approach (Simple vs Complex)
+5. **Analyze** (complex issues only) - Investigates root causes and technical constraints
+6. **Plan** - Creates implementation roadmap
    - Complex issues: Detailed dedicated planning phase
    - Simple issues: Combined analysis + planning in one step
-6. **Environment Setup** - Creates worktree, database branch, environment variables
-7. **Launch** - Opens IDE with color theme and starts development server
+7. **Environment Setup** - Creates worktree, database branch, environment variables. For epic looms, stores child issue details and dependency map in metadata.
+8. **Launch** - Opens IDE with color theme and starts development server
 
 **Examples:**
 
@@ -114,6 +119,15 @@ il start 42 --child-loom
 
 # Create independent loom even when inside another loom
 il start 99 --no-child-loom
+
+# Start an epic loom (auto-detect children, prompt for confirmation)
+il start 100
+
+# Force epic mode (skip prompt)
+il start 100 --epic
+
+# Force normal loom even if issue has children
+il start 100 --no-epic
 ```
 
 **Notes:**
@@ -121,6 +135,8 @@ il start 99 --no-child-loom
 - Creates isolated environment: Git worktree, database branch, unique port
 - All AI analysis is posted as issue comments for team visibility
 - Color codes the VS Code window for visual context switching
+- When an issue has child issues, prompts whether to create an epic loom (use `--epic`/`--no-epic` to skip the prompt). These flags are silently ignored if the issue has no children.
+- Epic looms store child issue details and the dependency map in metadata for use by swarm mode during `il spin`
 
 ---
 
@@ -145,6 +161,7 @@ il commit [options]
 | `--fixes` | Use "Fixes #N" trailer instead of "Refs #N" (closes the issue) |
 | `--no-review` | Skip commit message review prompt |
 | `--json` | Output result as JSON (implies `--no-review`) |
+| `--json-stream` | Stream JSONL output; runs Claude headless for validation fixes (implies `--no-review`, mutually exclusive with `--json`) |
 
 **Behavior:**
 
@@ -251,9 +268,10 @@ il finish [options]
 | `-n`, `--dry-run` | Preview actions without executing |
 | `--pr` | Treat input as PR number |
 | `--skip-build` | Skip post-merge build verification |
-| `--no-browser` | Skip opening PR in browser (github-pr mode only) |
+| `--no-browser` | Skip opening PR in browser (github-pr and github-draft-pr modes) |
 | `--cleanup` | Clean up worktree after finishing (default in local mode) |
 | `--no-cleanup` | Keep worktree after finishing (default in github-pr and github-draft-pr modes)|
+| `--review` | Review commit message before committing (default: auto-commit without review) |
 
 **Merge Behavior Modes:**
 
@@ -274,7 +292,14 @@ Behavior depends on the `mergeBehavior.mode` setting in your iloom configuration
 1. Same validation pipeline as local mode
 2. Pushes branch to remote
 3. Creates GitHub pull request
-4. Opens PR in browser (unless `--no-browser`)
+4. Opens PR in browser (unless `--no-browser` or `openBrowserOnFinish: false`)
+5. Prompts for cleanup (or use `--cleanup`/`--no-cleanup` flags)
+
+**`github-draft-pr`:**
+1. Same validation pipeline as local mode
+2. Removes placeholder commit and pushes final commits
+3. Marks draft PR as ready for review
+4. Opens PR in browser (unless `--no-browser` or `openBrowserOnFinish: false`)
 5. Prompts for cleanup (or use `--cleanup`/`--no-cleanup` flags)
 
 **Examples:**
@@ -302,6 +327,21 @@ For Payload CMS projects, iloom automatically detects and handles migration conf
 - Identifies migration file conflicts
 - Launches Claude to help resolve discrepancies
 - Validates schema consistency
+
+**Browser Opening Configuration:**
+
+By default, `il finish` opens the PR in your browser after creation (github-pr mode) or marking ready (github-draft-pr mode). To disable this permanently, set `openBrowserOnFinish` to `false` in your settings:
+
+```json
+{
+  "mergeBehavior": {
+    "mode": "github-pr",
+    "openBrowserOnFinish": false
+  }
+}
+```
+
+Browser opening is also suppressed in `--json` mode and `--dry-run` mode.
 
 **Notes:**
 - Claude assists with fixing any test, typecheck, or lint failures
@@ -379,6 +419,7 @@ il cleanup [options] [identifier]
 | `-i`, `--issue` | Cleanup by issue number |
 | `-f`, `--force` | Skip confirmations and force removal |
 | `--dry-run` | Show what would be done without doing it |
+| `--archive` | Archive metadata instead of deleting (preserves loom in `il list --finished`) |
 
 **Workflow:**
 
@@ -408,6 +449,9 @@ il cleanup --all
 
 # Force cleanup without confirmation
 il cleanup 25 --force
+
+# Archive metadata instead of deleting (keeps loom visible in il list --finished)
+il cleanup 25 --archive
 ```
 
 **Safety:**
@@ -443,6 +487,28 @@ il list [options]
 - Database branch name (if configured)
 - Current status (active, has uncommitted changes, etc.)
 - Finish time (for finished looms with `--finished` or `--all`)
+- Swarm lifecycle state (`state`) for child looms in swarm mode
+- Swarm issues and dependency map for epic looms (JSON output only)
+
+**JSON Output - Epic Loom Fields:**
+
+When using `--json`, epic looms include additional fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `state` | `string \| null` | Swarm lifecycle state: `pending`, `in_progress`, `code_review`, `done`, or `failed`. `null` for non-swarm looms. |
+| `swarmIssues` | `array` | Array of child issues with enriched state. Only present for epic looms. |
+| `dependencyMap` | `object` | Dependency DAG. Keys are issue numbers, values are arrays of blocking issue numbers. Only present for epic looms. |
+
+Each entry in `swarmIssues` has:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `number` | `string` | Issue number with prefix (e.g., `"#123"` for GitHub, `"ENG-123"` for Linear) |
+| `title` | `string` | Issue title |
+| `url` | `string` | Issue URL |
+| `state` | `string \| null` | Current lifecycle state (`pending`, `in_progress`, `code_review`, `done`, `failed`) or `null` |
+| `worktreePath` | `string \| null` | Path to the child's worktree, or `null` if not yet created |
 
 **Examples:**
 
@@ -493,10 +559,13 @@ il spin [options]
 | `-p, --print` | | Enable print/headless mode for CI/CD (uses `bypassPermissions`) |
 | `--output-format` | `json`, `stream-json`, `text` | Output format for Claude CLI (requires `--print`) |
 | `--verbose` | | Enable verbose output (requires `--print`) |
+| `--set` | `key=value` | Override settings using dot notation (repeatable). Same as global `--set` flag. |
+| `--skip-cleanup` | | Skip automatic cleanup of child worktrees in swarm mode |
 
 **Behavior:**
 
 - **Inside a loom:** Launches Claude with that loom's context preloaded
+- **Inside an epic loom:** Enters [swarm mode](#swarm-mode-epic-orchestration) — creates child worktrees and launches orchestrator with parallel agent teams
 - **Outside a loom:** Launches Claude with general project context
 
 **Context Loading:**
@@ -506,6 +575,35 @@ When launched from inside a loom, Claude receives:
 - AI-generated enhancement, analysis, and planning
 - Current file tree and recent changes
 - Environment details (port, database branch, etc.)
+
+**Swarm Mode (Epic Looms):**
+
+When `il spin` detects an epic loom (created via `il start --epic` or by confirming the epic prompt), it enters swarm mode instead of launching a standard Claude session:
+
+1. **Fetches/refreshes child data** - Re-fetches child issue details and dependency map from the issue tracker
+2. **Creates child worktrees** - One worktree per child issue, branched off the epic branch, with dependencies installed
+3. **Renders swarm agents** - Writes swarm-mode agent templates to `.claude/agents/` in the epic worktree
+4. **Renders swarm worker agent** - Writes the iloom workflow as a custom agent type to `.claude/agents/iloom-swarm-worker.md`
+5. **Copies agents to child worktrees** - Copies `.claude/agents/` from the epic worktree to each child worktree so workers can resolve agent files locally
+6. **Launches orchestrator** - Starts Claude with agent teams enabled and `bypassPermissions` mode
+
+The orchestrator then:
+- Analyzes the dependency DAG to identify initially unblocked issues
+- Spawns parallel agents for all unblocked child issues simultaneously
+- Each agent uses the `iloom-swarm-worker` custom agent type, receiving the full iloom workflow as its system prompt
+- Completed work is rebased and fast-forward merged into the epic branch for clean linear history
+- Newly unblocked issues are spawned as their dependencies complete
+- Failed children are isolated and do not block unrelated issues
+
+**Child Worktree Cleanup:**
+
+After each child agent's work is successfully merged into the epic branch, the orchestrator automatically runs `il cleanup --archive` on the child worktree to archive its metadata and remove the worktree and branch from disk. Archived child looms remain visible via `il list --finished`. Failed children are preserved for debugging and can be inspected manually.
+
+To disable automatic cleanup and keep all child worktrees after swarm completion, use the `--skip-cleanup` flag:
+
+```bash
+il spin --skip-cleanup
+```
 
 **Examples:**
 
@@ -524,6 +622,9 @@ il spin --print
 
 # Headless mode with JSON output format
 il spin --print --output-format=json
+
+# Keep child worktrees after swarm mode completes
+il spin --skip-cleanup
 ```
 
 ---
@@ -1243,7 +1344,7 @@ il issues [options] [project-path]
 | `--json` | Output as JSON (default behavior) | `true` |
 | `--limit <n>` | Maximum number of items to return (combined issues + PRs) | `100` |
 | `--sprint <name>` | **Jira only:** filter by sprint name (e.g., `"Sprint 17"`) or `"current"` for the active sprint | - |
-| `--mine` | **Jira only:** show only issues assigned to the authenticated user | `false` |
+| `--mine` | Show only issues and PRs assigned to the authenticated user | `false` |
 
 **Output Format:**
 ```json
@@ -1282,10 +1383,10 @@ il issues [options] [project-path]
 - For issues on GitHub: uses `gh issue list` with `--search sort:updated-desc`
 - For issues on Linear: uses `@linear/sdk` with team key filter from settings
 - For issues on Jira: uses Jira REST API with JQL, excluding statuses listed in `doneStatuses` (default: `["Done"]`)
-- `--sprint` and `--mine` flags are Jira-only. When used with other providers, a warning is logged and the flags are ignored.
+- `--sprint` is Jira-only. When used with other providers, a warning is logged and the flag is ignored.
 - `--sprint current` uses Jira's `openSprints()` JQL function to match the active sprint
 - `--sprint "Sprint 17"` filters to a specific named sprint
-- `--mine` uses Jira's `currentUser()` JQL function to filter by the authenticated user
+- `--mine` works across all providers: GitHub uses `--assignee @me` for both issues and PRs, Linear uses the SDK's `assignee: { isMe: { eq: true } }` filter, and Jira uses `currentUser()` JQL
 - For PRs: uses `gh pr list --state open` with draft filtering
 
 **Examples:**
@@ -1312,11 +1413,14 @@ il issues --sprint current
 # Jira: show issues in a specific sprint
 il issues --sprint "Sprint 17"
 
-# Jira: show only my issues
+# Show only my issues and PRs (works with any provider)
 il issues --mine
 
 # Jira: my issues in the current sprint
 il issues --sprint current --mine
+
+# GitHub/Linear: my assigned issues and PRs
+il issues --mine --limit 25
 ```
 
 **Notes:**
@@ -1429,6 +1533,221 @@ il enhance 127
 
 ---
 
+## Swarm Mode (Epic Orchestration)
+
+Swarm mode provides automatic, parallel execution of epic issues by coordinating a team of AI agents. Each child issue is implemented in its own isolated worktree by a dedicated agent, with all work merged back into the epic branch.
+
+### Prerequisites
+
+1. **Decompose the epic** into child issues using `il plan <epic-number>` or by manually creating child issues
+2. **Set up dependencies** between child issues (blocking relationships) so the orchestrator knows execution order
+3. **Claude CLI** must be installed with a Claude Max subscription (swarm mode runs multiple agents)
+
+### Lifecycle States
+
+Each child issue in swarm mode tracks its progress through lifecycle states:
+
+| State | Description |
+|-------|-------------|
+| `pending` | Child worktree created, waiting for dependencies to complete |
+| `in_progress` | Agent is actively implementing the issue |
+| `code_review` | Implementation complete, under review |
+| `done` | Successfully implemented and merged to epic branch |
+| `failed` | Implementation failed or blocked by a failed dependency |
+
+### Triggering Swarm Mode
+
+Swarm mode is a two-step process:
+
+**Step 1: Create the epic loom**
+
+```bash
+il start 100          # Auto-detect children, prompt for epic mode
+il start 100 --epic   # Force epic mode
+il start 100 --no-epic # Force normal loom (ignore children)
+```
+
+When creating an epic loom, `il start`:
+- Checks for child issues via the configured issue tracker
+- Fetches full details (title, body, URL) for each child issue
+- Builds the dependency map by querying blocking relationships between siblings
+- Stores all child data and the dependency map in loom metadata
+
+**Step 2: Launch swarm mode**
+
+```bash
+il spin
+```
+
+When `il spin` detects an epic loom, it automatically enters swarm mode.
+
+### Dependency Map Format
+
+The dependency map is a JSON object representing a directed acyclic graph (DAG). Keys are child issue numbers (as strings), values are arrays of issue numbers that must complete before the key issue can start.
+
+```json
+{
+  "101": [],
+  "102": ["101"],
+  "103": ["101"],
+  "104": ["102", "103"]
+}
+```
+
+In this example:
+- Issue 101 has no dependencies (starts immediately)
+- Issues 102 and 103 both depend on 101 (start in parallel after 101 completes)
+- Issue 104 depends on both 102 and 103 (starts after both complete)
+
+Only sibling dependencies (between child issues of the same epic) are included. External blockers are filtered out.
+
+### How Agents Work
+
+Each child agent runs in complete isolation:
+
+1. The orchestrator spawns the agent with `subagent_type: "iloom-swarm-worker"`, passing the child's issue number, title, worktree path, and issue body in the Task prompt
+2. The agent's system prompt contains the full iloom issue workflow adapted for swarm mode (high-authority instructions)
+3. The agent implements the issue autonomously in its own worktree (branched off the epic branch)
+4. On completion, the agent reports back to the orchestrator with status and summary
+
+The orchestrator uses `bypassPermissions` mode and Claude's agent teams feature, both set automatically.
+
+**Worker Model Configuration:**
+
+The swarm worker agent defaults to `sonnet`. To override, configure it via `.iloom/settings.json`:
+
+```json
+{
+  "agents": {
+    "iloom-swarm-worker": {
+      "model": "opus"
+    }
+  }
+}
+```
+
+This follows the same per-agent override pattern used for phase agents (e.g., `iloom-issue-implementer`, `iloom-issue-planner`).
+
+**Phase Agent Model Overrides (Swarm Mode):**
+
+You can configure different models for individual phase agents when they run inside swarm workers. This is useful for cost optimization (e.g., using a lighter model for enhancement but a heavier model for implementation).
+
+```json
+{
+  "agents": {
+    "iloom-issue-implementer": { "model": "opus" },
+    "iloom-issue-planner": { "model": "opus" },
+    "iloom-swarm-worker": {
+      "model": "sonnet",
+      "agents": {
+        "iloom-issue-implementer": { "model": "haiku" }
+      }
+    }
+  }
+}
+```
+
+**Fallback chain** for phase agent models in swarm mode (highest priority first):
+
+1. `agents.iloom-swarm-worker.agents.<agent-name>.model` -- Swarm-specific per-agent override
+2. `agents.iloom-swarm-worker.model` -- Blanket swarm worker model
+3. `agents.<agent-name>.model` -- Base per-agent override (also used in non-swarm mode)
+4. Agent default from `.md` file
+
+With the configuration above, the resolved models are:
+
+| Agent | Non-swarm mode | Swarm mode | Why |
+|-------|---------------|------------|-----|
+| `iloom-issue-implementer` | `opus` (base per-agent) | `haiku` (swarm-specific override) | Fallback step 1 |
+| `iloom-issue-planner` | `opus` (base per-agent) | `sonnet` (blanket swarm model) | Fallback step 2 |
+| `iloom-issue-analyzer` | `.md` default | `sonnet` (blanket swarm model) | Fallback step 2 |
+
+> **Important:** The blanket swarm model (step 2) overrides the base per-agent model (step 3). In the example above, `iloom-issue-planner` uses `opus` in non-swarm mode (from the base config) but `sonnet` in swarm mode (from the blanket swarm worker model). If you want a specific agent to use a different model than the blanket in swarm mode, use a swarm-specific per-agent override (step 1) as shown for `iloom-issue-implementer` above.
+
+> **Note:** The blanket override only activates when `agents.iloom-swarm-worker.model` is explicitly set in your configuration. If it is not configured, phase agents in swarm mode use their base per-agent model or `.md` default -- the worker agent's implicit `sonnet` default does not propagate to phase agents.
+
+**Example using the `--set` flag:**
+
+```bash
+# Override a specific phase agent's model in swarm mode
+il spin --set agents.iloom-swarm-worker.agents.iloom-issue-implementer.model=sonnet
+
+# Override ALL phase agent models in swarm mode
+il spin --set agents.iloom-swarm-worker.model=sonnet
+```
+
+**Sub-Agent Timeout:**
+
+When the swarm worker invokes phase agents (evaluator, analyzer, planner, implementer) via `claude -p`, each invocation has a configurable timeout. This prevents a single sub-agent from hanging indefinitely and blocking the entire swarm.
+
+- **Default:** 20 minutes
+- **Setting:** `agents.iloom-swarm-worker.subAgentTimeout` (in minutes)
+- **Range:** 1 to 120 minutes
+
+```json
+{
+  "agents": {
+    "iloom-swarm-worker": {
+      "subAgentTimeout": 30
+    }
+  }
+}
+```
+
+```bash
+# Override via CLI flag
+il spin --set agents.iloom-swarm-worker.subAgentTimeout=30
+```
+
+### Merge Strategy
+
+When a child agent completes successfully:
+
+1. The orchestrator navigates to the epic worktree
+2. Rebases the child's branch onto the epic branch and fast-forward merges for clean linear history
+3. If merge conflicts occur, a subagent is spawned to resolve them
+4. If conflict resolution fails, the merge is aborted and the child is marked as `failed`
+5. The child's metadata state is updated to `done`
+6. Any newly unblocked children are spawned
+
+### Failure Handling
+
+Swarm mode is designed to maximize throughput despite individual failures:
+
+- **Failed agents** are marked as `failed` but do not halt the orchestrator
+- **Downstream dependencies** of a failed child are also marked as `failed` (with reason: blocked by failed dependency)
+- **Unrelated children** continue executing normally
+- **Merge conflicts** that cannot be auto-resolved cause the child to be marked `failed`; the merge is aborted cleanly
+- A **final summary** reports the status of all children with success/failure counts
+
+### File Structure
+
+During swarm mode, the following files are created:
+
+```
+~/project-looms/
+├── epic-issue-100/                    # Epic worktree
+│   └── .claude/
+│       └── agents/
+│           ├── iloom-swarm-worker.md              # Worker agent with full iloom workflow
+│           ├── iloom-swarm-issue-implementer.md   # Swarm agent definitions
+│           └── ...
+├── issue-101/                         # Child worktree (branched off epic)
+│   ├── .claude/
+│   │   └── agents/                    # Copied from epic worktree during setup (not committed)
+│   │       ├── iloom-swarm-worker.md
+│   │       ├── iloom-swarm-issue-implementer.md
+│   │       └── ...
+│   └── iloom-metadata.json            # state: pending -> in_progress -> done
+├── issue-102/                         # Another child worktree
+│   └── iloom-metadata.json
+└── ...
+```
+
+Swarm agent files are not committed to the repository.
+
+---
+
 ## Configuration & Maintenance
 
 ### il init / il config
@@ -1473,7 +1792,7 @@ il init "configure neon database with project ID abc-123"
 ```
 
 **Configuration Areas:**
-- Issue tracker (GitHub/Linear)
+- Issue tracker (GitHub/Linear/Jira)
 - Database provider (Neon)
 - IDE preference (VS Code, Cursor, Windsurf, etc.)
 - Merge behavior (local vs github-pr)
@@ -1481,6 +1800,24 @@ il init "configure neon database with project ID abc-123"
 - Project type (web app, CLI tool, etc.)
 - Base port for development servers
 - Environment variable names
+
+**Jira Advanced Settings:**
+
+The following Jira settings can be configured in `.iloom/settings.json` under `issueManagement.jira`:
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `host` | string | (required) | Jira instance URL (e.g., `"https://yourcompany.atlassian.net"`) |
+| `username` | string | (required) | Jira username or email address |
+| `apiToken` | string | (required) | Jira API token (store in `settings.local.json`) |
+| `projectKey` | string | (required) | Jira project key (e.g., `"PROJ"`, `"ENG"`) |
+| `boardId` | string | - | Jira board ID for sprint filtering |
+| `transitionMappings` | object | - | Map iloom states to Jira transition names (e.g., `{"In Review": "Start Review"}`) |
+| `defaultIssueType` | string | `"Task"` | Issue type name for creating issues (e.g., `"Task"`, `"Story"`, `"Bug"`) |
+| `defaultSubtaskType` | string | `"Subtask"` | Issue type name for creating child issues (e.g., `"Subtask"`, `"Sub-task"`) |
+| `doneStatuses` | string[] | `["Done"]` | Status names to exclude from `il issues` output |
+
+**Note:** Different Jira instances may use different issue type names. If issue creation fails with a 400 error, check your Jira project's available issue types and configure `defaultIssueType` and `defaultSubtaskType` accordingly.
 
 ---
 
@@ -1616,6 +1953,46 @@ il contribute "facebook/react"
 
 ---
 
+### il telemetry
+
+Manage anonymous usage telemetry settings.
+
+**Usage:**
+```bash
+il telemetry <subcommand>
+```
+
+**Subcommands:**
+
+| Subcommand | Description |
+|------------|-------------|
+| `off` | Disable anonymous usage telemetry. No data will be collected or sent. |
+| `on` | Re-enable anonymous usage telemetry. |
+| `status` | Show current telemetry state (enabled/disabled) and the anonymous identifier. |
+
+**Examples:**
+
+```bash
+# Disable telemetry
+il telemetry off
+
+# Re-enable telemetry
+il telemetry on
+
+# Check current telemetry status
+il telemetry status
+```
+
+**First-Run Disclosure:**
+
+On first run, iloom displays a disclosure message informing you that anonymous telemetry is enabled by default and how to opt out. This message is shown once and not repeated.
+
+**Privacy:**
+
+For details on what data is and is not collected, see the [Telemetry section in the README](../README.md#telemetry).
+
+---
+
 ## Global Flags
 
 Some flags work across multiple commands:
@@ -1642,6 +2019,12 @@ iloom respects these environment variables:
 | `ILOOM_DEBUG` | Enable debug logging | `false` |
 | `ILOOM_DEV_SERVER_TIMEOUT` | Dev server startup timeout in milliseconds | `180000` (180 seconds) |
 | `CLAUDE_API_KEY` | Claude API key (if not using Claude CLI) | - |
+| `JIRA_HOST` | Jira instance URL (MCP server) | - |
+| `JIRA_USERNAME` | Jira username/email (MCP server) | - |
+| `JIRA_API_TOKEN` | Jira API token (MCP server) | - |
+| `JIRA_PROJECT_KEY` | Jira project key (MCP server) | - |
+| `JIRA_DEFAULT_ISSUE_TYPE` | Default issue type for Jira issue creation (MCP server) | `"Task"` |
+| `JIRA_DEFAULT_SUBTASK_TYPE` | Default subtask type for Jira child issue creation (MCP server) | `"Subtask"` |
 
 ---
 

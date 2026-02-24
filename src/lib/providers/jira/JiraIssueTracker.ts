@@ -5,6 +5,7 @@ import type { IssueTracker } from '../../IssueTracker.js'
 import type { Issue, IssueTrackerInputDetection } from '../../../types/index.js'
 import { JiraApiClient, type JiraConfig, type JiraIssue, type JiraTransition } from './JiraApiClient.js'
 import { getLogger } from '../../../utils/logger-context.js'
+import { promptConfirmation } from '../../../utils/prompt.js'
 import { adfToMarkdown } from './AdfMarkdownConverter.js'
 
 /**
@@ -13,6 +14,8 @@ import { adfToMarkdown } from './AdfMarkdownConverter.js'
 export interface JiraTrackerConfig extends JiraConfig {
 	projectKey: string
 	transitionMappings?: Record<string, string> // Map iloom states to Jira transition names
+	defaultIssueType?: string // Default issue type for creating issues (e.g., "Task", "Story")
+	defaultSubtaskType?: string // Default issue type for creating subtasks (e.g., "Subtask", "Sub-task")
 }
 
 /**
@@ -30,14 +33,18 @@ export class JiraIssueTracker implements IssueTracker {
 
 	private readonly client: JiraApiClient
 	private readonly config: JiraTrackerConfig
+	private prompter: (message: string) => Promise<boolean>
 
-	constructor(config: JiraTrackerConfig) {
+	constructor(config: JiraTrackerConfig, options?: {
+		prompter?: (message: string) => Promise<boolean>
+	}) {
 		this.config = config
 		this.client = new JiraApiClient({
 			host: config.host,
 			username: config.username,
 			apiToken: config.apiToken,
 		})
+		this.prompter = options?.prompter ?? promptConfirmation
 	}
 
 	/**
@@ -69,8 +76,11 @@ export class JiraIssueTracker implements IssueTracker {
 			await this.client.getIssue(issueKey)
 			return { type: 'issue', identifier: issueKey, rawInput: input }
 		} catch (error) {
-			getLogger().debug('Issue not found', { issueKey, error })
-			return { type: 'unknown', identifier: null, rawInput: input }
+			if (error instanceof Error && (/404/.test(error.message) || /not found/i.test(error.message))) {
+				getLogger().debug('Issue not found', { issueKey, error })
+				return { type: 'unknown', identifier: null, rawInput: input }
+			}
+			throw error
 		}
 	}
 
@@ -92,8 +102,11 @@ export class JiraIssueTracker implements IssueTracker {
 		try {
 			return await this.fetchIssue(identifier)
 		} catch (error) {
-			getLogger().debug('Issue validation failed', { identifier, error })
-			return false
+			if (error instanceof Error && (/404/.test(error.message) || /not found/i.test(error.message))) {
+				getLogger().debug('Issue validation failed: not found', { identifier, error })
+				return false
+			}
+			throw error
 		}
 	}
 
@@ -102,14 +115,14 @@ export class JiraIssueTracker implements IssueTracker {
 	 * Note: Jira doesn't have a simple "closed" state - depends on workflow
 	 */
 	async validateIssueState(issue: Issue): Promise<void> {
-		// Jira state validation is workflow-specific
-		// For now, we'll just log the state
 		getLogger().debug('Jira issue state', { issueKey: issue.number, state: issue.state })
-		
-		// Could add custom validation logic here based on config
-		// For example, warn if issue is in "Done" state
-		if (issue.state.toLowerCase() === 'done') {
-			getLogger().warn('Issue is already in Done state', { issueKey: issue.number })
+		if (issue.state === 'closed') {
+			const shouldContinue = await this.prompter(
+				`Issue ${issue.number} is in a completed state. Continue anyway?`
+			)
+			if (!shouldContinue) {
+				throw new Error('User cancelled due to completed issue')
+			}
 		}
 	}
 
@@ -130,7 +143,8 @@ export class JiraIssueTracker implements IssueTracker {
 		const jiraIssue = await this.client.createIssue(
 			this.config.projectKey,
 			title,
-			body
+			body,
+			this.config.defaultIssueType
 		)
 
 		return {
@@ -214,6 +228,72 @@ export class JiraIssueTracker implements IssueTracker {
 	}
 
 	/**
+	 * Close an issue by transitioning to "Done" state
+	 * Uses configured transition mapping or default transition names
+	 */
+	async closeIssue(identifier: string | number): Promise<void> {
+		const issueKey = this.normalizeIdentifier(identifier)
+		getLogger().debug('Closing Jira issue', { issueKey })
+
+		// Get available transitions
+		const transitions = await this.client.getTransitions(issueKey)
+
+		// Look for the transition in config mapping or use default names
+		const transitionName = this.config.transitionMappings?.['Done']
+			?? this.findTransitionByName(transitions, ['Done', 'Close', 'Closed', 'Resolve', 'Resolved'])
+
+		if (!transitionName) {
+			throw new Error(
+				`Could not find "Done" transition for ${issueKey}. ` +
+				`Available transitions: ${transitions.map(t => t.name).join(', ')}. ` +
+				`Configure custom mapping in settings.json: issueManagement.jira.transitionMappings`
+			)
+		}
+
+		// Find transition ID
+		const transition = transitions.find(t => t.name === transitionName)
+		if (!transition) {
+			throw new Error(`Transition "${transitionName}" not found`)
+		}
+
+		await this.client.transitionIssue(issueKey, transition.id)
+		getLogger().info('Issue closed successfully', { issueKey, transition: transitionName })
+	}
+
+	/**
+	 * Reopen an issue by transitioning back to an open state
+	 * Uses configured transition mapping or default transition names
+	 */
+	async reopenIssue(identifier: string | number): Promise<void> {
+		const issueKey = this.normalizeIdentifier(identifier)
+		getLogger().debug('Reopening Jira issue', { issueKey })
+
+		// Get available transitions
+		const transitions = await this.client.getTransitions(issueKey)
+
+		// Look for the transition in config mapping or use default names
+		const transitionName = this.config.transitionMappings?.['Reopen']
+			?? this.findTransitionByName(transitions, ['Reopen', 'To Do', 'Open', 'Backlog'])
+
+		if (!transitionName) {
+			throw new Error(
+				`Could not find "Reopen" transition for ${issueKey}. ` +
+				`Available transitions: ${transitions.map(t => t.name).join(', ')}. ` +
+				`Configure custom mapping in settings.json: issueManagement.jira.transitionMappings`
+			)
+		}
+
+		// Find transition ID
+		const transition = transitions.find(t => t.name === transitionName)
+		if (!transition) {
+			throw new Error(`Transition "${transitionName}" not found`)
+		}
+
+		await this.client.transitionIssue(issueKey, transition.id)
+		getLogger().info('Issue reopened successfully', { issueKey, transition: transitionName })
+	}
+
+	/**
 	 * Extract context from issue for AI prompts
 	 */
 	extractContext(entity: Issue): string {
@@ -227,6 +307,28 @@ ${entity.body}
 
 ${entity.labels.length > 0 ? `Labels: ${entity.labels.join(', ')}` : ''}
 ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''}`
+	}
+
+	/**
+	 * Fetch child issues of a Jira parent issue using JQL
+	 * @param parentIdentifier - Jira issue key (e.g., "PROJ-123")
+	 * @param _repo - Repository (unused for Jira)
+	 * @returns Array of child issues
+	 */
+	async getChildIssues(parentIdentifier: string, _repo?: string): Promise<Array<{ id: string; title: string; url: string; state: string }>> {
+		const parentKey = this.normalizeIdentifier(parentIdentifier)
+		const jiraKeyPattern = /^[A-Z][A-Z0-9]+-\d+$/
+		if (!jiraKeyPattern.test(parentKey)) {
+			getLogger().warn(`Invalid Jira issue key format: ${parentKey}`)
+			return []
+		}
+		const issues = await this.client.searchIssues(`parent = ${parentKey}`)
+		return issues.map(issue => ({
+			id: issue.key,
+			title: issue.fields.summary,
+			url: `${this.config.host}/browse/${issue.key}`,
+			state: issue.fields.status.name.toLowerCase(),
+		}))
 	}
 
 	/**
@@ -324,7 +426,7 @@ ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''
 			number: jiraIssue.key,
 			title: jiraIssue.fields.summary,
 			body: description,
-			state: jiraIssue.fields.status.name.toLowerCase() as 'open' | 'closed',
+			state: this.mapJiraStatusToState(jiraIssue.fields.status.name),
 			labels: jiraIssue.fields.labels,
 			assignees: jiraIssue.fields.assignee 
 				? [jiraIssue.fields.assignee.displayName]
@@ -335,6 +437,12 @@ ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''
 			issueType: jiraIssue.fields.issuetype.name,
 			status: jiraIssue.fields.status.name,
 		}
+	}
+
+	private mapJiraStatusToState(statusName: string): 'open' | 'closed' {
+		const normalized = statusName.toLowerCase()
+		const closedStatuses = ['done', 'closed', 'resolved', 'cancelled', 'canceled']
+		return closedStatuses.includes(normalized) ? 'closed' : 'open'
 	}
 
 	/**

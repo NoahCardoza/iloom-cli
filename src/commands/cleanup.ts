@@ -11,6 +11,23 @@ import { IdentifierParser } from '../utils/IdentifierParser.js'
 import { loadEnvIntoProcess } from '../utils/env.js'
 import { createNeonProviderFromSettings } from '../utils/neon-helpers.js'
 import { LoomManager } from '../lib/LoomManager.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
+import { MetadataManager } from '../lib/MetadataManager.js'
+import type { LoomMetadata } from '../lib/MetadataManager.js'
+
+function trackLoomAbandoned(metadata: LoomMetadata): void {
+	try {
+		const durationMinutes = metadata.created_at
+			? Math.round((Date.now() - new Date(metadata.created_at).getTime()) / 60000)
+			: 0
+		TelemetryService.getInstance().track('loom.abandoned', {
+			duration_minutes: isNaN(durationMinutes) ? 0 : durationMinutes,
+			phase_reached: metadata.state ?? 'unknown',
+		})
+	} catch (error: unknown) {
+		getLogger().debug(`Failed to track loom.abandoned telemetry: ${error instanceof Error ? error.message : String(error)}`)
+	}
+}
 import type { CleanupOptions } from '../types/index.js'
 import type { CleanupResult } from '../types/cleanup.js'
 import type { ParsedInput } from './start.js'
@@ -100,14 +117,14 @@ export class CleanupCommand {
 
     // Initialize LoomManager if not provided (for child loom detection)
     if (!this.loomManager) {
-      const { GitHubService } = await import('../lib/GitHubService.js')
+      const { IssueTrackerFactory } = await import('../lib/IssueTrackerFactory.js')
       const { ClaudeContextManager } = await import('../lib/ClaudeContextManager.js')
       const { ProjectCapabilityDetector } = await import('../lib/ProjectCapabilityDetector.js')
       const { DefaultBranchNamingService } = await import('../lib/BranchNamingService.js')
 
       this.loomManager = new LoomManager(
         this.gitWorktreeManager,
-        new GitHubService(),
+        IssueTrackerFactory.create(settings),
         new DefaultBranchNamingService({ useClaude: true }),
         environmentManager,
         new ClaudeContextManager(),
@@ -396,6 +413,23 @@ export class CleanupCommand {
       }
     }
 
+    // Step 3.5: Read metadata BEFORE cleanup (cleanup deletes the worktree)
+    let preCleanupMetadata: LoomMetadata | null = null
+    try {
+      // Find worktree path for metadata lookup
+      const worktree = parsedInput.type === 'branch' && parsedInput.branchName
+        ? await this.gitWorktreeManager.findWorktreeForBranch(parsedInput.branchName)
+        : parsedInput.number !== undefined
+        ? await this.gitWorktreeManager.findWorktreeForIssue(parsedInput.number)
+        : null
+      if (worktree) {
+        const metadataManager = new MetadataManager()
+        preCleanupMetadata = await metadataManager.readMetadata(worktree.path)
+      }
+    } catch (error: unknown) {
+      getLogger().debug(`Failed to read metadata for telemetry: ${error instanceof Error ? error.message : String(error)}`)
+    }
+
     // Step 4: Execute worktree cleanup (includes safety validation)
     // Issue #275 fix: Run 5-point safety check BEFORE any deletion
     // This prevents the scenario where worktree is deleted but branch deletion fails
@@ -408,7 +442,8 @@ export class CleanupCommand {
       force: force ?? false,
       deleteBranch: true,  // Always include branch deletion (safety checks run first)
       keepDatabase: false,
-      checkMergeSafety: true  // Run 5-point safety check BEFORE any deletion
+      checkMergeSafety: true,  // Run 5-point safety check BEFORE any deletion
+      archive: parsed.options.archive ?? false,
     })
 
     // Add dryRun flag to result
@@ -416,6 +451,11 @@ export class CleanupCommand {
 
     // Step 5: Report cleanup results
     this.reportCleanupResults(cleanupResult)
+
+    // Track loom.abandoned telemetry event (only for unfinished looms)
+    if (cleanupResult.success && preCleanupMetadata && preCleanupMetadata.status !== 'finished') {
+      trackLoomAbandoned(preCleanupMetadata)
+    }
 
     // Final success message
     if (cleanupResult.success) {
@@ -462,7 +502,7 @@ export class CleanupCommand {
 
     const { force, dryRun } = parsed.options
 
-    getLogger().info(`Finding worktrees related to GitHub issue/PR #${issueNumber}...`)
+    getLogger().info(`Finding worktrees related to issue/PR #${issueNumber}...`)
 
     // Step 1: Get all worktrees and filter by path pattern
     const worktrees = await this.gitWorktreeManager.listWorktrees()
@@ -479,7 +519,7 @@ export class CleanupCommand {
     })
 
     if (matchingWorktrees.length === 0) {
-      getLogger().warn(`No worktrees found for GitHub issue/PR #${issueNumber}`)
+      getLogger().warn(`No worktrees found for issue/PR #${issueNumber}`)
       getLogger().info(`Searched for worktree paths containing: ${issueNumber}, _pr_${issueNumber}, issue-${issueNumber}, etc.`)
       return {
         identifier: String(issueNumber),
@@ -538,6 +578,17 @@ export class CleanupCommand {
       // Cleanup worktree using ResourceCleanup with ParsedInput
       // Now includes branch deletion with 5-point safety check BEFORE any deletion
       try {
+        // Read metadata BEFORE cleanup for telemetry
+        let targetMetadata: LoomMetadata | null = null
+        if (target.worktreePath) {
+          try {
+            const metadataManager = new MetadataManager()
+            targetMetadata = await metadataManager.readMetadata(target.worktreePath)
+          } catch (error: unknown) {
+            getLogger().debug(`Failed to read metadata for telemetry: ${error instanceof Error ? error.message : String(error)}`)
+          }
+        }
+
         // Use the known issue number directly instead of parsing from branch name
         // This ensures CLI symlinks (created with issue number) are properly cleaned up
         const parsedInput: ParsedInput = {
@@ -558,7 +609,9 @@ export class CleanupCommand {
           force: force ?? false,
           deleteBranch: true,  // Include branch deletion (with safety checks)
           keepDatabase: false,
-          checkMergeSafety: true  // Run 5-point safety check BEFORE any deletion
+          checkMergeSafety: true,  // Run 5-point safety check BEFORE any deletion
+          archive: parsed.options.archive ?? false,
+          ...(target.worktreePath && { worktree: { path: target.worktreePath, branch: target.branchName } }),
         })
 
         if (result.success) {
@@ -579,9 +632,17 @@ export class CleanupCommand {
             const deletedBranchName = target.branchName
             databaseBranchesDeletedList.push(deletedBranchName)
           }
+
+          // Track loom.abandoned telemetry (only for unfinished looms)
+          if (targetMetadata && targetMetadata.status !== 'finished') {
+            trackLoomAbandoned(targetMetadata)
+          }
         } else {
           failed++
           getLogger().error(`  Failed to remove worktree: ${target.branchName}`)
+          for (const err of result.errors) {
+            getLogger().error(`    ${err.message}`)
+          }
         }
       } catch (error) {
         failed++

@@ -104,6 +104,17 @@ export interface TemplateVariables {
 	HAS_REVIEWER?: boolean
 	// Git remote configuration
 	GIT_REMOTE?: string  // Remote name for push (defaults to 'origin')
+	// Swarm orchestrator variables
+	EPIC_ISSUE_NUMBER?: string | number
+	EPIC_WORKTREE_PATH?: string
+	EPIC_METADATA_PATH?: string  // Path to the epic's metadata JSON file
+	CHILD_ISSUES?: string  // JSON stringified array of child issues with worktree paths
+	DEPENDENCY_MAP?: string  // JSON stringified dependency map
+	SWARM_MODE?: boolean  // True when rendering agents in swarm mode
+	SWARM_AGENT_METADATA?: string  // JSON string mapping agent names to { model, tools } for claude -p commands
+	SWARM_SUB_AGENT_TIMEOUT_MS?: number  // Timeout in milliseconds for sub-agent claude -p Bash tool calls (default: 1200000 = 20 minutes)
+	NO_CLEANUP?: boolean  // True when child loom cleanup should be skipped (e.g., manual cleanup later)
+	ISSUE_PREFIX?: string  // "#" for GitHub, "" for Linear/Jira — used in commit message templates
 }
 
 /**
@@ -214,7 +225,7 @@ export class PromptTemplateManager {
 	/**
 	 * Load a template file by name
 	 */
-	async loadTemplate(templateName: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan'): Promise<string> {
+	async loadTemplate(templateName: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan' | 'swarm-orchestrator'): Promise<string> {
 		const templatePath = path.join(this.templateDir, `${templateName}-prompt.txt`)
 
 		logger.debug('Loading template', {
@@ -243,7 +254,7 @@ export class PromptTemplateManager {
 	 * Get a fully processed prompt for a workflow type
 	 */
 	async getPrompt(
-		type: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan',
+		type: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan' | 'swarm-orchestrator',
 		variables: TemplateVariables
 	): Promise<string> {
 		const template = await this.loadTemplate(type)

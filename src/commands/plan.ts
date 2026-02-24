@@ -11,6 +11,7 @@ import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFa
 import { needsFirstRunSetup, launchFirstRunSetup } from '../utils/first-run-setup.js'
 import type { IssueProvider, ChildIssueResult, DependenciesResult } from '../mcp/types.js'
 import { promptConfirmation, isInteractiveEnvironment } from '../utils/prompt.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
 
 // Define provider arrays for validation and dynamic flag generation
 const PLANNER_PROVIDERS = ['claude', 'gemini', 'codex'] as const
@@ -175,7 +176,7 @@ export class PlanCommand {
 		// Detect if prompt is an issue number for decomposition mode
 		// Uses shared matchIssueIdentifier() utility to identify issue identifiers:
 		// - Numeric pattern: #123 or 123 (GitHub format)
-		// - Linear pattern: ENG-123 (requires at least 2 letters before dash)
+		// - Project key pattern: ENG-123, PROJ-456 (requires at least 2 letters before dash)
 		const identifierMatch = prompt ? matchIssueIdentifier(prompt) : { isIssueIdentifier: false }
 		const looksLikeIssueIdentifier = identifierMatch.isIssueIdentifier
 		let decompositionContext: {
@@ -211,7 +212,7 @@ export class PlanCommand {
 				// Fetch existing children and dependencies using MCP provider
 				// This allows users to resume planning where they left off
 				try {
-					const mcpProvider = IssueManagementProviderFactory.create(provider as IssueProvider)
+					const mcpProvider = IssueManagementProviderFactory.create(provider as IssueProvider, settings ?? undefined)
 
 					// Fetch child issues
 					logger.debug('Fetching child issues for decomposition context', { identifier: decompositionContext.identifier })
@@ -466,7 +467,7 @@ export class PlanCommand {
 				throw new Error('--yolo requires a prompt or issue identifier (e.g., il plan --yolo "add gitlab support" or il plan --yolo 42)')
 			}
 			logger.warn(
-				'⚠️  YOLO mode enabled - Claude will skip permission prompts and proceed autonomously. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
+				'YOLO mode enabled - Claude will skip permission prompts and proceed autonomously. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
 			)
 		}
 
@@ -506,6 +507,20 @@ ${initialMessage}`
 			...claudeOptions,
 			...(effectiveYolo && { permissionMode: 'bypassPermissions' as const }),
 		})
+
+		// Track epic.planned telemetry for decomposition sessions
+		if (decompositionContext) {
+			try {
+				const mcpProv = IssueManagementProviderFactory.create(provider as IssueProvider, settings ?? undefined)
+				const children = await mcpProv.getChildIssues({ number: decompositionContext.identifier })
+				TelemetryService.getInstance().track('epic.planned', {
+					child_count: children.length,
+					tracker: provider,
+				})
+			} catch (error) {
+				logger.debug(`Telemetry epic.planned tracking failed: ${error instanceof Error ? error.message : error}`)
+			}
+		}
 
 		// Output final JSON for --json mode (--json-stream already streamed to stdout)
 		if (printOptions?.json) {
