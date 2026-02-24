@@ -1637,7 +1637,7 @@ You can also set a different model for the spin orchestrator when running in swa
 }
 ```
 
-In this example, `spin.model` (`sonnet`) is used when spin runs in issue, PR, or branch mode, while `spin.swarmModel` (`opus`) is used when spin runs in swarm mode. If `swarmModel` is not set, spin uses `model` for all modes. Note that `spin.swarmModel` only affects the spin orchestrator itself — it does not affect swarm worker agents or phase agents.
+In this example, `spin.model` (`sonnet`) is used when spin runs in issue, PR, or branch mode, while `spin.swarmModel` (`opus`) is used when spin runs in swarm mode. If `swarmModel` is not set, the orchestrator defaults to `sonnet` in swarm mode (Balanced mode default) — it does not fall back to `spin.model`. Note that `spin.swarmModel` only affects the spin orchestrator itself — it does not affect swarm worker agents or phase agents.
 
 **Phase Agent Model Overrides (Swarm Mode):**
 
@@ -1654,7 +1654,9 @@ Each agent supports a `swarmModel` field for a clean, per-agent swarm model over
 }
 ```
 
-If `swarmModel` is set for an agent, it overrides the agent's model in swarm mode. If not set, the agent uses its base `model` (or `.md` default) in both modes.
+If `swarmModel` is set for an agent, it overrides the agent's model in swarm mode. If no `swarmModel` is set, the Swarm Quality Mode defaults apply (see below) — not the agent's base `model`. This separation is intentional: swarms run many agents in parallel and costs scale quickly, so swarm model choices should always be explicit.
+
+**Important:** Changing an agent's `model` only affects non-swarm mode (single-issue looms via `il start`). To change an agent's model in swarm mode, use `swarmModel` or choose a different Swarm Quality Mode.
 
 With the configuration above:
 
@@ -1662,7 +1664,7 @@ With the configuration above:
 |-------|---------------|------------|
 | `iloom-issue-implementer` | `opus` | `sonnet` (swarmModel) |
 | `iloom-issue-complexity-evaluator` | `haiku` | `haiku` (swarmModel) |
-| `iloom-issue-analyzer` | `.md` default | `.md` default (no swarmModel set) |
+| `iloom-issue-analyzer` | `.md` default | `opus` (Balanced mode default) |
 
 **Example using the `--set` flag:**
 
@@ -1673,6 +1675,75 @@ il spin --set agents.iloom-issue-implementer.swarmModel=sonnet
 # Set spin orchestrator model for swarm mode
 il spin --set spin.swarmModel=sonnet
 ```
+
+**Swarm Quality Mode:**
+
+During `il init`, you'll be asked to choose a swarm quality mode that tunes the trade-off between reasoning quality and speed/cost:
+
+| Mode | Focus | Models used | Best for |
+|------|-------|-------------|----------|
+| **Maximum Quality** | Deepest reasoning, best analysis | Opus everywhere (complexity evaluator stays Haiku) | Complex epics, critical features |
+| **Balanced** (default) | Opus for analysis, Sonnet for everything else | Opus: analyzer, analyze-and-plan. Sonnet: orchestrator, worker, planner, implementer, enhancer, code-reviewer. Haiku: complexity evaluator | Most tasks |
+| **Fast & Cheap** | Quick iterations, lowest cost | Haiku everywhere | Simple tasks, rapid prototyping |
+
+The complexity evaluator always stays on Haiku regardless of mode, since it performs a simple classification task that does not benefit from a larger model.
+
+Example settings for each mode:
+
+**Maximum Quality:**
+```json
+{
+  "spin": { "swarmModel": "opus" },
+  "agents": {
+    "iloom-swarm-worker": { "model": "opus" },
+    "iloom-issue-analyzer": { "swarmModel": "opus" },
+    "iloom-issue-planner": { "swarmModel": "opus" },
+    "iloom-issue-implementer": { "swarmModel": "opus" },
+    "iloom-issue-enhancer": { "swarmModel": "opus" },
+    "iloom-issue-analyze-and-plan": { "swarmModel": "opus" },
+    "iloom-code-reviewer": { "swarmModel": "opus" },
+    "iloom-issue-complexity-evaluator": { "swarmModel": "haiku" }
+  }
+}
+```
+
+**Balanced (recommended default):**
+```json
+{
+  "spin": { "swarmModel": "sonnet" },
+  "agents": {
+    "iloom-swarm-worker": { "model": "sonnet" },
+    "iloom-issue-analyzer": { "swarmModel": "opus" },
+    "iloom-issue-planner": { "swarmModel": "sonnet" },
+    "iloom-issue-implementer": { "swarmModel": "sonnet" },
+    "iloom-issue-enhancer": { "swarmModel": "sonnet" },
+    "iloom-issue-analyze-and-plan": { "swarmModel": "opus" },
+    "iloom-code-reviewer": { "swarmModel": "sonnet" },
+    "iloom-issue-complexity-evaluator": { "swarmModel": "haiku" }
+  }
+}
+```
+
+**Fast & Cheap:**
+```json
+{
+  "spin": { "swarmModel": "haiku" },
+  "agents": {
+    "iloom-swarm-worker": { "model": "haiku" },
+    "iloom-issue-analyzer": { "swarmModel": "haiku" },
+    "iloom-issue-planner": { "swarmModel": "haiku" },
+    "iloom-issue-implementer": { "swarmModel": "haiku" },
+    "iloom-issue-enhancer": { "swarmModel": "haiku" },
+    "iloom-issue-analyze-and-plan": { "swarmModel": "haiku" },
+    "iloom-code-reviewer": { "swarmModel": "haiku" },
+    "iloom-issue-complexity-evaluator": { "swarmModel": "haiku" }
+  }
+}
+```
+
+These modes use `swarmModel` on phase agents (not `model`), so non-swarm behavior is preserved. When agents run outside of swarm mode, their base `model` setting is used. Mode settings merge with existing agent settings — only the `swarmModel` (and worker `model`) fields are overwritten.
+
+To configure, run `il init` — you'll be asked during setup, or you can change it later in the advanced configuration section.
 
 **Sub-Agent Timeout:**
 

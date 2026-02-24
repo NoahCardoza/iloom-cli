@@ -579,9 +579,32 @@ Based on the users answer:
 
 **Note:** Terminal colors default to `true` (always recommend unless user explicitly disables).
 
+### Phase 2.7: Swarm Quality Preference
+
+After tooling configuration (and color sync if applicable), ask the user how they want swarms to behave:
+
+```
+Swarms are iloom's most powerful feature. Give them an epic and they'll decompose it into issues, spin up parallel AI agents — each in its own isolated workspace — and build the entire thing for you. They can ship whole features, modules, or even full products.
+
+You can tune how swarms balance thinking depth versus speed:
+
+  🧠 Maximum Quality — Agents take more time to reason deeply, produce thorough analysis, and write more carefully considered code. Best when correctness matters most. Uses Opus for all agents, which is significantly more expensive.
+  ⚖️  Balanced (recommended) — Strong reasoning at a practical pace. The sweet spot for most work.
+  ⚡ Fast & Cheap — Agents move quickly through issues with lighter analysis. Great for rapid prototyping or if you're on a budget.
+```
+
+Ask: "Which swarm mode would you prefer?"
+
+- If the user picks **Maximum Quality**: apply the Maximum Quality rules (see Swarm Quality Mode in Phase 9 advanced config, item 2)
+- If the user picks **Balanced**: this is the default — no settings changes needed unless the user wants to be explicit
+- If the user picks **Fast & Cheap**: apply the Fast & Cheap rules
+- If the user says they don't use swarms or want to skip: move on without changes
+
+Include the user's choice in the Phase 3 summary under a "Swarm Mode" line.
+
 ### Phase 3: Configuration Summary
 
-After gathering all answers from Phase 1 and Phase 2, display a summary like this:
+After gathering all answers from Phase 1, Phase 2, and Phase 2.7, display a summary like this:
 
 ```
 Configuration Summary:
@@ -603,6 +626,7 @@ Tooling Configuration (Phase 2):
   Jira API Token: [configured/not configured] (only if issue tracker is Jira - never show actual token)
   IDE: [value or "vscode (default)"]
   Merge Mode: [value] (only if configured)
+  Swarm Mode: [Maximum Quality / Balanced / Fast & Cheap] (only if configured in Phase 2.7)
 ```
 
 **Note**:
@@ -1007,6 +1031,7 @@ Need more advanced configuration? I can help you set up:
   • Plan Configuration - Use different AI providers for planning and plan review
   • Agent Models - Use different Claude models for different tasks
   • Swarm Agent Models - Configure different models for agents when running in swarm mode
+  • Swarm Quality Mode - Control how deeply swarm agents reason vs how fast they move (also offered during initial setup)
   • Database Settings - Configure database branching for isolated development
   • Skip Pre-Commit Hooks - Bypass slow or failing hooks during commit and finish workflows
   • Workflow Behavior - Control permissions, IDE launching, dev servers, and terminal behavior
@@ -1025,6 +1050,8 @@ You can ask me questions like:
   "How do I protect my main branch from worktree creation?"
   "What models are available for the different agents?"
   "How do I use different models for swarm workers vs normal mode?"
+  "How do I change the swarm quality mode?"
+  "What's the difference between maximum quality and fast & cheap swarms?"
   "How do I use custom build/test commands instead of package.json scripts?"
 
 Just ask any of these questions and I'll help you modify your settings.
@@ -1056,36 +1083,50 @@ When configuring agents, use these model identifiers:
    }
    ```
 
+   **Important: Non-swarm and swarm models are independent.** Changing an agent's `model` here only affects non-swarm mode (single-issue looms via `il start`). Swarm mode has its own model configuration via `swarmModel` and the Swarm Quality Mode presets (see item 2 below). This separation is intentional — swarms run many agents in parallel and costs scale quickly, so swarm models should be an explicit choice.
+
    **Swarm-Specific Phase Agent Models:**
 
-   In swarm mode, you can configure different models for phase agents (analyzer, planner, implementer, etc.) than in normal mode:
+   To override a specific agent's model in swarm mode, use `swarmModel`:
 
    ```json
    "agents": {
      "iloom-issue-implementer": {
-       "model": "opus"
-     },
-     "iloom-swarm-worker": {
        "model": "opus",
-       "agents": {
-         "iloom-issue-implementer": {
-           "model": "sonnet"
-         },
-         "iloom-issue-planner": {
-           "model": "haiku"
-         }
-       }
+       "swarmModel": "sonnet"
      }
    }
    ```
 
-   Fallback chain in swarm mode:
-   1. `agents.iloom-swarm-worker.agents.<agent>.model` (swarm-specific per-agent)
-   2. `agents.iloom-swarm-worker.model` (blanket swarm worker model)
-   3. `agents.<agent>.model` (base per-agent model)
-   4. Agent default from its definition file
+   In this example, the implementer uses Opus in non-swarm mode but Sonnet in swarm mode. If no `swarmModel` is set, the Swarm Quality Mode defaults apply (see item 2 below) — not the agent's base `model`.
 
-2. **Database Environment Variable:**
+2. **Swarm Quality Mode:**
+
+   This controls the trade-off between reasoning quality and speed/cost for swarm agents. The same choice is offered proactively in Phase 2.7. Users can also change it here after initial setup.
+
+   | Mode | Focus | Models used | Best for |
+   |------|-------|-------------|----------|
+   | **Maximum Quality** | Deepest reasoning, best analysis | Opus everywhere (except complexity evaluator stays Haiku) | Complex epics, critical features |
+   | **Balanced** (default) | Opus for analysis, Sonnet for everything else | Opus: analyzer, analyze-and-plan. Sonnet: orchestrator, worker, planner, implementer, enhancer, code-reviewer. Haiku: complexity evaluator | Most tasks |
+   | **Fast & Cheap** | Quick iterations, lowest cost | Haiku everywhere | Simple tasks, rapid prototyping |
+
+   Note: The complexity evaluator always stays on Haiku regardless of mode, since it performs a simple classification task that does not benefit from a larger model.
+
+   **Rules for generating settings JSON:**
+
+   When the user selects a mode, **merge** the model values into their existing settings. Only set the `swarmModel` (or `model` for the worker) field on each agent — do not overwrite or remove other agent settings.
+
+   - **Maximum Quality:** Set `spin.swarmModel` to `"opus"`. Set `agents.iloom-swarm-worker.model` to `"opus"`. Set `swarmModel` to `"opus"` on all phase agents (`iloom-issue-analyzer`, `iloom-issue-planner`, `iloom-issue-implementer`, `iloom-issue-enhancer`, `iloom-issue-analyze-and-plan`, `iloom-code-reviewer`). Keep `iloom-issue-complexity-evaluator.swarmModel` as `"haiku"`.
+   - **Balanced (default):** Set `spin.swarmModel` to `"sonnet"`. Set `agents.iloom-swarm-worker.model` to `"sonnet"`. Set `swarmModel` to `"opus"` on analysis agents (`iloom-issue-analyzer`, `iloom-issue-analyze-and-plan`). Set `swarmModel` to `"sonnet"` on all other phase agents (`iloom-issue-planner`, `iloom-issue-implementer`, `iloom-issue-enhancer`, `iloom-code-reviewer`). Keep `iloom-issue-complexity-evaluator.swarmModel` as `"haiku"`.
+   - **Fast & Cheap:** Set `spin.swarmModel` to `"haiku"`. Set `agents.iloom-swarm-worker.model` to `"haiku"`. Set `swarmModel` to `"haiku"` on all phase agents and `iloom-issue-complexity-evaluator`.
+
+   **Important notes:**
+   - These set `swarmModel` on phase agents (not `model`), so non-swarm behavior is preserved. When agents run outside of swarm mode, their base `model` setting is used.
+   - Only merge into existing agent settings — never replace the entire agent object.
+   - If the user has already configured per-agent models, the mode values take precedence for swarm-related model fields only.
+   - If the user is unsure, recommend **Balanced**.
+
+3. **Database Environment Variable:**
    ```json
    "capabilities": {
      "database": {
@@ -1094,7 +1135,7 @@ When configuring agents, use these model identifiers:
    }
    ```
 
-3. **Workflow Behavior:**
+4. **Workflow Behavior:**
    ```json
    "workflows": {
      "pr": {
@@ -1106,26 +1147,26 @@ When configuring agents, use these model identifiers:
    }
    ```
 
-4. **Copy Gitignored Files:**
+5. **Copy Gitignored Files:**
    ```json
    "copyGitIgnoredPatterns": ["*.db", "data/*.sqlite", "tmp/fixtures/**"]
    ```
 
    Glob patterns for gitignored files that should be copied to new looms. Useful for local databases, large test fixtures, or generated files that are too big to commit. Note: `.env` files and iloom/claude local settings are automatically copied and don't need to be listed here.
 
-5. **Protected Branches:**
+6. **Protected Branches:**
    ```json
    "protectedBranches": ["main", "production", "release/*"]
    ```
 
-6. **IDE Configuration:**
+7. **IDE Configuration:**
    ```json
    "ide": {
      "type": "cursor"
    }
    ```
 
-7. **Code Review with Multiple Providers:**
+8. **Code Review with Multiple Providers:**
    ```json
    "agents": {
      "iloom-code-reviewer": {
@@ -1139,7 +1180,7 @@ When configuring agents, use these model identifiers:
 
    This configures the code reviewer to use both Claude and Gemini for reviews. Multiple providers can be configured to get reviews from different AI models.
 
-8. **Custom Script Configuration (package.iloom.json):**
+9. **Custom Script Configuration (package.iloom.json):**
 
    If users want to override or supplement npm scripts with custom commands, help them create `.iloom/package.iloom.json`:
    ```json
