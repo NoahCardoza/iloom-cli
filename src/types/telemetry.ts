@@ -106,6 +106,11 @@ export interface AutoSwarmCompletedProperties {
   phase_reached: 'plan' | 'start' | 'spin'
   fallback_to_normal: boolean
 }
+export interface OpenclawLinkedProperties {
+  force: boolean
+  was_already_linked: boolean
+  custom_workspace: boolean
+}
 
 // --- Event name → properties map (for type-safe track() in downstream issues) ---
 export interface TelemetryEventMap {
@@ -127,6 +132,7 @@ export interface TelemetryEventMap {
   'init.completed': InitCompletedProperties
   'auto_swarm.started': AutoSwarmStartedProperties
   'auto_swarm.completed': AutoSwarmCompletedProperties
+  'openclaw.linked': OpenclawLinkedProperties
 }
 
 export type TelemetryEventName = keyof TelemetryEventMap
