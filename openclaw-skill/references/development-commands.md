@@ -54,13 +54,14 @@ Commit all uncommitted files with issue reference trailer.
 | `--fixes` | boolean | `false` | Use "Fixes #N" trailer instead of "Refs #N" |
 | `--no-review` | boolean | `false` | Skip commit message review prompt |
 | `--json` | boolean | `false` | Output result as JSON (implies `--no-review`) |
+| `--json-stream` | boolean | `false` | Stream JSONL progress output |
 | `--wip-commit` | boolean | `false` | Quick WIP commit: skip validations and pre-commit hooks |
 
 ### Examples
 
 ```bash
-# Non-interactive commit with AI-generated message
-bash pty:true command:"il commit --no-review --json"
+# Non-interactive commit with AI-generated message (background recommended — Claude generates message)
+bash pty:true background:true command:"il commit --no-review --json --json-stream"
 
 # Commit with custom message
 bash pty:true command:"il commit -m 'fix: resolve auth timeout' --json"
@@ -103,12 +104,13 @@ Rebase current loom branch on main with AI-assisted conflict resolution.
 |------|------|---------|-------------|
 | `-f, --force` | boolean | `false` | Force rebase even in edge cases |
 | `-n, --dry-run` | boolean | `false` | Simulate rebase without changes |
+| `--json-stream` | boolean | `false` | Stream JSONL progress output |
 
 ### Examples
 
 ```bash
-# Rebase with force (skip edge case checks)
-bash pty:true command:"il rebase --force"
+# Rebase with force and progress streaming (background recommended — Claude may resolve conflicts)
+bash pty:true background:true command:"il rebase --force --json-stream"
 
 # Dry run
 bash pty:true command:"il rebase --dry-run"
@@ -119,7 +121,7 @@ bash pty:true command:"il rebase --dry-run"
 - Detects uncommitted changes and throws if found (commit first)
 - Claude assists with conflict resolution if conflicts arise
 - Post-rebase: installs dependencies and runs build (non-blocking)
-- No JSON output mode
+- Use `--json-stream` for incremental progress visibility
 
 ---
 

@@ -129,18 +129,19 @@ Validate, commit, merge, and clean up a loom workspace.
 | `--no-browser` | boolean | `false` | Skip opening PR in browser |
 | `--cleanup` / `--no-cleanup` | boolean | — | Explicit cleanup decision (skips prompt) |
 | `--json` | boolean | `false` | Output result as JSON |
+| `--json-stream` | boolean | `false` | Stream JSONL progress output |
 
 ### Examples
 
 ```bash
-# Fully autonomous finish from within a loom directory
-bash pty:true command:"il finish --force --cleanup --no-browser --json"
+# Fully autonomous finish from within a loom directory (background recommended — can take 1-2+ min)
+bash pty:true background:true command:"il finish --force --cleanup --no-browser --json --json-stream"
 
 # Dry run to preview what would happen
 bash pty:true command:"il finish --dry-run"
 
 # Finish a specific issue
-bash pty:true command:"il finish 42 --force --cleanup --no-browser --json"
+bash pty:true background:true command:"il finish 42 --force --cleanup --no-browser --json --json-stream"
 ```
 
 ### Interactive Prompts and Bypasses
