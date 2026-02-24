@@ -83,7 +83,11 @@ Add to `.iloom/settings.local.json` (not `settings.json`, since this is per-deve
 
 **Standard convention:** `origin` = your fork, `upstream` = the original repo. iloom assumes `origin` is yours by default.
 
-`issueManagement.github.remote` controls where issues are read/created. `mergeBehavior.remote` controls where branches are pushed and PRs are created. In fork workflows, issues live on `upstream` while you push to `origin`.
+**Understanding the two settings:**
+- **`issueManagement.github.remote`** — The canonical GitHub repository for all GitHub operations: listing/creating issues, **opening PRs**, commenting, closing issues. PRs are opened against this repo.
+- **`mergeBehavior.remote`** — The remote iloom pushes branches to. In a fork workflow, branches are pushed here, then a cross-fork PR is opened on the `issueManagement` repo.
+
+In fork workflows, issues and PRs live on `upstream` while you push branches to `origin`.
 
 ### 5. Update `.gitignore`
 

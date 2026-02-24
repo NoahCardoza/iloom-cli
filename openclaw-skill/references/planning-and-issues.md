@@ -23,14 +23,16 @@ Launch an interactive AI planning session to decompose features into child issue
 
 ### Modes
 
-**Fresh Planning Mode** — no identifier provided:
+**Fresh Planning Mode** — prompt describes the work to plan:
 ```bash
-# Interactive planning session (background, autonomous)
-bash pty:true background:true command:"il plan --yolo"
+# Autonomous planning with prompt (required for --yolo)
+bash pty:true background:true command:"il plan --yolo --print --json-stream 'Add authentication to the API'"
 
 # Headless planning with JSON output
-bash pty:true command:"il plan --yolo --print --output-format json"
+bash pty:true command:"il plan --yolo --print --output-format json 'Add authentication to the API'"
 ```
+
+> **Note:** `--yolo` mode requires either a **prompt argument** (description string) or an **issue identifier**. Without one, the command fails immediately.
 
 **Issue Decomposition Mode** — issue identifier provided:
 ```bash
@@ -46,7 +48,7 @@ bash pty:true background:true command:"il plan 'ENG-456' --yolo"
 This command **launches Claude**. Use `background:true` for interactive sessions:
 
 ```bash
-bash pty:true background:true command:"il plan --yolo"
+bash pty:true background:true command:"il plan --yolo --print --json-stream 'Description of work'"
 
 # Monitor the planning session
 process action:log sessionId:XXX
