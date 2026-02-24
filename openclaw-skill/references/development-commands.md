@@ -61,7 +61,7 @@ Commit all uncommitted files with issue reference trailer.
 
 ```bash
 # Non-interactive commit with AI-generated message (background recommended — Claude generates message)
-bash pty:true background:true command:"il commit --no-review --json --json-stream"
+bash pty:true background:true command:"il commit --no-review --json-stream"
 
 # Commit with custom message
 bash pty:true command:"il commit -m 'fix: resolve auth timeout' --json"

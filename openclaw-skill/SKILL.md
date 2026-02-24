@@ -105,7 +105,7 @@ For anything non-trivial, use the **plan → review → start → spin** workflo
 
 5. **Finish:** Merge and clean up
    ```bash
-   bash pty:true background:true command:"il finish --force --cleanup --no-browser --json --json-stream"
+   bash pty:true background:true command:"il finish --force --cleanup --no-browser --json-stream"
    # Monitor: process action:poll sessionId:XXX
    ```
 
@@ -131,7 +131,7 @@ bash pty:true command:"il list --json"
 ### Commit with AI-generated message
 
 ```bash
-bash pty:true background:true command:"il commit --no-review --json --json-stream"
+bash pty:true background:true command:"il commit --no-review --json-stream"
 # Monitor: process action:poll sessionId:XXX
 ```
 
