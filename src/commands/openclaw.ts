@@ -1,5 +1,6 @@
 import path from 'path'
 import os from 'os'
+import { fileURLToPath } from 'url'
 import fs from 'fs-extra'
 import { getLogger } from '../utils/logger-context.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
@@ -27,11 +28,9 @@ export class OpenclawCommand {
     const workspace = options.workspace ?? 'workspace'
     const force = options.force ?? false
 
-    // 1. Resolve and verify openclaw-skill/ exists in the project
-    const skillSourceDir = path.join(this.projectRoot, 'openclaw-skill')
-    if (!(await fs.pathExists(skillSourceDir))) {
-      throw new Error(`openclaw-skill/ directory not found in ${this.projectRoot}`)
-    }
+    // 1. Resolve and verify openclaw-skill/ exists
+    const skillSourceDir = await this.resolveSkillDir()
+    logger.debug(`Resolved openclaw-skill directory: ${skillSourceDir}`)
 
     // 2. Check ~/.openclaw exists
     const openclawHome = path.join(os.homedir(), '.openclaw')
@@ -75,6 +74,37 @@ export class OpenclawCommand {
       source: skillSourceDir,
       target: targetPath,
     }
+  }
+
+  /**
+   * Resolve the openclaw-skill directory.
+   * 1. Check relative to the package install location (dist/openclaw-skill/ for npm installs)
+   * 2. Fall back to projectRoot/openclaw-skill/ (for local dev / repo clones)
+   * 3. Throw if neither exists
+   */
+  private async resolveSkillDir(): Promise<string> {
+    // 1. Relative to the installed package (works for npm installs)
+    const __filename = fileURLToPath(import.meta.url)
+    const __dirname = path.dirname(__filename)
+    // In dist: dist/commands/openclaw.js -> walk up to dist/, then openclaw-skill/
+    let packageDir = __dirname
+    while (packageDir !== path.dirname(packageDir)) {
+      const candidate = path.join(packageDir, 'openclaw-skill')
+      if (await fs.pathExists(candidate)) {
+        return candidate
+      }
+      packageDir = path.dirname(packageDir)
+    }
+
+    // 2. Relative to projectRoot (for local dev / repo clones)
+    const devCandidate = path.join(this.projectRoot, 'openclaw-skill')
+    if (await fs.pathExists(devCandidate)) {
+      return devCandidate
+    }
+
+    throw new Error(
+      `openclaw-skill/ directory not found. Searched from package location (${__dirname}) and project root (${this.projectRoot}).`
+    )
   }
 
   /**
