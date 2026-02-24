@@ -74,26 +74,7 @@ bash pty:true background:true command:"il start 'Add dark mode support to the se
 bash pty:true background:true command:"il start 42 --yolo --no-code --no-child-loom --json"
 ```
 
-### Interactive Prompts and Bypasses
-
-| Prompt | Bypass |
-|--------|--------|
-| "Enter issue number..." | Provide `[identifier]` argument |
-| "Create as a child loom?" | `--child-loom` or `--no-child-loom` |
-| "bypassPermissions warning" | Already implied by `--yolo`; or use `--no-claude` |
-
-### Background Mode
-
-This command **launches Claude** by default. Use `background:true` and monitor:
-
-```bash
-bash pty:true background:true command:"il start 42 --yolo --no-code --json"
-# Returns sessionId
-
-process action:poll sessionId:XXX    # Check if done
-process action:log sessionId:XXX     # View output
-process action:kill sessionId:XXX    # Terminate if needed
-```
+See `{baseDir}/references/non-interactive-patterns.md` for prompt bypasses and execution mode guidance.
 
 ### JSON Output
 
@@ -144,13 +125,7 @@ bash pty:true command:"il finish --dry-run"
 bash pty:true background:true command:"il finish 42 --force --cleanup --no-browser --json-stream"
 ```
 
-### Interactive Prompts and Bypasses
-
-| Prompt | Bypass |
-|--------|--------|
-| "Clean up worktree?" | `--cleanup` or `--no-cleanup` |
-| Commit message review | `--force` |
-| General confirmations | `--force` |
+See `{baseDir}/references/non-interactive-patterns.md` for prompt bypasses and execution mode guidance.
 
 ### JSON Output
 
@@ -206,12 +181,7 @@ bash pty:true command:"il cleanup --list"
 bash pty:true command:"il cleanup --issue 42 --dry-run"
 ```
 
-### Interactive Prompts and Bypasses
-
-| Prompt | Bypass |
-|--------|--------|
-| "Remove this worktree?" | `--force` |
-| "Remove N worktree(s)?" | `--force` |
+See `{baseDir}/references/non-interactive-patterns.md` for prompt bypasses.
 
 ### JSON Output
 

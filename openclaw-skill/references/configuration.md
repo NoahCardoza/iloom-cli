@@ -12,18 +12,7 @@ iloom uses a layered settings system with three files:
 
 Local overrides project, project overrides global.
 
-### Key Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `mainBranch` | Primary branch name | Auto-detected (`main` or `master`) |
-| `workflows.issue.permissionMode` | Permission mode for issue looms | `default` |
-| `workflows.issue.startIde` | Open IDE on loom start | `true` |
-| `workflows.issue.startAiAgent` | Launch Claude on loom start | `true` |
-| `mergeBehavior.mode` | Merge strategy | `local` |
-| `issueManagement.provider` | Issue tracker | `github` |
-| `capabilities.web.basePort` | Base port for dev servers | `3000` |
-| `agents.<name>.model` | Per-agent model override | — |
+For the complete settings schema and all configuration options, see `{baseDir}/references/initialization.md`.
 
 ### Runtime Setting Overrides
 

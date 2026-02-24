@@ -34,9 +34,7 @@ process action:log sessionId:XXX
 process action:poll sessionId:XXX
 ```
 
-### Background Mode
-
-This command **launches Claude**. Use `background:true` for long-running sessions.
+See `{baseDir}/references/non-interactive-patterns.md` for execution mode guidance.
 
 ---
 
@@ -73,11 +71,7 @@ bash pty:true command:"il commit --wip-commit --json"
 bash pty:true command:"il commit --fixes --no-review --json"
 ```
 
-### Interactive Prompts and Bypasses
-
-| Prompt | Bypass |
-|--------|--------|
-| Commit message review (accept/edit/abort) | `--no-review` or `--json` |
+See `{baseDir}/references/non-interactive-patterns.md` for prompt bypasses and execution mode guidance.
 
 ### JSON Output
 

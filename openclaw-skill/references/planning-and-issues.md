@@ -43,20 +43,7 @@ bash pty:true background:true command:"il plan '#123' --yolo"
 bash pty:true background:true command:"il plan 'ENG-456' --yolo"
 ```
 
-### Background Mode
-
-This command **launches Claude**. Use `background:true` for interactive sessions:
-
-```bash
-bash pty:true background:true command:"il plan --yolo --print --json-stream 'Description of work'"
-
-# Monitor the planning session
-process action:log sessionId:XXX
-process action:poll sessionId:XXX
-
-# Send input if the planner asks a question
-process action:submit sessionId:XXX data:"Option A"
-```
+See `{baseDir}/references/non-interactive-patterns.md` for execution mode guidance and session lifecycle.
 
 ### JSON Output (with `--print`)
 
@@ -108,12 +95,7 @@ bash pty:true command:"il add-issue 'Fix login timeout' --body 'Users report 504
 3. Creates the issue on the configured tracker
 4. Returns structured result in `--json` mode
 
-### Interactive Prompts and Bypasses
-
-| Prompt | Bypass |
-|--------|--------|
-| First-run setup | `--json` (skips setup) |
-| "Press key to view in browser" | `--json` (skips browser) |
+See `{baseDir}/references/non-interactive-patterns.md` for prompt bypasses.
 
 ### JSON Output
 
@@ -151,12 +133,7 @@ bash pty:true command:"il enhance 42 --no-browser --json"
 bash pty:true command:"il enhance 42 --author johndoe --no-browser --json"
 ```
 
-### Interactive Prompts and Bypasses
-
-| Prompt | Bypass |
-|--------|--------|
-| First-run setup | `--json` (skips setup) |
-| "Press q to quit or key to view..." | `--no-browser` or `--json` |
+See `{baseDir}/references/non-interactive-patterns.md` for prompt bypasses.
 
 ### JSON Output
 
