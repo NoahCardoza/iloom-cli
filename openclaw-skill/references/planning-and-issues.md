@@ -118,7 +118,7 @@ Apply AI enhancement to an existing issue's description.
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `<issueNumber>` | positional | — | Issue number or identifier (required) |
+| `<workItem>` | positional | — | Work item identifier (required) |
 | `--no-browser` | boolean | `false` | Skip browser opening prompt |
 | `--author <username>` | string | — | GitHub username to tag in questions |
 | `--json` | boolean | `false` | Output result as JSON (non-interactive) |

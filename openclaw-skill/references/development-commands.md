@@ -179,7 +179,7 @@ Start the development server for a workspace.
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `[identifier]` | positional | — | Issue number, PR number, or branch name (auto-detected) |
+| `[identifier]` | positional | — | Work item identifier, PR number, or branch name (auto-detected) |
 | `--json` | boolean | `false` | Output result as JSON |
 
 ### Examples
@@ -260,7 +260,7 @@ Generate a Claude session summary for a loom.
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `[identifier]` | positional | — | Issue number, PR number, branch name, or Linear/Jira ID (auto-detected) |
+| `[identifier]` | positional | — | Work item identifier (auto-detected from any tracker) |
 | `--with-comment` | boolean | `false` | Post summary as comment to issue/PR |
 | `--json` | boolean | `false` | Output result as JSON |
 

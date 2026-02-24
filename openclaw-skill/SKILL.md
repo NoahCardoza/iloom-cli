@@ -8,6 +8,10 @@ metadata: { "openclaw": { "emoji": "🧵", "requires": { "anyBins": ["il", "iloo
 
 Manage isolated Git worktrees with AI-assisted development workflows.
 
+## Terminology
+
+`<workItem>` — the identifier for a work item on your configured issue tracker. Examples: `42` or `#42` (GitHub), `ENG-456` (Linear), `PROJ-789` (Jira).
+
 ## Execution Modes
 
 | Mode | Commands | Notes |
@@ -37,7 +41,7 @@ Use the **plan → review → start → spin → finish** workflow:
 
 1. **Plan:** `il plan --yolo --print --json-stream 'Description'` (background) — decomposes work into issues
 2. **Review:** Present the created epic to the user; wait for approval before continuing
-3. **Start:** `il start <issue#> --yolo --no-code --no-dev-server --no-claude --no-terminal --json` (plain exec) — creates workspace without Claude
+3. **Start:** `il start <workItem> --yolo --no-code --no-dev-server --no-claude --no-terminal --json` (plain exec) — creates workspace without Claude
 4. **Spin:** `il spin --yolo --print --json-stream` (background) — launches Claude separately
 5. **Finish:** `il finish --force --cleanup --no-browser --json-stream` (background) — merges and cleans up
 

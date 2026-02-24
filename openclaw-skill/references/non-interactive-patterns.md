@@ -16,7 +16,7 @@ bash command:"il issues --json"
 bash command:"il projects --json"
 bash command:"il recap --json"
 bash command:"il --version"
-bash command:"il start <issue#> --no-claude --no-code --no-dev-server --no-terminal --json"
+bash command:"il start <workItem> --no-claude --no-code --no-dev-server --no-terminal --json"
 bash command:"il cleanup --issue 42 --force --json"
 bash command:"il build"
 bash command:"il test"
@@ -32,9 +32,9 @@ These commands spawn Claude Code sessions or run extended operations that can ta
 ```bash
 bash background:true command:"il plan --yolo --print --json-stream"
 bash background:true command:"il spin --yolo --print --json-stream"
-bash background:true command:"il start <issue#> --yolo --no-code --no-terminal --json"  # with Claude (default)
+bash background:true command:"il start <workItem> --yolo --no-code --no-terminal --json"  # with Claude (default)
 bash background:true command:"il summary --json"
-bash background:true command:"il enhance <N> --no-browser --json"
+bash background:true command:"il enhance <workItem> --no-browser --json"
 bash background:true command:"il commit --no-review --json-stream"
 bash background:true command:"il finish --force --cleanup --no-browser --json-stream"
 bash background:true command:"il rebase --force --json-stream"
@@ -119,7 +119,7 @@ Every interactive prompt in iloom and the flag(s) that bypass it:
 ### Full Autonomous Start (create workspace)
 
 ```bash
-bash command:"il start <issue> --yolo --no-code --no-claude --no-dev-server --no-terminal --json"
+bash command:"il start <workItem> --yolo --no-code --no-claude --no-dev-server --no-terminal --json"
 ```
 
 - `--yolo`: bypass all permission prompts
@@ -132,7 +132,7 @@ bash command:"il start <issue> --yolo --no-code --no-claude --no-dev-server --no
 ### Full Autonomous Start (with Claude)
 
 ```bash
-bash background:true command:"il start <issue> --yolo --no-code --no-terminal --json"
+bash background:true command:"il start <workItem> --yolo --no-code --no-terminal --json"
 ```
 
 - Same as above but launches Claude — needs `background:true`

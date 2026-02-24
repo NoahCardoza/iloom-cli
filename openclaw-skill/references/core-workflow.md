@@ -156,7 +156,7 @@ Remove one or more loom workspaces without merging.
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `[identifier]` | positional | — | Branch name or issue number |
+| `[identifier]` | positional | — | Branch name or work item identifier |
 | `-l, --list` | boolean | `false` | List all worktrees (informational) |
 | `-a, --all` | boolean | `false` | Remove all worktrees |
 | `-i, --issue <number>` | number | — | Cleanup by issue number |
