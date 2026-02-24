@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { SettingsManager } from './SettingsManager.js'
+import { SettingsManager, BaseAgentSettingsSchema, SpinAgentSettingsSchema, type IloomSettings } from './SettingsManager.js'
 import { readFile } from 'fs/promises'
 
 // Mock fs/promises
@@ -2847,6 +2847,63 @@ const error: { code?: string; message: string } = {
 			const settings = { sourceEnvOnStart: false, spin: {} as { model: 'opus' } }
 			const result = settingsManager.getSpinModel(settings)
 			expect(result).toBe('opus')
+		})
+
+		it('should return spin.swarmModel when mode is swarm and swarmModel is set', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'opus' as const, swarmModel: 'sonnet' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('sonnet')
+		})
+
+		it('should fall back to spin.model when mode is swarm but swarmModel is not set', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('haiku')
+		})
+
+		it('should ignore swarmModel when mode is not swarm', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'opus' as const, swarmModel: 'sonnet' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings)
+			expect(result).toBe('opus')
+		})
+	})
+
+	describe('swarmModel schema validation', () => {
+		it('accepts swarmModel on BaseAgentSettingsSchema', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ swarmModel: 'sonnet' })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.swarmModel).toBe('sonnet')
+			}
+		})
+
+		it('accepts all valid model values for swarmModel on BaseAgentSettingsSchema', () => {
+			for (const model of ['sonnet', 'opus', 'haiku'] as const) {
+				const result = BaseAgentSettingsSchema.safeParse({ swarmModel: model })
+				expect(result.success).toBe(true)
+			}
+		})
+
+		it('rejects invalid swarmModel value on BaseAgentSettingsSchema', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ swarmModel: 'invalid' })
+			expect(result.success).toBe(false)
+		})
+
+		it('accepts swarmModel on SpinAgentSettingsSchema', () => {
+			const result = SpinAgentSettingsSchema.safeParse({ swarmModel: 'sonnet' })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.swarmModel).toBe('sonnet')
+			}
+		})
+
+		it('accepts SpinAgentSettingsSchema with both model and swarmModel', () => {
+			const result = SpinAgentSettingsSchema.safeParse({ model: 'opus', swarmModel: 'sonnet' })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.model).toBe('opus')
+				expect(result.data.swarmModel).toBe('sonnet')
+			}
 		})
 	})
 

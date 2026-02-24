@@ -246,38 +246,12 @@ export class SwarmSetupService {
 
 		const agents = await this.agentManager.loadAgents(settings, templateVariables)
 
-		// Apply swarm-specific model overrides (fallback chain)
-		// Priority 1: agents.iloom-swarm-worker.agents.<agent-name>.model (swarm-specific per-agent)
-		// Priority 2: agents.iloom-swarm-worker.model (blanket swarm worker model, explicitly configured)
-		// Priority 2.5: built-in swarm defaults (e.g., implementer defaults to sonnet)
-		// Priority 3: agents.<agent-name>.model (base per-agent, already applied by loadAgents)
-		// Priority 4: agent .md file default (already applied by loadAgents)
-		const swarmWorkerSettings = settings?.agents?.['iloom-swarm-worker']
-		const swarmAgentOverrides = swarmWorkerSettings?.agents
-		// NOTE: swarmWorkerModel is undefined when not explicitly set by the user.
-		// Do NOT use `?? 'opus'` here -- the implicit default must NOT participate
-		// in the fallback chain. It only activates in renderSwarmWorkerAgent for the
-		// worker agent's own frontmatter model.
-		const swarmWorkerModel = swarmWorkerSettings?.model
-
-		// Built-in defaults for phase agents in swarm mode (priority 2.5)
-		const swarmAgentDefaults: Record<string, string> = {
-			'iloom-issue-implementer': 'sonnet',
-		}
-
+		// Apply per-agent swarmModel overrides
 		for (const [agentName, agentConfig] of Object.entries(agents)) {
-			const swarmOverrideModel = swarmAgentOverrides?.[agentName]?.model
-			if (swarmOverrideModel) {
-				// Priority 1: swarm-specific agent model override
-				agents[agentName] = { ...agentConfig, model: swarmOverrideModel }
-			} else if (swarmWorkerModel) {
-				// Priority 2: blanket swarm worker model (overrides base per-agent model)
-				agents[agentName] = { ...agentConfig, model: swarmWorkerModel }
-			} else if (swarmAgentDefaults[agentName]) {
-				// Priority 2.5: built-in swarm defaults for specific agents
-				agents[agentName] = { ...agentConfig, model: swarmAgentDefaults[agentName] }
+			const swarmModel = settings?.agents?.[agentName]?.swarmModel
+			if (swarmModel) {
+				agents[agentName] = { ...agentConfig, model: swarmModel }
 			}
-			// Priority 3/4: keep model from loadAgents() (base agent model / .md default)
 		}
 
 		const renderedFiles: string[] = []
