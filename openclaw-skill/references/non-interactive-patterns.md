@@ -160,12 +160,12 @@ bash pty:true background:true command:"il finish --force --cleanup --no-browser 
 ### Headless Planning
 
 ```bash
-bash pty:true background:true command:"il plan --yolo --print --json-stream"
+bash pty:true background:true command:"il plan --yolo --print --json-stream 'Description of work to plan'"
 # Monitor: process action:poll sessionId:XXX
 # Full log: process action:log sessionId:XXX
 ```
 
-- `--yolo`: autonomous mode
+- `--yolo`: autonomous mode (**requires a prompt argument or issue identifier**)
 - `--print`: headless output
 - `--json-stream`: stream JSONL incrementally (visible via poll/log)
 - `background:true`: **required** — planning sessions can run 3-10+ minutes
