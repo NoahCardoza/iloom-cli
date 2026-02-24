@@ -105,7 +105,8 @@ For anything non-trivial, use the **plan → review → start → spin** workflo
 
 5. **Finish:** Merge and clean up
    ```bash
-   bash pty:true command:"il finish --force --cleanup --no-browser --json"
+   bash pty:true background:true command:"il finish --force --cleanup --no-browser --json-stream"
+   # Monitor: process action:poll sessionId:XXX
    ```
 
 ### Small Changes (single issue, quick fix)
@@ -130,7 +131,8 @@ bash pty:true command:"il list --json"
 ### Commit with AI-generated message
 
 ```bash
-bash pty:true command:"il commit --no-review --json"
+bash pty:true background:true command:"il commit --no-review --json-stream"
+# Monitor: process action:poll sessionId:XXX
 ```
 
 ## Ideation and Planning
@@ -145,7 +147,7 @@ bash pty:true background:true command:"il plan --yolo --print --json-stream"
 
 `il plan` launches an autonomous AI planning session that reads the codebase and creates structured issues with dependencies. Always prefer this over manually creating issues.
 
-**Important:** Both `plan` and `spin` should always be run in **background mode** (`background:true`) with `--print --json-stream`. These commands can run for several minutes (especially with Opus) as they analyze the codebase, and foreground timeouts will kill them. The `--json-stream` flag ensures incremental output is visible via `process action:poll`.
+**Important:** Commands that can run for extended periods — `plan`, `spin`, `commit`, `finish`, and `rebase` — should be run in **background mode** (`background:true`) with `--json-stream` (and `--print` for plan/spin). The `--json-stream` flag streams JSONL incrementally so you can monitor progress via `process action:poll`. Without it, you get zero visibility until the command completes.
 
 ## References
 
@@ -159,7 +161,7 @@ bash pty:true background:true command:"il plan --yolo --print --json-stream"
 ## Safety Rules
 
 1. **Always use `pty:true`** for every iloom command.
-2. **Use `background:true`** for commands that launch Claude: `start`, `spin`, `plan`.
+2. **Use `background:true`** for commands that launch Claude or run extended operations: `start`, `spin`, `plan`, `commit`, `finish`, `rebase`.
 3. **Never run `il finish` without `--force`** in autonomous mode — it will hang on confirmation prompts.
 4. **Always pass explicit flags** to avoid interactive prompts. See `{baseDir}/references/non-interactive-patterns.md` for the complete decision bypass map.
 5. **Use `--json`** when you need to parse command output programmatically.

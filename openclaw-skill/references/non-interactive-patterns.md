@@ -36,6 +36,21 @@ These commands launch Claude Code and run for extended periods. **Always run in 
 - Without `--json-stream`, `--print` buffers ALL output until completion (no visibility into what Claude is doing)
 - These commands can easily run 3-10+ minutes with Opus analyzing a codebase — foreground timeouts will kill them
 
+### Background Commands — Extended Operations
+
+These commands use Claude for message generation, conflict resolution, or merge validation and support `--json-stream` for progress monitoring:
+
+| Command | Recommended Invocation |
+|---------|----------------------|
+| `il commit` | `bash pty:true background:true command:"il commit --no-review --json-stream"` |
+| `il finish` | `bash pty:true background:true command:"il finish --force --cleanup --no-browser --json-stream"` |
+| `il rebase` | `bash pty:true background:true command:"il rebase --force --json-stream"` |
+
+**Why `--json-stream` for these commands?**
+- `commit` uses Claude to generate commit messages — can take 10-30s
+- `finish` validates, commits, merges, and may trigger builds — can take 1-2+ minutes
+- `rebase` may invoke Claude for conflict resolution — duration is unpredictable
+
 ### Foreground Commands (no `background:true`)
 
 These commands complete quickly and return structured output:
@@ -43,8 +58,6 @@ These commands complete quickly and return structured output:
 | Command | Recommended Invocation |
 |---------|----------------------|
 | `il list` | `bash pty:true command:"il list --json"` |
-| `il commit` | `bash pty:true command:"il commit --no-review --json"` |
-| `il finish` | `bash pty:true command:"il finish --force --cleanup --no-browser --json"` |
 | `il cleanup` | `bash pty:true command:"il cleanup --issue 42 --force --json"` |
 | `il build` | `bash pty:true command:"il build"` |
 | `il test` | `bash pty:true command:"il test"` |
@@ -61,7 +74,6 @@ These commands complete quickly and return structured output:
 | Command | Note |
 |---------|------|
 | `il init` | Interactive wizard, must run foreground. **Not recommended for AI agents** — use manual setup instead (see `{baseDir}/references/initialization.md`) |
-| `il rebase` | May need Claude for conflict resolution |
 | `il shell` | Opens interactive subshell |
 
 ---
@@ -134,13 +146,16 @@ bash pty:true background:true command:"il start <issue> --yolo --no-code --no-te
 ### Full Autonomous Finish (merge and cleanup)
 
 ```bash
-bash pty:true command:"il finish --force --cleanup --no-browser --json"
+bash pty:true background:true command:"il finish --force --cleanup --no-browser --json-stream"
+# Monitor: process action:poll sessionId:XXX
 ```
 
 - `--force`: skip all confirmations
 - `--cleanup`: auto-cleanup worktree
 - `--no-browser`: don't open browser
 - `--json`: structured output
+- `--json-stream`: stream progress incrementally
+- `background:true`: finish can take 1-2+ minutes (commit, merge, build verification)
 
 ### Headless Planning
 
@@ -158,11 +173,23 @@ bash pty:true background:true command:"il plan --yolo --print --json-stream"
 ### Non-Interactive Commit
 
 ```bash
-bash pty:true command:"il commit --no-review --json"
+bash pty:true background:true command:"il commit --no-review --json-stream"
+# Monitor: process action:poll sessionId:XXX
 ```
 
 - `--no-review`: skip message review
 - `--json`: structured output (also implies `--no-review`)
+- `--json-stream`: stream progress (Claude generates commit message)
+
+### Non-Interactive Rebase
+
+```bash
+bash pty:true background:true command:"il rebase --force --json-stream"
+# Monitor: process action:poll sessionId:XXX
+```
+
+- `--force`: force rebase even in edge cases
+- `--json-stream`: stream progress (Claude assists with conflict resolution if needed)
 
 ### Quick Cleanup
 
@@ -182,10 +209,10 @@ Commands that support `--json` for machine-parseable output:
 | Command | JSON Flag | Notes |
 |---------|-----------|-------|
 | `il start` | `--json` | Returns workspace metadata |
-| `il finish` | `--json` | Returns operation results |
+| `il finish` | `--json-stream` | Stream progress (mutually exclusive with `--json`) |
 | `il cleanup` | `--json` | Returns cleanup results |
 | `il list` | `--json` | Returns array of loom objects |
-| `il commit` | `--json` | Returns commit details (implies `--no-review`) |
+| `il commit` | `--json-stream` | Stream progress (mutually exclusive with `--json`, implies `--no-review`) |
 | `il issues` | `--json` | Returns array of issues/PRs |
 | `il add-issue` | `--json` | Returns created issue |
 | `il enhance` | `--json` | Returns enhancement result |
@@ -193,6 +220,7 @@ Commands that support `--json` for machine-parseable output:
 | `il recap` | `--json` | Returns recap data |
 | `il dev-server` | `--json` | Returns server status |
 | `il projects` | `--json` | Returns project list |
+| `il rebase` | `--json-stream` | Stream progress during rebase |
 | `il plan` | `--json` | Returns planning result (requires `--print`) |
 | `il spin` | `--json` | Returns result (requires `--print`) |
 
