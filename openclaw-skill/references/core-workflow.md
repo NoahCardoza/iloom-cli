@@ -135,13 +135,13 @@ Validate, commit, merge, and clean up a loom workspace.
 
 ```bash
 # Fully autonomous finish from within a loom directory (background recommended — can take 1-2+ min)
-bash pty:true background:true command:"il finish --force --cleanup --no-browser --json --json-stream"
+bash pty:true background:true command:"il finish --force --cleanup --no-browser --json-stream"
 
 # Dry run to preview what would happen
 bash pty:true command:"il finish --dry-run"
 
 # Finish a specific issue
-bash pty:true background:true command:"il finish 42 --force --cleanup --no-browser --json --json-stream"
+bash pty:true background:true command:"il finish 42 --force --cleanup --no-browser --json-stream"
 ```
 
 ### Interactive Prompts and Bypasses

@@ -42,8 +42,8 @@ These commands use Claude for message generation, conflict resolution, or merge 
 
 | Command | Recommended Invocation |
 |---------|----------------------|
-| `il commit` | `bash pty:true background:true command:"il commit --no-review --json --json-stream"` |
-| `il finish` | `bash pty:true background:true command:"il finish --force --cleanup --no-browser --json --json-stream"` |
+| `il commit` | `bash pty:true background:true command:"il commit --no-review --json-stream"` |
+| `il finish` | `bash pty:true background:true command:"il finish --force --cleanup --no-browser --json-stream"` |
 | `il rebase` | `bash pty:true background:true command:"il rebase --force --json-stream"` |
 
 **Why `--json-stream` for these commands?**
@@ -146,7 +146,7 @@ bash pty:true background:true command:"il start <issue> --yolo --no-code --no-te
 ### Full Autonomous Finish (merge and cleanup)
 
 ```bash
-bash pty:true background:true command:"il finish --force --cleanup --no-browser --json --json-stream"
+bash pty:true background:true command:"il finish --force --cleanup --no-browser --json-stream"
 # Monitor: process action:poll sessionId:XXX
 ```
 
@@ -173,7 +173,7 @@ bash pty:true background:true command:"il plan --yolo --print --json-stream"
 ### Non-Interactive Commit
 
 ```bash
-bash pty:true background:true command:"il commit --no-review --json --json-stream"
+bash pty:true background:true command:"il commit --no-review --json-stream"
 # Monitor: process action:poll sessionId:XXX
 ```
 
@@ -209,10 +209,10 @@ Commands that support `--json` for machine-parseable output:
 | Command | JSON Flag | Notes |
 |---------|-----------|-------|
 | `il start` | `--json` | Returns workspace metadata |
-| `il finish` | `--json`, `--json-stream` | Returns operation results. `--json-stream` for progress |
+| `il finish` | `--json-stream` | Stream progress (mutually exclusive with `--json`) |
 | `il cleanup` | `--json` | Returns cleanup results |
 | `il list` | `--json` | Returns array of loom objects |
-| `il commit` | `--json`, `--json-stream` | Returns commit details (implies `--no-review`). `--json-stream` for progress |
+| `il commit` | `--json-stream` | Stream progress (mutually exclusive with `--json`, implies `--no-review`) |
 | `il issues` | `--json` | Returns array of issues/PRs |
 | `il add-issue` | `--json` | Returns created issue |
 | `il enhance` | `--json` | Returns enhancement result |
