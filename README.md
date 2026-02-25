@@ -12,7 +12,7 @@ iloom
 > **[VS Code extension](https://marketplace.visualstudio.com/items?itemName=iloom-ai.iloom-vscode) now available!** Run `il vscode` to install. Get the recap panel to see AI decisions, risks, and assumptions in real-time, plus the loom explorer to manage and switch between active projects and tasks.
 
 <div align="center">
-  <img width="600" alt="iloom-ai-screenshot" src="https://raw.githubusercontent.com/iloom-ai/iloom-cli/main/assets/iloom-screenshot.png" />
+  <img width="600" alt="iloom-ai-screenshot" src="https://raw.githubusercontent.com/iloom-ai/iloom-cli/main/assets/iloom_dag.png" />
   <div>iloom in action: Scale understanding, not just output.</div>
 </div>
 
@@ -738,7 +738,7 @@ License & Name
     
 *   ❌ You cannot resell iloom itself as a product or SaaS.
     
-*   Converts to Apache 2.0 on 2030-02-23.
+*   Converts to Apache 2.0 on 2030-02-25.
     
 
 See [LICENSE](https://raw.githubusercontent.com/iloom-ai/iloom-cli/main/LICENSE) for complete terms.
