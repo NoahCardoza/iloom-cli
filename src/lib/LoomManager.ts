@@ -536,15 +536,16 @@ export class LoomManager {
         return []
       }
 
-      // Sanitize parent branch name the same way as in createWorktreeOnly (lines 361-363)
-      const sanitizedBranchName = parentBranchName
-        .replace(/\//g, '-')
-        .replace(/[^a-zA-Z0-9-_]/g, '-')
+      // Use metadata-based detection: find all looms whose parentLoom.branchName matches
+      const allMetadata = await this.metadataManager.listAllMetadata()
+      const childBranches = new Set(
+        allMetadata
+          .filter(m => m.parentLoom?.branchName === parentBranchName)
+          .map(m => m.branchName)
+          .filter((b): b is string => b != null),
+      )
 
-      // Child looms are in directory: {sanitizedBranchName}-looms/
-      const pattern = `${sanitizedBranchName}-looms/`
-
-      return worktrees.filter(wt => wt.path.includes(pattern))
+      return worktrees.filter(wt => childBranches.has(wt.branch))
     } catch (error) {
       getLogger().debug(`Failed to find child looms: ${error instanceof Error ? error.message : 'Unknown error'}`)
       return []
@@ -667,29 +668,14 @@ export class LoomManager {
     getLogger().info('Ensuring repository has initial commit...')
     await ensureRepositoryHasCommits(this.gitWorktree.workingDirectory)
 
-    // Load worktree prefix from settings
+    // Load settings (worktreePrefix is no longer used — all worktrees go under .iloom/worktrees/)
     const settingsData = await this.settings.loadSettings()
-    let worktreePrefix = settingsData.worktreePrefix
 
-    // If this is a child loom, compute dynamic prefix based on parent
-    if (input.parentLoom) {
-      // Sanitize branch name for directory use
-      const sanitizedBranchName = input.parentLoom.branchName
-        .replace(/\//g, '-')
-        .replace(/[^a-zA-Z0-9-_]/g, '-')
-      worktreePrefix = `${sanitizedBranchName}-looms/`
-      getLogger().info(`Creating child loom with prefix: ${worktreePrefix}`)
-    }
-
-    // Build options object, only including prefix if it's defined
-    const pathOptions: { isPR?: boolean; prNumber?: number; prefix?: string } =
+    // Build options object
+    const pathOptions: { isPR?: boolean; prNumber?: number } =
       input.type === 'pr'
         ? { isPR: true, prNumber: input.identifier as number }
         : {}
-
-    if (worktreePrefix !== undefined) {
-      pathOptions.prefix = worktreePrefix
-    }
 
     const worktreePath = this.gitWorktree.generateWorktreePath(
       branchName,
