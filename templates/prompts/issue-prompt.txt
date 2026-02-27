@@ -1252,7 +1252,7 @@ If workflow plan determined SKIP_IMPLEMENTATION:
 
 ## STEP 5 - Review Phase
 
-This section is about reviewing uncommitted code changes for quality, security, and compliance issues.
+This section is about reviewing code changes for quality, security, and compliance issues.
 
 {{#if SWARM_MODE}}
 **State transition**: Before running review, call `recap.set_loom_state('code_review')` with `worktreePath: "<your-worktree-path>"`.
@@ -1281,7 +1281,7 @@ This section is about reviewing uncommitted code changes for quality, security, 
 - Execute: @agent-iloom-code-reviewer with prompt "Run code review."
 - **IMPORTANT**: Must run in foreground (not as background Task) to access MCP tools
 - **DO NOT** pass extra context (file lists, issue details, etc.) - the agent knows what to do
-- The reviewer will analyze uncommitted changes and report findings
+- The reviewer will analyze code changes and report findings
 
 **When issues are found:**
 - Ask the user: "Issues found. Do you want to proceed anyway, or address these first?"
