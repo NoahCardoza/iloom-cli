@@ -27,6 +27,7 @@ import { launchFirstRunSetup, needsFirstRunSetup } from '../utils/first-run-setu
 import { isInteractiveEnvironment, promptConfirmation } from '../utils/prompt.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import type { LoomCreatedProperties } from '../types/telemetry.js'
+import { resolveRecapFilePath, readRecapFile, writeRecapFile } from '../utils/mcp.js'
 
 export interface StartCommandInput {
 	identifier: string
@@ -356,6 +357,7 @@ export class StartCommand {
 					enableDevServer,
 					enableTerminal,
 					...(input.options.oneShot && { oneShot: input.options.oneShot }),
+					...(input.options.complexity && { complexity: input.options.complexity }),
 					...(setArguments.length > 0 && { setArguments }),
 					...(executablePath && { executablePath }),
 					...(childIssueNumbers.length > 0 && { childIssueNumbers }),
@@ -365,6 +367,18 @@ export class StartCommand {
 			})
 
 			getLogger().success(`Created loom: ${loom.id} at ${loom.path}`)
+
+			// Set recap complexity if overridden via CLI flag
+			if (input.options.complexity) {
+				try {
+					const recapFilePath = resolveRecapFilePath(loom.path)
+					const recap = await readRecapFile(recapFilePath)
+					recap.complexity = { level: input.options.complexity, reason: 'Overridden via CLI flag', timestamp: new Date().toISOString() }
+					await writeRecapFile(recapFilePath, recap)
+				} catch (error) {
+					getLogger().debug(`Failed to set recap complexity: ${error instanceof Error ? error.message : error}`)
+				}
+			}
 
 			// Track loom.created telemetry event
 			try {
@@ -377,6 +391,7 @@ export class StartCommand {
 					tracker: this.issueTracker.providerName,
 					is_child_loom: !!parentLoom,
 					one_shot_mode: oneShotMap[input.options.oneShot ?? ''] ?? 'default',
+					complexity_override: !!input.options.complexity,
 				})
 			} catch (error: unknown) {
 				getLogger().debug(`Failed to track loom.created telemetry: ${error instanceof Error ? error.message : String(error)}`)
