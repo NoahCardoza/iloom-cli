@@ -288,9 +288,9 @@ il finish [options]
 | `-n`, `--dry-run` | Preview actions without executing |
 | `--pr` | Treat input as PR number |
 | `--skip-build` | Skip post-merge build verification |
-| `--no-browser` | Skip opening PR in browser (github-pr and github-draft-pr modes) |
+| `--no-browser` | Skip opening PR in browser (pr and draft-pr modes) |
 | `--cleanup` | Clean up worktree after finishing (default in local mode) |
-| `--no-cleanup` | Keep worktree after finishing (default in github-pr and github-draft-pr modes)|
+| `--no-cleanup` | Keep worktree after finishing (default in pr and draft-pr modes)|
 | `--review` | Review commit message before committing (default: auto-commit without review) |
 
 **Merge Behavior Modes:**
@@ -308,14 +308,14 @@ Behavior depends on the `mergeBehavior.mode` setting in your iloom configuration
 8. Runs post-merge build verification
 9. Cleans up worktree and database branch
 
-**`github-pr`:**
+**`pr`:**
 1. Same validation pipeline as local mode
 2. Pushes branch to remote
 3. Creates GitHub pull request
 4. Opens PR in browser (unless `--no-browser` or `openBrowserOnFinish: false`)
 5. Prompts for cleanup (or use `--cleanup`/`--no-cleanup` flags)
 
-**`github-draft-pr`:**
+**`draft-pr`:**
 1. Same validation pipeline as local mode
 2. Removes placeholder commit and pushes final commits
 3. Marks draft PR as ready for review
@@ -350,12 +350,12 @@ For Payload CMS projects, iloom automatically detects and handles migration conf
 
 **Browser Opening Configuration:**
 
-By default, `il finish` opens the PR in your browser after creation (github-pr mode) or marking ready (github-draft-pr mode). To disable this permanently, set `openBrowserOnFinish` to `false` in your settings:
+By default, `il finish` opens the PR in your browser after creation (pr mode) or marking ready (draft-pr mode). To disable this permanently, set `openBrowserOnFinish` to `false` in your settings:
 
 ```json
 {
   "mergeBehavior": {
-    "mode": "github-pr",
+    "mode": "pr",
     "openBrowserOnFinish": false
   }
 }
@@ -2033,7 +2033,7 @@ il init
 
 # Natural language configuration
 il init "set my IDE to windsurf and help me configure linear"
-il init "switch to github-pr merge mode"
+il init "switch to pr merge mode"
 il init "configure neon database with project ID abc-123"
 ```
 
@@ -2041,7 +2041,7 @@ il init "configure neon database with project ID abc-123"
 - Issue tracker (GitHub/Linear/Jira)
 - Database provider (Neon)
 - IDE preference (VS Code, Cursor, Windsurf, etc.)
-- Merge behavior (local vs github-pr)
+- Merge behavior (local, pr, draft-pr)
 - Permission modes
 - Project type (web app, CLI tool, etc.)
 - Base port for development servers
@@ -2176,7 +2176,7 @@ il contribute [repository]
 3. Sets up upstream remote to track the original repository
 4. Configures iloom settings:
    - Sets `issueManagement.github.remote` to `upstream`
-   - Sets `mergeBehavior.mode` to `github-draft-pr`
+   - Sets `mergeBehavior.mode` to `draft-pr`
 
 **Examples:**
 
@@ -2193,7 +2193,7 @@ il contribute "facebook/react"
 **Notes:**
 - Requires GitHub CLI (`gh`) to be authenticated
 - Creates fork if it doesn't exist
-- Sets up `github-draft-pr` mode so PRs are created immediately when you start work
+- Sets up `draft-pr` mode so PRs are created immediately when you start work
 - Draft PRs receive iloom's AI analysis and planning comments, giving maintainers full context
 - For iloom contributions, see [CONTRIBUTING.md](../CONTRIBUTING.md) for detailed guidelines
 

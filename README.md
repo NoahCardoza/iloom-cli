@@ -344,7 +344,7 @@ Control how `il finish` handles your work. Configure in `.iloom/settings.json`:
 ```json
 {
   "mergeBehavior": {
-    "mode": "local"  // "local", "github-pr", or "github-draft-pr"
+    "mode": "local"  // "local", "pr", or "draft-pr"
   }
 }
 ```
@@ -352,8 +352,8 @@ Control how `il finish` handles your work. Configure in `.iloom/settings.json`:
 | **Mode** | **Description** |
 |----------|-----------------|
 | `local` | (Default) Merge directly into main branch locally. Fast-forward merge, no PR created. |
-| `github-pr` | Push branch and create a GitHub PR on `il finish`. Worktree cleanup is optional. |
-| `github-draft-pr` | Create a draft PR immediately on `il start`. On `il finish`, the PR is marked ready for review. **Recommended for contributions to forked repos.** |
+| `pr` | Push branch and create a PR on `il finish`. Worktree cleanup is optional. |
+| `draft-pr` | Create a draft PR immediately on `il start`. On `il finish`, the PR is marked ready for review. **Recommended for contributions to forked repos.** |
 
 ### Artifact Review
 
@@ -411,7 +411,7 @@ When `il finish` or `il rebase` encounter rebase conflicts, iloom automatically 
 
 Note: Potentially destructive commands like `git reset` and `git checkout` are intentionally not auto-approved to prevent accidental data loss.
 
-**When to use `github-draft-pr`:**
+**When to use `draft-pr`:**
 - **Contributing to forks:** When you don't are contributing to a forked repo use this mode to create the PR from your fork immediately, allowing iloom's agents to post workflow comments directly to the PR instead of writing to the upstream repo's issues (which may not be appreciated by the repo owners).
 - CI runs on your branch during development (draft PRs trigger CI on most repos)
 - Your team requires PRs for all changes (no direct merges to main)
@@ -834,7 +834,7 @@ This command:
 1. Forks the repository (if not already forked)
 2. Clones your fork locally
 3. Configures iloom for the project
-4. Sets merge behavior to `github-draft-pr` (creates a draft PR immediately when you start work)
+4. Sets merge behavior to `draft-pr` (creates a draft PR immediately when you start work)
 
 The draft PR workflow is ideal for open source: as you work, iloom posts the AI's analysis, implementation plan, and progress directly to that draft PR—giving maintainers full context before the code is even ready for review.
 

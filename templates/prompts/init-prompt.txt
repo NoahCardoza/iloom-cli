@@ -389,11 +389,11 @@ Since this repository has multiple git remotes, GitHub Issues is suggested as th
 
 **Note on Provider + Merge Mode Combinations:**
 - GitHub Issues + local merge: Requires authorized GitHub CLI (`gh`)
-- GitHub Issues + github-pr or github-draft-pr: Requires authorized GitHub CLI (`gh`)
+- GitHub Issues + pr or draft-pr: Requires authorized GitHub CLI (`gh`)
 - Linear Issues + local merge: Requires Linear API token only
-- Linear Issues + github-pr or github-draft-pr: Requires BOTH Linear API token AND authorized GitHub CLI (`gh`)
+- Linear Issues + pr or draft-pr: Requires BOTH Linear API token AND authorized GitHub CLI (`gh`)
 - Jira Cloud + local merge: Requires Jira credentials (host, username, API token) only
-- Jira Cloud + github-pr or github-draft-pr: Requires BOTH Jira credentials AND authorized GitHub CLI (`gh`)
+- Jira Cloud + pr or draft-pr: Requires BOTH Jira credentials AND authorized GitHub CLI (`gh`)
 
 **Step 2: Provider-Specific Configuration**
 
@@ -525,17 +525,18 @@ This repository has multiple git remotes detected. iloom needs to know which rem
    - Question format: "How should iloom handle finishing work?{{#if currentMergeMode}} (Currently: [currentMergeMode]){{/if}}"
    - Options:
      - "local" - Merge changes locally (traditional workflow)
-     - "github-pr" - Create GitHub PR when finishing (for PR-based workflows)
-     - "github-draft-pr" - Create draft PR at start, mark ready when finishing (recommended for forks)
+     - "pr" - Create a PR when finishing (for PR-based workflows)
+     - "draft-pr" - Create draft PR at start, mark ready when finishing (recommended for forks)
    - Default:
-     - If origin + upstream remotes detected (fork pattern): "github-draft-pr"
+     - If origin + upstream remotes detected (fork pattern): "draft-pr"
      - Otherwise: currentMergeMode or "local"
-   - Validation: Must be one of: local, github-pr, github-draft-pr
+   - Validation: Must be one of: local, pr, draft-pr
    - Store answer as: `mergeBehavior.mode`
    - Context:
-     - **Fork workflows (with upstream remote)**: Use "github-draft-pr" mode. This creates a draft PR at the start of work, routes all AI agent comments to the PR (not the issue), and marks the PR ready for review when you finish. This keeps upstream issue trackers clean.
-     - **Direct contribution workflows**: Use "github-pr" to create PRs when finishing, or "local" to merge locally.
-   - **IMPORTANT**: Both "github-pr" and "github-draft-pr" modes require GitHub CLI (`gh`) to be installed and authenticated, regardless of your issue tracker provider.
+     - **Fork workflows (with upstream remote)**: Use "draft-pr" mode. This creates a draft PR at the start of work, routes all AI agent comments to the PR (not the issue), and marks the PR ready for review when you finish. This keeps upstream issue trackers clean.
+     - **Direct contribution workflows**: Use "pr" to create PRs when finishing, or "local" to merge locally.
+     - **Provider note**: The VCS provider (currently GitHub) determines how PRs are created. The mode value is provider-agnostic.
+   - **IMPORTANT**: Both "pr" and "draft-pr" modes require GitHub CLI (`gh`) to be installed and authenticated, regardless of your issue tracker provider.
 
 **Implementation Details:**
 - Ask Step 1 first to determine provider
@@ -781,11 +782,11 @@ When both settings.json and settings.local.json exist, you MUST prevent duplicat
    ```json
    {
      "mergeBehavior": {
-       "mode": "<user's answer>"  // "github-pr" or "github-draft-pr"
+       "mode": "<user's answer>"  // "pr" or "draft-pr"
      }
    }
    ```
-   Note: Valid modes are "local", "github-pr", and "github-draft-pr". Only include if not "local".
+   Note: Valid modes are "local", "pr", and "draft-pr". Only include if not "local".
 
 7. **Combine all applicable sections** into a single JSON object. Only include sections where the value differs from the default.
 
