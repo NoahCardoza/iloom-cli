@@ -46,9 +46,9 @@ describe('MergeManager', () => {
 		// Default: no rebase in progress (fs.access rejects = directory doesn't exist)
 		mockFsAccess.mockRejectedValue(new Error('ENOENT'))
 
-		// Create a mock SettingsManager - default to github-pr mode (uses origin/)
+		// Create a mock SettingsManager - default to pr mode (uses origin/)
 		mockSettingsManager = {
-			loadSettings: vi.fn().mockResolvedValue({ mergeBehavior: { mode: 'github-pr' } }),
+			loadSettings: vi.fn().mockResolvedValue({ mergeBehavior: { mode: 'pr' } }),
 		} as unknown as SettingsManager
 
 		// Create a mock MetadataManager - default to non-child loom
@@ -397,8 +397,8 @@ describe('MergeManager', () => {
 	})
 
 	describe('Conditional Origin/Local Branch Target', () => {
-		it('should use origin/{mainBranch} in github-pr mode (non-child)', async () => {
-			// Setup: github-pr mode (already default), non-child loom
+		it('should use origin/{mainBranch} in pr mode (non-child)', async () => {
+			// Setup: pr mode (already default), non-child loom
 			// Mock: successful rebase on origin/main
 			vi.mocked(git.executeGitCommand)
 				.mockResolvedValueOnce('/test/worktree/.git') // rev-parse --absolute-git-dir (isRebaseInProgress)
@@ -427,9 +427,9 @@ describe('MergeManager', () => {
 			)
 		})
 
-		it('should use origin/{mainBranch} in github-draft-pr mode (non-child)', async () => {
-			// Setup: github-draft-pr mode
-			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({ mergeBehavior: { mode: 'github-draft-pr' } })
+		it('should use origin/{mainBranch} in draft-pr mode (non-child)', async () => {
+			// Setup: draft-pr mode
+			mockSettingsManager.loadSettings = vi.fn().mockResolvedValue({ mergeBehavior: { mode: 'draft-pr' } })
 
 			// Mock: successful rebase on origin/main
 			vi.mocked(git.executeGitCommand)

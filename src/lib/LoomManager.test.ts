@@ -11,6 +11,7 @@ import { SettingsManager } from './SettingsManager.js'
 import type { CreateLoomInput } from '../types/loom.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { branchExists, ensureRepositoryHasCommits, isFileTrackedByGit, fetchOrigin, executeGitCommand, pushBranchToRemote } from '../utils/git.js'
+import { VCSProviderFactory } from './VCSProviderFactory.js'
 import fs from 'fs-extra'
 import fg from 'fast-glob'
 
@@ -154,6 +155,13 @@ vi.mock('./LoomLauncher.js', () => ({
   })),
 }))
 
+// Mock VCSProviderFactory - default returns null (GitHub/legacy path)
+vi.mock('./VCSProviderFactory.js', () => ({
+  VCSProviderFactory: {
+    create: vi.fn().mockReturnValue(null),
+  },
+}))
+
 // Mock PRManager for draft PR creation tests
 // Shared mock functions for verification in tests
 const mockCreateDraftPR = vi.fn()
@@ -258,6 +266,9 @@ describe('LoomManager', testOptions, () => {
     mockUpdateMetadata.mockResolvedValue(undefined)
     mockCreateDraftPR.mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' })
     mockCheckForExistingPR.mockResolvedValue(null) // No existing PR by default
+
+    // Re-setup VCSProviderFactory mock after clearAllMocks (null = use GitHub/legacy PRManager path)
+    vi.mocked(VCSProviderFactory.create).mockReturnValue(null)
   })
 
   describe('createIloom', () => {
@@ -639,19 +650,19 @@ describe('LoomManager', testOptions, () => {
       expect(mockClaude.launchWithContext).not.toHaveBeenCalled()
     })
 
-    it('should succeed with Linear provider and github-draft-pr merge mode', async () => {
+    it('should succeed with Linear provider and draft-pr merge mode', async () => {
       // Configure Linear provider (doesn't support PRs natively)
       mockGitHub.supportsPullRequests = false
       mockGitHub.providerName = 'linear'
       mockIssuePrefix = '' // Linear issues use empty prefix (identifier already includes team key)
 
-      // Mock settings with github-draft-pr mode
-      // (Issue #464: Linear + github-draft-pr should work since PRs go through GitHub CLI)
+      // Mock settings with draft-pr mode
+      // (Issue #464: Linear + draft-pr should work since PRs go through GitHub CLI)
       vi.mocked(mockSettings.loadSettings).mockResolvedValue({
         mainBranch: 'main',
         worktreeDir: '/test/worktrees',
         mergeBehavior: {
-          mode: 'github-draft-pr',
+          mode: 'draft-pr',
         },
       })
 
@@ -699,12 +710,61 @@ describe('LoomManager', testOptions, () => {
       )
     })
 
-    it('should remove placeholder commit from local branch after pushing in draft PR mode', async () => {
+    it('should run git operations but skip PR creation when VCS provider does not support draft PRs', async () => {
+      // Mock VCSProviderFactory to return a provider with supportsDraftPRs: false
+      vi.mocked(VCSProviderFactory.create).mockReturnValue({ supportsDraftPRs: false } as ReturnType<typeof VCSProviderFactory.create>)
+
       vi.mocked(mockSettings.loadSettings).mockResolvedValue({
         mainBranch: 'main',
         worktreeDir: '/test/worktrees',
         mergeBehavior: {
-          mode: 'github-draft-pr',
+          mode: 'draft-pr',
+        },
+      })
+
+      vi.mocked(mockGitHub.fetchIssue).mockResolvedValue({
+        number: 123,
+        title: 'Test Issue',
+        body: 'Test description',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        url: 'https://github.com/owner/repo/issues/123',
+      })
+
+      const expectedPath = '/test/worktree-issue-123'
+      vi.mocked(mockGitWorktree.generateWorktreePath).mockReturnValue(expectedPath)
+      vi.mocked(mockGitWorktree.createWorktree).mockResolvedValue(expectedPath)
+      vi.mocked(mockEnvironment.calculatePort).mockReturnValue(3123)
+
+      // Make rev-parse fail so we exercise the placeholder commit + push path
+      const { GitCommandError: MockGitCommandError } = await import('../utils/git.js')
+      vi.mocked(executeGitCommand).mockImplementation(async (args) => {
+        if (args[0] === 'rev-parse' && args[1] === '--verify' && String(args[2]).startsWith('origin/')) {
+          throw new MockGitCommandError('fatal: unknown revision', 'git rev-parse', 128, 'unknown revision')
+        }
+        return ''
+      })
+
+      await manager.createIloom(baseInput)
+
+      // Verify git fetch happened (git operations must run regardless of supportsDraftPRs)
+      expect(executeGitCommand).toHaveBeenCalledWith(['fetch', 'origin'], { cwd: expectedPath })
+
+      // Verify push happened (placeholder commit pushed to remote)
+      expect(pushBranchToRemote).toHaveBeenCalled()
+
+      // Verify PR creation was skipped (the whole point of the supportsDraftPRs: false check)
+      expect(mockCreateDraftPR).not.toHaveBeenCalled()
+      expect(mockCheckForExistingPR).not.toHaveBeenCalled()
+    })
+
+    it('should remove placeholder commit from local branch after pushing in draft-pr mode', async () => {
+      vi.mocked(mockSettings.loadSettings).mockResolvedValue({
+        mainBranch: 'main',
+        worktreeDir: '/test/worktrees',
+        mergeBehavior: {
+          mode: 'draft-pr',
         },
       })
 
@@ -744,17 +804,17 @@ describe('LoomManager', testOptions, () => {
       )
     })
 
-    it('should create draft PR for branch mode when mergeBehavior is github-draft-pr', async () => {
+    it('should create draft PR for branch mode when mergeBehavior is draft-pr', async () => {
       // Ensure PRManager mock is set up for this test
       mockCreateDraftPR.mockResolvedValue({ number: 99, url: 'https://github.com/owner/repo/pull/99' })
       mockCheckForExistingPR.mockResolvedValue(null) // No existing PR
 
-      // Mock settings with github-draft-pr mode
+      // Mock settings with draft-pr mode
       vi.mocked(mockSettings.loadSettings).mockResolvedValue({
         mainBranch: 'main',
         worktreeDir: '/test/worktrees',
         mergeBehavior: {
-          mode: 'github-draft-pr',
+          mode: 'draft-pr',
         },
       })
 
@@ -802,12 +862,12 @@ describe('LoomManager', testOptions, () => {
       mockCreateDraftPR.mockResolvedValue({ number: 101, url: 'https://github.com/owner/repo/pull/101' })
       mockCheckForExistingPR.mockResolvedValue(null)
 
-      // Mock settings with github-draft-pr mode
+      // Mock settings with draft-pr mode
       vi.mocked(mockSettings.loadSettings).mockResolvedValue({
         mainBranch: 'main',
         worktreeDir: '/test/worktrees',
         mergeBehavior: {
-          mode: 'github-draft-pr',
+          mode: 'draft-pr',
         },
       })
 
@@ -855,13 +915,13 @@ describe('LoomManager', testOptions, () => {
       )
     })
 
-    it('should reuse existing PR instead of creating new one in github-draft-pr mode', async () => {
-      // Mock settings with github-draft-pr mode
+    it('should reuse existing PR instead of creating new one in draft-pr mode', async () => {
+      // Mock settings with draft-pr mode
       vi.mocked(mockSettings.loadSettings).mockResolvedValue({
         mainBranch: 'main',
         worktreeDir: '/test/worktrees',
         mergeBehavior: {
-          mode: 'github-draft-pr',
+          mode: 'draft-pr',
         },
       })
 
@@ -915,13 +975,13 @@ describe('LoomManager', testOptions, () => {
     })
 
     describe('Fetch Before Branch Creation (PR Modes)', () => {
-      it('should fetch from origin before creating branch in github-pr mode', async () => {
-        // Mock settings with github-pr mode
+      it('should fetch from origin before creating branch in pr mode', async () => {
+        // Mock settings with pr mode
         vi.mocked(mockSettings.loadSettings).mockResolvedValue({
           mainBranch: 'main',
           worktreeDir: '/test/worktrees',
           mergeBehavior: {
-            mode: 'github-pr',
+            mode: 'pr',
           },
         })
 
@@ -955,13 +1015,13 @@ describe('LoomManager', testOptions, () => {
         )
       })
 
-      it('should fetch from origin before creating branch in github-draft-pr mode', async () => {
-        // Mock settings with github-draft-pr mode
+      it('should fetch from origin before creating branch in draft-pr mode', async () => {
+        // Mock settings with draft-pr mode
         vi.mocked(mockSettings.loadSettings).mockResolvedValue({
           mainBranch: 'main',
           worktreeDir: '/test/worktrees',
           mergeBehavior: {
-            mode: 'github-draft-pr',
+            mode: 'draft-pr',
           },
         })
 
@@ -996,12 +1056,12 @@ describe('LoomManager', testOptions, () => {
       })
 
       it('should NOT fetch for child looms (use parent local branch)', async () => {
-        // Mock settings with github-pr mode
+        // Mock settings with pr mode
         vi.mocked(mockSettings.loadSettings).mockResolvedValue({
           mainBranch: 'main',
           worktreeDir: '/test/worktrees',
           mergeBehavior: {
-            mode: 'github-pr',
+            mode: 'pr',
           },
         })
 
@@ -1082,12 +1142,12 @@ describe('LoomManager', testOptions, () => {
       })
 
       it('should handle fetch failure with clear error message', async () => {
-        // Mock settings with github-pr mode
+        // Mock settings with pr mode
         vi.mocked(mockSettings.loadSettings).mockResolvedValue({
           mainBranch: 'main',
           worktreeDir: '/test/worktrees',
           mergeBehavior: {
-            mode: 'github-pr',
+            mode: 'pr',
           },
         })
 
@@ -1115,12 +1175,12 @@ describe('LoomManager', testOptions, () => {
       })
 
       it('should NOT fetch when input type is PR (working with existing PR)', async () => {
-        // Mock settings with github-pr mode
+        // Mock settings with pr mode
         vi.mocked(mockSettings.loadSettings).mockResolvedValue({
           mainBranch: 'main',
           worktreeDir: '/test/worktrees',
           mergeBehavior: {
-            mode: 'github-pr',
+            mode: 'pr',
           },
         })
 
@@ -1162,7 +1222,7 @@ describe('LoomManager', testOptions, () => {
           mainBranch: 'develop',
           worktreeDir: '/test/worktrees',
           mergeBehavior: {
-            mode: 'github-pr',
+            mode: 'pr',
           },
         })
 

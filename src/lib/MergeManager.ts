@@ -52,13 +52,13 @@ export class MergeManager {
 
 		// Determine whether to use remote (origin/) or local branch reference
 		// - Child looms: always use local parent branch (parent may not be pushed)
-		// - PR modes (github-pr, github-draft-pr) for non-child: fetch and use origin/{branch}
+		// - PR modes (pr, draft-pr) for non-child: fetch and use origin/{branch}
 		// - Local mode: use local branch (no fetch)
 		const metadata = await this.metadataManager.readMetadata(worktreePath)
 		const isChildLoom = !!metadata?.parentLoom
 		const settings = await this.settingsManager.loadSettings(worktreePath)
 		const mergeBehaviorMode = settings.mergeBehavior?.mode ?? 'local'
-		const isPRMode = mergeBehaviorMode === 'github-pr' || mergeBehaviorMode === 'github-draft-pr'
+		const isPRMode = mergeBehaviorMode === 'pr' || mergeBehaviorMode === 'draft-pr'
 		const useRemote = isPRMode && !isChildLoom
 
 		let targetBranch: string
