@@ -1100,7 +1100,7 @@ export async function getMergeTargetBranch(
 }
 
 /**
- * Placeholder commit prefix used by github-draft-pr mode.
+ * Placeholder commit prefix used by draft-pr mode.
  * Created during il start to enable draft PR creation (GitHub requires at least one commit ahead of base).
  * Removed during il finish before the final push to maintain clean commit history.
  */

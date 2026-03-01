@@ -535,7 +535,7 @@ describe('FinishCommand - Child Loom GitHub PR Workflow', () => {
 		// Mock getMergeTargetBranch to return parent branch (simulating child loom metadata)
 		vi.mocked(getMergeTargetBranch).mockResolvedValue('feat/issue-123-parent-feature')
 
-		// Mock SettingsManager to return github-pr mode
+		// Mock SettingsManager to return pr mode
 		const mockSettingsManager = {
 			loadSettings: vi.fn().mockResolvedValue({
 				mergeBehavior: { mode: 'pr' },

@@ -18,7 +18,7 @@ describe('PRManager', () => {
 	beforeEach(() => {
 		mockSettings = {
 			mergeBehavior: {
-				mode: 'github-pr',
+				mode: 'pr',
 			},
 			issueManagement: {
 				github: {
@@ -200,7 +200,7 @@ describe('PRManager', () => {
 		})
 
 		it('should target correct remote based on settings and use owner:branch format', async () => {
-			mockSettings.mergeBehavior = { mode: 'github-pr', remote: 'upstream' }
+			mockSettings.mergeBehavior = { mode: 'pr', remote: 'upstream' }
 			prManager = new PRManager(mockSettings)
 
 			vi.mocked(remoteUtils.getEffectivePRTargetRemote).mockResolvedValueOnce('upstream')
@@ -428,7 +428,7 @@ describe('PRManager', () => {
 		})
 
 		it('should prefer mergeBehavior.remote over issueManagement.github.remote', async () => {
-			mockSettings.mergeBehavior = { mode: 'github-pr', remote: 'upstream-custom' }
+			mockSettings.mergeBehavior = { mode: 'pr', remote: 'upstream-custom' }
 			mockSettings.issueManagement = {
 				github: {
 					remote: 'upstream-default',

@@ -486,7 +486,7 @@ describe('MergeManager', () => {
 		})
 
 		it('should use local parent branch for child looms (any mode, no fetch)', async () => {
-			// Setup: github-pr mode BUT child loom (has parent)
+			// Setup: pr mode BUT child loom (has parent)
 			mockMetadataManager.readMetadata = vi.fn().mockResolvedValue({
 				parentLoom: { branchName: 'fix/parent-branch', identifier: 'issue-100' }
 			})

@@ -28,7 +28,7 @@ export interface MetadataFile {
   projectPath?: string // Main worktree path (project root) - enables project identification
   issueUrls?: Record<string, string> // Map of issue ID to URL in the issue tracker
   prUrls?: Record<string, string> // Map of PR number to URL in the issue tracker
-  draftPrNumber?: number // Draft PR number if github-draft-pr mode was used
+  draftPrNumber?: number // Draft PR number if draft-pr mode was used
   oneShot?: OneShotMode // One-shot automation mode stored during loom creation
   complexity?: ComplexityOverride // Complexity override stored during loom creation
   capabilities?: ProjectCapability[] // Detected project capabilities
@@ -71,7 +71,7 @@ export interface WriteMetadataInput {
   projectPath: string // Main worktree path (project root) - required for new looms
   issueUrls: Record<string, string> // Map of issue ID to URL in the issue tracker
   prUrls: Record<string, string> // Map of PR number to URL in the issue tracker
-  draftPrNumber?: number // Draft PR number for github-draft-pr mode
+  draftPrNumber?: number // Draft PR number for draft-pr mode
   oneShot?: OneShotMode // One-shot automation mode to persist
   complexity?: ComplexityOverride // Complexity override to persist
   capabilities: ProjectCapability[] // Detected project capabilities (required for new looms)

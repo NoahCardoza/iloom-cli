@@ -14,7 +14,7 @@ import type { LoomMetadata } from '../lib/MetadataManager.js'
  * @param repo - Optional repo in "owner/repo" format. If not provided, will auto-detect from git.
  * @param provider - Issue management provider (default: 'github')
  * @param settings - Optional settings to extract Linear API token from
- * @param draftPrNumber - Optional draft PR number for github-draft-pr mode (routes comments to PR)
+ * @param draftPrNumber - Optional draft PR number for draft-pr mode (routes comments to PR)
  */
 export async function generateIssueManagementMcpConfig(
 	contextType?: 'issue' | 'pr',
@@ -23,7 +23,7 @@ export async function generateIssueManagementMcpConfig(
 	settings?: IloomSettings,
 	draftPrNumber?: number
 ): Promise<Record<string, unknown>[]> {
-	// When draftPrNumber is provided (github-draft-pr mode), force contextType to 'pr'
+	// When draftPrNumber is provided (draft-pr mode), force contextType to 'pr'
 	// This ensures agents route comments to the draft PR instead of the issue
 	const effectiveContextType = draftPrNumber ? 'pr' : contextType
 

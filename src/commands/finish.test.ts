@@ -3566,7 +3566,7 @@ describe('FinishCommand', () => {
 				})
 			})
 
-			it('should succeed with Linear provider and github-pr merge mode', async () => {
+			it('should succeed with Linear provider and pr merge mode', async () => {
 				// Mock settings with pr mode
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
@@ -3595,7 +3595,7 @@ describe('FinishCommand', () => {
 				expect(mockMergeManager.performFastForwardMerge).not.toHaveBeenCalled()
 			})
 
-			it('should succeed with Linear provider and github-draft-pr merge mode', async () => {
+			it('should succeed with Linear provider and draft-pr merge mode', async () => {
 				// Mock settings with draft-pr mode
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',
@@ -3792,7 +3792,7 @@ describe('FinishCommand', () => {
 			})
 		})
 
-		describe('github-pr mode', () => {
+		describe('pr mode', () => {
 			it('should respect openBrowserOnFinish=false setting', async () => {
 				vi.spyOn(SettingsManager.prototype, 'loadSettings').mockResolvedValue({
 					mainBranch: 'main',

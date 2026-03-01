@@ -391,7 +391,7 @@ export class IgniteCommand {
 			if (context.type === 'issue' || context.type === 'pr') {
 				try {
 					const provider = this.settings ? IssueTrackerFactory.getProviderName(this.settings) : 'github'
-					// Pass draftPrNumber to route comments to PR when in github-draft-pr mode
+					// Pass draftPrNumber to route comments to PR when in draft-pr mode
 					mcpConfig = await generateIssueManagementMcpConfig(context.type, undefined, provider, this.settings, draftPrNumber)
 					logger.debug('Generated MCP configuration for issue management', { provider, draftPrNumber })
 
@@ -633,7 +633,7 @@ export class IgniteCommand {
 		}
 
 		// Set draft PR mode flags (mutually exclusive)
-		// When draftPrNumber is set, we're in github-draft-pr mode
+		// When draftPrNumber is set, we're in draft-pr mode
 		if (draftPrNumber !== undefined) {
 			variables.DRAFT_PR_MODE = true
 			variables.DRAFT_PR_NUMBER = draftPrNumber
