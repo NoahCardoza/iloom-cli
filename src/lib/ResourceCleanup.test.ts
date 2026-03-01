@@ -15,6 +15,10 @@ vi.mock('./DatabaseManager.js')
 vi.mock('./process/ProcessManager.js')
 vi.mock('./SettingsManager.js')
 
+vi.mock('../utils/claude-trust.js', () => ({
+	removeClaudeTrust: vi.fn().mockResolvedValue(undefined),
+}))
+
 // Mock MetadataManager to prevent real file creation during tests
 vi.mock('./MetadataManager.js', () => ({
 	MetadataManager: vi.fn(() => ({
@@ -152,7 +156,7 @@ describe('ResourceCleanup', () => {
 
 			expect(result.success).toBe(true)
 			expect(result.errors).toHaveLength(0)
-			expect(result.operations).toHaveLength(6) // dev-server, worktree, recap, branch, database, metadata
+			expect(result.operations).toHaveLength(7) // dev-server, worktree, recap, branch, database, metadata, trust
 			expect(result.operations[0]?.type).toBe('dev-server')
 			expect(result.operations[0]?.success).toBe(true)
 			expect(result.operations[1]?.type).toBe('worktree')
@@ -160,6 +164,7 @@ describe('ResourceCleanup', () => {
 			expect(result.operations[3]?.type).toBe('branch')
 			expect(result.operations[4]?.type).toBe('database')
 			expect(result.operations[5]?.type).toBe('metadata')
+			expect(result.operations[6]?.type).toBe('trust')
 		})
 
 		it('should pre-fetch merge target BEFORE worktree deletion (bug fix for issue #328)', async () => {
@@ -332,10 +337,87 @@ describe('ResourceCleanup', () => {
 				keepDatabase: true,
 			})
 
-			expect(result.operations).toHaveLength(4) // dev-server check + worktree removal + recap archival + metadata
+			expect(result.operations).toHaveLength(5) // dev-server check + worktree removal + recap archival + metadata + trust
 			expect(result.operations.every(op => 'type' in op)).toBe(true)
 			expect(result.operations.every(op => 'success' in op)).toBe(true)
 			expect(result.operations.every(op => 'message' in op)).toBe(true)
+		})
+
+		it('should archive metadata instead of deleting when archive option is set', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				keepDatabase: true,
+				archive: true,
+			})
+
+			expect(result.success).toBe(true)
+			const metadataOp = result.operations.find(op => op.type === 'metadata')
+			expect(metadataOp?.success).toBe(true)
+			expect(metadataOp?.message).toBe('Metadata archived')
+		})
+
+		it('should delete metadata when archive option is not set', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+			vi.mocked(mockProcessManager.detectDevServer).mockResolvedValueOnce(null)
+			vi.mocked(mockGitWorktree.removeWorktree).mockResolvedValueOnce(undefined)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				keepDatabase: true,
+				archive: false,
+			})
+
+			expect(result.success).toBe(true)
+			const metadataOp = result.operations.find(op => op.type === 'metadata')
+			expect(metadataOp?.success).toBe(true)
+			expect(metadataOp?.message).toBe('Metadata deleted')
+		})
+
+		it('should show archive in dry-run message when archive option is set', async () => {
+			vi.mocked(mockGitWorktree.findWorktreeForIssue).mockResolvedValueOnce(mockWorktree)
+			vi.mocked(mockGitWorktree.isMainWorktree).mockResolvedValueOnce(false)
+			vi.mocked(hasUncommittedChanges).mockResolvedValueOnce(false)
+			vi.mocked(checkRemoteBranchStatus).mockResolvedValueOnce({
+				exists: true,
+				remoteAhead: false,
+				localAhead: false,
+				networkError: false
+			})
+			vi.mocked(mockProcessManager.calculatePort).mockReturnValue(3025)
+
+			const parsedInput = {
+				type: 'issue' as const,
+				number: 25,
+				originalInput: 'issue-25'
+			}
+
+			const result = await resourceCleanup.cleanupWorktree(parsedInput, {
+				dryRun: true,
+				deleteBranch: true,
+				keepDatabase: false,
+				archive: true,
+			})
+
+			expect(result.success).toBe(true)
+			const metadataOp = result.operations.find(op => op.type === 'metadata')
+			expect(metadataOp?.message).toContain('[DRY RUN]')
+			expect(metadataOp?.message).toContain('archive')
 		})
 
 		it('should support dry-run mode without executing changes', async () => {

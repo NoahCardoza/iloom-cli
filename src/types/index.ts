@@ -140,6 +140,9 @@ export interface Config {
 // One-shot automation mode type
 export type OneShotMode = 'default' | 'noReview' | 'bypassPermissions'
 
+// Complexity override type
+export type ComplexityOverride = 'trivial' | 'simple' | 'complex'
+
 // Command option types
 export interface StartOptions {
   // Individual component flags (can be combined)
@@ -149,8 +152,14 @@ export interface StartOptions {
   terminal?: boolean
   // Child loom control flag
   childLoom?: boolean
+  // Epic loom control flag (for issues with child issues)
+  epic?: boolean
+  // Create-only mode: skip Claude, IDE, terminal, dev server, and epic
+  createOnly?: boolean
   // One-shot automation mode
   oneShot?: OneShotMode
+  // Complexity override (skips complexity evaluation)
+  complexity?: ComplexityOverride
   // Optional body text for issue creation
   body?: string
   // Output result as JSON
@@ -183,6 +192,8 @@ export interface FinishOptions {
   cleanup?: boolean   // --cleanup / --no-cleanup - Control worktree cleanup after finishing
   json?: boolean      // --json - Output result as JSON
   skipToPr?: boolean  // --skip-to-pr - Skip rebase/validation/commit, go directly to PR creation (debug)
+  jsonStream?: boolean // --json-stream - Stream JSONL output for Claude conflict resolution
+  review?: boolean    // --review - Review commit message before committing (default: auto-commit without review)
 }
 
 /**
@@ -204,6 +215,8 @@ export interface CleanupOptions {
   json?: boolean
   /** Wait specified milliseconds before cleanup execution */
   defer?: number
+  /** Archive metadata instead of deleting (preserves loom in il list --finished) */
+  archive?: boolean
 }
 
 export interface ListOptions {
@@ -231,15 +244,16 @@ export interface StartResult {
   path: string
   branch: string
   port?: number
-  type: 'issue' | 'pr' | 'branch'
+  type: 'issue' | 'pr' | 'branch' | 'epic'
   identifier: string | number
   title?: string
   capabilities?: string[]
+  childIssueNumbers?: string[]
 }
 
 export interface FinishResult {
   success: boolean
-  type: 'issue' | 'pr' | 'branch'
+  type: 'issue' | 'pr' | 'branch' | 'epic'
   identifier: string | number
   /** Whether this was a dry-run operation */
   dryRun?: boolean
@@ -258,7 +272,21 @@ export interface SummaryResult {
   sessionId: string
   issueNumber?: string | number
   branchName: string
-  loomType: 'issue' | 'pr' | 'branch'
+  loomType: 'issue' | 'pr' | 'branch' | 'epic'
+}
+
+export interface RebaseResult {
+  success: boolean
+  conflictsDetected: boolean
+  claudeLaunched: boolean
+  conflictsResolved?: boolean
+  error?: string
+}
+
+export interface RebaseOutcome {
+  conflictsDetected: boolean
+  claudeLaunched: boolean
+  conflictsResolved: boolean
 }
 
 // Deprecated: Result types - use exception-based error handling instead
@@ -306,6 +334,7 @@ export interface ValidationOptions {
 	skipTypecheck?: boolean
 	skipLint?: boolean
 	skipTests?: boolean
+	jsonStream?: boolean
 }
 
 export interface ValidationStepResult {
@@ -352,6 +381,7 @@ export interface MergeOptions {
 	dryRun?: boolean      // Preview actions without executing
 	force?: boolean       // Skip confirmation prompts
 	repoRoot?: string     // Repository root path (optional, auto-detected if not provided)
+	jsonStream?: boolean  // When true, run Claude headless and stream JSONL for conflict resolution
 }
 
 export interface MergeResult {
@@ -375,3 +405,6 @@ export interface UpdateCheckResult {
 }
 
 export type InstallationMethod = 'global' | 'local' | 'linked' | 'unknown'
+
+// Telemetry types
+export * from './telemetry.js'

@@ -82,6 +82,7 @@ export interface TemplateVariables {
 	ANALYZE_AND_PLAN_REVIEW_ENABLED?: boolean       // True if analyze-and-plan artifacts should be reviewed
 	IMPLEMENTER_REVIEW_ENABLED?: boolean            // True if implementer artifacts should be reviewed
 	COMPLEXITY_REVIEW_ENABLED?: boolean             // True if complexity evaluator artifacts should be reviewed
+	COMPLEXITY_OVERRIDE?: 'trivial' | 'simple' | 'complex'  // Complexity override from CLI flag or loom metadata
 	// Planning mode variables - mutually exclusive
 	EXISTING_ISSUE_MODE?: boolean   // True when decomposing an existing issue (il plan 42)
 	FRESH_PLANNING_MODE?: boolean   // True when starting fresh planning session (il plan "feature idea")
@@ -104,13 +105,26 @@ export interface TemplateVariables {
 	HAS_REVIEWER?: boolean
 	// Git remote configuration
 	GIT_REMOTE?: string  // Remote name for push (defaults to 'origin')
+	// Swarm orchestrator variables
+	EPIC_ISSUE_NUMBER?: string | number
+	EPIC_WORKTREE_PATH?: string
+	EPIC_METADATA_PATH?: string  // Path to the epic's metadata JSON file
+	CHILD_ISSUES?: string  // JSON stringified array of child issues with worktree paths
+	DEPENDENCY_MAP?: string  // JSON stringified dependency map
+	SWARM_MODE?: boolean  // True when rendering agents in swarm mode
+	AUTO_SWARM_MODE?: boolean  // True when plan command launched with --auto-swarm flag
+	SWARM_AGENT_METADATA?: string  // JSON string mapping agent names to { model, tools } for claude -p commands
+	SWARM_SUB_AGENT_TIMEOUT_MS?: number  // Timeout in milliseconds for sub-agent claude -p Bash tool calls (default: 600000 = 10 minutes)
+	NO_CLEANUP?: boolean  // True when child loom cleanup should be skipped (e.g., manual cleanup later)
+	POST_SWARM_REVIEW?: boolean  // True when post-swarm code review is enabled (defaults to true)
+	ISSUE_PREFIX?: string  // "#" for GitHub, "" for Linear/Jira — used in commit message templates
 }
 
 /**
  * Build review-related template variables from settings.
  * Used by both the ignite command (for prompt templates) and AgentManager (for agent prompts).
  */
-export function buildReviewTemplateVariables(agents?: Record<string, AgentSettings> | null): Partial<TemplateVariables> {
+export function buildReviewTemplateVariables(isSwarmMode: boolean, agents?: Record<string, AgentSettings> | null): Partial<TemplateVariables> {
 	const variables: Partial<TemplateVariables> = {}
 
 	// Code reviewer configuration
@@ -162,12 +176,19 @@ export function buildReviewTemplateVariables(agents?: Record<string, AgentSettin
 	}
 
 	// Per-agent review flags (defaults to false for each)
-	variables.ENHANCER_REVIEW_ENABLED = agents?.['iloom-issue-enhancer']?.review === true
-	variables.ANALYZER_REVIEW_ENABLED = agents?.['iloom-issue-analyzer']?.review === true
-	variables.PLANNER_REVIEW_ENABLED = agents?.['iloom-issue-planner']?.review === true
-	variables.ANALYZE_AND_PLAN_REVIEW_ENABLED = agents?.['iloom-issue-analyze-and-plan']?.review === true
-	variables.IMPLEMENTER_REVIEW_ENABLED = agents?.['iloom-issue-implementer']?.review === true
-	variables.COMPLEXITY_REVIEW_ENABLED = agents?.['iloom-issue-complexity-evaluator']?.review === true
+	// In swarm mode, swarmReview is used directly (defaults to false if not set)
+	const resolveReview = (agent: AgentSettings | undefined): boolean => {
+		if (isSwarmMode) {
+			return agent?.swarmReview === true
+		}
+		return agent?.review === true
+	}
+	variables.ENHANCER_REVIEW_ENABLED = resolveReview(agents?.['iloom-issue-enhancer'])
+	variables.ANALYZER_REVIEW_ENABLED = resolveReview(agents?.['iloom-issue-analyzer'])
+	variables.PLANNER_REVIEW_ENABLED = resolveReview(agents?.['iloom-issue-planner'])
+	variables.ANALYZE_AND_PLAN_REVIEW_ENABLED = resolveReview(agents?.['iloom-issue-analyze-and-plan'])
+	variables.IMPLEMENTER_REVIEW_ENABLED = resolveReview(agents?.['iloom-issue-implementer'])
+	variables.COMPLEXITY_REVIEW_ENABLED = resolveReview(agents?.['iloom-issue-complexity-evaluator'])
 
 	return variables
 }
@@ -214,7 +235,7 @@ export class PromptTemplateManager {
 	/**
 	 * Load a template file by name
 	 */
-	async loadTemplate(templateName: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan'): Promise<string> {
+	async loadTemplate(templateName: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan' | 'swarm-orchestrator'): Promise<string> {
 		const templatePath = path.join(this.templateDir, `${templateName}-prompt.txt`)
 
 		logger.debug('Loading template', {
@@ -243,7 +264,7 @@ export class PromptTemplateManager {
 	 * Get a fully processed prompt for a workflow type
 	 */
 	async getPrompt(
-		type: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan',
+		type: 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan' | 'swarm-orchestrator',
 		variables: TemplateVariables
 	): Promise<string> {
 		const template = await this.loadTemplate(type)

@@ -263,6 +263,72 @@ export class JiraIssueTracker implements IssueTracker {
 	}
 
 	/**
+	 * Close an issue by transitioning to "Done" state
+	 * Uses configured transition mapping or default transition names
+	 */
+	async closeIssue(identifier: string | number): Promise<void> {
+		const issueKey = this.normalizeIdentifier(identifier)
+		getLogger().debug('Closing Jira issue', { issueKey })
+
+		// Get available transitions
+		const transitions = await this.client.getTransitions(issueKey)
+
+		// Look for the transition in config mapping or use default names
+		const transitionName = this.config.transitionMappings?.['Done']
+			?? this.findTransitionByName(transitions, ['Done', 'Close', 'Closed', 'Resolve', 'Resolved'])
+
+		if (!transitionName) {
+			throw new Error(
+				`Could not find "Done" transition for ${issueKey}. ` +
+				`Available transitions: ${transitions.map(t => t.name).join(', ')}. ` +
+				`Configure custom mapping in settings.json: issueManagement.jira.transitionMappings`
+			)
+		}
+
+		// Find transition ID
+		const transition = transitions.find(t => t.name === transitionName)
+		if (!transition) {
+			throw new Error(`Transition "${transitionName}" not found`)
+		}
+
+		await this.client.transitionIssue(issueKey, transition.id)
+		getLogger().info('Issue closed successfully', { issueKey, transition: transitionName })
+	}
+
+	/**
+	 * Reopen an issue by transitioning back to an open state
+	 * Uses configured transition mapping or default transition names
+	 */
+	async reopenIssue(identifier: string | number): Promise<void> {
+		const issueKey = this.normalizeIdentifier(identifier)
+		getLogger().debug('Reopening Jira issue', { issueKey })
+
+		// Get available transitions
+		const transitions = await this.client.getTransitions(issueKey)
+
+		// Look for the transition in config mapping or use default names
+		const transitionName = this.config.transitionMappings?.['Reopen']
+			?? this.findTransitionByName(transitions, ['Reopen', 'To Do', 'Open', 'Backlog'])
+
+		if (!transitionName) {
+			throw new Error(
+				`Could not find "Reopen" transition for ${issueKey}. ` +
+				`Available transitions: ${transitions.map(t => t.name).join(', ')}. ` +
+				`Configure custom mapping in settings.json: issueManagement.jira.transitionMappings`
+			)
+		}
+
+		// Find transition ID
+		const transition = transitions.find(t => t.name === transitionName)
+		if (!transition) {
+			throw new Error(`Transition "${transitionName}" not found`)
+		}
+
+		await this.client.transitionIssue(issueKey, transition.id)
+		getLogger().info('Issue reopened successfully', { issueKey, transition: transitionName })
+	}
+
+	/**
 	 * Extract context from issue for AI prompts
 	 */
 	extractContext(entity: Issue): string {
@@ -276,6 +342,28 @@ ${entity.body}
 
 ${entity.labels.length > 0 ? `Labels: ${entity.labels.join(', ')}` : ''}
 ${entity.assignees.length > 0 ? `Assignees: ${entity.assignees.join(', ')}` : ''}`
+	}
+
+	/**
+	 * Fetch child issues of a Jira parent issue using JQL
+	 * @param parentIdentifier - Jira issue key (e.g., "PROJ-123")
+	 * @param _repo - Repository (unused for Jira)
+	 * @returns Array of child issues
+	 */
+	async getChildIssues(parentIdentifier: string, _repo?: string): Promise<Array<{ id: string; title: string; url: string; state: string }>> {
+		const parentKey = this.normalizeIdentifier(parentIdentifier)
+		const jiraKeyPattern = /^[A-Z][A-Z0-9]+-\d+$/
+		if (!jiraKeyPattern.test(parentKey)) {
+			getLogger().warn(`Invalid Jira issue key format: ${parentKey}`)
+			return []
+		}
+		const issues = await this.client.searchIssues(`parent = ${parentKey}`)
+		return issues.map(issue => ({
+			id: issue.key,
+			title: issue.fields.summary,
+			url: `${this.config.host}/browse/${issue.key}`,
+			state: issue.fields.status.name.toLowerCase(),
+		}))
 	}
 
 	/**

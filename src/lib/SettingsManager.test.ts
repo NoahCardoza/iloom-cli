@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { SettingsManager, redactSensitiveFields } from './SettingsManager.js'
+import { SettingsManager, redactSensitiveFields, BaseAgentSettingsSchema, SpinAgentSettingsSchema, IloomSettingsSchemaNoDefaults, type IloomSettings } from './SettingsManager.js'
 import { readFile } from 'fs/promises'
 
 // Mock fs/promises
@@ -54,7 +54,16 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
-			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly', ...defaultSettings })
+			// subAgentTimeout defaults to 10 for each agent
+			expect(result).toEqual({
+				agents: {
+					'iloom-issue-analyzer': { model: 'sonnet', subAgentTimeout: 10 },
+					'iloom-issue-planner': { model: 'opus', subAgentTimeout: 10 },
+				},
+				sourceEnvOnStart: false,
+				attribution: 'upstreamOnly',
+				...defaultSettings,
+			})
 		})
 
 		it('should return empty object when settings file does not exist', async () => {
@@ -183,7 +192,15 @@ describe('SettingsManager', () => {
 
 			const result = await settingsManager.loadSettings()
 			// sourceEnvOnStart defaults to false, attribution defaults to 'upstreamOnly'
-			expect(result).toEqual({ ...validSettings, sourceEnvOnStart: false, attribution: 'upstreamOnly', ...defaultSettings })
+			// subAgentTimeout defaults to 10 for each agent
+			expect(result).toEqual({
+				agents: {
+					'test-agent': { model: 'haiku', subAgentTimeout: 10 },
+				},
+				sourceEnvOnStart: false,
+				attribution: 'upstreamOnly',
+				...defaultSettings,
+			})
 		})
 
 		it('should load settings with mainBranch field', async () => {
@@ -2927,6 +2944,175 @@ const error: { code?: string; message: string } = {
 			const result = settingsManager.getSpinModel(settings)
 			expect(result).toBe('opus')
 		})
+
+		it('should return spin.swarmModel when mode is swarm and swarmModel is set', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'opus' as const, swarmModel: 'sonnet' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('sonnet')
+		})
+
+		it('should default to opus when mode is swarm but swarmModel is not set', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('opus')
+		})
+
+		it('should ignore swarmModel when mode is not swarm', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'opus' as const, swarmModel: 'sonnet' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings)
+			expect(result).toBe('opus')
+		})
+
+		it('swarm mode defaults to opus even when spin.model is sonnet', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'sonnet' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('opus')
+		})
+
+		it('swarm mode defaults to opus even when spin.model is haiku', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('opus')
+		})
+
+		it('swarm mode defaults to opus even when no spin config exists', () => {
+			const settings = { sourceEnvOnStart: false }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('opus')
+		})
+
+		it('explicit spin.swarmModel overrides the default in swarm mode', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'sonnet' as const, swarmModel: 'opus' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
+			expect(result).toBe('opus')
+		})
+
+		it('non-swarm mode ignores swarmModel and uses spin.model', () => {
+			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const, swarmModel: 'opus' as const } }
+			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings)
+			expect(result).toBe('haiku')
+		})
+	})
+
+	describe('swarmModel schema validation', () => {
+		it('accepts swarmModel on BaseAgentSettingsSchema', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ swarmModel: 'sonnet' })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.swarmModel).toBe('sonnet')
+			}
+		})
+
+		it('accepts all valid model values for swarmModel on BaseAgentSettingsSchema', () => {
+			for (const model of ['sonnet', 'opus', 'haiku'] as const) {
+				const result = BaseAgentSettingsSchema.safeParse({ swarmModel: model })
+				expect(result.success).toBe(true)
+			}
+		})
+
+		it('rejects invalid swarmModel value on BaseAgentSettingsSchema', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ swarmModel: 'invalid' })
+			expect(result.success).toBe(false)
+		})
+
+		it('accepts swarmModel on SpinAgentSettingsSchema', () => {
+			const result = SpinAgentSettingsSchema.safeParse({ swarmModel: 'sonnet' })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.swarmModel).toBe('sonnet')
+			}
+		})
+
+		it('accepts SpinAgentSettingsSchema with both model and swarmModel', () => {
+			const result = SpinAgentSettingsSchema.safeParse({ model: 'opus', swarmModel: 'sonnet' })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.model).toBe('opus')
+				expect(result.data.swarmModel).toBe('sonnet')
+			}
+		})
+	})
+
+	describe('swarmReview schema validation', () => {
+		it('accepts swarmReview: true on BaseAgentSettingsSchema', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ swarmReview: true })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.swarmReview).toBe(true)
+			}
+		})
+
+		it('accepts swarmReview: false on BaseAgentSettingsSchema', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ swarmReview: false })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.swarmReview).toBe(false)
+			}
+		})
+
+		it('rejects invalid swarmReview value on BaseAgentSettingsSchema', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ swarmReview: 'yes' })
+			expect(result.success).toBe(false)
+		})
+
+		it('accepts BaseAgentSettingsSchema with both review and swarmReview', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ review: true, swarmReview: false })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.review).toBe(true)
+				expect(result.data.swarmReview).toBe(false)
+			}
+		})
+
+		it('accepts BaseAgentSettingsSchema without swarmReview (optional)', () => {
+			const result = BaseAgentSettingsSchema.safeParse({ review: true })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.swarmReview).toBeUndefined()
+			}
+		})
+	})
+
+	describe('postSwarmReview setting', () => {
+		it('defaults postSwarmReview to true on SpinAgentSettingsSchema', () => {
+			const result = SpinAgentSettingsSchema.safeParse({})
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.postSwarmReview).toBe(true)
+			}
+		})
+
+		it('accepts postSwarmReview: true on SpinAgentSettingsSchema', () => {
+			const result = SpinAgentSettingsSchema.safeParse({ model: 'opus', postSwarmReview: true })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.postSwarmReview).toBe(true)
+			}
+		})
+
+		it('accepts postSwarmReview: false on SpinAgentSettingsSchema', () => {
+			const result = SpinAgentSettingsSchema.safeParse({ model: 'opus', postSwarmReview: false })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.postSwarmReview).toBe(false)
+			}
+		})
+
+		it('accepts optional postSwarmReview on IloomSettingsSchemaNoDefaults spin section', () => {
+			const result = IloomSettingsSchemaNoDefaults.safeParse({ spin: { postSwarmReview: false } })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.spin?.postSwarmReview).toBe(false)
+			}
+		})
+
+		it('allows omitting postSwarmReview on IloomSettingsSchemaNoDefaults spin section', () => {
+			const result = IloomSettingsSchemaNoDefaults.safeParse({ spin: {} })
+			expect(result.success).toBe(true)
+			if (result.success) {
+				expect(result.data.spin?.postSwarmReview).toBeUndefined()
+			}
+		})
 	})
 
 	describe('getPlanPlanner', () => {
@@ -3417,6 +3603,151 @@ const error: { code?: string; message: string } = {
 
 			expect(result.token).toBe(123)
 			expect(result.password).toBe(true)
+		})
+	})
+
+	describe('AgentSettingsSchema subAgentTimeout', () => {
+		it('should accept valid subAgentTimeout on swarm-worker', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						model: 'sonnet',
+						subAgentTimeout: 30,
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-swarm-worker']?.subAgentTimeout).toBe(30)
+		})
+
+		it('should accept subAgentTimeout of 1 minute (minimum)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						subAgentTimeout: 1,
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-swarm-worker']?.subAgentTimeout).toBe(1)
+		})
+
+		it('should accept subAgentTimeout of 120 minutes (maximum)', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						subAgentTimeout: 120,
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-swarm-worker']?.subAgentTimeout).toBe(120)
+		})
+
+		it('should reject subAgentTimeout below 1 minute', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						subAgentTimeout: 0,
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow('Settings validation failed')
+		})
+
+		it('should reject subAgentTimeout above 120 minutes', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						subAgentTimeout: 121,
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			await expect(settingsManager.loadSettings(projectRoot)).rejects.toThrow('Settings validation failed')
+		})
+
+		it('should default subAgentTimeout to 10 when not configured', async () => {
+			const projectRoot = '/test/project'
+			const settings = {
+				agents: {
+					'iloom-swarm-worker': {
+						model: 'sonnet',
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.agents?.['iloom-swarm-worker']?.subAgentTimeout).toBe(10)
 		})
 	})
 })

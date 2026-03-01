@@ -279,6 +279,55 @@ describe('MetadataManager', () => {
       const writtenContent = JSON.parse(writeCall?.[1] as string)
       expect(writtenContent.oneShot).toBeUndefined()
     })
+
+    it('should write state to metadata when provided', async () => {
+      const inputWithState = {
+        ...metadataInput,
+        state: 'in_progress' as const,
+      }
+
+      await manager.writeMetadata(worktreePath, inputWithState)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.state).toBe('in_progress')
+    })
+
+    it('should not include state field when not provided', async () => {
+      await manager.writeMetadata(worktreePath, metadataInput)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.state).toBeUndefined()
+    })
+
+    it('should write issueType epic and childIssueNumbers to metadata when provided', async () => {
+      const inputWithEpic = {
+        ...metadataInput,
+        issueType: 'epic' as const,
+        childIssueNumbers: ['101', '102', '103'],
+      }
+
+      await manager.writeMetadata(worktreePath, inputWithEpic)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.issueType).toBe('epic')
+      expect(writtenContent.childIssueNumbers).toEqual(['101', '102', '103'])
+    })
+
+    it('should not include childIssueNumbers when array is empty', async () => {
+      const inputWithEmptyChildren = {
+        ...metadataInput,
+        childIssueNumbers: [],
+      }
+
+      await manager.writeMetadata(worktreePath, inputWithEmptyChildren)
+
+      const writeCall = vi.mocked(fs.writeFile).mock.calls[0]
+      const writtenContent = JSON.parse(writeCall?.[1] as string)
+      expect(writtenContent.childIssueNumbers).toBeUndefined()
+    })
   })
 
   describe('readMetadata', () => {
@@ -324,8 +373,14 @@ describe('MetadataManager', () => {
         prUrls: {},
         draftPrNumber: null,
         oneShot: null,
+        complexity: null,
         capabilities: ['web'],
+        state: null,
+        childIssueNumbers: [],
         parentLoom: null,
+        childIssues: [],
+        dependencyMap: {},
+        mcpConfigPath: null,
       })
     })
 
@@ -341,6 +396,36 @@ describe('MetadataManager', () => {
 
       const result = await manager.readMetadata(worktreePath)
       expect(result?.projectPath).toBe('/Users/jane/dev/main-repo')
+    })
+
+    it('should return issueType epic and childIssueNumbers when present in metadata', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Epic loom',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        issueType: 'epic',
+        childIssueNumbers: ['101', '102'],
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+      expect(result?.issueType).toBe('epic')
+      expect(result?.childIssueNumbers).toEqual(['101', '102'])
+    })
+
+    it('should default childIssueNumbers to empty for legacy looms', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Legacy loom without epic fields',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+      expect(result?.issueType).toBeNull()
+      expect(result?.childIssueNumbers).toEqual([])
     })
 
     it('should return null projectPath for legacy looms', async () => {
@@ -420,8 +505,14 @@ describe('MetadataManager', () => {
         prUrls: {},
         draftPrNumber: null,
         oneShot: null,
+        complexity: null,
         capabilities: [],
+        state: null,
+        childIssueNumbers: [],
         parentLoom: null,
+        childIssues: [],
+        dependencyMap: {},
+        mcpConfigPath: null,
       })
     })
 
@@ -653,6 +744,49 @@ describe('MetadataManager', () => {
 
       expect(result?.oneShot).toBeNull()
     })
+
+    it('should return state when present in metadata file', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Loom with swarm state',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__feature',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+        state: 'code_review',
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.state).toBe('code_review')
+    })
+
+    it('should return null state for looms without state field', async () => {
+      const mockContent = JSON.stringify({
+        description: 'Loom without state',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-42__feature',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#f5dceb',
+      })
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(mockContent)
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.state).toBeNull()
+    })
   })
 
   describe('listAllMetadata', () => {
@@ -741,8 +875,14 @@ describe('MetadataManager', () => {
         prUrls: {},
         draftPrNumber: null,
         oneShot: null,
+        complexity: null,
         capabilities: ['cli'],
+        state: null,
+        childIssueNumbers: [],
         parentLoom: null,
+        childIssues: [],
+        dependencyMap: {},
+        mcpConfigPath: null,
       })
       expect(result[1]).toEqual({
         description: 'Project 2 loom',
@@ -761,8 +901,14 @@ describe('MetadataManager', () => {
         prUrls: {},
         draftPrNumber: null,
         oneShot: null,
+        complexity: null,
         capabilities: ['web'],
+        state: null,
+        childIssueNumbers: [],
         parentLoom: null,
+        childIssues: [],
+        dependencyMap: {},
+        mcpConfigPath: null,
       })
     })
 
@@ -865,8 +1011,14 @@ describe('MetadataManager', () => {
         prUrls: {},
         draftPrNumber: null,
         oneShot: null,
+        complexity: null,
         capabilities: [],
+        state: null,
+        childIssueNumbers: [],
         parentLoom: null,
+        childIssues: [],
+        dependencyMap: {},
+        mcpConfigPath: null,
       })
     })
 
@@ -1179,6 +1331,156 @@ describe('MetadataManager', () => {
       const result = await manager.listFinishedMetadata()
 
       expect(result).toEqual([])
+    })
+  })
+
+  describe('updateMetadata', () => {
+    const worktreePath = '/Users/jane/dev/repo'
+
+    it('should merge updates into existing metadata', async () => {
+      const existingContent = JSON.stringify({
+        description: 'Epic loom',
+        created_at: '2024-01-15T10:30:00.000Z',
+        version: 1,
+        branchName: 'issue-100__epic',
+        issueType: 'issue',
+        issue_numbers: ['100'],
+      })
+
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      const childIssues = [
+        { number: '#101', title: 'Task 1', body: 'Body 1', url: 'url1' },
+        { number: '#102', title: 'Task 2', body: 'Body 2', url: 'url2' },
+      ]
+      const dependencyMap = { '101': [], '102': ['101'] }
+
+      await manager.updateMetadata(worktreePath, { childIssues, dependencyMap })
+
+      expect(fs.writeFile).toHaveBeenCalledTimes(1)
+      const writtenContent = JSON.parse(vi.mocked(fs.writeFile).mock.calls[0]?.[1] as string)
+      expect(writtenContent.description).toBe('Epic loom')
+      expect(writtenContent.childIssues).toEqual(childIssues)
+      expect(writtenContent.dependencyMap).toEqual(dependencyMap)
+      expect(writtenContent.branchName).toBe('issue-100__epic')
+    })
+
+    it('should not throw when metadata file does not exist', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(false)
+
+      await expect(
+        manager.updateMetadata(worktreePath, { childIssues: [] })
+      ).resolves.not.toThrow()
+
+      expect(fs.writeFile).not.toHaveBeenCalled()
+    })
+
+    it('should re-throw on write error', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ description: 'test', version: 1 }))
+      vi.mocked(fs.writeFile).mockRejectedValue(new Error('Write error'))
+
+      await expect(
+        manager.updateMetadata(worktreePath, { childIssues: [] })
+      ).rejects.toThrow('Write error')
+    })
+  })
+
+  describe('childIssues and dependencyMap fields', () => {
+    const worktreePath = '/Users/jane/dev/repo'
+
+    it('should read childIssues and dependencyMap from metadata', async () => {
+      const childIssues = [
+        { number: '#101', title: 'Task 1', body: 'Body 1', url: 'url1' },
+      ]
+      const dependencyMap = { '101': [] }
+
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+        description: 'Epic loom',
+        version: 1,
+        childIssues,
+        dependencyMap,
+      }))
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.childIssues).toEqual(childIssues)
+      expect(result?.dependencyMap).toEqual(dependencyMap)
+    })
+
+    it('should return empty defaults for legacy looms without child data', async () => {
+      vi.mocked(fs.pathExists).mockResolvedValue(true)
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+        description: 'Legacy loom',
+        version: 1,
+      }))
+
+      const result = await manager.readMetadata(worktreePath)
+
+      expect(result?.childIssues).toEqual([])
+      expect(result?.dependencyMap).toEqual({})
+    })
+
+    it('should write childIssues and dependencyMap when provided', async () => {
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      const childIssues = [
+        { number: '#101', title: 'Task 1', body: 'Body 1', url: 'url1' },
+      ]
+
+      await manager.writeMetadata(worktreePath, {
+        description: 'Epic loom',
+        branchName: 'issue-100__epic',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['100'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#ff0000',
+        sessionId: 'test-session',
+        projectPath: '/Users/jane/dev',
+        issueUrls: {},
+        prUrls: {},
+        capabilities: [],
+        childIssues,
+        dependencyMap: { '101': [] },
+      })
+
+      const writtenContent = JSON.parse(vi.mocked(fs.writeFile).mock.calls[0]?.[1] as string)
+      expect(writtenContent.childIssues).toEqual(childIssues)
+      expect(writtenContent.dependencyMap).toEqual({ '101': [] })
+    })
+
+    it('should not write childIssues when empty', async () => {
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      await manager.writeMetadata(worktreePath, {
+        description: 'Regular loom',
+        branchName: 'issue-42__feature',
+        worktreePath: '/Users/jane/dev/repo',
+        issueType: 'issue',
+        issue_numbers: ['42'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#ff0000',
+        sessionId: 'test-session',
+        projectPath: '/Users/jane/dev',
+        issueUrls: {},
+        prUrls: {},
+        capabilities: [],
+        childIssues: [],
+        dependencyMap: {},
+        mcpConfigPath: null,
+      })
+
+      const writtenContent = JSON.parse(vi.mocked(fs.writeFile).mock.calls[0]?.[1] as string)
+      expect(writtenContent.childIssues).toBeUndefined()
+      expect(writtenContent.dependencyMap).toBeUndefined()
     })
   })
 })

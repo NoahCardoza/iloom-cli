@@ -1,14 +1,47 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+/* global AbortSignal */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { PlanCommand } from './plan.js'
 import type { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import * as claudeUtils from '../utils/claude.js'
 import * as mcpUtils from '../utils/mcp.js'
 import * as firstRunSetup from '../utils/first-run-setup.js'
+import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
+import * as identifierParser from '../utils/IdentifierParser.js'
+import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
+import { HarnessServer } from '../lib/HarnessServer.js'
+import type { HarnessHandler } from '../lib/HarnessServer.js'
 
 // Mock dependencies
 vi.mock('../utils/claude.js')
 vi.mock('../utils/mcp.js')
 vi.mock('../utils/first-run-setup.js')
+vi.mock('../utils/IdentifierParser.js')
+vi.mock('../mcp/IssueManagementProviderFactory.js')
+vi.mock('../lib/HarnessServer.js')
+vi.mock('./start.js', () => {
+	class MockStartCommand {
+		async execute() {
+			return { id: 'test-loom', path: '/tmp/test-epic-worktree', branch: 'issue/42', type: 'epic' as const, identifier: '42' }
+		}
+	}
+	return { StartCommand: MockStartCommand }
+})
+
+vi.mock('./ignite.js', () => {
+	class MockIgniteCommand {
+		async execute() {
+			return undefined
+		}
+	}
+	return { IgniteCommand: MockIgniteCommand, WorktreeValidationError: class WorktreeValidationError extends Error {} }
+})
+vi.mock('../lib/TelemetryService.js', () => ({
+	TelemetryService: {
+		getInstance: vi.fn(),
+		resetInstance: vi.fn(),
+	},
+}))
 vi.mock('../lib/SettingsManager.js', () => ({
 	SettingsManager: vi.fn(() => ({
 		loadSettings: vi.fn().mockResolvedValue(null),
@@ -20,6 +53,7 @@ vi.mock('../lib/SettingsManager.js', () => ({
 vi.mock('../lib/IssueTrackerFactory.js', () => ({
 	IssueTrackerFactory: {
 		getProviderName: vi.fn().mockReturnValue('github'),
+		create: vi.fn(),
 	},
 }))
 vi.mock('../utils/logger.js', () => ({
@@ -54,6 +88,11 @@ describe('PlanCommand', () => {
 		// Default: project is already configured (no first-run setup needed)
 		vi.mocked(firstRunSetup.needsFirstRunSetup).mockResolvedValue(false)
 		vi.mocked(firstRunSetup.launchFirstRunSetup).mockResolvedValue(undefined)
+		// Default: input is not an issue identifier (non-decomposition mode)
+		vi.mocked(identifierParser.matchIssueIdentifier).mockReturnValue({ isIssueIdentifier: false })
+		// Default: TelemetryService mock
+		const mockTrack = vi.fn()
+		vi.mocked(TelemetryService.getInstance).mockReturnValue({ track: mockTrack } as unknown as TelemetryService)
 	})
 
 	describe('VS Code mode detection', () => {
@@ -454,8 +493,243 @@ describe('PlanCommand', () => {
 			await command.execute('test prompt', undefined, true)
 
 			expect(logger.warn).toHaveBeenCalledWith(
-				'⚠️  YOLO mode enabled - Claude will skip permission prompts and proceed autonomously. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
+				'YOLO mode enabled - Claude will skip permission prompts and proceed autonomously. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
 			)
+		})
+	})
+
+	describe('epic.planned telemetry', () => {
+		const mockTrack = vi.fn()
+		const mockGetChildIssues = vi.fn()
+
+		beforeEach(() => {
+			// Setup TelemetryService mock
+			vi.mocked(TelemetryService.getInstance).mockReturnValue({ track: mockTrack } as unknown as TelemetryService)
+
+			// Setup IssueManagementProviderFactory mock
+			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
+				getChildIssues: mockGetChildIssues,
+			} as never)
+
+			// Setup decomposition mode: matchIssueIdentifier returns true for "42"
+			vi.mocked(identifierParser.matchIssueIdentifier).mockReturnValue({
+				isIssueIdentifier: true,
+				type: 'numeric',
+				identifier: '42',
+			})
+
+			// Setup IssueTrackerFactory.create to return a mock issue tracker
+			const mockIssueTracker = {
+				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: '42' }),
+				fetchIssue: vi.fn().mockResolvedValue({ number: 42, title: 'Test epic', body: 'Epic body' }),
+			}
+			vi.mocked(IssueTrackerFactory.create).mockReturnValue(mockIssueTracker as never)
+		})
+
+		it('tracks epic.planned with child_count after decomposition session', async () => {
+			mockGetChildIssues.mockResolvedValue([
+				{ id: '100', title: 'Child 1', state: 'open' },
+				{ id: '101', title: 'Child 2', state: 'open' },
+				{ id: '102', title: 'Child 3', state: 'open' },
+			])
+
+			await command.execute('42')
+
+			expect(mockTrack).toHaveBeenCalledWith('epic.planned', {
+				child_count: 3,
+				tracker: 'github',
+			})
+		})
+
+		it('does not track epic.planned for non-decomposition sessions', async () => {
+			// Override: not an issue identifier
+			vi.mocked(identifierParser.matchIssueIdentifier).mockReturnValue({ isIssueIdentifier: false })
+
+			await command.execute('help me plan something')
+
+			expect(mockTrack).not.toHaveBeenCalledWith('epic.planned', expect.anything())
+		})
+
+		it('does not throw if telemetry tracking fails', async () => {
+			// Make getChildIssues throw to trigger the catch block
+			mockGetChildIssues.mockRejectedValue(new Error('MCP provider error'))
+
+			// Should not throw — telemetry failure is non-blocking
+			await expect(command.execute('42')).resolves.toBeUndefined()
+		})
+	})
+
+	describe('auto-swarm harness lifecycle', () => {
+		let capturedHandlers: Map<string, HarnessHandler>
+		let mockHarnessInstance: {
+			path: string
+			start: ReturnType<typeof vi.fn>
+			stop: ReturnType<typeof vi.fn>
+			registerHandler: ReturnType<typeof vi.fn>
+		}
+
+		beforeEach(() => {
+			capturedHandlers = new Map<string, HarnessHandler>()
+
+			mockHarnessInstance = {
+				path: '/tmp/test-harness.sock',
+				start: vi.fn().mockResolvedValue(undefined),
+				stop: vi.fn().mockResolvedValue(undefined),
+				registerHandler: vi.fn((type: string, handler: HarnessHandler) => {
+					capturedHandlers.set(type, handler)
+				}),
+			}
+
+			vi.mocked(HarnessServer).mockImplementation(
+				() => mockHarnessInstance as unknown as HarnessServer
+			)
+
+			// generateHarnessMcpConfig is synchronous — must use mockReturnValue
+			vi.mocked(mcpUtils.generateHarnessMcpConfig).mockReturnValue([
+				{ mcpServers: { harness: {} } },
+			])
+
+			// Default: launchClaude simulates successful planning by invoking the done handler
+			vi.mocked(claudeUtils.launchClaude).mockImplementation(async () => {
+				const doneHandler = capturedHandlers.get('done')
+				if (doneHandler) {
+					await doneHandler({ epicIssueNumber: '42', childIssues: [1, 2, 3] })
+				}
+				return undefined
+			})
+		})
+
+		afterEach(() => {
+			delete process.env.ILOOM_HARNESS_SOCKET
+		})
+
+		it('creates and starts HarnessServer when ILOOM_HARNESS_SOCKET is not set', async () => {
+			delete process.env.ILOOM_HARNESS_SOCKET
+
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(HarnessServer).toHaveBeenCalled()
+			expect(mockHarnessInstance.start).toHaveBeenCalled()
+		})
+
+		it('does not create HarnessServer when ILOOM_HARNESS_SOCKET is set', async () => {
+			process.env.ILOOM_HARNESS_SOCKET = '/tmp/external.sock'
+			vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
+
+			// External harness mode: exits cleanly without checking epicData
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(HarnessServer).not.toHaveBeenCalled()
+		})
+
+		it('uses ILOOM_HARNESS_SOCKET path for harness MCP config', async () => {
+			process.env.ILOOM_HARNESS_SOCKET = '/tmp/external.sock'
+			vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
+
+			// External harness mode: exits cleanly, VS Code manages the pipeline
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(mcpUtils.generateHarnessMcpConfig).toHaveBeenCalledWith('/tmp/external.sock')
+		})
+
+		it('forces yolo mode (bypassPermissions) when autoSwarm is true', async () => {
+			await command.execute('plan my epic', undefined, false, undefined, undefined, undefined, true)
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ permissionMode: 'bypassPermissions' })
+			)
+		})
+
+		it('adds mcp__harness__signal to allowed tools', async () => {
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					allowedTools: expect.arrayContaining(['mcp__harness__signal']),
+				})
+			)
+		})
+
+		it('sets AUTO_SWARM_MODE: true in template variables', async () => {
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith(
+				'plan',
+				expect.objectContaining({ AUTO_SWARM_MODE: true })
+			)
+		})
+
+		it('passes AbortSignal to launchClaude', async () => {
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(claudeUtils.launchClaude).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ signal: expect.any(AbortSignal) })
+			)
+		})
+
+		it('registers done handler on harness server', async () => {
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(mockHarnessInstance.registerHandler).toHaveBeenCalledWith('done', expect.any(Function), { idempotent: true })
+		})
+
+		it('resolves successfully when done signal is received', async () => {
+			await expect(
+				command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			).resolves.toBeUndefined()
+		})
+
+		it('throws when launchClaude resolves without done signal', async () => {
+			vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
+
+			await expect(
+				command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			).rejects.toThrow('Plan phase exited without completing. The Architect did not signal done.')
+		})
+
+		it('stops harness server in finally block on success', async () => {
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(mockHarnessInstance.stop).toHaveBeenCalled()
+		})
+
+		it('stops harness server in finally block when launchClaude throws', async () => {
+			vi.mocked(claudeUtils.launchClaude).mockRejectedValue(new Error('Claude crashed'))
+
+			await expect(
+				command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+			).rejects.toThrow('Claude crashed')
+
+			expect(mockHarnessInstance.stop).toHaveBeenCalled()
+		})
+
+		it('done handler returns planning complete instruction', async () => {
+			let doneResponse: unknown
+
+			vi.mocked(claudeUtils.launchClaude).mockImplementation(async () => {
+				const doneHandler = capturedHandlers.get('done')
+				if (doneHandler) {
+					doneResponse = await doneHandler({ epicIssueNumber: '42', childIssues: [1, 2, 3] })
+				}
+				return undefined
+			})
+
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			expect(doneResponse).toEqual({
+				type: 'instruction',
+				content: expect.stringContaining('Planning complete'),
+			})
+		})
+
+		it('merges harness MCP config with base MCP config', async () => {
+			await command.execute('plan my epic', undefined, undefined, undefined, undefined, undefined, true)
+
+			// generateHarnessMcpConfig called with the harness socket path
+			expect(mcpUtils.generateHarnessMcpConfig).toHaveBeenCalledWith(mockHarnessInstance.path)
 		})
 	})
 })

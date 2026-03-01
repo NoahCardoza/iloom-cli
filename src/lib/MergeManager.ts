@@ -1,9 +1,9 @@
-import { executeGitCommand, fetchOrigin, findMainWorktreePathWithSettings, findWorktreeForBranch, getMergeTargetBranch } from '../utils/git.js'
+import { executeGitCommand, fetchOrigin, findMainWorktreePathWithSettings, findWorktreeForBranch, getMergeTargetBranch, GitCommandError } from '../utils/git.js'
 import { getLogger } from '../utils/logger-context.js'
 import { detectClaudeCli, launchClaude } from '../utils/claude.js'
 import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager } from './MetadataManager.js'
-import type { MergeOptions } from '../types/index.js'
+import type { MergeOptions, RebaseOutcome } from '../types/index.js'
 
 /**
  * MergeManager handles Git rebase and fast-forward merge operations
@@ -42,8 +42,12 @@ export class MergeManager {
 	 * @param options - Merge options (dryRun, force)
 	 * @throws Error if main branch doesn't exist, uncommitted changes exist, or conflicts occur
 	 */
-	async rebaseOnMain(worktreePath: string, options: MergeOptions = {}): Promise<void> {
-		const { dryRun = false, force = false } = options
+	async rebaseOnMain(worktreePath: string, options: MergeOptions = {}): Promise<RebaseOutcome> {
+		const { dryRun = false, force = false, jsonStream = false } = options
+
+		// Pre-check: abort any in-progress rebase before starting a new one
+		await this.abortInProgressRebase(worktreePath)
+
 		const mainBranch = await this.getMainBranch(worktreePath)
 
 		// Determine whether to use remote (origin/) or local branch reference
@@ -122,7 +126,7 @@ export class MergeManager {
 			if (wipCommitHash) {
 				await this.restoreWipCommit(worktreePath, wipCommitHash)
 			}
-			return
+			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }
 		}
 
 		// Step 4: Show commits to be rebased (for informational purposes)
@@ -155,7 +159,7 @@ export class MergeManager {
 			if (commitLines.length > 0) {
 				getLogger().info(`[DRY RUN] This would rebase ${commitLines.length} commit(s)`)
 			}
-			return
+			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }
 		}
 
 		// Execute rebase
@@ -169,6 +173,7 @@ export class MergeManager {
 			if (wipCommitHash) {
 				await this.restoreWipCommit(worktreePath, wipCommitHash)
 			}
+			return { conflictsDetected: false, claudeLaunched: false, conflictsResolved: false }
 		} catch (error) {
 			// Detect conflicts
 			const conflictedFiles = await this.detectConflictedFiles(worktreePath)
@@ -179,7 +184,8 @@ export class MergeManager {
 
 				const resolved = await this.attemptClaudeConflictResolution(
 					worktreePath,
-					conflictedFiles
+					conflictedFiles,
+					{ jsonStream }
 				)
 
 				if (resolved) {
@@ -189,7 +195,7 @@ export class MergeManager {
 					if (wipCommitHash) {
 						await this.restoreWipCommit(worktreePath, wipCommitHash)
 					}
-					return // Continue with successful rebase
+					return { conflictsDetected: true, claudeLaunched: true, conflictsResolved: true }
 				}
 
 				// Claude couldn't resolve or not available - fail fast
@@ -453,7 +459,8 @@ export class MergeManager {
 	 */
 	private async attemptClaudeConflictResolution(
 		worktreePath: string,
-		conflictedFiles: string[]
+		conflictedFiles: string[],
+		options: { jsonStream?: boolean } = {}
 	): Promise<boolean> {
 		// Check if Claude CLI is available
 		const isClaudeAvailable = await detectClaudeCli()
@@ -485,15 +492,21 @@ export class MergeManager {
 			'Bash(git log:*)',
 			'Bash(git add:*)',
 			'Bash(git rebase:*)',
+			'Bash(GIT_EDITOR=true git rebase:*)',
 		]
 
 		try {
 			// Launch Claude interactively in current terminal
 			// User will interact directly with Claude to resolve conflicts
+			// When jsonStream is true, run headless with stdout passthrough for JSONL streaming
 			await launchClaude(prompt, {
 				appendSystemPrompt: systemPrompt,
 				addDir: worktreePath,
-				headless: false, // Interactive - runs in current terminal with stdio: inherit
+				headless: options.jsonStream ? true : false,
+				...(options.jsonStream && {
+					permissionMode: 'bypassPermissions' as const,
+					passthroughStdout: true,
+				}),
 				allowedTools: rebaseAllowedTools,
 				noSessionPersistence: true, // Utility operation - no session persistence needed
 			})
@@ -538,8 +551,15 @@ export class MergeManager {
 		const fs = await import('node:fs/promises')
 		const path = await import('node:path')
 
-		const rebaseMergePath = path.join(worktreePath, '.git', 'rebase-merge')
-		const rebaseApplyPath = path.join(worktreePath, '.git', 'rebase-apply')
+		// In git worktrees, .git is a file pointing to the actual git dir.
+		// Use git rev-parse to resolve the real git directory.
+		const gitDir = (await executeGitCommand(
+			['rev-parse', '--absolute-git-dir'],
+			{ cwd: worktreePath }
+		)).trim()
+
+		const rebaseMergePath = path.join(gitDir, 'rebase-merge')
+		const rebaseApplyPath = path.join(gitDir, 'rebase-apply')
 
 		// Check for rebase-merge directory
 		try {
@@ -558,5 +578,43 @@ export class MergeManager {
 		}
 
 		return false
+	}
+
+	/**
+	 * Abort an in-progress rebase if one is detected
+	 * This handles cases where a previous rebase was interrupted (e.g., terminal closed,
+	 * Claude session ended, user manually stopped) and the worktree is left in a dirty state.
+	 * Since we're about to start a new rebase, the stale rebase state is irrelevant and safe to abort.
+	 *
+	 * @param worktreePath - Path to the worktree
+	 * @private
+	 */
+	private async abortInProgressRebase(worktreePath: string): Promise<void> {
+		const rebaseInProgress = await this.isRebaseInProgress(worktreePath)
+
+		if (!rebaseInProgress) {
+			return
+		}
+
+		getLogger().warn('A rebase is already in progress. Aborting the stale rebase before proceeding...')
+
+		try {
+			await executeGitCommand(['rebase', '--abort'], { cwd: worktreePath })
+			getLogger().info('Stale rebase aborted successfully.')
+		} catch (error) {
+			// Handle race condition: rebase may have been resolved between check and abort
+			const errorMsg = error instanceof Error ? error.message : String(error)
+			if (errorMsg.includes('No rebase in progress')) {
+				getLogger().info('Rebase was already resolved by another process.')
+				return
+			}
+			if (error instanceof GitCommandError) {
+				throw new Error(
+					`Failed to abort in-progress rebase: ${error.message}\n` +
+						'Manual recovery: run "git rebase --abort" in the worktree directory.'
+				)
+			}
+			throw error
+		}
 	}
 }

@@ -3,9 +3,15 @@ import fs from 'fs-extra'
 import path from 'path'
 import os from 'os'
 import { migrations } from './index.js'
+import { ensureGlobalGitignorePatterns } from '../utils/gitignore.js'
 
 // Mock fs-extra
 vi.mock('fs-extra')
+
+// Mock gitignore utilities used by the 0.10.3 migration
+vi.mock('../utils/gitignore.js', () => ({
+  ensureGlobalGitignorePatterns: vi.fn(),
+}))
 
 describe('migrations', () => {
   describe('v0.6.1 global gitignore migration', () => {
@@ -37,7 +43,8 @@ describe('migrations', () => {
     it('should append pattern if not already present', async () => {
       const existingContent = '# Existing ignores\n*.log\n'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
       vi.mocked(fs.writeFile).mockResolvedValue(undefined)
 
       await migration?.migrate()
@@ -52,7 +59,8 @@ describe('migrations', () => {
     it('should not duplicate if pattern exists', async () => {
       const existingContent = '# Existing\n**/.iloom/settings.local.json\n'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
 
       await migration?.migrate()
 
@@ -72,7 +80,8 @@ describe('migrations', () => {
     it('should handle file without trailing newline', async () => {
       const existingContent = '*.log'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
       vi.mocked(fs.writeFile).mockResolvedValue(undefined)
 
       await migration?.migrate()
@@ -113,7 +122,8 @@ describe('migrations', () => {
     it('should append pattern if not already present', async () => {
       const existingContent = '# Existing ignores\n*.log\n'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
       vi.mocked(fs.writeFile).mockResolvedValue(undefined)
 
       await migration?.migrate()
@@ -128,7 +138,8 @@ describe('migrations', () => {
     it('should not duplicate if pattern exists', async () => {
       const existingContent = '# Existing\n**/.iloom/package.iloom.local.json\n'
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue(existingContent)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
 
       await migration?.migrate()
 
@@ -137,11 +148,113 @@ describe('migrations', () => {
 
     it('should be idempotent when run multiple times', async () => {
       vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
-      vi.mocked(fs.readFile).mockResolvedValue('**/.iloom/package.iloom.local.json\n')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue('**/.iloom/package.iloom.local.json\n' as any)
 
       await migration?.migrate()
 
       expect(fs.writeFile).not.toHaveBeenCalled()
     })
   })
+
+  describe('v0.9.3 global gitignore migration for swarm mode', () => {
+    const expectedPath = path.join(os.homedir(), '.config', 'git', 'ignore')
+    const agentPattern = '**/.claude/agents/iloom-*'
+    const skillPattern = '**/.claude/skills/iloom-*'
+    const migration = migrations.find(m => m.version === '0.9.3')
+
+    it('should exist with correct description', () => {
+      expect(migration).toBeDefined()
+      expect(migration?.description).toContain('swarm')
+    })
+
+    it('should create ~/.config/git/ignore if not exists', async () => {
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      vi.mocked(fs.readFile).mockRejectedValue(new Error('ENOENT'))
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+
+      expect(fs.ensureDir).toHaveBeenCalledWith(path.dirname(expectedPath))
+      const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]?.[1] as string
+      expect(writtenContent).toContain(agentPattern)
+      expect(writtenContent).toContain(skillPattern)
+      expect(writtenContent).toContain('# Added by iloom CLI')
+    })
+
+    it('should append both patterns when not already present', async () => {
+      const existingContent = '# Existing ignores\n*.log\n'
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+
+      const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]?.[1] as string
+      expect(writtenContent).toContain(agentPattern)
+      expect(writtenContent).toContain(skillPattern)
+      expect(writtenContent.startsWith(existingContent)).toBe(true)
+    })
+
+    it('should not duplicate if agent pattern already exists', async () => {
+      const existingContent = '# Added by iloom CLI\n**/.claude/agents/iloom-*\n**/.claude/skills/iloom-*\n'
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
+
+      await migration?.migrate()
+
+      expect(fs.writeFile).not.toHaveBeenCalled()
+    })
+
+    it('should handle file without trailing newline', async () => {
+      const existingContent = '*.log'
+      vi.mocked(fs.ensureDir).mockResolvedValue(undefined)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(fs.readFile).mockResolvedValue(existingContent as any)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+
+      const writtenContent = vi.mocked(fs.writeFile).mock.calls[0]?.[1] as string
+      expect(writtenContent).toMatch(/^\*\.log\n/)
+    })
+  })
+
+  describe('v0.10.3 global gitignore path remediation migration', () => {
+    const migration = migrations.find(m => m.version === '0.10.3')
+
+    const allIloomPatterns = [
+      '**/.iloom/settings.local.json',
+      '**/.iloom/package.iloom.local.json',
+      '**/.claude/agents/iloom-*',
+      '**/.claude/skills/iloom-*',
+      '**/.claude/iloom-swarm-mcp-config-path',
+    ]
+
+    it('should exist with correct description', () => {
+      expect(migration).toBeDefined()
+      expect(migration?.description).toContain('core.excludesFile')
+    })
+
+    it('calls ensureGlobalGitignorePatterns with all iloom patterns', async () => {
+      vi.mocked(ensureGlobalGitignorePatterns).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+
+      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledWith(allIloomPatterns)
+    })
+
+    it('is idempotent - ensureGlobalGitignorePatterns handles deduplication', async () => {
+      vi.mocked(ensureGlobalGitignorePatterns).mockResolvedValue(undefined)
+
+      await migration?.migrate()
+      await migration?.migrate()
+
+      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledTimes(2)
+      expect(ensureGlobalGitignorePatterns).toHaveBeenCalledWith(allIloomPatterns)
+    })
+  })
+
 })

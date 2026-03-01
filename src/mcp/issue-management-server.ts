@@ -10,6 +10,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { IssueManagementProviderFactory } from './IssueManagementProviderFactory.js'
+import { JiraWikiSanitizer } from '../utils/jira-wiki-sanitizer.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import type { IloomSettings } from '../lib/SettingsManager.js'
 import type {
@@ -25,6 +26,10 @@ import type {
 	GetDependenciesInput,
 	GetChildIssuesInput,
 	RemoveDependencyInput,
+	CloseIssueInput,
+	ReopenIssueInput,
+	EditIssueInput,
+	GetReviewCommentsInput,
 } from './types.js'
 
 // Module-level settings loaded at startup
@@ -277,6 +282,77 @@ server.registerTool(
 	}
 )
 
+// Register get_review_comments tool
+// Note: Review comments only exist on GitHub PRs, so this tool always uses the GitHub provider
+
+server.registerTool(
+	'get_review_comments',
+	{
+		title: 'Get PR Review Comments',
+		description:
+			'Fetch inline code review comments on a pull request (comments on specific files and lines). ' +
+			'Returns comments with file path, line number, diff side, author, and reply threading. ' +
+			'Optionally filter by review ID. PRs only exist on GitHub, so this tool always uses GitHub.',
+		inputSchema: {
+			number: z.string().describe('The PR number'),
+			reviewId: z
+				.string()
+				.optional()
+				.describe('Optional review ID to filter comments by a specific review'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository.'
+				),
+		},
+		outputSchema: {
+			comments: z.array(
+				z.object({
+					id: z.string().describe('Review comment ID'),
+					body: z.string().describe('Comment body content'),
+					path: z.string().describe('File path the comment is on'),
+					line: z.number().nullable().describe('Line number in the diff'),
+					side: z.string().nullable().describe('Side of the diff (LEFT or RIGHT)'),
+					author: flexibleAuthorSchema.nullable().describe('Comment author'),
+					createdAt: z.string().describe('Comment creation timestamp'),
+					updatedAt: z.string().nullable().describe('Comment last updated timestamp'),
+					inReplyToId: z.string().nullable().describe('ID of the comment this replies to'),
+					pullRequestReviewId: z.number().nullable().describe('The review this comment belongs to'),
+				})
+			).describe('Inline review comments on the PR'),
+		},
+	},
+	async ({ number, reviewId, repo }: GetReviewCommentsInput) => {
+		console.error(`Fetching review comments for PR ${number}${reviewId ? ` (review ${reviewId})` : ''}${repo ? ` from ${repo}` : ''}`)
+
+		try {
+			// Review comments always use GitHub provider regardless of configured issue tracker
+			const provider = new GitHubIssueManagementProvider()
+			const comments = await provider.getReviewComments({ number, reviewId, repo })
+
+			console.error(`Review comments fetched successfully: ${comments.length} comments`)
+
+			const result = { comments }
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify(result),
+					},
+				],
+				structuredContent: result as unknown as { [x: string]: unknown },
+			}
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to fetch review comments: ${errorMessage}`)
+			throw new Error(`Failed to fetch review comments: ${errorMessage}`)
+		}
+	}
+)
+
 // Register get_comment tool
 server.registerTool(
 	'get_comment',
@@ -348,6 +424,7 @@ server.registerTool(
 			type: z
 				.enum(['issue', 'pr'])
 				.describe('Type of entity to comment on (issue or pr)'),
+			markupLanguage: z.literal('GFM').describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			id: z.string(),
@@ -359,10 +436,11 @@ server.registerTool(
 		console.error(`Creating ${type} comment on ${number}`)
 
 		try {
+			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
 			// PR comments must always go to GitHub since PRs only exist on GitHub
 			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
 			const provider = IssueManagementProviderFactory.create(providerType, settings)
-			const result = await provider.createComment({ number, body, type })
+			const result = await provider.createComment({ number, body: sanitizedBody, type })
 
 			console.error(
 				`Comment created successfully: ${result.id} at ${result.url}`
@@ -398,6 +476,7 @@ server.registerTool(
 			number: z.string().describe('The issue or PR identifier (context for providers that need it)'),
 			body: z.string().describe('The updated comment body (markdown supported)'),
 			type: z.enum(['issue', 'pr']).optional().describe('Optional type to route PR comments to GitHub regardless of configured provider'),
+			markupLanguage: z.literal('GFM').describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			id: z.string(),
@@ -409,10 +488,11 @@ server.registerTool(
 		console.error(`Updating comment ${commentId} on ${type === 'pr' ? 'PR' : 'issue'} ${number}`)
 
 		try {
+			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
 			// PR comments must always go to GitHub since PRs only exist on GitHub
 			const providerType = type === 'pr' ? 'github' : (process.env.ISSUE_PROVIDER as IssueProvider)
 			const provider = IssueManagementProviderFactory.create(providerType, settings)
-			const result = await provider.updateComment({ commentId, number, body })
+			const result = await provider.updateComment({ commentId, number, body: sanitizedBody })
 
 			console.error(
 				`Comment updated successfully: ${result.id} at ${result.url}`
@@ -457,6 +537,7 @@ server.registerTool(
 					'Optional repository in "owner/repo" format or full GitHub URL. ' +
 					'When not provided, uses the current repository. GitHub only.'
 				),
+			markupLanguage: z.literal('GFM').describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			id: z.string().describe('Issue identifier'),
@@ -468,11 +549,12 @@ server.registerTool(
 		console.error(`Creating issue: ${title}${repo ? ` in ${repo}` : ''}`)
 
 		try {
+			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
 			const provider = IssueManagementProviderFactory.create(
 				process.env.ISSUE_PROVIDER as IssueProvider,
 				settings
 			)
-			const result = await provider.createIssue({ title, body, labels, teamKey, repo })
+			const result = await provider.createIssue({ title, body: sanitizedBody, labels, teamKey, repo })
 
 			console.error(`Issue created successfully: ${result.id} at ${result.url}`)
 
@@ -517,6 +599,7 @@ server.registerTool(
 					'Optional repository in "owner/repo" format or full GitHub URL. ' +
 					'When not provided, uses the current repository. GitHub only.'
 				),
+			markupLanguage: z.literal('GFM').describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
 		},
 		outputSchema: {
 			id: z.string().describe('Issue identifier'),
@@ -528,11 +611,12 @@ server.registerTool(
 		console.error(`Creating child issue for parent ${parentId}: ${title}${repo ? ` in ${repo}` : ''}`)
 
 		try {
+			const sanitizedBody = JiraWikiSanitizer.sanitize(body)
 			const provider = IssueManagementProviderFactory.create(
 				process.env.ISSUE_PROVIDER as IssueProvider,
 				settings
 			)
-			const result = await provider.createChildIssue({ parentId, title, body, labels, teamKey, repo })
+			const result = await provider.createChildIssue({ parentId, title, body: sanitizedBody, labels, teamKey, repo })
 
 			console.error(`Child issue created successfully: ${result.id} at ${result.url}`)
 
@@ -781,9 +865,193 @@ server.registerTool(
 	}
 )
 
+// Register close_issue tool
+server.registerTool(
+	'close_issue',
+	{
+		title: 'Close Issue',
+		description:
+			'Close an issue in the configured issue tracker. ' +
+			'For GitHub: uses `gh issue close`. ' +
+			'For Linear: transitions issue to "Done" state. ' +
+			'For Jira: transitions issue to "Done" state.',
+		inputSchema: {
+			number: z.string().describe('The issue identifier'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
+		},
+		outputSchema: {
+			success: z.boolean().describe('Whether the issue was closed successfully'),
+		},
+	},
+	async ({ number, repo }: CloseIssueInput) => {
+		console.error(`Closing issue ${number}${repo ? ` in ${repo}` : ''}`)
+
+		try {
+			const provider = IssueManagementProviderFactory.create(
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
+			)
+			await provider.closeIssue({ number, repo })
+
+			console.error(`Issue closed successfully: ${number}`)
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify({ success: true }),
+					},
+				],
+				structuredContent: { success: true },
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to close issue: ${errorMessage}`)
+			throw new Error(`Failed to close issue: ${errorMessage}`)
+		}
+	}
+)
+
+// Register reopen_issue tool
+server.registerTool(
+	'reopen_issue',
+	{
+		title: 'Reopen Issue',
+		description:
+			'Reopen a closed issue in the configured issue tracker. ' +
+			'For GitHub: uses `gh issue reopen`. ' +
+			'For Linear: transitions issue to "Todo" state. ' +
+			'For Jira: transitions issue to "Reopen" or "To Do" state.',
+		inputSchema: {
+			number: z.string().describe('The issue identifier'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
+		},
+		outputSchema: {
+			success: z.boolean().describe('Whether the issue was reopened successfully'),
+		},
+	},
+	async ({ number, repo }: ReopenIssueInput) => {
+		console.error(`Reopening issue ${number}${repo ? ` in ${repo}` : ''}`)
+
+		try {
+			const provider = IssueManagementProviderFactory.create(
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
+			)
+			await provider.reopenIssue({ number, repo })
+
+			console.error(`Issue reopened successfully: ${number}`)
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify({ success: true }),
+					},
+				],
+				structuredContent: { success: true },
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to reopen issue: ${errorMessage}`)
+			throw new Error(`Failed to reopen issue: ${errorMessage}`)
+		}
+	}
+)
+
+// Register edit_issue tool
+server.registerTool(
+	'edit_issue',
+	{
+		title: 'Edit Issue',
+		description:
+			'Edit an issue\'s properties (title, body, state, labels) in the configured issue tracker. ' +
+			'State changes use close/reopen internally. ' +
+			'For GitHub: uses `gh issue edit` for field updates and `gh issue close/reopen` for state. ' +
+			'For Linear: uses Linear SDK to update fields and state transitions. ' +
+			'For Jira: uses REST API to update fields and transitions for state.',
+		inputSchema: {
+			number: z.string().describe('The issue identifier'),
+			title: z.string().optional().describe('New issue title'),
+			body: z.string().optional().describe('New issue body/description'),
+			state: z.enum(['open', 'closed']).optional().describe('New issue state'),
+			labels: z.array(z.string()).optional().describe('Labels to add to the issue'),
+			repo: z
+				.string()
+				.optional()
+				.describe(
+					'Optional repository in "owner/repo" format or full GitHub URL. ' +
+					'When not provided, uses the current repository. GitHub only.'
+				),
+			markupLanguage: z.literal('GFM').optional().describe('The markup language for the body content. Must be GitHub Flavored Markdown (GFM).'),
+		},
+		outputSchema: {
+			success: z.boolean().describe('Whether the issue was edited successfully'),
+		},
+	},
+	async ({ number, title, body, state, labels, repo }: EditIssueInput) => {
+		console.error(`Editing issue ${number}${repo ? ` in ${repo}` : ''}`)
+
+		try {
+			const sanitizedBody = body ? JiraWikiSanitizer.sanitize(body) : undefined
+			const provider = IssueManagementProviderFactory.create(
+				process.env.ISSUE_PROVIDER as IssueProvider,
+				settings
+			)
+			await provider.editIssue({ number, title, body: sanitizedBody, state, labels, repo })
+
+			console.error(`Issue edited successfully: ${number}`)
+
+			return {
+				content: [
+					{
+						type: 'text' as const,
+						text: JSON.stringify({ success: true }),
+					},
+				],
+				structuredContent: { success: true },
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			console.error(`Failed to edit issue: ${errorMessage}`)
+			throw new Error(`Failed to edit issue: ${errorMessage}`)
+		}
+	}
+)
+
 // Main server startup
 async function main(): Promise<void> {
-	console.error('Starting Issue Management MCP Server...')
+	console.error('=== Issue Management MCP Server Starting ===')
+	console.error(`PID: ${process.pid}`)
+	console.error(`Node version: ${process.version}`)
+	console.error(`CWD: ${process.cwd()}`)
+	console.error(`Script: ${new URL(import.meta.url).pathname}`)
+
+	// Log all ISSUE_PROVIDER-related env vars (redact sensitive values)
+	const relevantEnvKeys = [
+		'ISSUE_PROVIDER', 'REPO_OWNER', 'REPO_NAME', 'GITHUB_API_URL', 'GITHUB_EVENT_NAME',
+		'DRAFT_PR_NUMBER', 'LINEAR_API_TOKEN', 'LINEAR_TEAM_KEY',
+		'JIRA_HOST', 'JIRA_USERNAME', 'JIRA_API_TOKEN', 'JIRA_PROJECT_KEY',
+	]
+	console.error('Environment variables:')
+	for (const key of relevantEnvKeys) {
+		const val = process.env[key]
+		if (val !== undefined) {
+			console.error(`  ${key}=${val}`)
+		}
+	}
 
 	// Load settings for providers that need them
 	const settingsManager = new SettingsManager()
@@ -804,7 +1072,7 @@ async function main(): Promise<void> {
 	const transport = new StdioServerTransport()
 	await server.connect(transport)
 
-	console.error('Issue Management MCP Server running on stdio transport')
+	console.error('=== Issue Management MCP Server READY (stdio transport) ===')
 }
 
 // Run the server

@@ -14,6 +14,41 @@ iloom is a TypeScript CLI tool that converts existing bash workflow scripts into
 * **Avoid dynamic imports**: Use static imports at the top of files unless there's a genuine need for lazy loading (e.g., CLI commands that may not be invoked) or breaking circular dependencies. Dynamic imports add complexity, hurt performance, and make dependencies harder to trace. Before adding a dynamic import, check if the module is already imported elsewhere in the file or if a static import would work.
 * **ALWAYS run `pnpm build` after completing major tasks** to ensure the TypeScript builds successfully and make the functionality available for testing. This catches compilation errors early and enables users to test new features immediately. Major tasks include: implementing new features, refactoring code, adding/modifying CLI commands, or making significant changes to core modules.
 
+### Telemetry Requirements
+
+**Purpose:** Telemetry helps us understand which features are actually used, where users hit errors, and how workflows perform in practice. This data drives decisions about what to improve, what to deprecate, and where to invest effort. Without it, we're guessing.
+
+**What to track:** Add telemetry when adding new commands, features, or significant user-facing workflows. Specifically:
+- **Command usage**: When a new CLI command or subcommand is added, track that it was invoked and whether it succeeded
+- **Feature adoption**: When adding a new option, mode, or integration, track which variants users choose (e.g., tracker type, merge behavior, one-shot mode)
+- **Workflow outcomes**: Track success/failure of multi-step workflows (loom lifecycle, swarm execution, epic planning) with duration and outcome counts
+- **Error rates**: Track error types (NOT messages) at top-level catch boundaries so we can identify reliability issues
+- **Lifecycle events**: Track install, upgrade, and session start to understand the active user base and version distribution
+
+**You do NOT need to track:** Internal helper functions, intermediate steps within a workflow, or read-only operations (list, status, config display).
+
+The telemetry system is in `src/lib/TelemetryService.ts` and event types are defined in `src/types/telemetry.ts`.
+
+**How to add telemetry:**
+- Import `TelemetryService` and call `TelemetryService.getInstance().track('event.name', { properties })` at the success point of the workflow
+- All tracking calls must be wrapped in try/catch with `logger.debug()` — telemetry must NEVER break user workflows
+- Tracking calls are fire-and-forget (non-blocking)
+- If adding a new event type, define its interface in `src/types/telemetry.ts` and add it to the `TelemetryEventMap`
+
+**CRITICAL — Anonymity and privacy rules for telemetry properties:**
+- **NEVER** include repository names, URLs, or remote origins
+- **NEVER** include branch names, issue titles, issue descriptions, or issue content
+- **NEVER** include file paths, code content, or AI-generated analysis/plan content
+- **NEVER** include GitHub/Linear/Jira usernames, emails, or any user identifiers
+- **NEVER** include error messages (they can contain file paths or PII) — only use `error.constructor.name` for error types
+- **DO** include: counts (child_count, duration_minutes), enums (tracker type, merge behavior, source type), booleans (success/failure, feature flags), and the CLI version
+- When in doubt, ask: "Could this property identify a specific person, project, or repository?" If yes, do not include it.
+
+**Existing patterns to follow:**
+- `src/commands/start.ts` — tracking `loom.created` after successful start
+- `src/commands/finish.ts` — tracking `loom.finished` with duration calculation
+- `src/commands/cleanup.ts` — `trackLoomAbandoned()` helper for reuse across single and batch cleanup paths
+
 ### Documentation Requirements
 
 **IMPORTANT: When adding features or configuration options, update the appropriate documentation file**:
@@ -160,6 +195,19 @@ import { someFunction } from '../utils/helpers.js'
 vi.mock('../utils/helpers.js')
 ```
 
+- **Always mock `process.platform`**: Tests must never rely on the host OS. Code with platform-specific branches (`process.platform === 'darwin'`, etc.) will produce different results on macOS vs Linux/Windows CI. Always mock the platform explicitly in tests that exercise platform-gated code paths, and restore it in `finally`:
+
+```typescript
+// ✅ Correct: explicit platform mock
+const originalPlatform = process.platform
+Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
+try {
+  // test code
+} finally {
+  Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+}
+```
+
 **Mock Factories Required**:
 
 ```typescript
@@ -177,6 +225,12 @@ Each workspace gets a unique port calculated as `3000 + issue/PR number`. This p
 ## Database Branch Isolation
 
 Uses Neon database branching to create isolated database copies per workspace. Each branch gets independent schema and data, preventing conflicts between features under development.
+
+## Migration Versioning
+
+Migrations live in `src/migrations/index.ts` and run automatically on CLI startup via `VersionMigrationManager`. Each migration has a `version` field that determines when it runs: it must be greater than `lastMigratedVersion` (stored in `~/.config/iloom-ai/migration-state.json`) and less than or equal to the current package version.
+
+**Versioning convention:** A new migration's version should be one patch version higher than the current `package.json` version. For example, if `package.json` is at `0.10.2`, the next migration should be `0.10.3`. If an unreleased migration already exists at that version (check `git tag` to confirm it hasn't been released), fold new migration logic into it rather than creating a separate entry.
 
 ## Agent Workflow Todo Lists
 

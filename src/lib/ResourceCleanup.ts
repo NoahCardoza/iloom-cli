@@ -7,6 +7,7 @@ import { SettingsManager } from './SettingsManager.js'
 import { MetadataManager } from './MetadataManager.js'
 import { getLogger } from '../utils/logger-context.js'
 import { hasUncommittedChanges, executeGitCommand, findMainWorktreePathWithSettings, extractIssueNumber, isBranchMergedIntoMain, checkRemoteBranchStatus, getMergeTargetBranch, findWorktreeForBranch, type RemoteBranchStatus } from '../utils/git.js'
+import { removeClaudeTrust } from '../utils/claude-trust.js'
 import { calculatePortFromIdentifier } from '../utils/port.js'
 import { archiveRecap } from '../utils/recap-archiver.js'
 
@@ -98,19 +99,32 @@ export class ResourceCleanup {
 		// Step 2: Find worktree using specific methods based on type
 		let worktree: GitWorktree | null = null
 		try {
-			// Use specific finding methods based on parsed type for precision
-			if (parsed.type === 'pr' && parsed.number !== undefined) {
-				// For PRs, ensure the number is numeric (PRs are always numeric per GitHub)
-				const prNumber = typeof parsed.number === 'number' ? parsed.number : Number(parsed.number)
-				if (isNaN(prNumber) || !isFinite(prNumber)) {
-					throw new Error(`Invalid PR number: ${parsed.number}. PR numbers must be numeric.`)
+			// Use pre-resolved worktree if provided (skips the search step)
+			if (options.worktree) {
+				worktree = {
+					path: options.worktree.path,
+					branch: options.worktree.branch,
+					commit: '',
+					bare: false,
+					detached: false,
+					locked: false,
 				}
-				// For PRs, pass empty string for branchName since we're detecting from path pattern
-				worktree = await this.gitWorktree.findWorktreeForPR(prNumber, '')
-			} else if (parsed.type === 'issue' && parsed.number !== undefined) {
-				worktree = await this.gitWorktree.findWorktreeForIssue(parsed.number)
-			} else if (parsed.type === 'branch' && parsed.branchName) {
-				worktree = await this.gitWorktree.findWorktreeForBranch(parsed.branchName)
+				getLogger().debug(`Using pre-resolved worktree: path="${worktree.path}", branch="${worktree.branch}"`)
+			} else {
+				// Use specific finding methods based on parsed type for precision
+				if (parsed.type === 'pr' && parsed.number !== undefined) {
+					// For PRs, ensure the number is numeric (PRs are always numeric per GitHub)
+					const prNumber = typeof parsed.number === 'number' ? parsed.number : Number(parsed.number)
+					if (isNaN(prNumber) || !isFinite(prNumber)) {
+						throw new Error(`Invalid PR number: ${parsed.number}. PR numbers must be numeric.`)
+					}
+					// For PRs, pass empty string for branchName since we're detecting from path pattern
+					worktree = await this.gitWorktree.findWorktreeForPR(prNumber, '')
+				} else if (parsed.type === 'issue' && parsed.number !== undefined) {
+					worktree = await this.gitWorktree.findWorktreeForIssue(parsed.number)
+				} else if (parsed.type === 'branch' && parsed.branchName) {
+					worktree = await this.gitWorktree.findWorktreeForBranch(parsed.branchName)
+				}
 			}
 
 			if (!worktree) {
@@ -462,14 +476,35 @@ export class ResourceCleanup {
 			}
 		}
 
-		// Step 7: Delete metadata file
+		// Step 7: Delete or archive metadata file
 		if (worktree) {
 			if (options.dryRun) {
+				const action = options.archive ? 'archive' : 'delete'
 				operations.push({
 					type: 'metadata',
 					success: true,
-					message: `[DRY RUN] Would delete metadata for worktree: ${worktree.path}`,
+					message: `[DRY RUN] Would ${action} metadata for worktree: ${worktree.path}`,
 				})
+			} else if (options.archive) {
+				try {
+					await this.metadataManager.archiveMetadata(worktree.path)
+					getLogger().info(`Metadata archived for worktree: ${worktree.path}`)
+					operations.push({
+						type: 'metadata',
+						success: true,
+						message: 'Metadata archived',
+					})
+				} catch (error) {
+					const err = error instanceof Error ? error : new Error(String(error))
+					errors.push(err)
+					getLogger().warn(`Metadata archival failed: ${err.message}`)
+					operations.push({
+						type: 'metadata',
+						success: false,
+						message: 'Metadata archival failed (non-fatal)',
+						error: err.message,
+					})
+				}
 			} else {
 				try {
 					await this.metadataManager.deleteMetadata(worktree.path)
@@ -491,6 +526,35 @@ export class ResourceCleanup {
 					})
 				}
 			}
+		}
+
+		// Step 7.5: Remove Claude trust entry for the worktree
+		if (worktree && !options.dryRun) {
+			try {
+				await removeClaudeTrust(worktree.path)
+				getLogger().debug(`Claude trust entry removed for worktree: ${worktree.path}`)
+				operations.push({
+					type: 'trust',
+					success: true,
+					message: 'Claude trust entry removed',
+				})
+			} catch (error) {
+				// Non-fatal: trust removal failure should not block cleanup
+				const err = error instanceof Error ? error : new Error(String(error))
+				getLogger().warn(`Claude trust removal failed (non-fatal): ${err.message}`)
+				operations.push({
+					type: 'trust',
+					success: false,
+					message: 'Claude trust removal failed (non-fatal)',
+					error: err.message,
+				})
+			}
+		} else if (worktree && options.dryRun) {
+			operations.push({
+				type: 'trust',
+				success: true,
+				message: `[DRY RUN] Would remove Claude trust entry for: ${worktree.path}`,
+			})
 		}
 
 		// Calculate overall success

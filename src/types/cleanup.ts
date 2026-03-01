@@ -16,6 +16,10 @@ export interface ResourceCleanupOptions {
 	checkMergeSafety?: boolean
 	/** Check if branch exists on remote before allowing cleanup (useful for GitHub-PR mode) */
 	checkRemoteBranch?: boolean
+	/** Pre-resolved worktree to clean up (skips the search step) */
+	worktree?: { path: string; branch: string }
+	/** Archive metadata instead of deleting (preserves loom in il list --finished) */
+	archive?: boolean
 }
 
 /**
@@ -43,7 +47,7 @@ export interface CleanupResult {
  */
 export interface OperationResult {
 	/** Type of operation performed */
-	type: 'dev-server' | 'worktree' | 'branch' | 'database' | 'cli-symlinks' | 'recap' | 'metadata'
+	type: 'dev-server' | 'worktree' | 'branch' | 'database' | 'cli-symlinks' | 'recap' | 'metadata' | 'trust'
 	/** Whether operation succeeded */
 	success: boolean
 	/** Human-readable message */

@@ -1,22 +1,31 @@
 import path from 'path'
+import fs from 'fs-extra'
 import { logger, createStderrLogger } from '../utils/logger.js'
 import { withLogger } from '../utils/logger-context.js'
 import { ClaudeWorkflowOptions } from '../lib/ClaudeService.js'
 import { GitWorktreeManager } from '../lib/GitWorktreeManager.js'
 import { launchClaude, ClaudeCliOptions } from '../utils/claude.js'
 import { PromptTemplateManager, TemplateVariables, buildReviewTemplateVariables } from '../lib/PromptTemplateManager.js'
-import { generateIssueManagementMcpConfig, generateRecapMcpConfig } from '../utils/mcp.js'
+import { generateIssueManagementMcpConfig, generateRecapMcpConfig, generateAndWriteMcpConfigFile, resolveRecapFilePath, readRecapFile, writeRecapFile } from '../utils/mcp.js'
 import { AgentManager } from '../lib/AgentManager.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { SettingsManager, type IloomSettings } from '../lib/SettingsManager.js'
 import { MetadataManager } from '../lib/MetadataManager.js'
 import { extractSettingsOverrides } from '../utils/cli-overrides.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
-import { extractIssueNumber, isValidGitRepo, getWorktreeRoot } from '../utils/git.js'
+import { extractIssueNumber, isValidGitRepo, getWorktreeRoot, findMainWorktreePathWithSettings, generateWorktreePath } from '../utils/git.js'
 import { getWorkspacePort } from '../utils/port.js'
 import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
-import type { OneShotMode } from '../types/index.js'
+import type { OneShotMode, ComplexityOverride } from '../types/index.js'
+import { fetchChildIssueDetails } from '../utils/list-children.js'
+import { buildDependencyMap } from '../utils/dependency-map.js'
+import { SwarmSetupService } from '../lib/SwarmSetupService.js'
+import type { LoomMetadata } from '../lib/MetadataManager.js'
+import { TelemetryService } from '../lib/TelemetryService.js'
+import { detectProjectLanguage } from '../utils/language-detector.js'
+import { prepareSystemPromptForPlatform } from '../utils/system-prompt-writer.js'
+import { preAcceptClaudeTrust } from '../utils/claude-trust.js'
 
 /**
  * Error thrown when the spin command is run from an invalid location
@@ -70,10 +79,11 @@ export class IgniteCommand {
 
 	/**
 	 * Validate that we're not running from the main worktree
+	 * @param workspacePath - Optional explicit workspace path; defaults to process.cwd()
 	 * @throws WorktreeValidationError if running from main worktree
 	 */
-	private async validateNotMainWorktree(): Promise<void> {
-		const currentDir = process.cwd()
+	private async validateNotMainWorktree(workspacePath?: string): Promise<void> {
+		const currentDir = workspacePath ?? process.cwd()
 
 		// Step 1: Check if we're in a git repository at all
 		const isGitRepo = await isValidGitRepo(currentDir)
@@ -123,6 +133,9 @@ export class IgniteCommand {
 	 * Main entry point for spin command
 	 * @param oneShot - One-shot automation mode
 	 * @param printOptions - Print mode options for headless/CI execution
+	 * @param skipCleanup - Skip cleanup after execution
+	 * @param workspacePath - Optional explicit workspace path for programmatic invocation (avoids process.chdir())
+	 * @param complexity - Override complexity evaluation (session-only, takes priority over metadata)
 	 */
 	async execute(oneShot?: OneShotMode, printOptions?: {
 		print?: boolean
@@ -130,30 +143,30 @@ export class IgniteCommand {
 		verbose?: boolean
 		json?: boolean
 		jsonStream?: boolean
-	}): Promise<void> {
+	}, skipCleanup?: boolean, workspacePath?: string, complexity?: ComplexityOverride): Promise<void> {
 		this.printOptions = printOptions
 
 		// Wrap execution in stderr logger for JSON modes to keep stdout clean
 		const isJsonMode = (this.printOptions?.json ?? false) || (this.printOptions?.jsonStream ?? false)
 		if (isJsonMode) {
 			const jsonLogger = createStderrLogger()
-			return withLogger(jsonLogger, () => this.executeInternal(oneShot))
+			return withLogger(jsonLogger, () => this.executeInternal(oneShot, skipCleanup, workspacePath, complexity))
 		}
 
-		return this.executeInternal(oneShot)
+		return this.executeInternal(oneShot, skipCleanup, workspacePath, complexity)
 	}
 
 	/**
 	 * Internal execution method (separated for withLogger wrapping)
 	 */
-	private async executeInternal(oneShot?: OneShotMode): Promise<void> {
+	private async executeInternal(oneShot?: OneShotMode, skipCleanup?: boolean, workspacePath?: string, complexity?: ComplexityOverride): Promise<void> {
 		// Set ILOOM=1 so hooks know this is an iloom session
 		// This is inherited by the Claude child process
 		process.env.ILOOM = '1'
 
 		// Validate we're not in the main worktree first
 		try {
-			await this.validateNotMainWorktree()
+			await this.validateNotMainWorktree(workspacePath)
 		} catch (error) {
 			if (error instanceof WorktreeValidationError) {
 				logger.error(error.message)
@@ -176,7 +189,7 @@ export class IgniteCommand {
 			await this.hookManager.installHooks()
 
 			// Step 1: Auto-detect workspace context
-			const context = await this.detectWorkspaceContext()
+			const context = await this.detectWorkspaceContext(workspacePath)
 
 			logger.debug('Auto-detected workspace context', { context })
 
@@ -194,6 +207,16 @@ export class IgniteCommand {
 				? metadata.prUrls[String(draftPrNumber)]
 				: undefined
 
+			// Step 2.0.3: Prevent il spin in child worktrees of epic looms
+			// Child issues managed by a swarm orchestrator must not launch independent agents.
+			// Exception: child epics (issueType === 'epic') need il spin for their own swarm.
+			if (metadata?.parentLoom?.type === 'epic' && metadata.issueType !== 'epic') {
+				throw new WorktreeValidationError(
+					'Cannot run il spin in a child worktree of an epic loom. The swarm orchestrator manages agent execution for these issues.',
+					'Run il spin from the parent epic worktree instead to launch the swarm orchestrator.'
+				)
+			}
+
 			// Step 2.0.4: Determine effective oneShot mode
 			// If print mode is enabled, force noReview to skip interactive reviews
 			// If oneShot is provided (any value including 'default'), use it
@@ -203,10 +226,40 @@ export class IgniteCommand {
 			const isHeadlessForOneShot = this.printOptions?.print ?? false
 			const effectiveOneShot: OneShotMode = isHeadlessForOneShot ? 'noReview' : (oneShot ?? storedOneShot)
 
+			// Determine effective complexity override
+			// CLI flag takes priority over loom metadata
+			const effectiveComplexity = complexity ?? metadata?.complexity ?? undefined
+
+			// Set recap complexity if overridden and not already set
+			if (effectiveComplexity) {
+				try {
+					const recapFilePath = resolveRecapFilePath(context.workspacePath)
+					const recap = await readRecapFile(recapFilePath)
+					if (!recap.complexity) {
+						recap.complexity = { level: effectiveComplexity, reason: 'Overridden via CLI flag', timestamp: new Date().toISOString() }
+						await writeRecapFile(recapFilePath, recap)
+					}
+				} catch (error) {
+					logger.debug(`Failed to set recap complexity: ${error instanceof Error ? error.message : error}`)
+				}
+			}
+
 			// Step 2.0.5: Load settings early if not cached (needed for port calculation)
 			if (!this.settings) {
 				const cliOverrides = extractSettingsOverrides()
 				this.settings = await this.settingsManager.loadSettings(undefined, cliOverrides)
+			}
+
+			// Step 2.0.5.1: Track session.started telemetry
+			try {
+				const hasNeon = !!this.settings?.databaseProviders?.neon
+				const language = await detectProjectLanguage(context.workspacePath)
+				TelemetryService.getInstance().track('session.started', {
+					has_neon: hasNeon,
+					language,
+				})
+			} catch (error) {
+				logger.debug(`Telemetry session.started tracking failed: ${error instanceof Error ? error.message : error}`)
 			}
 
 			// Step 2.0.6: Calculate port for web-capable looms
@@ -220,8 +273,33 @@ export class IgniteCommand {
 				logger.info(`🌐 Development server port: ${context.port}`)
 			}
 
-			// Step 2.1: Get prompt template with variable substitution
-			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl)
+			// Step 2.1: Fetch and persist epic child data if this is an epic loom
+			// Detection: check for childIssues already stored (re-spin of an epic)
+			// or check for 'epic' issueType once issue #624 adds it
+			const isEpicLoom = metadata && metadata.issue_numbers.length > 0
+				&& ((metadata.childIssues?.length ?? 0) > 0 || metadata.issueType === 'epic')
+			if (isEpicLoom && this.settings) {
+				await this.fetchAndStoreEpicChildData(metadataManager, metadata, context.workspacePath, this.settings)
+			}
+
+			// Step 2.1.1: If this is an epic loom, enter swarm mode
+			if (isEpicLoom && this.settings) {
+				// Re-read metadata to get freshly persisted child data
+				const freshMetadata = await metadataManager.readMetadata(context.workspacePath)
+				if (freshMetadata && freshMetadata.childIssues.length > 0) {
+					await this.executeSwarmMode(
+						freshMetadata,
+						context.workspacePath,
+						context.branchName ?? '',
+						metadataManager,
+						skipCleanup,
+					)
+					return
+				}
+			}
+
+			// Step 2.2: Get prompt template with variable substitution
+			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl, effectiveComplexity)
 
 			// Step 2.5: Add first-time user context if needed
 			if (isFirstRun) {
@@ -326,15 +404,22 @@ export class IgniteCommand {
 						'mcp__issue_management__create_comment',
 						'mcp__issue_management__update_comment',
 						'mcp__issue_management__create_issue',
+						'mcp__issue_management__close_issue',
+						'mcp__issue_management__reopen_issue',
+						'mcp__issue_management__edit_issue',
 						'mcp__recap__add_entry',
 						'mcp__recap__get_recap',
 						'mcp__recap__add_artifact',
-						'mcp__recap__set_complexity'
+						'mcp__recap__set_complexity',
+						'mcp__recap__set_loom_state',
+						'mcp__recap__get_loom_state'
 					]
 					allowedTools = context.type === 'pr'
-						? [...baseTools, 'mcp__issue_management__get_pr', 'mcp__recap__set_goal']
+						? [...baseTools, 'mcp__issue_management__get_pr', 'mcp__issue_management__get_review_comments', 'mcp__recap__set_goal']
 						: baseTools
-					disallowedTools = ['Bash(gh api:*), Bash(gh issue view:*), Bash(gh pr view:*), Bash(gh issue comment:*)']
+					disallowedTools = context.type === 'pr'
+						? ['Bash(gh issue comment:*)']
+						: ['Bash(gh api:*)', 'Bash(gh issue comment:*)']
 
 					logger.debug('Configured tool filtering for issue/PR workflow', { allowedTools, disallowedTools })
 				} catch (error) {
@@ -348,6 +433,8 @@ export class IgniteCommand {
 					'mcp__recap__add_entry',
 					'mcp__recap__get_recap',
 					'mcp__recap__set_complexity',
+					'mcp__recap__set_loom_state',
+					'mcp__recap__get_loom_state',
 				]
 				logger.debug('Configured tool filtering for regular workflow', { allowedTools })
 			}
@@ -387,11 +474,25 @@ export class IgniteCommand {
 					variables,
 					['*.md', '!iloom-framework-detector.md']
 				)
-				agents = this.agentManager.formatForCli(loadedAgents)
-				logger.debug('Loaded agent configurations', {
-					agentCount: Object.keys(agents).length,
-					agentNames: Object.keys(agents),
-				})
+
+				if (process.platform === 'darwin') {
+					// macOS: pass agents inline via --agents flag (unchanged behavior)
+					agents = this.agentManager.formatForCli(loadedAgents)
+					logger.debug('Loaded agent configurations for CLI', {
+						agentCount: Object.keys(agents).length,
+						agentNames: Object.keys(agents),
+					})
+				} else {
+					// Linux/Windows: render agents to .claude/agents/ for auto-discovery
+					const agentsDir = path.join(context.workspacePath, '.claude', 'agents')
+					const rendered = await this.agentManager.renderAgentsToDisk(loadedAgents, agentsDir)
+					logger.debug('Rendered agent files to disk for auto-discovery', {
+						agentCount: rendered.length,
+						agentNames: rendered,
+						targetDir: agentsDir,
+					})
+					// agents remains undefined - not passed to launchClaude
+				}
 			} catch (error) {
 				// Log warning but continue without agents
 				logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -405,12 +506,29 @@ export class IgniteCommand {
 				hasMcpConfig: !!mcpConfig,
 			})
 
+			// Pre-accept Claude Code trust for this worktree path
+			try {
+				await preAcceptClaudeTrust(context.workspacePath)
+			} catch (error) {
+				logger.warn(`Failed to pre-accept Claude trust: ${error instanceof Error ? error.message : String(error)}`)
+			}
+
 			logger.info(isHeadless ? '✨ Launching Claude in headless mode...' : '✨ Launching Claude in current terminal...')
 
+			// Prepare system prompt based on platform
+			const systemPromptConfig = await prepareSystemPromptForPlatform(
+				systemInstructions,
+				context.workspacePath,
+			)
+
+			// Determine the initial user prompt (Windows overrides with /clear)
+			const effectiveUserPrompt = systemPromptConfig.initialPromptOverride ?? userPrompt
+
 			// Step 5: Launch Claude with system instructions appended and user prompt
-			const claudeResult = await launchClaude(userPrompt, {
+			const claudeResult = await launchClaude(effectiveUserPrompt, {
 				...claudeOptions,
-				appendSystemPrompt: systemInstructions,
+				...(systemPromptConfig.appendSystemPrompt && { appendSystemPrompt: systemPromptConfig.appendSystemPrompt }),
+				...(systemPromptConfig.pluginDir && { pluginDir: systemPromptConfig.pluginDir }),
 				...(mcpConfig && { mcpConfig }),
 				...(allowedTools && { allowedTools }),
 				...(disallowedTools && { disallowedTools }),
@@ -439,8 +557,6 @@ export class IgniteCommand {
 					success: false,
 					error: errorMessage
 				}))
-			} else {
-				logger.error(`Failed to launch Claude: ${errorMessage}`)
 			}
 			throw error
 		}
@@ -474,7 +590,8 @@ export class IgniteCommand {
 		context: ClaudeWorkflowOptions,
 		oneShot: OneShotMode,
 		draftPrNumber?: number,
-		draftPrUrl?: string
+		draftPrUrl?: string,
+		complexity?: ComplexityOverride
 	): TemplateVariables {
 		const variables: TemplateVariables = {
 			WORKSPACE_PATH: context.workspacePath,
@@ -508,7 +625,12 @@ export class IgniteCommand {
 		}
 
 		// Set review configuration variables (code reviewer + artifact reviewer + per-agent flags)
-		Object.assign(variables, buildReviewTemplateVariables(this.settings?.agents))
+		Object.assign(variables, buildReviewTemplateVariables(false, this.settings?.agents))
+
+		// Set complexity override if provided (CLI flag or loom metadata)
+		if (complexity) {
+			variables.COMPLEXITY_OVERRIDE = complexity
+		}
 
 		// Set draft PR mode flags (mutually exclusive)
 		// When draftPrNumber is set, we're in github-draft-pr mode
@@ -535,6 +657,10 @@ export class IgniteCommand {
 			// Issue/PR mode without draft PR
 			variables.STANDARD_ISSUE_MODE = true
 		}
+
+		// Detect VS Code mode
+		const isVscodeMode = process.env.ILOOM_VSCODE === '1'
+		variables.IS_VSCODE_MODE = isVscodeMode
 
 		return variables
 	}
@@ -578,9 +704,9 @@ export class IgniteCommand {
 	 *
 	 * This leverages the same logic as FinishCommand.autoDetectFromCurrentDirectory()
 	 */
-	private async detectWorkspaceContext(): Promise<ClaudeWorkflowOptions> {
-		const workspacePath = process.cwd()
-		const currentDir = path.basename(workspacePath)
+	private async detectWorkspaceContext(workspacePath?: string): Promise<ClaudeWorkflowOptions> {
+		const workspacePath_ = workspacePath ?? process.cwd()
+		const currentDir = path.basename(workspacePath_)
 
 		// Check for PR worktree pattern: _pr_N suffix
 		// Pattern: /.*_pr_(\d+)$/
@@ -591,7 +717,7 @@ export class IgniteCommand {
 			const prNumber = parseInt(prMatch[1], 10)
 			logger.debug(`Auto-detected PR #${prNumber} from directory: ${currentDir}`)
 
-			return this.buildContextForPR(prNumber, workspacePath)
+			return this.buildContextForPR(prNumber, workspacePath_)
 		}
 
 		// Check for issue pattern in directory name
@@ -600,7 +726,7 @@ export class IgniteCommand {
 		if (issueNumber !== null) {
 			logger.debug(`Auto-detected issue #${issueNumber} from directory: ${currentDir}`)
 
-			return this.buildContextForIssue(issueNumber, workspacePath)
+			return this.buildContextForIssue(issueNumber, workspacePath_)
 		}
 
 		// Fallback: Try to extract from git branch name
@@ -614,7 +740,7 @@ export class IgniteCommand {
 				if (branchIssueNumber !== null) {
 					logger.debug(`Auto-detected issue #${branchIssueNumber} from branch: ${currentBranch}`)
 
-					return this.buildContextForIssue(branchIssueNumber, workspacePath, currentBranch)
+					return this.buildContextForIssue(branchIssueNumber, workspacePath_, currentBranch)
 				}
 			}
 		} catch (error) {
@@ -624,7 +750,7 @@ export class IgniteCommand {
 
 		// Last resort: use regular workflow
 		logger.debug('No specific context detected, using regular workflow')
-		return this.buildContextForRegular(workspacePath)
+		return this.buildContextForRegular(workspacePath_)
 	}
 
 	/**
@@ -715,6 +841,373 @@ export class IgniteCommand {
 		return context
 	}
 
+
+	/**
+	 * Fetch and store epic child issue data and dependency map in metadata
+	 *
+	 * Called during spin setup for epic looms. Fetches child issue details
+	 * and dependency relationships from the issue tracker, then persists
+	 * them in the loom metadata for use by the orchestrator.
+	 */
+	private async fetchAndStoreEpicChildData(
+		metadataManager: MetadataManager,
+		metadata: import('../lib/MetadataManager.js').LoomMetadata,
+		worktreePath: string,
+		settings: import('../lib/SettingsManager.js').IloomSettings,
+	): Promise<void> {
+		const parentIssueNumber = metadata.issue_numbers[0]
+		if (!parentIssueNumber) return
+
+		logger.info('Fetching child issue data for epic...')
+
+		try {
+			const issueTracker = IssueTrackerFactory.create(settings)
+
+			// Fetch child issue details and build dependency map in parallel
+			const childIssueDetails = await fetchChildIssueDetails(
+				parentIssueNumber, issueTracker
+			)
+
+			if (childIssueDetails.length === 0) {
+				logger.debug('No child issues found for epic')
+				return
+			}
+
+			// Extract raw IDs for dependency map building (strip prefixes)
+			const childIds = childIssueDetails.map((child) => child.number.replace(/^#/, ''))
+
+			const dependencyMap = await buildDependencyMap(childIds, settings)
+
+			// Persist to metadata
+			await metadataManager.updateMetadata(worktreePath, {
+				childIssues: childIssueDetails,
+				dependencyMap,
+			})
+
+			logger.info(`Stored ${childIssueDetails.length} child issues and dependency map in metadata`)
+		} catch (error) {
+			// Non-fatal: epic can still spin without child data
+			logger.warn(`Failed to fetch epic child data: ${error instanceof Error ? error.message : String(error)}`)
+		}
+	}
+
+	/**
+	 * Execute swarm mode for an epic loom.
+	 *
+	 * Creates child worktrees, renders swarm agents/skill, builds the
+	 * orchestrator prompt, and launches Claude with agent teams enabled.
+	 */
+	private async executeSwarmMode(
+		metadata: LoomMetadata,
+		epicWorktreePath: string,
+		epicBranch: string,
+		metadataManager: MetadataManager,
+		skipCleanup?: boolean,
+	): Promise<void> {
+		if (!this.settings) {
+			throw new Error('Settings not loaded. Cannot enter swarm mode.')
+		}
+		const settings = this.settings
+		const epicIssueNumber = metadata.issue_numbers[0]
+		if (!epicIssueNumber) {
+			throw new Error('Epic loom has no issue number in metadata')
+		}
+
+		logger.info('Epic loom detected - entering swarm mode...')
+
+		// Determine main worktree path and issue tracker provider
+		const mainWorktreePath = await findMainWorktreePathWithSettings()
+		const providerName = IssueTrackerFactory.getProviderName(settings)
+
+		// Create SwarmSetupService
+		const swarmSetup = new SwarmSetupService(
+			this.gitWorktreeManager,
+			metadataManager,
+			this.agentManager,
+			this.settingsManager,
+			this.templateManager,
+		)
+
+		// Generate and write per-loom MCP config file for the epic worktree
+		try {
+			const epicMcpConfigPath = await generateAndWriteMcpConfigFile(
+				epicWorktreePath,
+				metadata,
+				providerName as 'github' | 'linear' | 'jira',
+				settings,
+			)
+			await metadataManager.updateMetadata(epicWorktreePath, { mcpConfigPath: epicMcpConfigPath })
+
+			// Write MCP config path to .claude/iloom-swarm-mcp-config-path for worker discovery
+			const epicClaudeDir = path.join(epicWorktreePath, '.claude')
+			await fs.ensureDir(epicClaudeDir)
+			await fs.writeFile(
+				path.join(epicClaudeDir, 'iloom-swarm-mcp-config-path'),
+				epicMcpConfigPath,
+				'utf-8',
+			)
+
+			logger.debug('Wrote MCP config for epic loom', { epicMcpConfigPath })
+		} catch (error) {
+			logger.warn(`Failed to write MCP config for epic loom: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
+		// Build MCP configs for the orchestrator's own launchClaude call
+		const mcpConfigs: Record<string, unknown>[] = []
+
+		// Issue management MCP
+		try {
+			const issueMcpConfigs = await generateIssueManagementMcpConfig(
+				'issue',
+				undefined,
+				providerName as 'github' | 'linear' | 'jira',
+				settings,
+			)
+			mcpConfigs.push(...issueMcpConfigs)
+		} catch (error) {
+			logger.warn(`Failed to generate issue management MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
+		// Recap MCP for the epic loom
+		try {
+			const recapMcpConfigs = generateRecapMcpConfig(epicWorktreePath, metadata)
+			mcpConfigs.push(...recapMcpConfigs)
+		} catch (error) {
+			logger.warn(`Failed to generate recap MCP config: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
+		// Filter out children that are already done (finished looms may have metadata
+		// in the "looms/finished" directory, not just in active worktree metadata)
+		const finishedMetadata = await metadataManager.listFinishedMetadata()
+		const finishedByIssueNumber = new Map<string, LoomMetadata>()
+		for (const meta of finishedMetadata) {
+			for (const issueNum of meta.issue_numbers) {
+				// listFinishedMetadata returns newest first; preserve the newest entry
+				if (!finishedByIssueNumber.has(issueNum)) {
+					finishedByIssueNumber.set(issueNum, meta)
+				}
+			}
+		}
+
+		const pendingChildIssues: typeof metadata.childIssues = []
+		const skippedChildren: Array<{ number: string; state: string }> = []
+
+		for (const child of metadata.childIssues) {
+			const rawId = child.number.replace(/^#/, '')
+			const safeId = rawId.replace(/[^a-zA-Z0-9-_]/g, '-')
+			const childBranch = `issue/${safeId}`
+			const childWorktreePath = generateWorktreePath(childBranch, mainWorktreePath)
+
+			// Check active worktree metadata first, then fall back to finished metadata
+			const childMeta = await metadataManager.readMetadata(childWorktreePath)
+				?? finishedByIssueNumber.get(rawId) ?? null
+
+			if (childMeta?.state === 'done') {
+				skippedChildren.push({ number: child.number, state: childMeta.state })
+			} else {
+				pendingChildIssues.push(child)
+			}
+		}
+
+		if (skippedChildren.length > 0) {
+			for (const skipped of skippedChildren) {
+				logger.info(`Skipping child ${skipped.number} (state: ${skipped.state})`)
+			}
+		}
+
+		// Run swarm setup for any pending child issues (may be empty if all are done)
+		const swarmResult = await swarmSetup.setupSwarm(
+			epicIssueNumber,
+			epicBranch,
+			epicWorktreePath,
+			pendingChildIssues,
+			mainWorktreePath,
+			providerName,
+			settings,
+		)
+
+		// Build template variables for orchestrator prompt
+		const successfulWorktrees = swarmResult.childWorktrees.filter((c) => c.success)
+		const worktreeMap = new Map(successfulWorktrees.map((cw) => [cw.issueId, cw]))
+
+		const childIssuesData = pendingChildIssues
+			.filter((ci) => worktreeMap.has(ci.number.replace(/^#/, '')))
+			.map((ci) => {
+				const rawId = ci.number.replace(/^#/, '')
+				const wt = worktreeMap.get(rawId)
+				return {
+					number: rawId,
+					title: ci.title,
+					body: ci.body,
+					worktreePath: wt?.worktreePath ?? '',
+					branchName: wt?.branch ?? '',
+				}
+			})
+
+		// Get metadata file path for the orchestrator prompt template
+		const epicMetadataPath = metadataManager.getMetadataFilePath(epicWorktreePath)
+
+		// Determine issue prefix for commit message trailers
+		const issuePrefix = providerName === 'github' ? '#' : ''
+
+		// Post-swarm review defaults to true (matches SpinAgentSettingsSchema default)
+		const postSwarmReview = settings.spin?.postSwarmReview !== false
+
+		const variables: TemplateVariables = {
+			EPIC_ISSUE_NUMBER: epicIssueNumber,
+			EPIC_WORKTREE_PATH: epicWorktreePath,
+			EPIC_METADATA_PATH: epicMetadataPath,
+			CHILD_ISSUES: JSON.stringify(childIssuesData, null, 2),
+			DEPENDENCY_MAP: JSON.stringify(metadata.dependencyMap, null, 2),
+			ISSUE_PREFIX: issuePrefix,
+			...(skipCleanup && { NO_CLEANUP: true }),
+			...(postSwarmReview && { POST_SWARM_REVIEW: true }),
+		}
+
+		// Set draft PR mode flags for swarm orchestrator (same logic as buildTemplateVariables)
+		const draftPrNumber = metadata.draftPrNumber ?? undefined
+		if (draftPrNumber !== undefined) {
+			variables.DRAFT_PR_MODE = true
+			variables.DRAFT_PR_NUMBER = draftPrNumber
+			const draftPrUrl = metadata.prUrls?.[String(draftPrNumber)]
+			if (draftPrUrl) {
+				variables.DRAFT_PR_URL = draftPrUrl
+			}
+			const autoCommitPushEnabled = settings.mergeBehavior?.autoCommitPush !== false
+			variables.AUTO_COMMIT_PUSH = autoCommitPushEnabled
+			const remote = settings.mergeBehavior?.remote ?? 'origin'
+			if (!/^[a-zA-Z0-9_-]+$/.test(remote)) {
+				throw new Error(`Invalid git remote name: "${remote}". Remote names can only contain alphanumeric characters, underscores, and hyphens.`)
+			}
+			variables.GIT_REMOTE = remote
+		}
+
+		const orchestratorPrompt = await this.templateManager.getPrompt('swarm-orchestrator', variables)
+
+		// Build allowed tools
+		const allowedTools = [
+			'mcp__issue_management__get_issue',
+			'mcp__issue_management__get_comment',
+			'mcp__issue_management__create_comment',
+			'mcp__issue_management__update_comment',
+			'mcp__issue_management__create_issue',
+			'mcp__issue_management__close_issue',
+			'mcp__issue_management__reopen_issue',
+			'mcp__issue_management__edit_issue',
+			'mcp__recap__add_entry',
+			'mcp__recap__get_recap',
+			'mcp__recap__add_artifact',
+			'mcp__recap__set_complexity',
+			'mcp__recap__set_loom_state',
+			'mcp__recap__get_loom_state',
+		]
+
+		// Launch Claude with agent teams enabled
+		const model = this.settingsManager.getSpinModel(settings, 'swarm')
+
+		logger.info('Launching swarm orchestrator...')
+		logger.info(`   Model: ${model ?? 'default'}`)
+		logger.info(`   Permission mode: bypassPermissions`)
+		logger.info(`   Agent teams: enabled`)
+		logger.info(`   Child worktrees: ${successfulWorktrees.length}`)
+
+		// Load agents for the orchestrator
+		let agents: Record<string, unknown> | undefined
+		try {
+			const loadedAgents = await this.agentManager.loadAgents(
+				settings,
+				variables,
+				['*.md', '!iloom-framework-detector.md']
+			)
+
+			if (process.platform === 'darwin') {
+				agents = this.agentManager.formatForCli(loadedAgents)
+			} else {
+				const agentsDir = path.join(epicWorktreePath, '.claude', 'agents')
+				await this.agentManager.renderAgentsToDisk(loadedAgents, agentsDir)
+			}
+		} catch (error) {
+			logger.warn(`Failed to load agents: ${error instanceof Error ? error.message : 'Unknown error'}`)
+		}
+
+		// Track swarm.started before launching orchestrator
+		const swarmStartTime = Date.now()
+		try {
+			TelemetryService.getInstance().track('swarm.started', {
+				child_count: successfulWorktrees.length,
+				tracker: providerName,
+			})
+		} catch (error) {
+			logger.debug(`Telemetry swarm.started tracking failed: ${error instanceof Error ? error.message : error}`)
+		}
+
+		// Prepare orchestrator prompt based on platform
+		const orchestratorPromptConfig = await prepareSystemPromptForPlatform(
+			orchestratorPrompt,
+			epicWorktreePath,
+		)
+
+		const effectiveSwarmPrompt = orchestratorPromptConfig.initialPromptOverride
+			?? `You are the swarm orchestrator for epic #${epicIssueNumber}. Begin by reading your system prompt instructions and executing the workflow.`
+
+		// Set env vars directly on process.env so they propagate to Claude Code
+		// and its child processes (execa's env option doesn't reliably pass them)
+		process.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = '1'
+		process.env.ILOOM_SWARM = '1'
+		process.env.ENABLE_TOOL_SEARCH = 'auto:30'
+		process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING = '1'
+		process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1'
+		process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
+		process.env.CLAUDE_CODE_EFFORT_LEVEL = 'medium'
+
+		await launchClaude(effectiveSwarmPrompt, {
+			model,
+			permissionMode: 'bypassPermissions',
+			addDir: epicWorktreePath,
+			headless: false,
+			...(metadata.sessionId && { sessionId: metadata.sessionId }),
+			...(orchestratorPromptConfig.appendSystemPrompt && { appendSystemPrompt: orchestratorPromptConfig.appendSystemPrompt }),
+			...(orchestratorPromptConfig.pluginDir && { pluginDir: orchestratorPromptConfig.pluginDir }),
+			mcpConfig: mcpConfigs,
+			allowedTools,
+			...(agents && { agents }),
+		})
+
+		// Track swarm child completions and overall completion
+		try {
+			const swarmEndTime = Date.now()
+			let succeeded = 0
+			let failed = 0
+
+			for (const child of successfulWorktrees) {
+				const childMeta = await metadataManager.readMetadata(child.worktreePath)
+				const isSuccess = childMeta?.state === 'done'
+				if (isSuccess) {
+					succeeded++
+				} else {
+					failed++
+				}
+
+				const parsed = childMeta?.created_at ? Date.parse(childMeta.created_at) : NaN
+				const childCreatedAt = Number.isNaN(parsed) ? swarmStartTime : parsed
+				const childDuration = Math.max(0, Math.round((swarmEndTime - childCreatedAt) / 60000))
+
+				TelemetryService.getInstance().track('swarm.child_completed', {
+					success: isSuccess,
+					duration_minutes: childDuration,
+				})
+			}
+
+			TelemetryService.getInstance().track('swarm.completed', {
+				total_children: successfulWorktrees.length,
+				succeeded,
+				failed,
+				duration_minutes: Math.round((swarmEndTime - swarmStartTime) / 60000),
+			})
+		} catch (error) {
+			logger.debug(`Telemetry swarm completion tracking failed: ${error instanceof Error ? error.message : error}`)
+		}
+	}
 
 	/**
 	 * Build user prompt based on one-shot mode

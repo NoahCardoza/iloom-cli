@@ -3,6 +3,7 @@ import {
   formatLoomForJson,
   formatLoomsForJson,
   formatFinishedLoomForJson,
+  enrichSwarmIssues,
 } from './loom-formatter.js'
 import type { GitWorktree } from '../types/worktree.js'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
@@ -683,6 +684,7 @@ describe('formatLoomsForJson', () => {
         issueUrls: {},
         prUrls: {},
         capabilities: [],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -704,6 +706,7 @@ describe('formatLoomsForJson', () => {
         issueUrls: {},
         prUrls: {},
         capabilities: [],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -725,6 +728,7 @@ describe('formatLoomsForJson', () => {
         issueUrls: {},
         prUrls: {},
         capabilities: [],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -746,6 +750,7 @@ describe('formatLoomsForJson', () => {
         issueUrls: {},
         prUrls: {},
         capabilities: [],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -881,6 +886,7 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: '2024-01-20T15:45:00.000Z',
         capabilities: [],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -1143,6 +1149,7 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: null,
         capabilities: [],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -1236,6 +1243,7 @@ describe('formatFinishedLoomForJson', () => {
         status: 'finished',
         finishedAt: '2024-01-20T15:45:00.000Z',
         capabilities: ['cli'],
+        state: null,
         isChildLoom: false,
         parentLoom: null,
       })
@@ -1458,5 +1466,786 @@ describe('formatFinishedLoomForJson - child loom fields', () => {
       branchName: 'issue-100__parent-feature',
       worktreePath: '/Users/dev/projects/myapp-looms/issue-100__parent-feature',
     })
+  })
+})
+
+describe('formatLoomForJson - swarm state field', () => {
+  const createWorktree = (overrides: Partial<GitWorktree> = {}): GitWorktree => ({
+    path: '/Users/dev/projects/myapp-looms/issue-101__sub-task',
+    branch: 'issue-101__sub-task',
+    commit: 'abc123def456789012345678901234567890abcd',
+    bare: false,
+    detached: false,
+    locked: false,
+    ...overrides,
+  })
+
+  const createMetadataWithState = (state: LoomMetadata['state']): LoomMetadata => ({
+    description: 'Swarm task',
+    created_at: '2024-01-15T10:30:00.000Z',
+    branchName: 'issue-101__sub-task',
+    worktreePath: '/Users/dev/projects/myapp-looms/issue-101__sub-task',
+    issueType: 'issue',
+    issueKey: null,
+    issue_numbers: ['101'],
+    pr_numbers: [],
+    issueTracker: 'github',
+    colorHex: '#dcebff',
+    sessionId: 'session-abc123',
+    projectPath: '/Users/dev/projects/myapp',
+    issueUrls: { '101': 'https://github.com/owner/repo/issues/101' },
+    prUrls: {},
+    draftPrNumber: null,
+    oneShot: null,
+    capabilities: [],
+    state,
+    parentLoom: null,
+  })
+
+  it('should return state: null when no metadata is provided', () => {
+    const worktree = createWorktree()
+    const result = formatLoomForJson(worktree)
+    expect(result.state).toBeNull()
+  })
+
+  it('should return state: null when metadata has no state', () => {
+    const worktree = createWorktree()
+    const metadata = createMetadataWithState(null)
+    const result = formatLoomForJson(worktree, undefined, metadata)
+    expect(result.state).toBeNull()
+  })
+
+  it.each([
+    'pending' as const,
+    'in_progress' as const,
+    'code_review' as const,
+    'done' as const,
+    'failed' as const,
+  ])('should include state "%s" in output when set', (state) => {
+    const worktree = createWorktree()
+    const metadata = createMetadataWithState(state)
+    const result = formatLoomForJson(worktree, undefined, metadata)
+    expect(result.state).toBe(state)
+  })
+})
+
+describe('formatFinishedLoomForJson - swarm state field', () => {
+  const createFinishedMetadataWithState = (state: LoomMetadata['state']): LoomMetadata => ({
+    description: 'Finished swarm task',
+    created_at: '2024-01-15T10:30:00.000Z',
+    branchName: 'issue-101__sub-task',
+    worktreePath: '/Users/dev/projects/myapp-looms/issue-101__sub-task',
+    issueType: 'issue',
+    issueKey: null,
+    issue_numbers: ['101'],
+    pr_numbers: [],
+    issueTracker: 'github',
+    colorHex: '#dcebff',
+    sessionId: 'session-abc123',
+    projectPath: '/Users/dev/projects/myapp',
+    issueUrls: { '101': 'https://github.com/owner/repo/issues/101' },
+    prUrls: {},
+    draftPrNumber: null,
+    oneShot: null,
+    capabilities: [],
+    state,
+    parentLoom: null,
+    status: 'finished',
+    finishedAt: '2024-01-20T15:45:00.000Z',
+  })
+
+  it('should return state: null when metadata has no state', () => {
+    const metadata = createFinishedMetadataWithState(null)
+    const result = formatFinishedLoomForJson(metadata)
+    expect(result.state).toBeNull()
+  })
+
+  it.each([
+    'pending' as const,
+    'in_progress' as const,
+    'code_review' as const,
+    'done' as const,
+    'failed' as const,
+  ])('should include state "%s" in output when set', (state) => {
+    const metadata = createFinishedMetadataWithState(state)
+    const result = formatFinishedLoomForJson(metadata)
+    expect(result.state).toBe(state)
+  })
+})
+
+// ============================================================================
+// Swarm Issues and Dependency Map Tests
+// ============================================================================
+
+describe('enrichSwarmIssues', () => {
+  const createChildLoomMetadata = (
+    issueNumber: string,
+    state: LoomMetadata['state'],
+    worktreePath: string | null,
+  ): LoomMetadata => ({
+    description: `Child issue ${issueNumber}`,
+    created_at: '2024-01-15T10:30:00.000Z',
+    branchName: `issue-${issueNumber}__child-task`,
+    worktreePath,
+    issueType: 'issue',
+    issueKey: null,
+    issue_numbers: [issueNumber],
+    pr_numbers: [],
+    issueTracker: 'github',
+    colorHex: '#dcebff',
+    sessionId: 'session-child',
+    projectPath: '/Users/dev/projects/myapp',
+    issueUrls: {},
+    prUrls: {},
+    draftPrNumber: null,
+    oneShot: null,
+    capabilities: [],
+    state,
+    childIssueNumbers: [],
+    parentLoom: {
+      type: 'epic',
+      identifier: '100',
+      branchName: 'issue-100__epic',
+      worktreePath: '/Users/dev/projects/myapp-looms/issue-100__epic',
+    },
+    childIssues: [],
+    dependencyMap: {},
+  })
+
+  it('should enrich child issues with state and worktreePath from child loom metadata', () => {
+    const childIssues = [
+      { number: '#101', title: 'First task', body: 'body1', url: 'https://github.com/org/repo/issues/101' },
+      { number: '#102', title: 'Second task', body: 'body2', url: 'https://github.com/org/repo/issues/102' },
+    ]
+    const allMetadata = [
+      createChildLoomMetadata('101', 'in_progress', '/Users/dev/projects/myapp-looms/issue-101__child'),
+      createChildLoomMetadata('102', 'done', '/Users/dev/projects/myapp-looms/issue-102__child'),
+    ]
+
+    const result = enrichSwarmIssues(childIssues, allMetadata)
+
+    expect(result).toEqual([
+      {
+        number: '#101',
+        title: 'First task',
+        url: 'https://github.com/org/repo/issues/101',
+        state: 'in_progress',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-101__child',
+      },
+      {
+        number: '#102',
+        title: 'Second task',
+        url: 'https://github.com/org/repo/issues/102',
+        state: 'done',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-102__child',
+      },
+    ])
+  })
+
+  it('should set state and worktreePath to null when no child loom exists', () => {
+    const childIssues = [
+      { number: '#101', title: 'Task without loom', body: 'body', url: 'https://github.com/org/repo/issues/101' },
+    ]
+    const allMetadata: LoomMetadata[] = []
+
+    const result = enrichSwarmIssues(childIssues, allMetadata)
+
+    expect(result).toEqual([
+      {
+        number: '#101',
+        title: 'Task without loom',
+        url: 'https://github.com/org/repo/issues/101',
+        state: null,
+        worktreePath: null,
+      },
+    ])
+  })
+
+  it('should handle Linear-style issue numbers (no # prefix)', () => {
+    const childIssues = [
+      { number: 'ENG-123', title: 'Linear task', body: 'body', url: 'https://linear.app/org/issue/ENG-123' },
+    ]
+    const allMetadata = [
+      createChildLoomMetadata('ENG-123', 'code_review', '/Users/dev/projects/myapp-looms/issue-ENG-123__task'),
+    ]
+
+    const result = enrichSwarmIssues(childIssues, allMetadata)
+
+    expect(result).toEqual([
+      {
+        number: 'ENG-123',
+        title: 'Linear task',
+        url: 'https://linear.app/org/issue/ENG-123',
+        state: 'code_review',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-ENG-123__task',
+      },
+    ])
+  })
+
+  it('should handle mixed matched and unmatched child issues', () => {
+    const childIssues = [
+      { number: '#101', title: 'Matched task', body: 'body1', url: 'https://github.com/org/repo/issues/101' },
+      { number: '#102', title: 'Unmatched task', body: 'body2', url: 'https://github.com/org/repo/issues/102' },
+    ]
+    const allMetadata = [
+      createChildLoomMetadata('101', 'pending', '/Users/dev/projects/myapp-looms/issue-101__child'),
+    ]
+
+    const result = enrichSwarmIssues(childIssues, allMetadata)
+
+    expect(result[0]?.state).toBe('pending')
+    expect(result[0]?.worktreePath).toBe('/Users/dev/projects/myapp-looms/issue-101__child')
+    expect(result[1]?.state).toBeNull()
+    expect(result[1]?.worktreePath).toBeNull()
+  })
+
+  it('should return empty array for empty childIssues', () => {
+    const result = enrichSwarmIssues([], [])
+    expect(result).toEqual([])
+  })
+
+  it('should fall back to finished metadata when child loom is not in active metadata', () => {
+    const childIssues = [
+      { number: '#101', title: 'Cleaned up task', body: 'body1', url: 'https://github.com/org/repo/issues/101' },
+      { number: '#102', title: 'Still active task', body: 'body2', url: 'https://github.com/org/repo/issues/102' },
+    ]
+    // Only #102 is active
+    const activeMetadata = [
+      createChildLoomMetadata('102', 'in_progress', '/Users/dev/projects/myapp-looms/issue-102__child'),
+    ]
+    // #101 was cleaned up/archived and exists in finished metadata
+    const finishedMetadata: LoomMetadata[] = [
+      {
+        ...createChildLoomMetadata('101', 'done', '/Users/dev/projects/myapp-looms/issue-101__child'),
+        status: 'finished',
+        finishedAt: '2024-01-20T15:45:00.000Z',
+      },
+    ]
+
+    const result = enrichSwarmIssues(childIssues, activeMetadata, finishedMetadata)
+
+    expect(result).toEqual([
+      {
+        number: '#101',
+        title: 'Cleaned up task',
+        url: 'https://github.com/org/repo/issues/101',
+        state: 'done',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-101__child',
+      },
+      {
+        number: '#102',
+        title: 'Still active task',
+        url: 'https://github.com/org/repo/issues/102',
+        state: 'in_progress',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-102__child',
+      },
+    ])
+  })
+
+  it('should prefer active metadata over finished metadata for the same issue', () => {
+    const childIssues = [
+      { number: '#101', title: 'Task', body: 'body', url: 'https://github.com/org/repo/issues/101' },
+    ]
+    const activeMetadata = [
+      createChildLoomMetadata('101', 'in_progress', '/Users/dev/projects/myapp-looms/issue-101__active'),
+    ]
+    const finishedMetadata: LoomMetadata[] = [
+      {
+        ...createChildLoomMetadata('101', 'done', '/Users/dev/projects/myapp-looms/issue-101__finished'),
+        status: 'finished',
+        finishedAt: '2024-01-20T15:45:00.000Z',
+      },
+    ]
+
+    const result = enrichSwarmIssues(childIssues, activeMetadata, finishedMetadata)
+
+    // Active metadata should take precedence
+    expect(result[0]?.state).toBe('in_progress')
+    expect(result[0]?.worktreePath).toBe('/Users/dev/projects/myapp-looms/issue-101__active')
+  })
+
+  describe('project-scoped filtering', () => {
+    const createMetaForProject = (
+      issueNumber: string,
+      state: LoomMetadata['state'],
+      worktreePath: string,
+      projectPath: string,
+    ): LoomMetadata => ({
+      ...createChildLoomMetadata(issueNumber, state, worktreePath),
+      projectPath,
+    })
+
+    it('should only match metadata from the same project, preventing cross-project collisions', () => {
+      const childIssues = [
+        { number: '#2', title: 'Resume builder task', body: 'body', url: 'https://github.com/org/resume-builder/issues/2' },
+      ]
+      // Same issue number (#2) exists in both projects
+      const allMetadata = [
+        createMetaForProject('2', 'in_progress', '/projects/resume-builder-looms/issue-2__task', '/projects/resume-builder'),
+        createMetaForProject('2', 'done', '/projects/real-estate-looms/issue-2__task', '/projects/real-estate'),
+      ]
+
+      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, '/projects/resume-builder')
+
+      expect(result[0]?.state).toBe('in_progress')
+      expect(result[0]?.worktreePath).toBe('/projects/resume-builder-looms/issue-2__task')
+    })
+
+    it('should scope finished metadata by project too', () => {
+      const childIssues = [
+        { number: '#3', title: 'Task three', body: 'body', url: 'https://github.com/org/project-a/issues/3' },
+      ]
+      // No active metadata for project-a issue #3
+      const activeMetadata = [
+        createMetaForProject('3', 'in_progress', '/projects/project-b-looms/issue-3__work', '/projects/project-b'),
+      ]
+      // But finished metadata has both projects
+      const finishedMetadata: LoomMetadata[] = [
+        {
+          ...createMetaForProject('3', 'done', '/projects/project-a-looms/issue-3__done', '/projects/project-a'),
+          status: 'finished',
+          finishedAt: '2024-01-20T00:00:00.000Z',
+        },
+        {
+          ...createMetaForProject('3', 'failed', '/projects/project-b-looms/issue-3__failed', '/projects/project-b'),
+          status: 'finished',
+          finishedAt: '2024-01-21T00:00:00.000Z',
+        },
+      ]
+
+      const result = enrichSwarmIssues(childIssues, activeMetadata, finishedMetadata, '/projects/project-a')
+
+      // Should fall back to project-a's finished metadata, not project-b's active or finished
+      expect(result[0]?.state).toBe('done')
+      expect(result[0]?.worktreePath).toBe('/projects/project-a-looms/issue-3__done')
+    })
+
+    it('should fall back to unscoped behavior when projectPath is null', () => {
+      const childIssues = [
+        { number: '#5', title: 'Legacy task', body: 'body', url: 'https://github.com/org/repo/issues/5' },
+      ]
+      const allMetadata = [
+        createMetaForProject('5', 'pending', '/projects/some-project-looms/issue-5__work', '/projects/some-project'),
+      ]
+
+      // null projectPath => no filtering, matches any project
+      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, null)
+
+      expect(result[0]?.state).toBe('pending')
+      expect(result[0]?.worktreePath).toBe('/projects/some-project-looms/issue-5__work')
+    })
+
+    it('should fall back to unscoped behavior when projectPath is undefined', () => {
+      const childIssues = [
+        { number: '#5', title: 'Legacy task', body: 'body', url: 'https://github.com/org/repo/issues/5' },
+      ]
+      const allMetadata = [
+        createMetaForProject('5', 'pending', '/projects/some-project-looms/issue-5__work', '/projects/some-project'),
+      ]
+
+      // undefined projectPath => no filtering
+      const result = enrichSwarmIssues(childIssues, allMetadata)
+
+      expect(result[0]?.state).toBe('pending')
+    })
+
+    it('should handle realpathSync errors gracefully (falls back to original path)', () => {
+      // When realpathSync throws (e.g., path doesn't exist), resolvePathSafe falls back to original.
+      // This means paths that differ only in symlinks but don't resolve will still compare by string.
+      const childIssues = [
+        { number: '#7', title: 'Test', body: 'body', url: 'https://github.com/org/repo/issues/7' },
+      ]
+      const allMetadata = [
+        createMetaForProject('7', 'in_progress', '/projects/project-a-looms/issue-7__work', '/projects/project-a'),
+      ]
+
+      // Same string path => matches even if realpathSync can't resolve
+      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, '/projects/project-a')
+
+      expect(result[0]?.state).toBe('in_progress')
+      expect(result[0]?.worktreePath).toBe('/projects/project-a-looms/issue-7__work')
+    })
+
+    it('should exclude metadata entries with null projectPath when scoping is active', () => {
+      const childIssues = [
+        { number: '#10', title: 'Test', body: 'body', url: 'https://github.com/org/repo/issues/10' },
+      ]
+      // Metadata with null projectPath (legacy) should be excluded when scoping is active
+      const allMetadata: LoomMetadata[] = [
+        {
+          ...createChildLoomMetadata('10', 'in_progress', '/projects/legacy-looms/issue-10__work'),
+          projectPath: null,
+        },
+      ]
+
+      const result = enrichSwarmIssues(childIssues, allMetadata, undefined, '/projects/my-project')
+
+      // Legacy entry (null projectPath) should NOT match when we're scoping
+      expect(result[0]?.state).toBeNull()
+      expect(result[0]?.worktreePath).toBeNull()
+    })
+  })
+})
+
+describe('formatLoomForJson - swarmIssues and dependencyMap for epic looms', () => {
+  const createWorktree = (overrides: Partial<GitWorktree> = {}): GitWorktree => ({
+    path: '/Users/dev/projects/myapp-looms/issue-100__epic-feature',
+    branch: 'issue-100__epic-feature',
+    commit: 'abc123def456789012345678901234567890abcd',
+    bare: false,
+    detached: false,
+    locked: false,
+    ...overrides,
+  })
+
+  const createEpicMetadata = (overrides: Partial<LoomMetadata> = {}): LoomMetadata => ({
+    description: 'Epic feature',
+    created_at: '2024-01-15T10:30:00.000Z',
+    branchName: 'issue-100__epic-feature',
+    worktreePath: '/Users/dev/projects/myapp-looms/issue-100__epic-feature',
+    issueType: 'epic',
+    issueKey: null,
+    issue_numbers: ['100'],
+    pr_numbers: [],
+    issueTracker: 'github',
+    colorHex: '#dcebff',
+    sessionId: 'session-epic',
+    projectPath: '/Users/dev/projects/myapp',
+    issueUrls: { '100': 'https://github.com/org/repo/issues/100' },
+    prUrls: {},
+    draftPrNumber: null,
+    oneShot: null,
+    capabilities: [],
+    state: null,
+    childIssueNumbers: ['101', '102'],
+    parentLoom: null,
+    childIssues: [
+      { number: '#101', title: 'First child', body: 'body1', url: 'https://github.com/org/repo/issues/101' },
+      { number: '#102', title: 'Second child', body: 'body2', url: 'https://github.com/org/repo/issues/102' },
+    ],
+    dependencyMap: { '#102': ['#101'] },
+    ...overrides,
+  })
+
+  const createChildMetadata = (
+    issueNumber: string,
+    state: LoomMetadata['state'],
+    worktreePath: string,
+  ): LoomMetadata => ({
+    description: `Child ${issueNumber}`,
+    created_at: '2024-01-15T10:30:00.000Z',
+    branchName: `issue-${issueNumber}__child`,
+    worktreePath,
+    issueType: 'issue',
+    issueKey: null,
+    issue_numbers: [issueNumber],
+    pr_numbers: [],
+    issueTracker: 'github',
+    colorHex: '#dcebff',
+    sessionId: 'session-child',
+    projectPath: '/Users/dev/projects/myapp',
+    issueUrls: {},
+    prUrls: {},
+    draftPrNumber: null,
+    oneShot: null,
+    capabilities: [],
+    state,
+    childIssueNumbers: [],
+    parentLoom: {
+      type: 'epic',
+      identifier: '100',
+      branchName: 'issue-100__epic-feature',
+      worktreePath: '/Users/dev/projects/myapp-looms/issue-100__epic-feature',
+    },
+    childIssues: [],
+    dependencyMap: {},
+  })
+
+  it('should include swarmIssues and dependencyMap for epic loom with child issues', () => {
+    const worktree = createWorktree()
+    const metadata = createEpicMetadata()
+    const allMetadata = [
+      createChildMetadata('101', 'in_progress', '/Users/dev/projects/myapp-looms/issue-101__child'),
+      createChildMetadata('102', 'pending', '/Users/dev/projects/myapp-looms/issue-102__child'),
+    ]
+
+    const result = formatLoomForJson(worktree, undefined, metadata, allMetadata)
+
+    expect(result.type).toBe('epic')
+    expect(result.swarmIssues).toEqual([
+      {
+        number: '#101',
+        title: 'First child',
+        url: 'https://github.com/org/repo/issues/101',
+        state: 'in_progress',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-101__child',
+      },
+      {
+        number: '#102',
+        title: 'Second child',
+        url: 'https://github.com/org/repo/issues/102',
+        state: 'pending',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-102__child',
+      },
+    ])
+    expect(result.dependencyMap).toEqual({ '#102': ['#101'] })
+  })
+
+  it('should return empty swarmIssues for epic loom with no childIssues', () => {
+    const worktree = createWorktree()
+    const metadata = createEpicMetadata({ childIssues: [], dependencyMap: {} })
+
+    const result = formatLoomForJson(worktree, undefined, metadata)
+
+    expect(result.type).toBe('epic')
+    expect(result.swarmIssues).toEqual([])
+    expect(result.dependencyMap).toEqual({})
+  })
+
+  it('should not include swarmIssues or dependencyMap for non-epic looms', () => {
+    const worktree = createWorktree({
+      path: '/Users/dev/projects/myapp-looms/issue-42__feature',
+      branch: 'issue-42__feature',
+    })
+    const metadata: LoomMetadata = {
+      description: 'Regular issue',
+      created_at: '2024-01-15T10:30:00.000Z',
+      branchName: 'issue-42__feature',
+      worktreePath: '/Users/dev/projects/myapp-looms/issue-42__feature',
+      issueType: 'issue',
+      issueKey: null,
+      issue_numbers: ['42'],
+      pr_numbers: [],
+      issueTracker: 'github',
+      colorHex: '#dcebff',
+      sessionId: 'session-abc',
+      projectPath: '/Users/dev/projects/myapp',
+      issueUrls: {},
+      prUrls: {},
+      draftPrNumber: null,
+      oneShot: null,
+      capabilities: [],
+      state: null,
+      childIssueNumbers: [],
+      parentLoom: null,
+      childIssues: [],
+      dependencyMap: {},
+    }
+
+    const result = formatLoomForJson(worktree, undefined, metadata)
+
+    expect(result.type).toBe('issue')
+    expect(result.swarmIssues).toBeUndefined()
+    expect(result.dependencyMap).toBeUndefined()
+  })
+
+  it('should not include swarmIssues or dependencyMap when no metadata', () => {
+    const worktree = createWorktree()
+    const result = formatLoomForJson(worktree)
+
+    expect(result.swarmIssues).toBeUndefined()
+    expect(result.dependencyMap).toBeUndefined()
+  })
+})
+
+describe('formatFinishedLoomForJson - swarmIssues and dependencyMap for epic looms', () => {
+  const createFinishedEpicMetadata = (overrides: Partial<LoomMetadata> = {}): LoomMetadata => ({
+    description: 'Finished epic',
+    created_at: '2024-01-15T10:30:00.000Z',
+    branchName: 'issue-200__finished-epic',
+    worktreePath: '/Users/dev/projects/myapp-looms/issue-200__finished-epic',
+    issueType: 'epic',
+    issueKey: null,
+    issue_numbers: ['200'],
+    pr_numbers: [],
+    issueTracker: 'github',
+    colorHex: '#dcebff',
+    sessionId: 'session-epic',
+    projectPath: '/Users/dev/projects/myapp',
+    issueUrls: {},
+    prUrls: {},
+    draftPrNumber: null,
+    oneShot: null,
+    capabilities: [],
+    state: 'done',
+    childIssueNumbers: ['201'],
+    parentLoom: null,
+    childIssues: [
+      { number: '#201', title: 'Finished child', body: 'body', url: 'https://github.com/org/repo/issues/201' },
+    ],
+    dependencyMap: {},
+    status: 'finished',
+    finishedAt: '2024-01-20T15:45:00.000Z',
+    ...overrides,
+  })
+
+  it('should include swarmIssues and dependencyMap for finished epic loom', () => {
+    const metadata = createFinishedEpicMetadata()
+    const allMetadata: LoomMetadata[] = [
+      {
+        description: 'Active child',
+        created_at: '2024-01-15T10:30:00.000Z',
+        branchName: 'issue-201__child',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-201__child',
+        issueType: 'issue',
+        issueKey: null,
+        issue_numbers: ['201'],
+        pr_numbers: [],
+        issueTracker: 'github',
+        colorHex: '#dcebff',
+        sessionId: 'session-child',
+        projectPath: '/Users/dev/projects/myapp',
+        issueUrls: {},
+        prUrls: {},
+        draftPrNumber: null,
+        oneShot: null,
+        capabilities: [],
+        state: 'done',
+        childIssueNumbers: [],
+        parentLoom: null,
+        childIssues: [],
+        dependencyMap: {},
+      },
+    ]
+
+    const result = formatFinishedLoomForJson(metadata, allMetadata)
+
+    expect(result.type).toBe('epic')
+    expect(result.swarmIssues).toEqual([
+      {
+        number: '#201',
+        title: 'Finished child',
+        url: 'https://github.com/org/repo/issues/201',
+        state: 'done',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-201__child',
+      },
+    ])
+    expect(result.dependencyMap).toEqual({})
+  })
+
+  it('should not include swarmIssues or dependencyMap for finished non-epic loom', () => {
+    const metadata: LoomMetadata = {
+      description: 'Finished issue',
+      created_at: '2024-01-15T10:30:00.000Z',
+      branchName: 'issue-42__feature',
+      worktreePath: '/Users/dev/projects/myapp-looms/issue-42__feature',
+      issueType: 'issue',
+      issueKey: null,
+      issue_numbers: ['42'],
+      pr_numbers: [],
+      issueTracker: 'github',
+      colorHex: '#dcebff',
+      sessionId: 'session-abc',
+      projectPath: '/Users/dev/projects/myapp',
+      issueUrls: {},
+      prUrls: {},
+      draftPrNumber: null,
+      oneShot: null,
+      capabilities: [],
+      state: null,
+      childIssueNumbers: [],
+      parentLoom: null,
+      childIssues: [],
+      dependencyMap: {},
+      status: 'finished',
+      finishedAt: '2024-01-20T15:45:00.000Z',
+    }
+
+    const result = formatFinishedLoomForJson(metadata)
+
+    expect(result.swarmIssues).toBeUndefined()
+    expect(result.dependencyMap).toBeUndefined()
+  })
+})
+
+describe('formatLoomsForJson - swarm issues propagation', () => {
+  it('should propagate allMetadata to individual loom formatting for epic looms', () => {
+    const mainPath = '/Users/dev/projects/myapp'
+    const epicWorktree: GitWorktree = {
+      path: '/Users/dev/projects/myapp-looms/issue-100__epic',
+      branch: 'issue-100__epic',
+      commit: 'abc123',
+      bare: false,
+      detached: false,
+      locked: false,
+    }
+
+    const epicMetadata: LoomMetadata = {
+      description: 'Epic',
+      created_at: '2024-01-15T10:30:00.000Z',
+      branchName: 'issue-100__epic',
+      worktreePath: '/Users/dev/projects/myapp-looms/issue-100__epic',
+      issueType: 'epic',
+      issueKey: null,
+      issue_numbers: ['100'],
+      pr_numbers: [],
+      issueTracker: 'github',
+      colorHex: '#dcebff',
+      sessionId: 'session-epic',
+      projectPath: mainPath,
+      issueUrls: {},
+      prUrls: {},
+      draftPrNumber: null,
+      oneShot: null,
+      capabilities: [],
+      state: null,
+      childIssueNumbers: ['101'],
+      parentLoom: null,
+      childIssues: [
+        { number: '#101', title: 'Child', body: 'body', url: 'https://github.com/org/repo/issues/101' },
+      ],
+      dependencyMap: {},
+    }
+
+    const childMetadata: LoomMetadata = {
+      description: 'Child',
+      created_at: '2024-01-15T10:30:00.000Z',
+      branchName: 'issue-101__child',
+      worktreePath: '/Users/dev/projects/myapp-looms/issue-101__child',
+      issueType: 'issue',
+      issueKey: null,
+      issue_numbers: ['101'],
+      pr_numbers: [],
+      issueTracker: 'github',
+      colorHex: '#dcebff',
+      sessionId: 'session-child',
+      projectPath: mainPath,
+      issueUrls: {},
+      prUrls: {},
+      draftPrNumber: null,
+      oneShot: null,
+      capabilities: [],
+      state: 'in_progress',
+      childIssueNumbers: [],
+      parentLoom: {
+        type: 'epic',
+        identifier: '100',
+        branchName: 'issue-100__epic',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-100__epic',
+      },
+      childIssues: [],
+      dependencyMap: {},
+    }
+
+    const metadataMap = new Map<string, LoomMetadata | null>()
+    metadataMap.set(epicWorktree.path, epicMetadata)
+
+    const result = formatLoomsForJson(
+      [epicWorktree],
+      mainPath,
+      metadataMap,
+      [epicMetadata, childMetadata],
+    )
+
+    expect(result).toHaveLength(1)
+    expect(result[0]?.swarmIssues).toEqual([
+      {
+        number: '#101',
+        title: 'Child',
+        url: 'https://github.com/org/repo/issues/101',
+        state: 'in_progress',
+        worktreePath: '/Users/dev/projects/myapp-looms/issue-101__child',
+      },
+    ])
   })
 })

@@ -6,19 +6,17 @@ import deepmerge from 'deepmerge'
 import { logger } from '../utils/logger.js'
 
 /**
- * Valid project capability values for Zod enum validation.
- * When updating this constant, also update ProjectCapability type in src/types/loom.ts
+ * Zod schema for base agent settings (without nested agents)
  */
-const PROJECT_CAPABILITIES = ['cli', 'web'] as const
-
-/**
- * Zod schema for agent settings
- */
-export const AgentSettingsSchema = z.object({
+export const BaseAgentSettingsSchema = z.object({
 	model: z
 		.enum(['sonnet', 'opus', 'haiku'])
 		.optional()
 		.describe('Claude model shorthand: sonnet, opus, or haiku'),
+	swarmModel: z
+		.enum(['sonnet', 'opus', 'haiku'])
+		.optional()
+		.describe('Model to use for this agent in swarm mode. Overrides the base model when running inside swarm workers.'),
 	enabled: z
 		.boolean()
 		.optional()
@@ -34,6 +32,22 @@ export const AgentSettingsSchema = z.object({
 		.boolean()
 		.optional()
 		.describe('Whether artifacts from this agent should be reviewed before posting (defaults to false)'),
+	swarmReview: z
+		.boolean()
+		.optional()
+		.describe('Whether artifacts from this agent should be reviewed in swarm mode. Defaults to false if not set (review is off in swarm mode for speed and cost unless explicitly enabled).'),
+})
+
+/**
+ * Zod schema for agent settings, extends base with sub-agent timeout.
+ */
+export const AgentSettingsSchema = BaseAgentSettingsSchema.extend({
+	subAgentTimeout: z
+		.number()
+		.min(1, 'Sub-agent timeout must be at least 1 minute')
+		.max(120, 'Sub-agent timeout cannot exceed 120 minutes')
+		.default(10)
+		.describe('Timeout in minutes for sub-agent claude -p invocations in swarm mode. Applies to each phase agent (evaluator, analyzer, planner, implementer) when invoked via the Bash tool. Default: 10 minutes. Only meaningful under the iloom-swarm-worker agent entry.'),
 })
 
 /**
@@ -45,6 +59,14 @@ export const SpinAgentSettingsSchema = z.object({
 		.enum(['sonnet', 'opus', 'haiku'])
 		.default('opus')
 		.describe('Claude model shorthand for spin orchestrator'),
+	swarmModel: z
+		.enum(['sonnet', 'opus', 'haiku'])
+		.optional()
+		.describe('Model for the spin orchestrator when running in swarm mode. Overrides spin.model for swarm workflows.'),
+	postSwarmReview: z
+		.boolean()
+		.default(true)
+		.describe('Run a full code review after swarm completion, auto-fixing issues with confidence 80+. Defaults to true.'),
 })
 
 /**
@@ -173,10 +195,6 @@ export const WorkflowsSettingsSchemaNoDefaults = z
  */
 export const CapabilitiesSettingsSchema = z
 	.object({
-		capabilities: z
-			.array(z.enum(PROJECT_CAPABILITIES))
-			.optional()
-			.describe('Explicitly declared project capabilities (auto-detected if not specified)'),
 		web: z
 			.object({
 				basePort: z
@@ -186,7 +204,8 @@ export const CapabilitiesSettingsSchema = z
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
 			})
-			.optional(),
+			.optional()
+			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
 		database: z
 			.object({
 				databaseUrlEnvVarName: z
@@ -206,10 +225,6 @@ export const CapabilitiesSettingsSchema = z
  */
 export const CapabilitiesSettingsSchemaNoDefaults = z
 	.object({
-		capabilities: z
-			.array(z.enum(PROJECT_CAPABILITIES))
-			.optional()
-			.describe('Explicitly declared project capabilities (auto-detected if not specified)'),
 		web: z
 			.object({
 				basePort: z
@@ -219,7 +234,8 @@ export const CapabilitiesSettingsSchemaNoDefaults = z
 					.optional()
 					.describe('Base port for web workspace port calculations (default: 3000)'),
 			})
-			.optional(),
+			.optional()
+			.describe('Web dev server settings. To declare a project as a web project, add "web" to the capabilities array in .iloom/package.iloom.json or .iloom/package.iloom.local.json.'),
 		database: z
 			.object({
 				databaseUrlEnvVarName: z
@@ -336,7 +352,9 @@ export const IloomSettingsSchema = z.object({
 				'iloom-issue-enhancer (enhances issue descriptions), ' +
 				'iloom-issue-implementer (implements code changes), ' +
 				'iloom-code-reviewer (reviews code changes against requirements), ' +
-				'iloom-artifact-reviewer (reviews artifacts before posting)',
+				'iloom-artifact-reviewer (reviews artifacts before posting), ' +
+				'iloom-swarm-worker (swarm worker agent, dynamically generated). ' +
+				'Use swarmModel on any agent to override its model in swarm mode.',
 		),
 	spin: SpinAgentSettingsSchema.optional().describe(
 		'Spin orchestrator configuration. Model defaults to opus when not configured.',
@@ -467,6 +485,12 @@ export const IloomSettingsSchema = z.object({
 					'Auto-commit and push after code review in draft PR mode. Defaults to true when mode is github-draft-pr.'
 				),
 			prTitlePrefix: z.boolean().default(false).optional().describe('Prefix PR titles with the issue number (e.g., "QLH-123: Title"). Default: false'),
+			openBrowserOnFinish: z
+				.boolean()
+				.default(true)
+				.describe(
+					'Open the PR in the default browser after finishing in github-pr or github-draft-pr mode. Use --no-browser flag to override.'
+				),
 		})
 		.optional()
 		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), github-draft-pr (create draft PR at start, mark ready on finish), or bitbucket-pr (create BitBucket PR)'),
@@ -605,11 +629,15 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 				'iloom-issue-enhancer (enhances issue descriptions), ' +
 				'iloom-issue-implementer (implements code changes), ' +
 				'iloom-code-reviewer (reviews code changes against requirements), ' +
-				'iloom-artifact-reviewer (reviews artifacts before posting)',
+				'iloom-artifact-reviewer (reviews artifacts before posting), ' +
+				'iloom-swarm-worker (swarm worker agent, dynamically generated). ' +
+				'Use swarmModel on any agent to override its model in swarm mode.',
 		),
 	spin: z
 		.object({
 			model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
+			swarmModel: z.enum(['sonnet', 'opus', 'haiku']).optional(),
+			postSwarmReview: z.boolean().optional(),
 		})
 		.optional()
 		.describe('Spin orchestrator configuration'),
@@ -743,6 +771,12 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 					'Auto-commit and push after code review in draft PR mode. Defaults to true when mode is github-draft-pr.'
 				),
 			prTitlePrefix: z.boolean().optional(),
+			openBrowserOnFinish: z
+				.boolean()
+				.optional()
+				.describe(
+					'Open the PR in the default browser after finishing in github-pr or github-draft-pr mode. Use --no-browser flag to override.'
+				),
 		})
 		.optional()
 		.describe('Merge behavior configuration: local (merge locally), github-pr (create PR), github-draft-pr (create draft PR at start, mark ready on finish), or bitbucket-pr (create BitBucket PR)'),
@@ -1160,7 +1194,14 @@ export class SettingsManager {
 	 * @param settings - Pre-loaded settings object
 	 * @returns Model shorthand ('opus', 'sonnet', or 'haiku')
 	 */
-	getSpinModel(settings?: IloomSettings): 'sonnet' | 'opus' | 'haiku' {
+	getSpinModel(settings?: IloomSettings, mode?: 'swarm'): 'sonnet' | 'opus' | 'haiku' {
+		if (mode === 'swarm') {
+			if (settings?.spin?.swarmModel) {
+				return settings.spin.swarmModel
+			}
+			// Default to opus for swarm orchestrator ("Balanced" mode)
+			return 'opus'
+		}
 		return settings?.spin?.model ?? SpinAgentSettingsSchema.parse({}).model
 	}
 

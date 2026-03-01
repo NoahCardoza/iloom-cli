@@ -79,6 +79,7 @@ After the subagent completes, include its context summary when sending the plan 
 
 {{#if USE_GEMINI_REVIEWER}}
 **Reviewer: Gemini** - Use available Gemini MCP tools (look for tools with "gemini" in the name) to review your plan. Ask for feedback on:
+- **Complexity sizing** (each child issue should target SIMPLE: <5 files, <200 LOC, no cross-cutting changes, no architectural signals)
 - Proper scoping (1 issue = 1 loom = 1 PR)
 - Dependency identification and sequencing
 - Technical architecture and design decisions
@@ -92,6 +93,7 @@ After the subagent completes, include its context summary when sending the plan 
 {{/if}}
 {{#if USE_CODEX_REVIEWER}}
 **Reviewer: Codex** - Use available Codex MCP tools (look for tools with "codex" in the name) to review your plan. Ask for feedback on:
+- **Complexity sizing** (each child issue should target SIMPLE: <5 files, <200 LOC, no cross-cutting changes, no architectural signals)
 - Proper scoping (1 issue = 1 loom = 1 PR)
 - Dependency identification and sequencing
 - Technical architecture and design decisions
@@ -105,6 +107,7 @@ After the subagent completes, include its context summary when sending the plan 
 {{/if}}
 {{#unless USE_GEMINI_REVIEWER}}{{#unless USE_CODEX_REVIEWER}}
 **Reviewer: Claude** - Review the plan yourself, considering:
+- **Complexity sizing** (each child issue should target SIMPLE: <5 files, <200 LOC, no cross-cutting changes, no architectural signals)
 - Proper scoping (1 issue = 1 loom = 1 PR)
 - Dependency identification and sequencing
 - Technical architecture and design decisions
@@ -203,21 +206,79 @@ AskUserQuestion(
 
 ### Phase 3: Issue Decomposition (Writing Plans)
 
-Break the work into actionable issues. Each issue should be:
+**Step 1: Identify work units, define shared contracts, and design the DAG.**
+
+Start by listing the work units at a high level (title + one sentence each). Then, before writing full issue descriptions, design the dependency graph:
+
+1. **Assume all issues run in parallel.** This is your starting point — not something you optimize toward later.
+2. **Define shared contracts to keep them parallel.** When Issue B needs an API, module, or type that Issue A is building, do NOT make A block B. Instead, define the shared contract (interface, function signature, module API) explicitly, and specify it in both issue descriptions. Both agents implement against the agreed contract simultaneously — a later integration step catches any mismatches.
+3. **Only add blocking dependencies you truly cannot eliminate with a contract.** Hard blockers are rare — they apply when Issue B literally modifies files that Issue A creates from scratch (not just imports them), or when Issue B requires a database migration from Issue A.
+4. **Check the shape.** Ask: "What is the widest, shallowest DAG I can create?" If the graph is mostly linear (A → B → C → D), rethink the decomposition. The shape of the graph matters as much as the content of individual issues, because a narrow graph kills swarm throughput.
+
+**Example:** If Issue A creates a `UserService` class and Issue B needs to call `UserService.getById()`, don't block B on A. Instead, specify the contract in both issues: "`UserService` exposes a `getById(id)` method that returns a user object." Both agents implement against this contract simultaneously.
+
+**Compilation errors are expected and OK.** When issues run in parallel against shared contracts, individual branches will have build errors — Issue B imports a module that Issue A hasn't merged yet. This is normal. The errors resolve when branches merge into the epic branch. Agents should not block on or try to fix compilation errors caused by missing contract implementations from parallel issues.
+
+**Step 2: Write full issue descriptions.** Now flesh out each node in your DAG. Each issue should be:
 - Self-contained with clear inputs and outputs
-- Ordered by dependencies (what must come first)
+- Connected to other issues via shared contracts (already defined in Step 1) rather than blocking dependencies
 
 **Right-size your issues.** Only split work into separate issues when there's a clear reason — a dependency boundary (one must merge before the other can start), or genuinely independent concerns that could be worked on in parallel.
 
 A sign that issues should be consolidated: several small issues share the same dependencies, touch overlapping files, or have similar scope. For example, "add field X to the schema," "add field X to the API," and "add field X to the UI" are likely one issue if they all depend on the same prior work and would naturally be done together. When the boundaries feel artificial, combine them.
 
+**Target SIMPLE complexity for each child issue.** Every child issue should be scoped so that an implementing agent can classify it as SIMPLE (or TRIVIAL). This means each child issue should meet ALL of these criteria:
+
+| Metric | Target |
+|--------|--------|
+| Files affected | < 5 (excluding test files) |
+| Lines of code | < 200 (new + modified, excluding tests) |
+| Breaking changes | None |
+| Database migrations | None |
+| Cross-cutting changes | None — avoid issues that pass parameters/config through 3+ architectural layers |
+| Architectural complexity signals | None — no deep architectural decisions required to implement it |
+| Risk level | Low or Medium |
+| File quality | All modified files < 500 LOC, or well-architected if larger |
+
+**When an issue would naturally be COMPLEX, decompose further.** If a piece of work would touch 5+ files, require 200+ LOC, or involve cross-cutting parameter threading, split it into smaller issues that each stay within SIMPLE bounds. Common decomposition strategies:
+
+- **Layer by layer**: Instead of one issue that threads a new option from CLI → Manager → Service → Utility, create separate issues for each layer boundary (e.g., "Add option to CLI interface" then "Wire option through to Service layer")
+- **Vertical slices**: Instead of one issue that adds a full feature, split into "Add core logic" then "Add UI/CLI surface" then "Add tests and validation"
+- **New pattern then apply**: If a new pattern is needed, create one issue to establish the pattern in a single location, then a follow-up to apply it elsewhere
+
+**Resist the urge to create COMPLEX child issues.** A common mistake is creating child issues that are individually large and complex. The goal is many small, focused issues — not a few big ones. If you find yourself writing a child issue that requires architectural decisions, coordinating multiple systems, or modifying large poorly-structured files, it's a signal to split further.
+
+**But don't over-split into TRIVIAL busywork either.** Each child issue should represent a meaningful, coherent unit of work — not a single function rename or a one-line config change. Signs you've split too far:
+- Multiple child issues touch the same file for closely related changes
+- A child issue has no meaningful acceptance criteria beyond "change X to Y"
+- The dependency chain is long and linear with no parallelism (A → B → C → D → E), where each step is tiny
+- You're creating issues that an engineer would naturally do as part of a larger change (e.g., "update imports" as its own issue)
+
+**The sweet spot is SIMPLE, not TRIVIAL.** Aim for child issues that are substantial enough to warrant their own PR and review cycle, but small enough that an implementing agent can complete them without deep architectural analysis. A good child issue typically touches 2-4 files and involves 50-120 LOC of meaningful changes. When you're on the fence about whether to split, lean toward splitting — smaller issues enable more parallelism and are easier for agents to get right on the first attempt.
+
+**CRITICAL: Issue bodies must NOT contain implementation details.** The implementing agent will discover the *how* through its own codebase research. Baking implementation instructions into the issue body causes agents to skip their research phase and treat your instructions as ground truth, which produces brittle implementations based on potentially stale assumptions.
+
+Implementation details include:
+- **Code snippets or pseudocode** — exact TypeScript interfaces, function bodies, logic sequences
+- **File paths** — `src/types/telemetry.ts`, `src/commands/plan.ts`, etc.
+- **Step-by-step implementation instructions** — "Add X to file Y, then call Z"
+- **Pre-written content** — exact documentation text, config blocks, or error messages to paste in
+- **Internal behavior descriptions** — conditional logic, specific APIs to call, error handling patterns
+
+A contract describes an *interface boundary* (what a function accepts and returns). Implementation detail describes *how* something works internally. Contracts belong in the issue body. Implementation detail does NOT.
+
+**The test:** For every sentence in the issue body, ask: "Does this tell the implementing agent *what* to build, or *how* to build it?" If it's how — remove it.
+
 **Issue Structure:**
-Each child issue should include:
+Each child issue should include ONLY these sections:
 1. **Summary**: One-sentence description of what this issue accomplishes
 2. **Context**: Why this issue exists (relationship to parent feature)
-3. **Acceptance Criteria**: Clear, testable conditions for "done"
-4. **Dependencies**: Which issues must be completed first (if any)
-5. **Scope Boundaries**: What is explicitly NOT included
+3. **Acceptance Criteria**: Clear, testable, outcome-focused conditions for "done" — describe the desired result, not the implementation mechanism (e.g., "auto-swarm pipeline events are observable" not "tracking calls fire at pipeline start and end")
+4. **Shared Contracts**: Specify the exact contracts defined in Step 1 that this issue produces or consumes (function signatures, types, module exports). A contract is an interface boundary — what one issue exposes for another to consume. Example: `PlanCommand.execute()` gains an optional `autoSwarm?: boolean` 7th parameter. NOT an implementation: do not describe what happens internally when `autoSwarm` is true — that is implementation detail, not a contract.
+5. **Hard Blocking Dependencies** *(minimize these)*: Which issues must be completed first, if any — each one should have been validated in Step 1 as not replaceable by a contract
+6. **Scope Boundaries**: What is explicitly NOT included
+
+Do NOT add "Implementation Details", "Technical Approach", or similar sections — these violate the rule above.
 
 ---
 
@@ -242,6 +303,19 @@ At the end of the planning session, you have MCP tools to create issues:
   - Parameters: `number` (issue number), `direction` ('blocking' | 'blocked_by' | 'both')
 - `mcp__issue_management__remove_dependency`: Remove a dependency between issues
   - Parameters: `blockingIssue`, `blockedIssue`
+
+{{#if AUTO_SWARM_MODE}}
+**Harness Signal Tool:**
+- `mcp__harness__signal`: Signal the auto-swarm harness when planning is complete
+  - Call this after all child issues and dependencies have been created
+  - Parameters: `type` ("done"), `data` (`{ "epicIssueNumber": "<parent issue number>", "childIssues": [<list of child issue numbers>] }`)
+{{/if}}
+
+**Validation Gate — Check Before Presenting Your Plan:**
+Before presenting the plan to the user, audit it against these questions:
+1. **For each blocking dependency:** "Can I replace this with a shared contract so both issues run in parallel?" If yes, rewrite the issues with an explicit contract and remove the dependency.
+2. **DAG shape check:** Is the graph wide and shallow, or narrow and linear? If your longest chain is more than 2 deep, re-examine whether intermediate dependencies are truly hard blockers.
+3. **Contract completeness:** Does every issue that produces or consumes a shared API specify the exact contract (function signatures, types, module exports) in its description?
 
 **Before Creating Issues:**
 1. Summarize the proposed issues and their relationships
@@ -294,16 +368,16 @@ Wait for the subagent to complete, then present its summary to the user for plan
    - Do NOT create a new parent epic - use the existing issue #{{PARENT_ISSUE_NUMBER}}
 2. **Set up blocking dependencies between children**
    - Use `create_dependency` to define execution order
-   - If Issue B depends on work from Issue A, create a dependency where A blocks B
+   - Only create a blocking dependency (A blocks B) when B truly cannot start without A's output — prefer contract-based parallelism over blocking dependencies (see "Maximize Parallel Execution" above)
 3. **Post Architectural Decision Record (ADR) as comment on parent issue**
    - Use `create_comment` with `number: "{{PARENT_ISSUE_NUMBER}}"`, `type: "issue"`
    - Include: Design rationale, key decisions, trade-offs, recommended execution order
 4. **Output next steps to the user**
    - Tell them what was created: "Created N child issues for #{{PARENT_ISSUE_NUMBER}}."
 {{#if IS_VSCODE_MODE}}
-   - Recommend where to start: "Exit this session, then use the iloom explorer panel to create a new loom for issue Z to begin with [first task title]."
+   - Recommend: "In the iloom explorer panel, add a loom for issue #{{PARENT_ISSUE_NUMBER}} — it will detect the child issues and launch the swarm workflow automatically."
 {{else}}
-   - Recommend where to start: "Exit this session and run `il start Z` to begin with [first task title]."
+   - Recommend: "Run `il start {{PARENT_ISSUE_NUMBER}}` — it will detect the child issues and launch the swarm workflow automatically."
 {{/if}}
 {{else}}
 **Fresh Planning Mode - Issue Creation Order:**
@@ -315,16 +389,16 @@ Wait for the subagent to complete, then present its summary to the user for plan
    - Each child represents one focused unit of work (1 loom = 1 PR)
 3. **Set up blocking dependencies between children**
    - Use `create_dependency` to define execution order
-   - If Issue B depends on work from Issue A, create a dependency where A blocks B
+   - Only create a blocking dependency (A blocks B) when B truly cannot start without A's output — prefer contract-based parallelism over blocking dependencies (see "Maximize Parallel Execution" above)
 4. **Post Architectural Decision Record (ADR) as first comment on parent epic**
    - Use `create_comment` with `number: <parent epic number>`, `type: "issue"`
    - Include: Design rationale, key decisions, trade-offs, recommended execution order
 5. **Output next steps to the user**
    - Tell them what was created: "Created Epic #X with Y child issues."
 {{#if IS_VSCODE_MODE}}
-   - Recommend where to start: "Exit this session, then use the iloom explorer panel to create a new loom for issue Z to begin with [first task title]."
+   - Recommend: "In the iloom explorer panel, add a loom for Epic #X — it will detect the child issues and launch the swarm workflow automatically."
 {{else}}
-   - Recommend where to start: "Exit this session and run `il start Z` to begin with [first task title]."
+   - Recommend: "Run `il start X` — it will detect the child issues and launch the swarm workflow automatically."
 {{/if}}
 {{/if}}
 
@@ -427,6 +501,7 @@ Use `mcp__issue_management__create_comment` to post this summary to the parent e
 - Create issues without user confirmation
 - Over-engineer the decomposition (keep it pragmatic)
 - Assume requirements that weren't explicitly stated
+- Include implementation details in issue bodies (code snippets, file paths, step-by-step instructions, pre-written content)
 
 **Do:**
 - Use the conversation to refine understanding iteratively
@@ -452,14 +527,28 @@ Use `mcp__issue_management__create_comment` to post this summary to the parent e
 
 After creating issues successfully, you MUST end with a clear next steps message.
 
+{{#if AUTO_SWARM_MODE}}
+## Auto-Swarm Completion
+
+After creating all child issues and setting up dependencies:
+
+1. **Signal the harness** by calling the `mcp__harness__signal` tool:
+   ```json
+   { "type": "done", "data": { "epicIssueNumber": "{{PARENT_ISSUE_NUMBER}}", "childIssues": [list of child issue numbers created] } }
+   ```
+2. **Relay the harness response** to the user — the harness will respond with an instruction or acknowledgment. Display the content of the response to the user.
+3. **Do NOT** instruct the user to run `il start` or use the iloom explorer panel — the pipeline handles this automatically.
+
+{{else}}
 Direct the user to **open the epic issue** - this is the parent issue that contains all the child issues you just created. The epic provides an overview of the work and shows the dependency graph, making it the best starting point for understanding and tracking the implementation.
 
 {{#if IS_VSCODE_MODE}}
 **Next Steps Message (VS Code Mode):**
-End your summary with: "Exit this session and open the epic at [EPIC_URL] to review the plan and child issues. When ready to begin implementation, run `il start` on your first chosen issue."
+End your summary with: "Review the epic and child issues at [EPIC_URL]. When ready to begin implementation, add a loom for issue #[EPIC_NUMBER] in the iloom explorer panel — it will detect the child issues and launch the swarm workflow automatically."
 {{else}}
 **Next Steps Message (CLI Mode):**
-End your summary with: "Exit this session and open the epic at [EPIC_URL] to review the plan and child issues. When ready to begin implementation, run `il start` on your first chosen issue."
+End your summary with: "Review the epic and child issues at [EPIC_URL]. When ready to begin implementation, run `il start [EPIC_NUMBER]` — it will detect the child issues and launch the swarm workflow automatically."
 {{/if}}
 
-Replace `[EPIC_URL]` with the actual URL of the epic issue you created.
+Replace `[EPIC_URL]` and `[EPIC_NUMBER]` with actual values from the epic issue you created.
+{{/if}}
