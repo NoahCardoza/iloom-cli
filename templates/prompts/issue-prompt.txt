@@ -396,7 +396,7 @@ env -u CLAUDECODE \
   --permission-mode bypassPermissions \
   --output-format stream-json \
   --verbose \
-  --max-turns 100 \
+  --max-turns 200 \
   "<prompt for the phase>" > "$PHASE_OUTPUT_FILE" 2>"${PHASE_OUTPUT_FILE}.stderr"
 ```
 
