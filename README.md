@@ -842,6 +842,7 @@ Acknowledgments
 ----------------
 
 - [@NoahCardoza](https://github.com/NoahCardoza) — Jira Cloud integration (PR [#588](https://github.com/iloom-ai/iloom-cli/pull/588)): JiraApiClient, JiraIssueTracker, ADF/Markdown conversion, MCP provider, sprint/mine filtering, and `il issues` Jira support.
+- [@NoahCardoza](https://github.com/NoahCardoza) — BitBucket integration (PR [#609](https://github.com/iloom-ai/iloom-cli/pull/609)): BitBucketApiClient, BitBucketVCSProvider, PR creation/listing, reviewer resolution, repository auto-detection, and token redaction.
 - [@TickTockBent](https://github.com/TickTockBent) — Linux, WSL, and tmux terminal support (PR [#796](https://github.com/iloom-ai/iloom-cli/pull/796)): strategy-pattern terminal backends, GUI-to-tmux fallback for headless environments, WSL detection, and cross-platform terminal launching.
 - [@rexsilex](https://github.com/rexsilex) — Original Linux/WSL terminal support design (PR [#649](https://github.com/iloom-ai/iloom-cli/pull/649)): pioneered the strategy pattern and backend interface that inspired the final implementation.
 
