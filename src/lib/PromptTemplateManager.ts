@@ -48,7 +48,7 @@ export interface TemplateVariables {
 	// Draft PR mode variables - mutually exclusive with standard issue mode
 	DRAFT_PR_NUMBER?: number  // PR number for draft PR workflow
 	DRAFT_PR_URL?: string     // Full URL of the draft PR (e.g., https://github.com/owner/repo/pull/123)
-	DRAFT_PR_MODE?: boolean   // True when using github-draft-pr merge mode
+	DRAFT_PR_MODE?: boolean   // True when using draft-pr merge mode
 	AUTO_COMMIT_PUSH?: boolean  // True when auto-commit/push is enabled for draft PR mode
 	STANDARD_ISSUE_MODE?: boolean  // True when using standard issue commenting (not draft PR)
 	STANDARD_BRANCH_MODE?: boolean // True when using standard branch mode (not draft PR)

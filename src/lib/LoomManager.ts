@@ -25,6 +25,7 @@ import type { GitWorktree } from '../types/worktree.js'
 import type { Issue, PullRequest } from '../types/index.js'
 import { getLogger } from '../utils/logger-context.js'
 import { PRManager } from './PRManager.js'
+import { VCSProviderFactory } from './VCSProviderFactory.js'
 
 /**
  * LoomManager orchestrates the creation and management of looms (isolated workspaces)
@@ -203,16 +204,17 @@ export class LoomManager {
       }
     }
 
-    // 10.5. Handle github-draft-pr mode - push branch and create draft PR
+    // 10.5. Handle draft-pr mode - push branch and create draft PR
     let draftPrNumber: number | undefined = undefined
     let draftPrUrl: string | undefined = undefined
 
     const mergeBehavior = settingsData.mergeBehavior ?? { mode: 'local' }
 
-    if (mergeBehavior.mode === 'github-draft-pr' && (input.type === 'issue' || input.type === 'epic' || input.type === 'branch')) {
+    if (mergeBehavior.mode === 'draft-pr' && (input.type === 'issue' || input.type === 'epic' || input.type === 'branch')) {
       const prManager = new PRManager(settingsData)
 
       // Fetch from origin to get latest remote branch state
+      // These git operations run regardless of whether the provider supports draft PRs
       getLogger().info('Fetching from origin...')
       await executeGitCommand(['fetch', 'origin'], { cwd: worktreePath })
 
@@ -268,43 +270,49 @@ export class LoomManager {
         getLogger().debug('Placeholder commit removed from local branch (still on remote)')
       }
 
-      // Check for existing draft PR before creating a new one
-      const existingPR = await prManager.checkForExistingPR(branchName, worktreePath)
-
-      if (existingPR) {
-        // Reuse existing PR
-        draftPrNumber = existingPR.number
-        draftPrUrl = existingPR.url
-        getLogger().success(`Found existing PR: ${existingPR.url}`)
+      // Only create draft PR if the VCS provider supports it (or no VCS provider override is configured)
+      const vcsProvider = VCSProviderFactory.create(settingsData)
+      if (vcsProvider !== null && !vcsProvider.supportsDraftPRs) {
+        getLogger().info('VCS provider does not support draft PRs, skipping draft PR creation at start time')
       } else {
-        // Generate PR title and body
-        // For issue mode: use issue title and reference issue number
-        // For branch mode: use branch name and generic description
-        const prTitle = issueData?.title ?? `Work on ${branchName}`
-        let prBody: string
-        if (input.type === 'issue' || input.type === 'epic') {
-          const issueBody = issueData?.body ? `\n\n## ${issueData.title}\n\n${issueData.body}` : ''
-          prBody = `Fixes ${prManager.issuePrefix}${input.identifier}${issueBody}\n\n---\n*This PR was created automatically by iloom.*`
+        // Check for existing draft PR before creating a new one
+        const existingPR = await prManager.checkForExistingPR(branchName, worktreePath)
+
+        if (existingPR) {
+          // Reuse existing PR
+          draftPrNumber = existingPR.number
+          draftPrUrl = existingPR.url
+          getLogger().success(`Found existing PR: ${existingPR.url}`)
         } else {
-          prBody = `Branch: ${branchName}\n\n---\n*This PR was created automatically by iloom.*`
+          // Generate PR title and body
+          // For issue mode: use issue title and reference issue number
+          // For branch mode: use branch name and generic description
+          const prTitle = issueData?.title ?? `Work on ${branchName}`
+          let prBody: string
+          if (input.type === 'issue' || input.type === 'epic') {
+            const issueBody = issueData?.body ? `\n\n## ${issueData.title}\n\n${issueData.body}` : ''
+            prBody = `Fixes ${prManager.issuePrefix}${input.identifier}${issueBody}\n\n---\n*This PR was created automatically by iloom.*`
+          } else {
+            prBody = `Branch: ${branchName}\n\n---\n*This PR was created automatically by iloom.*`
+          }
+
+          // Create draft PR
+          // For child looms, target the parent branch; otherwise use the configured main branch
+          const draftBaseBranch = input.parentLoom?.branchName ?? settingsData.mainBranch ?? 'main'
+          getLogger().info('Creating draft PR...')
+          const prResult = await prManager.createDraftPR(
+            branchName,
+            prTitle,
+            prBody,
+            draftBaseBranch,
+            worktreePath
+          )
+
+          draftPrNumber = prResult.number
+          draftPrUrl = prResult.url
+          getLogger().success(`Draft PR created: ${prResult.url}`)
         }
-
-        // Create draft PR
-        // For child looms, target the parent branch; otherwise use the configured main branch
-        const draftBaseBranch = input.parentLoom?.branchName ?? settingsData.mainBranch ?? 'main'
-        getLogger().info('Creating draft PR...')
-        const prResult = await prManager.createDraftPR(
-          branchName,
-          prTitle,
-          prBody,
-          draftBaseBranch,
-          worktreePath
-        )
-
-        draftPrNumber = prResult.number
-        draftPrUrl = prResult.url
-        getLogger().success(`Draft PR created: ${prResult.url}`)
-      }
+      } // end else (provider supports draft PRs)
     }
 
     // 11. Select color with collision avoidance
@@ -739,7 +747,7 @@ export class LoomManager {
 
     // Check if branch exists locally only (used for different purposes depending on type)
     // Pass false for includeRemote to only check local branches - remote branch existence
-    // is handled separately in github-draft-pr mode
+    // is handled separately in draft-pr mode
     const branchExistedLocally = await branchExists(branchName, process.cwd(), false)
 
     // For non-PRs, throw error if branch exists
@@ -753,10 +761,10 @@ export class LoomManager {
 
     // Determine base branch based on loom type and merge mode:
     // - Child looms: use parent's local branch (parent may not be pushed yet)
-    // - PR modes (github-pr, github-draft-pr) for non-child, non-PR type: fetch and use origin/{mainBranch}
+    // - PR modes (pr, draft-pr) for non-child, non-PR type: fetch and use origin/{mainBranch}
     // - Local mode or PR type: use explicit baseBranch or default (main)
     const mergeBehavior = settingsData.mergeBehavior ?? { mode: 'local' }
-    const isPRMode = mergeBehavior.mode === 'github-pr' || mergeBehavior.mode === 'github-draft-pr'
+    const isPRMode = mergeBehavior.mode === 'pr' || mergeBehavior.mode === 'draft-pr'
     const isChildLoom = !!input.parentLoom
 
     let baseBranch: string | undefined

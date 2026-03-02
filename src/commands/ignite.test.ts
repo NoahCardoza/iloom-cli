@@ -2756,7 +2756,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({
 					mergeBehavior: {
-						mode: 'github-draft-pr',
+						mode: 'draft-pr',
 						// autoCommitPush not set - should default to true
 					},
 				}),
@@ -2820,7 +2820,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({
 					mergeBehavior: {
-						mode: 'github-draft-pr',
+						mode: 'draft-pr',
 						autoCommitPush: false, // Explicitly disabled
 					},
 				}),
@@ -2945,7 +2945,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({
 					mergeBehavior: {
-						mode: 'github-draft-pr',
+						mode: 'draft-pr',
 						remote: 'my_remote-123',
 					},
 				}),
@@ -3006,7 +3006,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({
 					mergeBehavior: {
-						mode: 'github-draft-pr',
+						mode: 'draft-pr',
 						remote: 'origin; rm -rf /',
 					},
 				}),
@@ -3064,7 +3064,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({
 					mergeBehavior: {
-						mode: 'github-draft-pr',
+						mode: 'draft-pr',
 						remote: 'my remote',
 					},
 				}),
@@ -3122,7 +3122,7 @@ describe('IgniteCommand', () => {
 			const mockSettingsManager = {
 				loadSettings: vi.fn().mockResolvedValue({
 					mergeBehavior: {
-						mode: 'github-draft-pr',
+						mode: 'draft-pr',
 						// remote not set - should default to 'origin'
 					},
 				}),

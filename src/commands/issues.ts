@@ -8,7 +8,7 @@ import { findMainWorktreePathWithSettings } from '../utils/git.js'
 import { fetchGitHubIssueList, fetchGitHubPRList } from '../utils/github.js'
 import { fetchLinearIssueList } from '../utils/linear.js'
 import { fetchJiraIssueList } from '../utils/jira.js'
-import { JiraApiClient } from '../lib/providers/jira/index.js'
+import { JiraIssueTracker } from '../lib/providers/jira/JiraIssueTracker.js'
 import { getLogger } from '../utils/logger-context.js'
 
 /**
@@ -167,34 +167,17 @@ export class IssuesCommand {
         ...(mine ? { mine } : {}),
       })
     } else if (provider === 'jira') {
-      const jiraSettings = settings.issueManagement?.jira
-      const host = jiraSettings?.host
-      if (!host) {
-        throw new Error(
-          'Jira host not configured. Set issueManagement.jira.host in your settings.json.',
-        )
-      }
-      const username = jiraSettings?.username
-      if (!username) {
-        throw new Error(
-          'Jira username not configured. Set issueManagement.jira.username in your settings.json.',
-        )
-      }
-      const apiToken = jiraSettings?.apiToken
-      if (!apiToken) {
-        throw new Error(
-          'Jira API token not configured. Set issueManagement.jira.apiToken in your settings.json or settings.local.json.',
-        )
-      }
-      const projectKey = jiraSettings?.projectKey
-      if (!projectKey) {
-        throw new Error(
-          'Jira project key not configured. Set issueManagement.jira.projectKey in your settings.json.',
-        )
-      }
-      const doneStatuses = jiraSettings?.doneStatuses
-      const client = new JiraApiClient({ host, username, apiToken })
-      results = await fetchJiraIssueList(client, { host, projectKey, doneStatuses, limit, sprint, mine })
+      const tracker = JiraIssueTracker.fromSettings(settings)
+      const trackerConfig = tracker.getConfig()
+      const doneStatuses = settings.issueManagement?.jira?.doneStatuses
+      results = await fetchJiraIssueList(tracker.getApiClient(), {
+        host: trackerConfig.host,
+        projectKey: trackerConfig.projectKey,
+        ...(doneStatuses ? { doneStatuses } : {}),
+        limit,
+        sprint,
+        mine,
+      })
     } else {
       throw new Error(`Unsupported issue tracker provider: ${provider}`)
     }
@@ -202,34 +185,72 @@ export class IssuesCommand {
     // Tag issues with type
     results.forEach(item => { item.type = 'issue' })
 
-    // 6. Fetch PRs from GitHub (PRs are a GitHub concept regardless of issue tracker)
-    // TODO(bitbucket): detect bitbucket configuration and fetch PRs from Bitbucket instead of GitHub when relevant
-    try {
-      const prs = await fetchGitHubPRList({
-        limit,
-        cwd: resolvedProjectPath,
-        ...(mine ? { mine } : {}),
-      })
-      const prItems: IssueListItem[] = prs.map(pr => ({ ...pr, type: 'pr' as const }))
-      results = [...results, ...prItems]
-    } catch (error) {
-      // Only catch expected, non-fatal errors from gh CLI
-      // Per CLAUDE.md: "DO NOT SWALLOW ERRORS" -- must check specifically
-      const stderr = (error as NodeJS.ErrnoException & { stderr?: string }).stderr ?? ''
-      const isExpectedError = error instanceof Error && (
-        error.message.includes('not logged in') ||
-        error.message.includes('auth login') ||
-        error.message.includes('rate limit') ||
-        error.message.includes('ETIMEDOUT') ||
-        error.message.includes('ECONNREFUSED') ||
-        error.message.includes('no git remotes found') ||
-        stderr.includes('not logged in') ||
-        stderr.includes('rate limit')
-      )
-      if (isExpectedError) {
-        logger.warn(`PR fetch failed (non-fatal), continuing with issues only: ${error.message}`)
-      } else {
-        throw error // Re-throw unexpected errors -- do not swallow
+    // 6. Fetch PRs from VCS provider (GitHub or BitBucket)
+    const vcsProvider = settings.versionControl?.provider ?? 'github'
+
+    if (vcsProvider === 'bitbucket') {
+      try {
+        const bbSettings = settings.versionControl?.bitbucket
+        if (!bbSettings?.username || !bbSettings?.apiToken) {
+          logger.warn('BitBucket username or API token not configured. Skipping PR fetch.')
+        } else {
+          const { BitBucketVCSProvider } = await import('../lib/providers/bitbucket/BitBucketVCSProvider.js')
+          const bbProvider = BitBucketVCSProvider.fromSettings(settings)
+          const bbPRs = await bbProvider.listPullRequests(resolvedProjectPath)
+          const prItems: IssueListItem[] = bbPRs.map(pr => ({
+            id: String(pr.id),
+            title: `[PR] ${pr.title}`,
+            updatedAt: pr.updated_on,
+            url: pr.links.html.href,
+            state: pr.state.toLowerCase(),
+            type: 'pr' as const,
+          }))
+          results = [...results, ...prItems]
+        }
+      } catch (error) {
+        // Only catch expected, non-fatal BitBucket errors
+        const isExpectedError = error instanceof Error && (
+          error.message.includes('BitBucket API error (401)') ||
+          error.message.includes('BitBucket API error (403)') ||
+          error.message.includes('BitBucket API request failed') ||
+          error.message.includes('Could not determine BitBucket workspace/repository') ||
+          error.message.includes('ETIMEDOUT') ||
+          error.message.includes('ECONNREFUSED')
+        )
+        if (isExpectedError) {
+          logger.warn(`BitBucket PR fetch failed (non-fatal), continuing with issues only: ${error.message}`)
+        } else {
+          throw error
+        }
+      }
+    } else {
+      try {
+        const prs = await fetchGitHubPRList({
+          limit,
+          cwd: resolvedProjectPath,
+          ...(mine ? { mine } : {}),
+        })
+        const prItems: IssueListItem[] = prs.map(pr => ({ ...pr, type: 'pr' as const }))
+        results = [...results, ...prItems]
+      } catch (error) {
+        // Only catch expected, non-fatal errors from gh CLI
+        // Per CLAUDE.md: "DO NOT SWALLOW ERRORS" -- must check specifically
+        const stderr = (error as NodeJS.ErrnoException & { stderr?: string }).stderr ?? ''
+        const isExpectedError = error instanceof Error && (
+          error.message.includes('not logged in') ||
+          error.message.includes('auth login') ||
+          error.message.includes('rate limit') ||
+          error.message.includes('ETIMEDOUT') ||
+          error.message.includes('ECONNREFUSED') ||
+          error.message.includes('no git remotes found') ||
+          stderr.includes('not logged in') ||
+          stderr.includes('rate limit')
+        )
+        if (isExpectedError) {
+          logger.warn(`PR fetch failed (non-fatal), continuing with issues only: ${error.message}`)
+        } else {
+          throw error // Re-throw unexpected errors -- do not swallow
+        }
       }
     }
 

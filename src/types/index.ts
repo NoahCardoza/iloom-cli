@@ -188,7 +188,7 @@ export interface FinishOptions {
   dryRun?: boolean    // -n, --dry-run - Preview actions without executing
   pr?: number         // --pr <number> - Treat input as PR number
   skipBuild?: boolean // --skip-build - Skip post-merge build verification
-  noBrowser?: boolean // --no-browser - Skip opening PR in browser (github-pr mode only)
+  noBrowser?: boolean // --no-browser - Skip opening PR in browser (pr mode only)
   cleanup?: boolean   // --cleanup / --no-cleanup - Control worktree cleanup after finishing
   json?: boolean      // --json - Output result as JSON
   skipToPr?: boolean  // --skip-to-pr - Skip rebase/validation/commit, go directly to PR creation (debug)

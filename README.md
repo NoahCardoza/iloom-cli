@@ -344,7 +344,7 @@ Control how `il finish` handles your work. Configure in `.iloom/settings.json`:
 ```json
 {
   "mergeBehavior": {
-    "mode": "local"  // "local", "github-pr", or "github-draft-pr"
+    "mode": "local"  // "local", "pr", or "draft-pr"
   }
 }
 ```
@@ -352,8 +352,8 @@ Control how `il finish` handles your work. Configure in `.iloom/settings.json`:
 | **Mode** | **Description** |
 |----------|-----------------|
 | `local` | (Default) Merge directly into main branch locally. Fast-forward merge, no PR created. |
-| `github-pr` | Push branch and create a GitHub PR on `il finish`. Worktree cleanup is optional. |
-| `github-draft-pr` | Create a draft PR immediately on `il start`. On `il finish`, the PR is marked ready for review. **Recommended for contributions to forked repos.** |
+| `pr` | Push branch and create a PR on `il finish`. Worktree cleanup is optional. |
+| `draft-pr` | Create a draft PR immediately on `il start`. On `il finish`, the PR is marked ready for review. **Recommended for contributions to forked repos.** |
 
 ### Artifact Review
 
@@ -411,7 +411,7 @@ When `il finish` or `il rebase` encounter rebase conflicts, iloom automatically 
 
 Note: Potentially destructive commands like `git reset` and `git checkout` are intentionally not auto-approved to prevent accidental data loss.
 
-**When to use `github-draft-pr`:**
+**When to use `draft-pr`:**
 - **Contributing to forks:** When you are contributing to a forked repo use this mode to create the PR from your fork immediately, allowing iloom's agents to post workflow comments directly to the PR instead of writing to the upstream repo's issues (which may not be appreciated by the repo owners).
 - CI runs on your branch during development (draft PRs trigger CI on most repos)
 - Your team requires PRs for all changes (no direct merges to main)
@@ -429,6 +429,15 @@ iloom supports multiple issue tracking providers to fit your team's workflow.
 | **GitHub**   | `gh auth login` | Default. Supports Issues and Pull Requests automatically. |
 | **Linear**   | `il init` | Requires API token. Supports full read/write on Linear issues. |
 | **Jira**     | Configure in `.iloom/settings.json` | Atlassian Cloud. Requires API token. See [Jira Setup](#jira-setup) below. |
+
+### Version Control Providers
+
+Choose which platform hosts your pull requests and code reviews.
+
+| **Provider** | **Setup** | **Notes** |
+|--------------|-----------|-----------|
+| **GitHub**   | `gh auth login` | Default. Integrated with GitHub Issues. |
+| **BitBucket** | Configure in `.iloom/settings.json` | Atlassian Cloud. Requires API token. See [BitBucket Setup](#bitbucket-setup) below. |
 
 ### Jira Setup
 
@@ -478,13 +487,121 @@ To use Jira as your issue tracker, add this configuration:
 - `doneStatuses`: (Optional) Status names to exclude from `il issues` lists (default: `["Done"]`). Set to match your Jira workflow, e.g., `["Done", "Closed", "Verified"]`
 - `transitionMappings`: (Optional) Map iloom states to your Jira workflow transition names
 
+### BitBucket Setup
+
+To use BitBucket for pull requests, add this configuration:
+
+**.iloom/settings.json (Committed)**
+```json
+{
+  "versionControl": {
+    "provider": "bitbucket",
+    "bitbucket": {
+      "username": "your-bitbucket-username",
+      "workspace": "your-workspace",
+      "repoSlug": "your-repo"
+    }
+  },
+  "mergeBehavior": {
+    "mode": "bitbucket-pr"
+  }
+}
+```
+
+**.iloom/settings.local.json (Gitignored - Never commit this file)**
+```json
+{
+  "versionControl": {
+    "bitbucket": {
+      "apiToken": "your-bitbucket-api-token"
+    }
+  }
+}
+```
+
+**Generate a BitBucket API Token:**
+1. Visit https://bitbucket.org/account/settings/app-passwords/
+2. Click "Create API token" (Note: App passwords were deprecated September 2025)
+3. Grant permissions: `repository:read`, `repository:write`, `pullrequest:read`, `pullrequest:write`
+4. Copy the token to `.iloom/settings.local.json`
+
+**Configuration Options:**
+- `username`: Your BitBucket username
+- `apiToken`: API token (store in settings.local.json only!)
+- `workspace`: (Optional) BitBucket workspace, auto-detected from git remote if not provided
+- `repoSlug`: (Optional) Repository slug, auto-detected from git remote if not provided
+- `reviewers`: (Optional) Array of BitBucket usernames to automatically add as PR reviewers. Usernames are resolved to BitBucket account IDs at PR creation time. Unresolved usernames are logged as warnings but don't block PR creation.
+
+**Example with Reviewers:**
+```json
+{
+  "versionControl": {
+    "provider": "bitbucket",
+    "bitbucket": {
+      "username": "your-bitbucket-username",
+      "reviewers": [
+        "alice.jones",
+        "bob.smith"
+      ]
+    }
+  },
+  "mergeBehavior": {
+    "mode": "bitbucket-pr"
+  }
+}
+```
+
+### Jira + BitBucket Together
+
+Use Jira for issues and BitBucket for pull requests:
+
+**.iloom/settings.json**
+```json
+{
+  "issueManagement": {
+    "provider": "jira",
+    "jira": {
+      "host": "https://yourcompany.atlassian.net",
+      "username": "your.email@company.com",
+      "projectKey": "PROJ"
+    }
+  },
+  "versionControl": {
+    "provider": "bitbucket",
+    "bitbucket": {
+      "username": "your-bitbucket-username"
+    }
+  },
+  "mergeBehavior": {
+    "mode": "bitbucket-pr"
+  }
+}
+```
+
+**.iloom/settings.local.json**
+```json
+{
+  "issueManagement": {
+    "jira": {
+      "apiToken": "your-jira-api-token"
+    }
+  },
+  "versionControl": {
+    "bitbucket": {
+      "apiToken": "your-bitbucket-api-token"
+    }
+  }
+}
+```
+
 
 ### IDE Support
 iloom creates isolated workspace settings for your editor. Color synchronization (visual context) only works best VS Code-based editors.
 
 *   **Supported:** VS Code, Cursor, Windsurf, Antigravity, WebStorm, IntelliJ, Sublime Text.
-    
+
 *   **Config:** Set your preference via `il init` or `il start --set ide.type=cursor`.
+
 
 ### Git Operation Settings
 
@@ -504,7 +621,6 @@ Configure git operation timeouts for projects with long-running pre-commit hooks
 | `git.commitTimeout` | 60000 (60s) | 1000-600000 | Timeout in milliseconds for git commit operations. Increase if pre-commit hooks (linting, tests, type checking) exceed the default timeout. |
 
 **When to increase:** If you see timeout errors during `il commit` or `il finish`, your pre-commit hooks are taking longer than the default 60 seconds. Set a higher value based on your typical hook duration.
-
 
 Advanced Features
 -----------------
@@ -718,7 +834,7 @@ This command:
 1. Forks the repository (if not already forked)
 2. Clones your fork locally
 3. Configures iloom for the project
-4. Sets merge behavior to `github-draft-pr` (creates a draft PR immediately when you start work)
+4. Sets merge behavior to `draft-pr` (creates a draft PR immediately when you start work)
 
 The draft PR workflow is ideal for open source: as you work, iloom posts the AI's analysis, implementation plan, and progress directly to that draft PR—giving maintainers full context before the code is even ready for review.
 
@@ -726,6 +842,7 @@ Acknowledgments
 ----------------
 
 - [@NoahCardoza](https://github.com/NoahCardoza) — Jira Cloud integration (PR [#588](https://github.com/iloom-ai/iloom-cli/pull/588)): JiraApiClient, JiraIssueTracker, ADF/Markdown conversion, MCP provider, sprint/mine filtering, and `il issues` Jira support.
+- [@NoahCardoza](https://github.com/NoahCardoza) — BitBucket integration (PR [#609](https://github.com/iloom-ai/iloom-cli/pull/609)): BitBucketApiClient, BitBucketVCSProvider, PR creation/listing, reviewer resolution, repository auto-detection, and token redaction.
 - [@TickTockBent](https://github.com/TickTockBent) — Linux, WSL, and tmux terminal support (PR [#796](https://github.com/iloom-ai/iloom-cli/pull/796)): strategy-pattern terminal backends, GUI-to-tmux fallback for headless environments, WSL detection, and cross-platform terminal launching.
 - [@rexsilex](https://github.com/rexsilex) — Original Linux/WSL terminal support design (PR [#649](https://github.com/iloom-ai/iloom-cli/pull/649)): pioneered the strategy pattern and backend interface that inspired the final implementation.
 

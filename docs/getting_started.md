@@ -128,12 +128,12 @@ iloom supports three modes for handling finished work:
 | Mode | When PR is Created | Best For |
 |------|-------------------|----------|
 | `local` | Never | Solo development, rapid iteration |
-| `github-pr` | On `il finish` | Team environments |
-| `github-draft-pr` | On `il start` | Open source, early visibility |
+| `pr` | On `il finish` | Team environments |
+| `draft-pr` | On `il start` | Open source, early visibility |
 
 - **Local** (default): Merge directly to main without creating a PR
-- **GitHub PR**: Create a PR when you run `il finish`
-- **GitHub Draft PR**: Create a draft PR on `il start`, mark it ready on `il finish`
+- **PR**: Create a PR when you run `il finish`
+- **Draft PR**: Create a draft PR on `il start`, mark it ready on `il finish`
 
 Configure with:
 
@@ -452,7 +452,7 @@ il config "use upstream remote for issues"
 
 **Key features with GitHub:**
 - Issue and PR support
-- All workflow modes available (local, github-pr, github-draft-pr)
+- All workflow modes available (local, pr, draft-pr)
 - Issue references: `#123`, PR references: `#456`
 
 ### Linear Setup

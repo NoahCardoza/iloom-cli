@@ -366,7 +366,7 @@ Start your response immediately with the PR body text.
 
 	/**
 	 * Create a draft PR for the branch
-	 * Used by github-draft-pr mode during il start
+	 * Used by draft-pr mode during il start
 	 * @param branchName - Branch to create PR from (used as --head)
 	 * @param title - PR title
 	 * @param body - PR body
@@ -443,7 +443,7 @@ Start your response immediately with the PR body text.
 
 	/**
 	 * Mark a draft PR as ready for review
-	 * Used by github-draft-pr mode during il finish
+	 * Used by draft-pr mode during il finish
 	 * @param prNumber - PR number to mark ready
 	 * @param cwd - Working directory
 	 */

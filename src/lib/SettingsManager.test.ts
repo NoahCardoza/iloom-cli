@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { SettingsManager, BaseAgentSettingsSchema, SpinAgentSettingsSchema, IloomSettingsSchemaNoDefaults, type IloomSettings } from './SettingsManager.js'
+import { SettingsManager, redactSensitiveFields, BaseAgentSettingsSchema, SpinAgentSettingsSchema, IloomSettingsSchemaNoDefaults, type IloomSettings } from './SettingsManager.js'
 import { readFile } from 'fs/promises'
 
 // Mock fs/promises
@@ -2833,6 +2833,85 @@ const error: { code?: string; message: string } = {
 		})
 	})
 
+	describe('bitbucket reviewers configuration', () => {
+		it('should accept valid usernames in reviewers array', async () => {
+			const projectRoot = '/test/project'
+			const validSettings = {
+				versionControl: {
+					provider: 'bitbucket',
+					bitbucket: {
+						username: 'testuser',
+						apiToken: 'test-token',
+						reviewers: ['alice', 'bob_smith'],
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(validSettings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.versionControl?.bitbucket?.reviewers).toEqual(['alice', 'bob_smith'])
+		})
+
+		it('should allow empty reviewers array', async () => {
+			const projectRoot = '/test/project'
+			const validSettings = {
+				versionControl: {
+					provider: 'bitbucket',
+					bitbucket: {
+						username: 'testuser',
+						apiToken: 'test-token',
+						reviewers: [],
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(validSettings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.versionControl?.bitbucket?.reviewers).toEqual([])
+		})
+
+		it('should allow missing reviewers field', async () => {
+			const projectRoot = '/test/project'
+			const validSettings = {
+				versionControl: {
+					provider: 'bitbucket',
+					bitbucket: {
+						username: 'testuser',
+						apiToken: 'test-token',
+					},
+				},
+			}
+
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(validSettings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.versionControl?.bitbucket?.reviewers).toBeUndefined()
+		})
+	})
+
 	describe('getSpinModel', () => {
 		it('should return opus by default when spin not configured', () => {
 			const settings = { sourceEnvOnStart: false }
@@ -3073,7 +3152,7 @@ const error: { code?: string; message: string } = {
 			const projectRoot = '/test/project'
 			const settings = {
 				mergeBehavior: {
-					mode: 'github-draft-pr' as const,
+					mode: 'draft-pr' as const,
 					autoCommitPush: true,
 				},
 			}
@@ -3095,7 +3174,7 @@ const error: { code?: string; message: string } = {
 			const projectRoot = '/test/project'
 			const settings = {
 				mergeBehavior: {
-					mode: 'github-draft-pr' as const,
+					mode: 'draft-pr' as const,
 					autoCommitPush: false,
 				},
 			}
@@ -3117,7 +3196,7 @@ const error: { code?: string; message: string } = {
 			const projectRoot = '/test/project'
 			const settings = {
 				mergeBehavior: {
-					mode: 'github-draft-pr' as const,
+					mode: 'draft-pr' as const,
 					// autoCommitPush intentionally omitted
 				},
 			}
@@ -3133,6 +3212,32 @@ const error: { code?: string; message: string } = {
 
 			const result = await settingsManager.loadSettings(projectRoot)
 			expect(result.mergeBehavior?.autoCommitPush).toBeUndefined()
+		})
+	})
+
+	describe('mergeBehavior.mode backwards compatibility transform', () => {
+		it.each([
+			['github-pr', 'pr'],
+			['github-draft-pr', 'draft-pr'],
+			['bitbucket-pr', 'pr'],
+			['local', 'local'],
+			['pr', 'pr'],
+			['draft-pr', 'draft-pr'],
+		])('should transform "%s" to "%s"', async (input, expected) => {
+			const projectRoot = '/test/project'
+			const settings = { mergeBehavior: { mode: input } }
+			const error: { code?: string; message: string } = {
+				code: 'ENOENT',
+				message: 'ENOENT: no such file or directory',
+			}
+
+			vi.mocked(readFile)
+				.mockRejectedValueOnce(error) // global settings
+				.mockResolvedValueOnce(JSON.stringify(settings)) // settings.json
+				.mockRejectedValueOnce(error) // settings.local.json
+
+			const result = await settingsManager.loadSettings(projectRoot)
+			expect(result.mergeBehavior?.mode).toBe(expected)
 		})
 	})
 
@@ -3441,6 +3546,89 @@ const error: { code?: string; message: string } = {
 			const result = await settingsManager.loadSettings(projectRoot)
 
 			expect(result.git?.commitTimeout).toBe(600000)
+		})
+	})
+
+	describe('redactSensitiveFields', () => {
+		it('should pass through null and undefined', () => {
+			expect(redactSensitiveFields(null)).toBeNull()
+			expect(redactSensitiveFields(undefined)).toBeUndefined()
+		})
+
+		it('should return primitives unchanged', () => {
+			expect(redactSensitiveFields('hello')).toBe('hello')
+			expect(redactSensitiveFields(42)).toBe(42)
+			expect(redactSensitiveFields(true)).toBe(true)
+		})
+
+		it('should redact sensitive keys', () => {
+			const input = {
+				apiToken: 'secret-token-123',
+				accessToken: 'access-abc',
+				clientSecret: 'my-secret',
+				password: 'hunter2',
+				credential: 'cred-xyz',
+			}
+			const result = redactSensitiveFields(input) as Record<string, unknown>
+
+			expect(result.apiToken).toBe('[REDACTED]')
+			expect(result.accessToken).toBe('[REDACTED]')
+			expect(result.clientSecret).toBe('[REDACTED]')
+			expect(result.password).toBe('[REDACTED]')
+			expect(result.credential).toBe('[REDACTED]')
+		})
+
+		it('should not redact non-sensitive keys', () => {
+			const input = {
+				username: 'alice',
+				host: 'example.com',
+				port: 8080,
+			}
+			const result = redactSensitiveFields(input) as Record<string, unknown>
+
+			expect(result.username).toBe('alice')
+			expect(result.host).toBe('example.com')
+			expect(result.port).toBe(8080)
+		})
+
+		it('should recursively handle nested objects', () => {
+			const input = {
+				versionControl: {
+					bitbucket: {
+						username: 'alice',
+						apiToken: 'bb-token-123',
+					},
+				},
+			}
+			const result = redactSensitiveFields(input) as Record<string, unknown>
+			const bb = (result.versionControl as Record<string, unknown>).bitbucket as Record<string, unknown>
+
+			expect(bb.username).toBe('alice')
+			expect(bb.apiToken).toBe('[REDACTED]')
+		})
+
+		it('should handle arrays', () => {
+			const input = [
+				{ apiToken: 'token-1', name: 'first' },
+				{ apiToken: 'token-2', name: 'second' },
+			]
+			const result = redactSensitiveFields(input) as Record<string, unknown>[]
+
+			expect(result[0].apiToken).toBe('[REDACTED]')
+			expect(result[0].name).toBe('first')
+			expect(result[1].apiToken).toBe('[REDACTED]')
+			expect(result[1].name).toBe('second')
+		})
+
+		it('should not redact non-string sensitive values', () => {
+			const input = {
+				token: 123,
+				password: true,
+			}
+			const result = redactSensitiveFields(input) as Record<string, unknown>
+
+			expect(result.token).toBe(123)
+			expect(result.password).toBe(true)
 		})
 	})
 
