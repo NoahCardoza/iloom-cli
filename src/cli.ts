@@ -5,6 +5,7 @@ import { GitWorktreeManager } from './lib/GitWorktreeManager.js'
 import { ShellCompletion } from './lib/ShellCompletion.js'
 import { SettingsManager } from './lib/SettingsManager.js'
 import { IssueTrackerFactory } from './lib/IssueTrackerFactory.js'
+import { VCSProviderFactory } from './lib/VCSProviderFactory.js'
 import { IssueEnhancementService } from './lib/IssueEnhancementService.js'
 import { AgentManager } from './lib/AgentManager.js'
 import { GitHubService } from './lib/GitHubService.js'
@@ -245,7 +246,8 @@ export async function validateGhCliForCommand(command: Command): Promise<void> {
       const mergeBehaviorMode = settings.mergeBehavior?.mode
 
       const isPrMode = (mergeBehaviorMode as string) === 'pr' || (mergeBehaviorMode as string) === 'draft-pr'
-      needsGhCli = provider === 'github' || isPrMode
+      const vcsProvider = VCSProviderFactory.create(settings)
+      needsGhCli = provider === 'github' || (isPrMode && vcsProvider === null)
     } catch {
       // If we can't load settings, assume we might need gh CLI
       needsGhCli = true
