@@ -412,7 +412,7 @@ When `il finish` or `il rebase` encounter rebase conflicts, iloom automatically 
 Note: Potentially destructive commands like `git reset` and `git checkout` are intentionally not auto-approved to prevent accidental data loss.
 
 **When to use `github-draft-pr`:**
-- **Contributing to forks:** When you don't are contributing to a forked repo use this mode to create the PR from your fork immediately, allowing iloom's agents to post workflow comments directly to the PR instead of writing to the upstream repo's issues (which may not be appreciated by the repo owners).
+- **Contributing to forks:** When you are contributing to a forked repo use this mode to create the PR from your fork immediately, allowing iloom's agents to post workflow comments directly to the PR instead of writing to the upstream repo's issues (which may not be appreciated by the repo owners).
 - CI runs on your branch during development (draft PRs trigger CI on most repos)
 - Your team requires PRs for all changes (no direct merges to main)
 - You want reviewers to see progress before the work is complete
