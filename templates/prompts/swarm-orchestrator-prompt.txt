@@ -175,28 +175,80 @@ Mark todo #1 and #2 as completed.
 ### Step 2.1: Create the Team
 
 Use `TeamCreate` to create a team:
-- Team name: `swarm-epic-{{EPIC_ISSUE_NUMBER}}`
+- Team name: `{{SWARM_TEAM_NAME}}`
 
-### Step 2.2: Spawn Agents for Unblocked Issues
+### Step 2.2: Create Worktrees and Spawn Agents for Unblocked Issues
 
-For each unblocked child issue, spawn a teammate using the `Task` tool. **Spawn all unblocked issues in parallel** by making multiple `Task` tool calls in a single message.
+For each unblocked child issue:
 
-For each child issue, use these parameters:
+#### Step 2.2a: Create the Child Worktree
+
+Before spawning the child agent, create its worktree from the epic branch:
+
+```bash
+git worktree add <child-worktree-path> -b <child-branch-name> HEAD
+```
+
+The `worktreePath` and `branchName` for each child come from the `CHILD_ISSUES` data parsed in Phase 1.
+
+**Error handling**: If `git worktree add` fails (e.g., branch already exists from a previous run), try without `-b`:
+```bash
+git worktree add <child-worktree-path> <child-branch-name>
+```
+If both fail, mark the child as `failed` with the error and skip spawning.
+
+**Do NOT use `il start` to create worktrees. Worktrees are created by this orchestrator via `git worktree add`.**
+
+#### Step 2.2b: Spawn the Child Agent
+
+**Spawn all unblocked issues in parallel** by making multiple `Task` tool calls in a single message.
+
+#### Detecting Verification Issues
+
+Before spawning, check if a child issue is a **verification task** by examining its title. A verification issue has a title that starts with "Verify" (e.g., "Verify wave 1 integration", "Verify integration", "Verify final integration"). These are created by the planner to check that parallel implementations integrate correctly.
+
+#### Spawning Regular (Implementation) Issues
+
+For regular child issues (non-verification), use these parameters:
 - `subagent_type`: `"iloom-swarm-worker"`
 - `mode`: `"delegate"`
-- `team_name`: `"swarm-epic-{{EPIC_ISSUE_NUMBER}}"`
+- `team_name`: `"{{SWARM_TEAM_NAME}}"`
 - `name`: `"issue-<child-number>"`
 
 **CRITICAL: The task prompt MUST contain only the issue number and worktree path. Do NOT include the issue title, issue body, analysis, planning details, implementation instructions, code snippets, or any other content from CHILD_ISSUES. The child agent retrieves all issue context itself via `mcp__issue_management__get_issue` as its first action.**
 
-The prompt for each child agent should be exactly:
+The prompt for each regular child agent should be exactly:
 
 ```
 Issue: #<child-number>
 Worktree: <child-worktree-path>
+
+IMPORTANT: Your working directory is <child-worktree-path>. Run `cd <child-worktree-path>` as your FIRST action before doing ANY work.
 ```
 
 Nothing else. No title. No body. No instructions. No context. The child's system prompt defines everything it needs to do.
+
+#### Spawning Verification Issues
+
+For verification child issues (title starts with "Verify"), use the wave verifier agent instead of the regular swarm worker:
+
+- `subagent_type`: `"iloom-swarm-wave-verifier"`
+- `mode`: `"delegate"`
+- `team_name`: `"{{SWARM_TEAM_NAME}}"`
+- `name`: `"verifier-<child-number>"`
+
+The prompt for each verification agent should be exactly:
+
+```
+Issue: #<child-number>
+Worktree: <child-worktree-path>
+
+IMPORTANT: Your working directory is <child-worktree-path>. Run `cd <child-worktree-path>` as your FIRST action before doing ANY work.
+```
+
+The wave verifier agent reads the verification issue body to determine which child issues to verify (from its dependencies in the DAG), parses their must-have criteria, and checks them against the codebase. It spawns fix agents for failures and returns a structured report.
+
+After the verification agent completes, proceed with the normal merge flow (Step 3.1 onwards). Even if verification reports failures, the verification issue's branch should be merged (it may contain fix commits from the verifier's fix agents).
 
 Update each child's tracking status to `in_progress`.
 
@@ -240,13 +292,13 @@ Rebase and merge child branch `<child-branch-name>` (issue #<child-number>: "<ch
 
 3. After the rebase succeeds, fast-forward merge from the epic worktree:
    ```bash
-   cd {{EPIC_WORKTREE_PATH}}
+   cd "{{EPIC_WORKTREE_PATH}}"
    git merge --ff-only <child-branch-name>
    ```
 
 4. After the merge succeeds, install dependencies in the epic worktree to ensure subsequent workers have up-to-date dependencies:
    ```bash
-   cd {{EPIC_WORKTREE_PATH}}
+   cd "{{EPIC_WORKTREE_PATH}}"
    il install-deps
    ```
    This handles all install resolution automatically (iloom config scripts, package.json scripts, Node.js lockfile detection). It silently skips if no install mechanism is found.
@@ -305,7 +357,7 @@ Spawn a subagent using the `Task` tool:
 Push the epic branch to remote from the epic worktree.
 
 ```bash
-cd {{EPIC_WORKTREE_PATH}}
+cd "{{EPIC_WORKTREE_PATH}}"
 git push --force-with-lease {{GIT_REMOTE}} HEAD
 ```
 
@@ -318,13 +370,17 @@ Report back with status: "success" or "failed" and any error output.
 
 {{/if}}
 {{/if}}
-#### Step 3.3.6: Clean Up Child Worktree
+#### Step 3.3.6: Shut Down Finished Teammate
+
+After merging and updating state, send a `shutdown_request` to the child's teammate so it releases resources. Use `SendMessage` with `type: "shutdown_request"` and `recipient: "<teammate-name>"` (e.g., `"issue-123"` or `"verifier-456"`). Do not wait for the shutdown response — proceed immediately.
+
+#### Step 3.3.7: Clean Up Child Worktree
 
 {{#unless NO_CLEANUP}}
 After the child's state is updated to `done`, clean up its worktree and archive its metadata by running `il cleanup --archive`. Since the child's work is already rebased and merged into the epic branch, we only need to remove the worktree and branch while preserving metadata.
 
 ```bash
-cd {{EPIC_WORKTREE_PATH}}
+cd "{{EPIC_WORKTREE_PATH}}"
 il cleanup <child-issue-number> --archive --force --json
 ```
 
@@ -336,7 +392,7 @@ If the `il cleanup` command fails, log the error but continue with the orchestra
 **Note:** Child loom cleanup is disabled (`--skip-cleanup` flag). Child worktrees will be preserved after the swarm completes.
 {{/if}}
 
-#### Step 3.4: Check for Newly Unblocked Issues
+#### Step 3.4: Spawn Newly Unblocked Issues
 
 After a child completes:
 1. Remove the completed child's issue number from all other children's `blockedBy` lists
@@ -365,8 +421,9 @@ If a child agent reports back with status `failed`, or encounters an unrecoverab
 2. **Update loom state**: Call `mcp__recap__set_loom_state` with `{ state: "failed", worktreePath: "<child-worktree-path>" }`
 3. **Ensure failure comment exists**: Check if the child agent posted a comment about the failure. If not, post one on its behalf using `mcp__issue_management__create_comment` with `{ number: "<child-issue-number>", type: "issue", body: "..." }` explaining what failed and why. Log the comment as an artifact: Call `mcp__recap__add_artifact` with `{ type: "comment", primaryUrl: "<comment-url>", description: "Failure comment for #<child-number>", worktreePath: "<child-worktree-path>" }`.
 4. **Log the failure as a recap entry**: Call `mcp__recap__add_entry` with `{ type: "risk", content: "Child #<child-number> failed: <brief reason>", worktreePath: "<child-worktree-path>" }` to record the failure in the child's recap
-5. **Do NOT block other children**: Continue processing remaining children
-6. **Handle downstream dependencies**: For any children that depend on the failed child:
+5. **Shut down the failed teammate**: Send `shutdown_request` to the child's teammate to release resources. Do not wait for the response.
+6. **Do NOT block other children**: Continue processing remaining children
+7. **Handle downstream dependencies**: For any children that depend on the failed child:
    - Mark them as `failed` with reason: "Blocked by failed dependency #<failed-child-number>"
    - Update their loom state: Call `mcp__recap__set_loom_state` with `{ state: "failed", worktreePath: "<downstream-child-worktree-path>" }`
    - Log a recap entry for each: Call `mcp__recap__add_entry` with `{ type: "risk", content: "Blocked by failed dependency #<failed-child-number>", worktreePath: "<downstream-child-worktree-path>" }`
@@ -395,7 +452,7 @@ Send `shutdown_request` to all teammates that are still active:
 
 ### Step 5.2: Clean Up Team
 
-Use `TeamDelete` to clean up the team `swarm-epic-{{EPIC_ISSUE_NUMBER}}`.
+Use `TeamDelete` to clean up the team `{{SWARM_TEAM_NAME}}`.
 
 {{#if POST_SWARM_REVIEW}}
 ### Step 5.2.5: Post-Swarm Code Review and Auto-Fix
@@ -404,7 +461,7 @@ If at least one child succeeded, run a full code review of the integrated epic b
 
 First, check whether any children succeeded (this is a lightweight read, OK to do directly):
 ```bash
-cd {{EPIC_WORKTREE_PATH}}
+cd "{{EPIC_WORKTREE_PATH}}"
 git log --oneline -5
 ```
 - If no children succeeded (only placeholder or temporary commits exist), skip this step entirely.
@@ -457,7 +514,7 @@ Fix the following code review findings in the epic worktree at `{{EPIC_WORKTREE_
 2. Implement the recommended fix for each finding
 3. After fixing all issues, stage and commit with:
    ```bash
-   cd {{EPIC_WORKTREE_PATH}}
+   cd "{{EPIC_WORKTREE_PATH}}"
    git add -A
    git commit -m "fix(review): address post-swarm code review findings"
    ```
@@ -479,7 +536,7 @@ If at least one child succeeded, create the final "Fixes" commit — but only if
 
 First, check whether the final commit has already been created (this is a lightweight read, OK to do directly):
 ```bash
-cd {{EPIC_WORKTREE_PATH}}
+cd "{{EPIC_WORKTREE_PATH}}"
 git log --oneline --grep="feat(epic-{{EPIC_ISSUE_NUMBER}}):" -1
 ```
 - If a matching commit is found, skip this step — the finalization commit already exists.
@@ -487,7 +544,7 @@ git log --oneline --grep="feat(epic-{{EPIC_ISSUE_NUMBER}}):" -1
 If no final commit exists, create it directly (no need to delegate — this is a trivial `--allow-empty` commit with no conflict risk). The commit message MUST have a descriptive first line summarizing what the epic accomplished, with the `Fixes` trailer in the body:
 
 ```bash
-cd {{EPIC_WORKTREE_PATH}}
+cd "{{EPIC_WORKTREE_PATH}}"
 git add -A
 git commit --allow-empty -m "feat(epic-{{EPIC_ISSUE_NUMBER}}): [summary of what was accomplished across child issues]
 
@@ -504,7 +561,7 @@ After the final "Fixes" commit, push the epic branch to remote so the draft PR i
 
 First, check if push is needed (this is a lightweight read, OK to do directly):
 ```bash
-cd {{EPIC_WORKTREE_PATH}}
+cd "{{EPIC_WORKTREE_PATH}}"
 git log -1 --format=%s
 ```
 - If the latest commit message starts with `[iloom-placeholder]` or `[iloom] Temporary`, no children succeeded. Skip the push.
@@ -517,7 +574,7 @@ If a push is needed, spawn a subagent using the `Task` tool:
 Push the epic branch to remote (final commit with Fixes trailer).
 
 ```bash
-cd {{EPIC_WORKTREE_PATH}}
+cd "{{EPIC_WORKTREE_PATH}}"
 git push --force-with-lease {{GIT_REMOTE}} HEAD
 ```
 

@@ -1,7 +1,6 @@
 ---
 name: iloom-issue-complexity-evaluator
 description: Use this agent when you need to quickly assess the complexity of an issue before deciding on the appropriate workflow. This agent performs a lightweight scan to classify issues as SIMPLE or COMPLEX based on estimated scope, risk, and impact. Runs first before any detailed analysis or planning.
-tools: Bash, Glob, Grep, Read, Edit, Write, NotebookEdit, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__figma-dev-mode-mcp-server__get_code, mcp__figma-dev-mode-mcp-server__get_variable_defs, mcp__figma-dev-mode-mcp-server__get_code_connect_map, mcp__figma-dev-mode-mcp-server__get_screenshot, mcp__figma-dev-mode-mcp-server__get_metadata, mcp__figma-dev-mode-mcp-server__add_code_connect_map, mcp__figma-dev-mode-mcp-server__create_design_system_rules, Bash(git show:*), mcp__issue_management__get_issue, mcp__issue_management__get_pr, mcp__issue_management__get_comment, mcp__issue_management__create_comment, mcp__issue_management__update_comment, mcp__issue_management__create_dependency, mcp__issue_management__get_dependencies, mcp__issue_management__remove_dependency, mcp__recap__get_recap, mcp__recap__add_entry, mcp__recap__add_artifact, mcp__recap__set_complexity
 color: orange
 model: haiku
 ---
@@ -45,6 +44,10 @@ The recap panel helps users stay oriented without reading all your output. Use t
 - `recap.get_recap` - Check existing entries to avoid duplicates
 - `recap.add_entry` - Log with type: `insight`, `risk`, or `assumption`
 - `recap.add_artifact` - Log comments with type='comment', primaryUrl (full URL with comment ID), and description
+
+{{#if SWARM_MODE}}
+**IMPORTANT**: You are running inline in a swarm worker's context. You MUST pass `worktreePath` on ALL recap calls (`add_artifact`, `add_entry`, `set_complexity`, `set_loom_state`, `get_recap`). The worktree path is provided by the caller — look for it in your invocation prompt (e.g., "Your worktree path is ..."). Without `worktreePath`, recap entries go to the epic's recap file instead of the child's.
+{{/if}}
 
 **IMPORTANT**: Use `set_complexity` (not `add_entry`) for complexity assessments:
 ```

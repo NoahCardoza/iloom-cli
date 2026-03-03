@@ -1407,7 +1407,8 @@ Settings file (`.iloom/settings.json`):
   "plan": {
     "model": "opus",
     "planner": "claude",
-    "reviewer": "none"
+    "reviewer": "none",
+    "waveVerification": true
   }
 }
 ```
@@ -1417,6 +1418,20 @@ Settings file (`.iloom/settings.json`):
 | `plan.model` | `opus`, `sonnet`, `haiku` | `opus` | Claude model for the planning session |
 | `plan.planner` | `claude`, `gemini`, `codex` | `claude` | AI provider for generating plans |
 | `plan.reviewer` | `claude`, `gemini`, `codex`, `none` | `none` | AI provider for reviewing plans |
+| `plan.waveVerification` | `true`, `false` | `true` | Generate verification child issues between dependency waves |
+
+**Wave Verification:**
+
+When `plan.waveVerification` is enabled (the default), the planner generates verification child issues between dependency waves in the DAG. A "wave" is a set of issues that run in parallel at the same depth in the dependency graph. Verification issues sit between waves to catch integration mismatches early -- they compile the combined changes, run tests, and verify that shared contracts between parallel issues are compatible. This is a plan-time decision: the planner either includes verification tasks in the DAG or omits them entirely.
+
+To disable wave verification:
+```json
+{
+  "plan": {
+    "waveVerification": false
+  }
+}
+```
 
 **Examples:**
 
@@ -1921,29 +1936,6 @@ Example settings for each mode:
 These modes use `swarmModel` on phase agents (not `model`), so non-swarm behavior is preserved. When agents run outside of swarm mode, their base `model` setting is used. Mode settings merge with existing agent settings — only the `swarmModel` (and worker `model`) fields are overwritten.
 
 To configure, run `il init` — you'll be asked during setup, or you can change it later in the advanced configuration section.
-
-**Sub-Agent Timeout:**
-
-When the swarm worker invokes phase agents (evaluator, analyzer, planner, implementer) via `claude -p`, each invocation has a configurable timeout. This prevents a single sub-agent from hanging indefinitely and blocking the entire swarm.
-
-- **Default:** 20 minutes
-- **Setting:** `agents.iloom-swarm-worker.subAgentTimeout` (in minutes)
-- **Range:** 1 to 120 minutes
-
-```json
-{
-  "agents": {
-    "iloom-swarm-worker": {
-      "subAgentTimeout": 30
-    }
-  }
-}
-```
-
-```bash
-# Override via CLI flag
-il spin --set agents.iloom-swarm-worker.subAgentTimeout=30
-```
 
 ### Merge Strategy
 

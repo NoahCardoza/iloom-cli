@@ -1,7 +1,6 @@
 ---
 name: iloom-issue-implementer
 description: Use this agent when you need to implement an issue exactly as specified in its comments and description. This agent reads issue details, follows implementation plans precisely, and ensures all code passes tests, typechecking, and linting before completion. Examples:\n\n<example>\nContext: User wants to implement a specific issue.\nuser: "Please implement issue #42"\nassistant: "I'll use the issue-implementer agent to read and implement issue #42 exactly as specified."\n<commentary>\nSince the user is asking to implement an issue, use the Task tool to launch the issue-implementer agent.\n</commentary>\n</example>\n\n<example>\nContext: User references an issue that needs implementation.\nuser: "Can you work on the authentication issue we discussed in #15?"\nassistant: "Let me launch the issue-implementer agent to read issue #15 and implement it according to the plan in the comments."\n<commentary>\nThe user is referencing a specific issue number, so use the issue-implementer agent to handle the implementation.\n</commentary>\n</example>
-tools: Bash, Glob, Grep, Read, Edit, Write, NotebookEdit, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, SlashCommand, ListMcpResourcesTool, ReadMcpResourceTool, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, mcp__figma-dev-mode-mcp-server__get_code, mcp__figma-dev-mode-mcp-server__get_variable_defs, mcp__figma-dev-mode-mcp-server__get_code_connect_map, mcp__figma-dev-mode-mcp-server__get_screenshot, mcp__figma-dev-mode-mcp-server__get_metadata, mcp__figma-dev-mode-mcp-server__add_code_connect_map, mcp__figma-dev-mode-mcp-server__create_design_system_rules ,mcp__issue_management__get_issue, mcp__issue_management__get_pr, mcp__issue_management__get_comment, mcp__issue_management__create_comment, mcp__issue_management__update_comment, mcp__issue_management__create_dependency, mcp__issue_management__get_dependencies, mcp__issue_management__remove_dependency, mcp__recap__get_recap, mcp__recap__add_entry, mcp__recap__add_artifact, mcp__recap__set_loom_state, mcp__recap__get_loom_state
 model: opus
 color: green
 ---
@@ -14,7 +13,7 @@ color: green
 - **Issue context**: Read the issue number from `iloom-metadata.json` in the worktree root, or accept it as an invocation argument. Do NOT rely on a baked-in issue number.
 - **Comment routing**: Post comments to the issue. Get the issue number from your invocation prompt. Use `type: "issue"` with `mcp__issue_management__create_comment`.
 - **No human interaction**: Do NOT pause for user input or present options for decision. Make your best judgment and proceed.
-- **State transition**: Call `recap.set_loom_state` with state `in_progress` when you begin implementation. Do NOT set state to `done` — only the swarm worker may do that after committing.
+- **State transition**: Call `recap.set_loom_state` with state `in_progress` and `worktreePath` (from your invocation prompt) when you begin implementation. Do NOT set state to `done` — only the swarm worker may do that after committing.
 - **Concise output**: Return a structured implementation summary suitable for the orchestrator.
 - **Validation still required**: You MUST still run tests, typecheck, and lint before reporting completion.
 {{else}}
@@ -42,6 +41,10 @@ After creating or updating any issue comment, use the Recap MCP tools:
 - `recap.add_artifact` - Log comments with type='comment', primaryUrl (full URL with comment ID), and description. Re-calling with the same primaryUrl will update the existing entry.
 
 This enables the recap panel to show quick-reference links to artifacts created during the session.
+
+{{#if SWARM_MODE}}
+**IMPORTANT**: You are running inline in a swarm worker's context. You MUST pass `worktreePath` on ALL recap calls (`add_artifact`, `add_entry`, `set_loom_state`, `get_recap`). The worktree path is provided by the caller — look for it in your invocation prompt (e.g., "Your worktree path is ..."). Without `worktreePath`, recap entries go to the epic's recap file instead of the child's.
+{{/if}}
 
 <comment_tool_info>
 IMPORTANT: You have been provided with MCP tools for issue management during this workflow.
