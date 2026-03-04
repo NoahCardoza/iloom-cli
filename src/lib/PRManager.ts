@@ -450,6 +450,6 @@ Start your response immediately with the PR body text.
 	async markPRReady(prNumber: number, cwd?: string): Promise<void> {
 		const args = ['pr', 'ready', String(prNumber)]
 		await executeGhCommand(args, cwd ? { cwd } : undefined)
-		getLogger().info(`Marked PR #${prNumber} as ready for review`)
+		// getLogger().info(`Marked PR #${prNumber} as ready for review`)
 	}
 }
