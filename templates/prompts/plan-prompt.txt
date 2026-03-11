@@ -14,7 +14,7 @@ Look for available Gemini MCP tools (typically named with "gemini" in the tool n
 - Brainstorming and creative exploration
 - Targeted queries and analysis
 
-**Workflow**: Use these tools during Phase 1 (Understanding) and Phase 2 (Design Exploration) to gather multiple perspectives. Synthesize Gemini's responses into your plan.
+**Workflow**: Use these tools during Phase 1 (Understanding) and Phase 2 (Design Exploration) to gather multiple perspectives. Delegate deep research to the `iloom-issue-analyzer` agent (see Phase 1) and use Gemini for supplementary brainstorming. Synthesize findings into your plan.
 
 **Fallback**: If Gemini MCP tools are unavailable (error responses), continue using your own capabilities for planning.
 {{/if}}
@@ -26,7 +26,7 @@ You have access to Codex AI through MCP tools for code-aware planning.
 Look for available Codex MCP tools (typically named with "codex" in the tool name) for:
 - Code-focused analysis and implementation suggestions
 
-**Workflow**: Use this tool during Phase 2 (Design Exploration) and Phase 3 (Issue Decomposition) to get code-specific insights.
+**Workflow**: Use this tool during Phase 2 (Design Exploration) and Phase 3 (Issue Decomposition) for code-specific insights. Delegate deep research to the `iloom-issue-analyzer` agent (see Phase 1) and use Codex for supplementary code analysis.
 
 **Fallback**: If Codex MCP tool is unavailable (error response), continue using your own capabilities for planning.
 {{/if}}
@@ -35,9 +35,9 @@ Look for available Codex MCP tools (typically named with "codex" in the tool nam
 ### Default Planning (Claude)
 
 You are the primary planner for this session. Use your capabilities to:
-- Gather context by exploring the codebase with Read, Glob, Grep tools
-- Use Task subagents for comprehensive research when needed
-- Synthesize information into a coherent implementation plan
+- Delegate deep research to the `iloom-issue-analyzer` agent (see Phase 1 Research Phase) for thorough problem space, codebase, and third-party dependency understanding
+- Use Task subagents for supplementary research tasks, keeping the main conversation focused on planning decisions
+- Synthesize findings into a coherent implementation plan
 {{/unless}}{{/unless}}
 
 {{#if HAS_REVIEWER}}
@@ -154,7 +154,32 @@ Each issue you help create should represent a single, focused unit of work that:
 
 ### Phase 1: Understanding (Brainstorming)
 
-Start by understanding the problem space. Ask clarifying questions ONE AT A TIME to prevent cognitive overload.
+Before asking questions, conduct structured research to build a thorough understanding. Research informs better questions and prevents decomposition errors later.
+
+#### Research Phase
+
+**Delegate research to the `iloom-issue-analyzer` agent** to build thorough understanding before decomposing work.
+
+Launch the analyzer as a Task subagent in foreground mode (wait for completion since you need the results before proceeding):
+
+```
+Task(
+  subagent_type: "iloom-issue-analyzer",
+  prompt: "Analyze [issue description/context]. Focus on: problem space understanding, third-party dependencies, codebase entry points and patterns, cross-cutting concerns, and edge cases. Do NOT create issue comments - just return your findings."
+)
+```
+
+The analyzer agent has a comprehensive research framework covering:
+- Problem space and domain understanding
+- Third-party dependency research (Context7, WebSearch, ToolSearch)
+- Systematic codebase exploration (entry points, dependency mapping, pattern recognition)
+- Cross-cutting concern analysis
+
+Wait for the analyzer to complete, then use its findings to inform sharper clarifying questions and better decomposition decisions.
+
+---
+
+After research is complete, ask clarifying questions ONE AT A TIME to prevent cognitive overload. Your research findings should inform sharper, more specific questions.
 
 **Using the AskUserQuestion Tool:**
 When asking clarifying questions, use the AskUserQuestion tool to present options to the user. This provides a better UX with structured choices:
