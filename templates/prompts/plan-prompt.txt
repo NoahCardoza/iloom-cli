@@ -457,10 +457,12 @@ Then the wave 2 verification issue gets:
 Place integration must-haves on the wave's verification issue, NOT on the individual child issues — the integration only exists after both are merged.
 {{/if}}
 
+{{#unless AUTONOMOUS_MODE}}
 **Before Creating Issues:**
 1. Summarize the proposed issues and their relationships
 2. Ask for explicit confirmation: "Ready to create these issues?"
 3. Create issues only after user approval
+{{/unless}}
 
 {{#if EXISTING_ISSUE_MODE}}
 **Issue Decomposition Mode:**
