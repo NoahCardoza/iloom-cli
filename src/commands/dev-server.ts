@@ -134,11 +134,13 @@ export class DevServerCommand {
 		// 5. Get port for workspace
 		const cliOverrides = extractSettingsOverrides()
 		const settingsForPort = await this.settingsManager.loadSettings(undefined, cliOverrides)
+		const isMainWorktree = await this.gitWorktreeManager.isMainWorktree(worktree, this.settingsManager)
 		const port = await getWorkspacePort({
 			worktreePath: worktree.path,
 			worktreeBranch: worktree.branch,
 			basePort: settingsForPort.capabilities?.web?.basePort,
 			checkEnvFile: true,
+			isMainWorktree,
 		})
 		const protocol = settingsForPort.capabilities?.web?.protocol ?? 'http'
 		const url = buildDevServerUrl(port, protocol)
