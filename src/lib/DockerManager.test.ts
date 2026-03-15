@@ -2,10 +2,18 @@ import { describe, it, expect, vi } from 'vitest'
 import { DockerManager } from './DockerManager.js'
 import { execa } from 'execa'
 import { readFile } from 'fs/promises'
+import { expandAndValidateSecretPaths } from '../utils/docker.js'
 
 // Mock dependencies
 vi.mock('execa')
 vi.mock('fs/promises')
+vi.mock('../utils/docker.js', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../utils/docker.js')>()
+	return {
+		...actual,
+		expandAndValidateSecretPaths: vi.fn(actual.expandAndValidateSecretPaths),
+	}
+})
 
 // Mock the logger
 vi.mock('../utils/logger.js', () => ({
@@ -135,6 +143,129 @@ describe('DockerManager', () => {
 				DockerManager.buildImage('/test/worktree', 'my-image', './Dockerfile')
 			).rejects.toThrow('Docker build failed for image "my-image"')
 		})
+
+		it('should pass build secrets as --secret flags when configured', async () => {
+			vi.mocked(execa).mockResolvedValue({ exitCode: 0 } as never)
+			vi.mocked(expandAndValidateSecretPaths).mockReturnValue({
+				npmrc: '/home/user/.npmrc',
+			})
+
+			await DockerManager.buildImage(
+				'/test/worktree',
+				'my-image',
+				'./Dockerfile',
+				undefined,
+				{ npmrc: '~/.npmrc' }
+			)
+
+			expect(expandAndValidateSecretPaths).toHaveBeenCalledWith(
+				{ npmrc: '~/.npmrc' },
+				'/test/worktree'
+			)
+			expect(execa).toHaveBeenCalledWith(
+				'docker',
+				[
+					'build', '-t', 'my-image', '-f', './Dockerfile',
+					'--secret', 'id=npmrc,src=/home/user/.npmrc',
+					'.',
+				],
+				expect.objectContaining({
+					cwd: '/test/worktree',
+					stdio: 'inherit',
+					env: expect.objectContaining({ DOCKER_BUILDKIT: '1' }),
+				})
+			)
+		})
+
+		it('should handle multiple build secrets', async () => {
+			vi.mocked(execa).mockResolvedValue({ exitCode: 0 } as never)
+			vi.mocked(expandAndValidateSecretPaths).mockReturnValue({
+				npmrc: '/home/user/.npmrc',
+				dockerconfig: '/home/user/.docker/config.json',
+			})
+
+			await DockerManager.buildImage(
+				'/test/worktree',
+				'my-image',
+				'./Dockerfile',
+				undefined,
+				{ npmrc: '~/.npmrc', dockerconfig: '~/.docker/config.json' }
+			)
+
+			expect(execa).toHaveBeenCalledWith(
+				'docker',
+				[
+					'build', '-t', 'my-image', '-f', './Dockerfile',
+					'--secret', 'id=npmrc,src=/home/user/.npmrc',
+					'--secret', 'id=dockerconfig,src=/home/user/.docker/config.json',
+					'.',
+				],
+				expect.objectContaining({
+					cwd: '/test/worktree',
+					stdio: 'inherit',
+					env: expect.objectContaining({ DOCKER_BUILDKIT: '1' }),
+				})
+			)
+		})
+
+		it('should not add --secret flags when no secrets configured', async () => {
+			vi.mocked(execa).mockResolvedValue({ exitCode: 0 } as never)
+			vi.mocked(expandAndValidateSecretPaths).mockReturnValue({})
+
+			await DockerManager.buildImage(
+				'/test/worktree',
+				'my-image',
+				'./Dockerfile'
+			)
+
+			expect(execa).toHaveBeenCalledWith(
+				'docker',
+				['build', '-t', 'my-image', '-f', './Dockerfile', '.'],
+				{ cwd: '/test/worktree', stdio: 'inherit' }
+			)
+		})
+
+		it('should set DOCKER_BUILDKIT=1 env when secrets are present', async () => {
+			vi.mocked(execa).mockResolvedValue({ exitCode: 0 } as never)
+			vi.mocked(expandAndValidateSecretPaths).mockReturnValue({
+				npmrc: '/home/user/.npmrc',
+			})
+
+			await DockerManager.buildImage(
+				'/test/worktree',
+				'my-image',
+				'./Dockerfile',
+				undefined,
+				{ npmrc: '~/.npmrc' }
+			)
+
+			expect(execa).toHaveBeenCalledWith(
+				'docker',
+				expect.arrayContaining(['--secret', 'id=npmrc,src=/home/user/.npmrc']),
+				expect.objectContaining({
+					cwd: '/test/worktree',
+					stdio: 'inherit',
+					env: expect.objectContaining({ DOCKER_BUILDKIT: '1' }),
+				})
+			)
+		})
+
+		it('should not set DOCKER_BUILDKIT env when no secrets are present', async () => {
+			vi.mocked(execa).mockResolvedValue({ exitCode: 0 } as never)
+			vi.mocked(expandAndValidateSecretPaths).mockReturnValue({})
+
+			await DockerManager.buildImage(
+				'/test/worktree',
+				'my-image',
+				'./Dockerfile'
+			)
+
+			expect(execa).toHaveBeenCalledWith(
+				'docker',
+				['build', '-t', 'my-image', '-f', './Dockerfile', '.'],
+				{ cwd: '/test/worktree', stdio: 'inherit' }
+			)
+		})
 	})
 
 	describe('runDetached', () => {
@@ -206,6 +337,16 @@ describe('DockerManager', () => {
 	})
 
 	describe('runForeground', () => {
+		/** Helper to create an ExecaError-like object with exitCode and/or signal */
+		const makeExecaError = (props: { exitCode?: number; signal?: string; message?: string }): Error => {
+			const err = new Error(props.message ?? `Command failed with exit code ${props.exitCode ?? 1}`)
+			Object.assign(err, {
+				exitCode: props.exitCode,
+				signal: props.signal,
+			})
+			return err
+		}
+
 		it('should run attached with --rm flag and port mapping', async () => {
 			vi.mocked(execa)
 				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
@@ -297,6 +438,56 @@ describe('DockerManager', () => {
 			// Signal handlers should still be cleaned up
 			expect(processRemoveListenerSpy).toHaveBeenCalledWith('SIGINT', expect.any(Function))
 			expect(processRemoveListenerSpy).toHaveBeenCalledWith('SIGTERM', expect.any(Function))
+		})
+
+		it('should silently swallow exit code 143 (SIGTERM via docker stop)', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
+				.mockRejectedValueOnce(makeExecaError({ exitCode: 143 }))
+
+			await expect(
+				DockerManager.runForeground('my-image', 'iloom-dev-123', 3123, 4200)
+			).resolves.toBeUndefined()
+		})
+
+		it('should silently swallow exit code 130 (SIGINT)', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
+				.mockRejectedValueOnce(makeExecaError({ exitCode: 130 }))
+
+			await expect(
+				DockerManager.runForeground('my-image', 'iloom-dev-123', 3123, 4200)
+			).resolves.toBeUndefined()
+		})
+
+		it('should silently swallow signal SIGTERM', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
+				.mockRejectedValueOnce(makeExecaError({ signal: 'SIGTERM' }))
+
+			await expect(
+				DockerManager.runForeground('my-image', 'iloom-dev-123', 3123, 4200)
+			).resolves.toBeUndefined()
+		})
+
+		it('should silently swallow signal SIGINT', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
+				.mockRejectedValueOnce(makeExecaError({ signal: 'SIGINT' }))
+
+			await expect(
+				DockerManager.runForeground('my-image', 'iloom-dev-123', 3123, 4200)
+			).resolves.toBeUndefined()
+		})
+
+		it('should re-throw unexpected errors (non-signal exit codes)', async () => {
+			vi.mocked(execa)
+				.mockResolvedValueOnce({ exitCode: 0 } as never) // rm -f
+				.mockRejectedValueOnce(makeExecaError({ exitCode: 1, message: 'port already allocated' }))
+
+			await expect(
+				DockerManager.runForeground('my-image', 'iloom-dev-123', 3123, 4200)
+			).rejects.toThrow('port already allocated')
 		})
 	})
 
@@ -759,6 +950,7 @@ describe('DockerManager', () => {
 				dockerFile: './Dockerfile',
 				containerPort: undefined,
 				dockerBuildArgs: undefined,
+				dockerBuildSecrets: undefined,
 				dockerRunArgs: undefined,
 				identifier: '548',
 			})
@@ -788,9 +980,31 @@ describe('DockerManager', () => {
 				dockerFile: './Dockerfile',
 				containerPort: 4200,
 				dockerBuildArgs: { NODE_ENV: 'development' },
+				dockerBuildSecrets: undefined,
 				dockerRunArgs: ['-v', './src:/app/src'],
 				identifier: 'my-branch',
 			})
+		})
+
+		it('should pass through dockerBuildSecrets when provided', () => {
+			const result = DockerManager.buildDockerConfigFromSettings(
+				{
+					devServer: 'docker',
+					dockerBuildSecrets: { npmrc: '~/.npmrc' },
+				},
+				'548'
+			)
+
+			expect(result?.dockerBuildSecrets).toEqual({ npmrc: '~/.npmrc' })
+		})
+
+		it('should leave dockerBuildSecrets undefined when not set in WebSettings', () => {
+			const result = DockerManager.buildDockerConfigFromSettings(
+				{ devServer: 'docker' },
+				'548'
+			)
+
+			expect(result?.dockerBuildSecrets).toBeUndefined()
 		})
 	})
 })
