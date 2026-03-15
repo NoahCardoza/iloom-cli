@@ -1368,7 +1368,7 @@ il plan <issue-number> [options]
 
 | Flag | Values | Description |
 |------|--------|-------------|
-| `--model <model>` | `opus`, `sonnet`, `haiku` | Model to use (default: from settings `plan.model`, falls back to 'opus') |
+| `--model <model>` | `opus`, `sonnet`, `haiku`, `opus[1m]`, `sonnet[1m]` | Model to use (default: from settings `plan.model`, falls back to 'opus'). The `[1m]` variants use the 1M context window. `opus[1m]` requires a Max or Team plan. |
 | `--one-shot <mode>` | `default`, `noReview`, `bypassPermissions` | One-shot automation mode (`noReview` skips confirmation gates; `bypassPermissions` skips both gates and permission prompts) |
 | `--dangerously-skip-permissions` | - | Skip Claude permission prompts without skipping confirmation gates (composable with `--one-shot`) |
 | `--autonomous` | - | Alias for `--one-shot=bypassPermissions` (backwards compat) |
@@ -1516,7 +1516,7 @@ Settings file (`.iloom/settings.json`):
 
 | Setting | Values | Default | Description |
 |---------|--------|---------|-------------|
-| `plan.model` | `opus`, `sonnet`, `haiku` | `opus` | Claude model for the planning session |
+| `plan.model` | `opus`, `sonnet`, `haiku`, `opus[1m]`, `sonnet[1m]` | `opus` | Claude model for the planning session. The `[1m]` variants use the 1M context window. `opus[1m]` requires a Max or Team plan. |
 | `plan.planner` | `claude`, `gemini`, `codex` | `claude` | AI provider for generating plans |
 | `plan.reviewer` | `claude`, `gemini`, `codex`, `none` | `none` | AI provider for reviewing plans |
 | `plan.waveVerification` | `true`, `false` | `true` | Generate verification child issues between dependency waves |
@@ -1874,7 +1874,7 @@ The orchestrator uses `bypassPermissions` mode and Claude's agent teams feature,
 
 **Worker Model Configuration:**
 
-The swarm worker agent defaults to `opus`. To override, configure it via `.iloom/settings.json`:
+The swarm worker agent defaults to `opus`. The swarm orchestrator defaults to `opus[1m]`. To override, configure them via `.iloom/settings.json`:
 
 ```json
 {
@@ -1897,7 +1897,7 @@ You can also set a different model for the spin orchestrator when running in swa
 }
 ```
 
-In this example, `spin.model` (`sonnet`) is used when spin runs in issue, PR, or branch mode, while `spin.swarmModel` (`opus`) is used when spin runs in swarm mode. If `swarmModel` is not set, the orchestrator defaults to `opus` in swarm mode (Balanced mode default) — it does not fall back to `spin.model`. Note that `spin.swarmModel` only affects the spin orchestrator itself — it does not affect swarm worker agents or phase agents.
+In this example, `spin.model` (`sonnet`) is used when spin runs in issue, PR, or branch mode, while `spin.swarmModel` (`opus`) is used when spin runs in swarm mode. If `swarmModel` is not set, the orchestrator defaults to `opus[1m]` in swarm mode (Balanced mode default) — it does not fall back to `spin.model`. Note that `spin.swarmModel` only affects the spin orchestrator itself — it does not affect swarm worker agents or phase agents.
 
 **Phase Agent Model Overrides (Swarm Mode):**
 
@@ -1975,8 +1975,8 @@ During `il init`, you'll be asked to choose a swarm quality mode that tunes the 
 
 | Mode | Focus | Models used | Best for |
 |------|-------|-------------|----------|
-| **Maximum Quality** | Deepest reasoning, best analysis | Opus everywhere (complexity evaluator stays Haiku) | Complex epics, critical features |
-| **Balanced** (default) | Opus for orchestration, analysis, and workers; Sonnet for phase agents | Opus: orchestrator, worker, analyzer, analyze-and-plan. Sonnet: planner, implementer, enhancer, code-reviewer. Haiku: complexity evaluator | Most tasks |
+| **Maximum Quality** | Deepest reasoning, best analysis | Opus[1m] orchestrator; Opus everywhere else (complexity evaluator stays Haiku) | Complex epics, critical features |
+| **Balanced** (default) | Strong reasoning at a practical pace | Opus[1m]: orchestrator. Opus: worker, analyzer, analyze-and-plan. Sonnet: planner, implementer, enhancer, code-reviewer. Haiku: complexity evaluator | Most tasks |
 | **Fast & Cheap** | Quick iterations, lowest cost | Haiku everywhere | Simple tasks, rapid prototyping |
 
 The complexity evaluator always stays on Haiku regardless of mode, since it performs a simple classification task that does not benefit from a larger model.
@@ -1986,7 +1986,7 @@ Example settings for each mode:
 **Maximum Quality:**
 ```json
 {
-  "spin": { "swarmModel": "opus" },
+  "spin": { "swarmModel": "opus[1m]" },
   "agents": {
     "iloom-swarm-worker": { "model": "opus" },
     "iloom-issue-analyzer": { "swarmModel": "opus" },

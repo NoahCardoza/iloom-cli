@@ -688,12 +688,12 @@ describe('SettingsManager', () => {
 			}
 
 			expect(() => settingsManager['validateSettings'](invalidSettings as never)).toThrow(
-				/Invalid enum value.*Expected 'sonnet' \| 'opus' \| 'haiku'/,
+				/Invalid enum value.*Expected 'sonnet' \| 'opus' \| 'haiku' \| 'sonnet\[1m\]' \| 'opus\[1m\]'/,
 			)
 		})
 
 		it('should accept all valid shorthand model names', () => {
-			const validModels = ['sonnet', 'opus', 'haiku'] as const
+			const validModels = ['sonnet', 'opus', 'haiku', 'sonnet[1m]', 'opus[1m]'] as const
 
 			validModels.forEach(model => {
 				const settings = {
@@ -2949,10 +2949,10 @@ const error: { code?: string; message: string } = {
 			expect(result).toBe('sonnet')
 		})
 
-		it('should default to opus when mode is swarm but swarmModel is not set', () => {
+		it('should default to opus[1m] when mode is swarm but swarmModel is not set', () => {
 			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const } }
 			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
-			expect(result).toBe('opus')
+			expect(result).toBe('opus[1m]')
 		})
 
 		it('should ignore swarmModel when mode is not swarm', () => {
@@ -2961,22 +2961,22 @@ const error: { code?: string; message: string } = {
 			expect(result).toBe('opus')
 		})
 
-		it('swarm mode defaults to opus even when spin.model is sonnet', () => {
+		it('swarm mode defaults to opus[1m] even when spin.model is sonnet', () => {
 			const settings = { sourceEnvOnStart: false, spin: { model: 'sonnet' as const } }
 			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
-			expect(result).toBe('opus')
+			expect(result).toBe('opus[1m]')
 		})
 
-		it('swarm mode defaults to opus even when spin.model is haiku', () => {
+		it('swarm mode defaults to opus[1m] even when spin.model is haiku', () => {
 			const settings = { sourceEnvOnStart: false, spin: { model: 'haiku' as const } }
 			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
-			expect(result).toBe('opus')
+			expect(result).toBe('opus[1m]')
 		})
 
-		it('swarm mode defaults to opus even when no spin config exists', () => {
+		it('swarm mode defaults to opus[1m] even when no spin config exists', () => {
 			const settings = { sourceEnvOnStart: false }
 			const result = settingsManager.getSpinModel(settings as unknown as IloomSettings, 'swarm')
-			expect(result).toBe('opus')
+			expect(result).toBe('opus[1m]')
 		})
 
 		it('explicit spin.swarmModel overrides the default in swarm mode', () => {
@@ -3002,7 +3002,7 @@ const error: { code?: string; message: string } = {
 		})
 
 		it('accepts all valid model values for swarmModel on BaseAgentSettingsSchema', () => {
-			for (const model of ['sonnet', 'opus', 'haiku'] as const) {
+			for (const model of ['sonnet', 'opus', 'haiku', 'sonnet[1m]', 'opus[1m]'] as const) {
 				const result = BaseAgentSettingsSchema.safeParse({ swarmModel: model })
 				expect(result.success).toBe(true)
 			}
