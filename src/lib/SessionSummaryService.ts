@@ -8,10 +8,8 @@
  * 4. Posting the summary as a comment to the issue/PR
  */
 
-import path from 'path'
-import os from 'os'
-import fs from 'fs-extra'
 import { logger } from '../utils/logger.js'
+import { getLogger } from '../utils/logger-context.js'
 import { launchClaude, generateDeterministicSessionId } from '../utils/claude.js'
 import { readSessionContext } from '../utils/claude-transcript.js'
 import { PromptTemplateManager } from './PromptTemplateManager.js'
@@ -21,64 +19,10 @@ import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFa
 import type { IssueProvider } from '../mcp/types.js'
 import { VCSProviderFactory } from './VCSProviderFactory.js'
 import { hasMultipleRemotes } from '../utils/remote.js'
-import type { RecapFile, RecapOutput } from '../mcp/recap-types.js'
-import { formatRecapMarkdown } from '../utils/recap-formatter.js'
+import { SwarmReportCollector, readRecapForWorktree, type ChildImplementationData } from './SwarmReportCollector.js'
+import { TelemetryService } from './TelemetryService.js'
 
-const RECAPS_DIR = path.join(os.homedir(), '.config', 'iloom-ai', 'recaps')
-
-/**
- * Slugify path to recap filename (matches MetadataManager/RecapCommand algorithm)
- *
- * Algorithm:
- * 1. Trim trailing slashes
- * 2. Replace all path separators (/ or \) with ___ (triple underscore)
- * 3. Replace any other non-alphanumeric characters (except _ and -) with -
- * 4. Append .json
- */
-function slugifyPath(loomPath: string): string {
-	let slug = loomPath.replace(/[/\\]+$/, '')
-	slug = slug.replace(/[/\\]/g, '___')
-	slug = slug.replace(/[^a-zA-Z0-9_-]/g, '-')
-	return `${slug}.json`
-}
-
-/**
- * Read recap file for a worktree path with graceful degradation
- * Returns formatted recap string or null if not found/error
- */
-async function readRecapFile(worktreePath: string): Promise<string | null> {
-	try {
-		const filePath = path.join(RECAPS_DIR, slugifyPath(worktreePath))
-		if (await fs.pathExists(filePath)) {
-			const content = await fs.readFile(filePath, 'utf8')
-			const recap = JSON.parse(content) as RecapFile
-
-			// Check if recap has any meaningful content
-			const hasGoal = recap.goal !== null && recap.goal !== undefined
-			const hasComplexity = recap.complexity !== null && recap.complexity !== undefined
-			const hasEntries = Array.isArray(recap.entries) && recap.entries.length > 0
-			const hasArtifacts = Array.isArray(recap.artifacts) && recap.artifacts.length > 0
-			const hasContent = hasGoal || hasComplexity || hasEntries || hasArtifacts
-
-			if (hasContent) {
-				// Convert RecapFile (optional fields) to RecapOutput (required fields)
-				// Same pattern as RecapCommand.ts:61-66
-				const recapOutput: RecapOutput = {
-					filePath,
-					goal: recap.goal ?? null,
-					complexity: recap.complexity ?? null,
-					entries: recap.entries ?? [],
-					artifacts: recap.artifacts ?? [],
-				}
-				return formatRecapMarkdown(recapOutput)
-			}
-		}
-		return null
-	} catch {
-		// Graceful degradation - return null on any error
-		return null
-	}
-}
+const GITHUB_COMMENT_MAX_LENGTH = 65_536
 
 /**
  * Input for generating and posting a session summary
@@ -101,21 +45,36 @@ export interface SessionSummaryResult {
 }
 
 /**
+ * Input for generating and posting an epic implementation report
+ */
+export interface EpicReportInput {
+	worktreePath: string
+	epicIssueNumber: string | number
+	childIssueNumbers: string[]
+	epicTitle: string
+	/** Optional PR number - when provided, report is posted to the PR instead of the issue */
+	prNumber?: number
+}
+
+/**
  * Service that generates and posts Claude session summaries to issues
  */
 export class SessionSummaryService {
 	private templateManager: PromptTemplateManager
-	private metadataManager: MetadataManager
+	readonly metadataManager: MetadataManager
 	private settingsManager: SettingsManager
+	private swarmReportCollector: SwarmReportCollector
 
 	constructor(
 		templateManager?: PromptTemplateManager,
 		metadataManager?: MetadataManager,
-		settingsManager?: SettingsManager
+		settingsManager?: SettingsManager,
+		swarmReportCollector?: SwarmReportCollector
 	) {
 		this.templateManager = templateManager ?? new PromptTemplateManager()
 		this.metadataManager = metadataManager ?? new MetadataManager()
 		this.settingsManager = settingsManager ?? new SettingsManager()
+		this.swarmReportCollector = swarmReportCollector ?? new SwarmReportCollector()
 	}
 
 	/**
@@ -155,7 +114,7 @@ export class SessionSummaryService {
 			}
 
 			// 5. Try to read recap data for high-signal context
-			const recapData = await readRecapFile(input.worktreePath)
+			const recapData = await readRecapForWorktree(input.worktreePath)
 			if (recapData) {
 				logger.debug(`Found recap data (${recapData.length} chars)`)
 			} else {
@@ -210,6 +169,119 @@ export class SessionSummaryService {
 	}
 
 	/**
+	 * Format child implementation data as readable markdown for the epic report template.
+	 * This replaces raw JSON.stringify so the AI gets structured, readable input.
+	 */
+	private formatChildDataAsMarkdown(childData: ChildImplementationData[]): string {
+		return childData.map(child => {
+			const sections: string[] = [
+				`### Child #${child.issueNumber}: ${child.title}`,
+				`**Status:** ${child.status}`,
+			]
+
+			if (child.implementationComment) {
+				sections.push('', '**Implementation Summary:**', child.implementationComment)
+			}
+
+			if (child.recapMarkdown) {
+				sections.push('', '**Recap (decisions, risks, insights):**', child.recapMarkdown)
+			}
+
+			if (!child.implementationComment && !child.recapMarkdown) {
+				sections.push('', '*No implementation data available for this child.*')
+			}
+
+			return sections.join('\n')
+		}).join('\n\n---\n\n')
+	}
+
+	/**
+	 * Truncate a report to GitHub's comment size limit, appending a notice if truncated
+	 */
+	private truncateReport(report: string): string {
+		if (report.length <= GITHUB_COMMENT_MAX_LENGTH) return report
+		const truncationNotice = '\n\n---\n*Report truncated due to GitHub comment size limit.*'
+		const maxContentLength = GITHUB_COMMENT_MAX_LENGTH - truncationNotice.length
+		return report.slice(0, maxContentLength) + truncationNotice
+	}
+
+	/**
+	 * Generate and post an epic implementation report to the issue or PR
+	 *
+	 * Non-blocking: Catches all errors and logs warnings instead of throwing
+	 * This ensures the finish workflow continues even if report generation fails
+	 */
+	async generateAndPostEpicReport(input: EpicReportInput): Promise<void> {
+		const log = getLogger()
+		try {
+			// 1. Load settings, check generateSummary
+			const settings = await this.settingsManager.loadSettings(input.worktreePath)
+			if (!this.shouldGenerateSummary('epic', settings)) {
+				log.debug('Skipping epic report: generateSummary is disabled')
+				return
+			}
+
+			log.info('Generating epic implementation report...')
+
+			// 2. Collect child data via SwarmReportCollector
+			const childData = await this.swarmReportCollector.collectChildData(
+				input.childIssueNumbers, input.worktreePath, settings
+			)
+
+			// 3. Load epic-report template with variables
+			const totalSucceeded = childData.filter(c => c.status === 'success').length
+			const totalFailed = childData.filter(c => c.status === 'failure').length
+			const prompt = await this.templateManager.getPrompt('epic-report', {
+				EPIC_NUMBER: String(input.epicIssueNumber),
+				EPIC_TITLE: input.epicTitle,
+				CHILD_DATA: this.formatChildDataAsMarkdown(childData),
+				TOTAL_CHILDREN: String(childData.length),
+				TOTAL_SUCCEEDED: String(totalSucceeded),
+				TOTAL_FAILED: String(totalFailed),
+			})
+
+			log.debug('Epic report prompt:\n' + prompt)
+
+			// 4. Invoke Claude headless to generate report
+			const summaryModel = this.settingsManager.getSummaryModel(settings)
+			const reportResult = await launchClaude(prompt, {
+				headless: true,
+				model: summaryModel,
+			})
+
+			if (!reportResult || typeof reportResult !== 'string' || reportResult.trim() === '') {
+				log.warn('Epic report generation returned empty result')
+				return
+			}
+
+			// 5. Truncate if needed, then post
+			const report = this.truncateReport(reportResult.trim())
+			await this.postSummaryToIssue(
+				input.epicIssueNumber, report, settings, input.worktreePath, input.prNumber
+			)
+
+			const target = input.prNumber ? `PR #${input.prNumber}` : 'issue'
+			log.success(`Epic implementation report posted to ${target}`)
+
+			// Track telemetry for epic report generation
+			try {
+				TelemetryService.getInstance().track('epic.report_generated', {
+					total_children: childData.length,
+					succeeded: totalSucceeded,
+					failed: totalFailed,
+				})
+			} catch (telemetryError) {
+				log.debug(`Telemetry tracking failed: ${telemetryError instanceof Error ? telemetryError.message : String(telemetryError)}`)
+			}
+		} catch (error) {
+			// Non-blocking: log warning but don't throw
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			log.warn(`Failed to generate epic report: ${errorMessage}`)
+			log.debug('Epic report generation error details:', { error })
+		}
+	}
+
+	/**
 	 * Generate a session summary without posting it
 	 *
 	 * This method is useful for previewing the summary or for use by CLI commands
@@ -247,7 +319,7 @@ export class SessionSummaryService {
 		}
 
 		// 4. Try to read recap data for high-signal context
-		const recapData = await readRecapFile(worktreePath)
+		const recapData = await readRecapForWorktree(worktreePath)
 		if (recapData) {
 			logger.debug(`Found recap data (${recapData.length} chars)`)
 		} else {
@@ -326,9 +398,12 @@ export class SessionSummaryService {
 			return false
 		}
 
+		// Epic uses issue workflow config (epics are issue-based)
+		const effectiveType = loomType === 'epic' ? 'issue' : loomType
+
 		// Get workflow-specific config
 		const workflowConfig =
-			loomType === 'issue'
+			effectiveType === 'issue'
 				? settings.workflows?.issue
 				: settings.workflows?.pr
 
