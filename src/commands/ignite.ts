@@ -17,7 +17,7 @@ import { extractIssueNumber, isValidGitRepo, getWorktreeRoot, findMainWorktreePa
 import { getWorkspacePort } from '../utils/port.js'
 import { readFile } from 'fs/promises'
 import { ClaudeHookManager } from '../lib/ClaudeHookManager.js'
-import type { OneShotMode, ComplexityOverride } from '../types/index.js'
+import { isEffortLevel, type OneShotMode, type ComplexityOverride, type EffortLevel } from '../types/index.js'
 import { fetchChildIssueDetails } from '../utils/list-children.js'
 import { buildDependencyMap } from '../utils/dependency-map.js'
 import { SwarmSetupService } from '../lib/SwarmSetupService.js'
@@ -143,23 +143,23 @@ export class IgniteCommand {
 		verbose?: boolean
 		json?: boolean
 		jsonStream?: boolean
-	}, skipCleanup?: boolean, workspacePath?: string, complexity?: ComplexityOverride): Promise<void> {
+	}, skipCleanup?: boolean, workspacePath?: string, complexity?: ComplexityOverride, effort?: EffortLevel): Promise<void> {
 		this.printOptions = printOptions
 
 		// Wrap execution in stderr logger for JSON modes to keep stdout clean
 		const isJsonMode = (this.printOptions?.json ?? false) || (this.printOptions?.jsonStream ?? false)
 		if (isJsonMode) {
 			const jsonLogger = createStderrLogger()
-			return withLogger(jsonLogger, () => this.executeInternal(oneShot, skipCleanup, workspacePath, complexity))
+			return withLogger(jsonLogger, () => this.executeInternal(oneShot, skipCleanup, workspacePath, complexity, effort))
 		}
 
-		return this.executeInternal(oneShot, skipCleanup, workspacePath, complexity)
+		return this.executeInternal(oneShot, skipCleanup, workspacePath, complexity, effort)
 	}
 
 	/**
 	 * Internal execution method (separated for withLogger wrapping)
 	 */
-	private async executeInternal(oneShot?: OneShotMode, skipCleanup?: boolean, workspacePath?: string, complexity?: ComplexityOverride): Promise<void> {
+	private async executeInternal(oneShot?: OneShotMode, skipCleanup?: boolean, workspacePath?: string, complexity?: ComplexityOverride, effort?: EffortLevel): Promise<void> {
 		// Set ILOOM=1 so hooks know this is an iloom session
 		// This is inherited by the Claude child process
 		process.env.ILOOM = '1'
@@ -250,6 +250,11 @@ export class IgniteCommand {
 				this.settings = await this.settingsManager.loadSettings(undefined, cliOverrides)
 			}
 
+			// Determine effective effort level
+			// CLI flag > metadata > settings > 'high' (iloom default)
+			const metadataEffort = isEffortLevel(metadata?.effort) ? metadata.effort : undefined
+			const effectiveEffort = effort ?? metadataEffort ?? this.settingsManager.getSpinEffort(this.settings)
+
 			// Step 2.0.5.1: Track session.started telemetry
 			try {
 				const hasNeon = !!this.settings?.databaseProviders?.neon
@@ -257,6 +262,7 @@ export class IgniteCommand {
 				TelemetryService.getInstance().track('session.started', {
 					has_neon: hasNeon,
 					language,
+					...(effectiveEffort && { effort: effectiveEffort }),
 				})
 			} catch (error) {
 				logger.debug(`Telemetry session.started tracking failed: ${error instanceof Error ? error.message : error}`)
@@ -351,6 +357,11 @@ export class IgniteCommand {
 			// Add optional model if present
 			if (model !== undefined) {
 				claudeOptions.model = model
+			}
+
+			// Add effort level if configured
+			if (effectiveEffort) {
+				claudeOptions.effort = effectiveEffort
 			}
 
 			// Add permission mode if not default
@@ -1170,7 +1181,7 @@ export class IgniteCommand {
 		process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING = '1'
 		process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1'
 		process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
-		process.env.CLAUDE_CODE_EFFORT_LEVEL = 'medium'
+		const swarmEffort = this.settingsManager.getSpinEffort(settings, 'swarm')
 
 		await launchClaude(swarmUserPrompt, {
 			model,
@@ -1182,6 +1193,7 @@ export class IgniteCommand {
 			mcpConfig: mcpConfigs,
 			allowedTools,
 			...(agents && { agents }),
+			...(swarmEffort && { effort: swarmEffort }),
 		})
 
 		// Track swarm child completions and overall completion

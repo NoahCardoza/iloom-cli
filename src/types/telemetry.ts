@@ -79,6 +79,7 @@ export interface ContributeStartedProperties {
 export interface SessionStartedProperties {
   has_neon: boolean
   language: string
+  effort?: import('./index.js').EffortLevel
 }
 
 export interface ErrorOccurredProperties {

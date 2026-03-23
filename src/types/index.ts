@@ -145,6 +145,18 @@ export type OneShotMode = 'default' | 'noReview' | 'bypassPermissions'
 // Complexity override type
 export type ComplexityOverride = 'trivial' | 'simple' | 'complex'
 
+// Valid effort levels for Claude Code sessions
+export const VALID_EFFORT_LEVELS = ['low', 'medium', 'high', 'max'] as const
+export type EffortLevel = (typeof VALID_EFFORT_LEVELS)[number]
+
+/**
+ * Type guard for EffortLevel values
+ * Validates that a value is a valid effort level at runtime
+ */
+export function isEffortLevel(value: unknown): value is EffortLevel {
+	return typeof value === 'string' && VALID_EFFORT_LEVELS.includes(value as EffortLevel)
+}
+
 // Command option types
 export interface StartOptions {
   // Individual component flags (can be combined)
@@ -164,6 +176,8 @@ export interface StartOptions {
   dangerouslySkipPermissions?: boolean
   // Complexity override (skips complexity evaluation)
   complexity?: ComplexityOverride
+  // Effort level for Claude sessions
+  effort?: EffortLevel
   // Optional body text for issue creation
   body?: string
   // Output result as JSON

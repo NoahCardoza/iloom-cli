@@ -9,6 +9,7 @@ import { AgentManager } from '../lib/AgentManager.js'
 import { generateIssueManagementMcpConfig, generateHarnessMcpConfig } from '../utils/mcp.js'
 import { HarnessServer } from '../lib/HarnessServer.js'
 import { SettingsManager, PlanCommandSettingsSchema } from '../lib/SettingsManager.js'
+import type { EffortLevel } from '../types/index.js'
 import { IssueTrackerFactory } from '../lib/IssueTrackerFactory.js'
 import { matchIssueIdentifier } from '../utils/IdentifierParser.js'
 import { IssueManagementProviderFactory } from '../mcp/IssueManagementProviderFactory.js'
@@ -103,16 +104,17 @@ export class PlanCommand {
 			verbose?: boolean
 			json?: boolean
 			jsonStream?: boolean
-		}
+		},
+		effort?: EffortLevel
 	): Promise<void> {
 		// Wrap execution in stderr logger for JSON modes to keep stdout clean
 		const isJsonMode = (printOptions?.json ?? false) || (printOptions?.jsonStream ?? false)
 		if (isJsonMode) {
 			const jsonLogger = createStderrLogger()
-			return withLogger(jsonLogger, () => this.executeInternal(prompt, model, flags, planner, reviewer, printOptions))
+			return withLogger(jsonLogger, () => this.executeInternal(prompt, model, flags, planner, reviewer, printOptions, effort))
 		}
 
-		return this.executeInternal(prompt, model, flags, planner, reviewer, printOptions)
+		return this.executeInternal(prompt, model, flags, planner, reviewer, printOptions, effort)
 	}
 
 	/**
@@ -134,7 +136,8 @@ export class PlanCommand {
 			verbose?: boolean
 			json?: boolean
 			jsonStream?: boolean
-		}
+		},
+		effort?: EffortLevel
 	): Promise<void> {
 		// Validate and normalize planner CLI argument
 		let normalizedPlanner: PlannerProvider | undefined
@@ -271,6 +274,9 @@ export class PlanCommand {
 
 		// Use CLI model if provided, otherwise use settings (plan.model), defaults to opus
 		const effectiveModel = model ?? settingsManager.getPlanModel(settings ?? undefined)
+
+		// Get effective effort level (CLI > settings > undefined/defer to Claude Code)
+		const effectiveEffort = effort ?? settingsManager.getPlanEffort(settings ?? undefined)
 
 		// Get effective planner/reviewer (CLI > settings > default)
 		const effectivePlanner = normalizedPlanner ?? settingsManager.getPlanPlanner(settings ?? undefined)
@@ -526,6 +532,7 @@ export class PlanCommand {
 			addDir: process.cwd(),
 			allowedTools,
 			...(agents && { agents }),
+			...(effectiveEffort && { effort: effectiveEffort }),
 		}
 
 		// Add output format and verbose options if provided (print mode only)

@@ -4,6 +4,10 @@ import os from 'os'
 import { z } from 'zod'
 import deepmerge from 'deepmerge'
 import { logger } from '../utils/logger.js'
+// Re-export from canonical location for backward compatibility
+export { VALID_EFFORT_LEVELS, type EffortLevel } from '../types/index.js'
+import { VALID_EFFORT_LEVELS } from '../types/index.js'
+import type { EffortLevel } from '../types/index.js'
 
 // Merge mode: canonical values + legacy aliases accepted at parse time
 export const mergeModeValues = ['local', 'pr', 'draft-pr', 'github-pr', 'github-draft-pr', 'bitbucket-pr'] as const
@@ -29,6 +33,14 @@ export const BaseAgentSettingsSchema = z.object({
 		.enum(VALID_CLAUDE_MODELS)
 		.optional()
 		.describe('Model to use for this agent in swarm mode. Overrides the base model when running inside swarm workers.'),
+	effort: z
+		.enum(VALID_EFFORT_LEVELS)
+		.optional()
+		.describe('Effort level for this agent: low, medium, high, max'),
+	swarmEffort: z
+		.enum(VALID_EFFORT_LEVELS)
+		.optional()
+		.describe('Effort level for this agent in swarm mode.'),
 	enabled: z
 		.boolean()
 		.optional()
@@ -68,6 +80,14 @@ export const SpinAgentSettingsSchema = z.object({
 		.enum(VALID_CLAUDE_MODELS)
 		.optional()
 		.describe('Model for the spin orchestrator when running in swarm mode. Overrides spin.model for swarm workflows.'),
+	effort: z
+		.enum(VALID_EFFORT_LEVELS)
+		.optional()
+		.describe('Default effort level for spin sessions'),
+	swarmEffort: z
+		.enum(VALID_EFFORT_LEVELS)
+		.optional()
+		.describe('Effort level for spin orchestrator in swarm mode. Defaults to medium.'),
 	postSwarmReview: z
 		.boolean()
 		.default(true)
@@ -83,6 +103,10 @@ export const PlanCommandSettingsSchema = z.object({
 		.enum(VALID_CLAUDE_MODELS)
 		.default('opus')
 		.describe('Claude model shorthand for plan command'),
+	effort: z
+		.enum(VALID_EFFORT_LEVELS)
+		.optional()
+		.describe('Default effort level for plan sessions'),
 	planner: z
 		.enum(['claude', 'gemini', 'codex'])
 		.default('claude')
@@ -815,6 +839,8 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 		.object({
 			model: z.enum(VALID_CLAUDE_MODELS).optional(),
 			swarmModel: z.enum(VALID_CLAUDE_MODELS).optional(),
+			effort: z.enum(VALID_EFFORT_LEVELS).optional(),
+			swarmEffort: z.enum(VALID_EFFORT_LEVELS).optional(),
 			postSwarmReview: z.boolean().optional(),
 		})
 		.optional()
@@ -822,6 +848,7 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 	plan: z
 		.object({
 			model: z.enum(VALID_CLAUDE_MODELS).optional(),
+			effort: z.enum(VALID_EFFORT_LEVELS).optional(),
 			planner: z.enum(['claude', 'gemini', 'codex']).optional(),
 			reviewer: z.enum(['claude', 'gemini', 'codex', 'none']).optional(),
 			waveVerification: z.boolean().optional(),
@@ -1432,6 +1459,32 @@ export class SettingsManager {
 	 */
 	getPlanWaveVerification(settings?: IloomSettings): boolean {
 		return settings?.plan?.waveVerification !== false
+	}
+
+	/**
+	 * Get the spin effort level
+	 * Defaults to 'high' when not configured
+	 *
+	 * @param settings - Pre-loaded settings object
+	 * @param mode - When 'swarm', returns swarmEffort (defaults to 'high')
+	 * @returns Effort level
+	 */
+	getSpinEffort(settings?: IloomSettings, mode?: 'swarm'): EffortLevel {
+		if (mode === 'swarm') {
+			return settings?.spin?.swarmEffort ?? 'high'
+		}
+		return settings?.spin?.effort ?? 'high'
+	}
+
+	/**
+	 * Get the plan effort level
+	 * Defaults to 'high' when not configured
+	 *
+	 * @param settings - Pre-loaded settings object
+	 * @returns Effort level
+	 */
+	getPlanEffort(settings?: IloomSettings): EffortLevel {
+		return settings?.plan?.effort ?? 'high'
 	}
 
 	/**
