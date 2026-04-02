@@ -595,18 +595,17 @@ describe('CommitManager', () => {
       expect(commitCall?.[0][3]).not.toContain('Fixes #ENG-456')
     })
 
-    it('should pass worktree path to Claude via addDir option', async () => {
+    it('should embed staged diff in prompt instead of using addDir', async () => {
       vi.mocked(claude.launchClaude).mockResolvedValue('Add feature')
-      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('diff output here')
 
       await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
 
       const claudeCall = vi.mocked(claude.launchClaude).mock.calls[0]
-      expect(claudeCall[1]).toEqual(
-        expect.objectContaining({
-          addDir: mockWorktreePath,
-        })
-      )
+      // addDir should NOT be set — diff is embedded in the prompt
+      expect(claudeCall[1]).not.toHaveProperty('addDir')
+      // Prompt should contain the diff
+      expect(claudeCall[0]).toContain('StagedChanges')
     })
 
     it('should use headless mode for Claude execution', async () => {
@@ -725,6 +724,34 @@ describe('CommitManager', () => {
       await expect(
         manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
       ).resolves.not.toThrow()
+    })
+  })
+
+  describe('Claude Integration - Bare Mode (auto-applied by launchClaude)', () => {
+    beforeEach(() => {
+      vi.mocked(claude.detectClaudeCli).mockResolvedValue(true)
+      vi.mocked(claude.launchClaude).mockResolvedValue('Add feature')
+      vi.mocked(git.executeGitCommand).mockResolvedValue('')
+    })
+
+    it('should not pass bare option to launchClaude (bare mode is now auto-applied internally)', async () => {
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
+
+      const claudeCall = vi.mocked(claude.launchClaude).mock.calls[0]
+      // CommitManager no longer sets bare - launchClaude auto-applies it when headless + noSessionPersistence
+      expect(claudeCall[1]).not.toHaveProperty('bare')
+    })
+
+    it('should pass headless and noSessionPersistence so launchClaude can auto-apply bare', async () => {
+      await manager.commitChanges(mockWorktreePath, { issuePrefix: '#', dryRun: false })
+
+      const claudeCall = vi.mocked(claude.launchClaude).mock.calls[0]
+      expect(claudeCall[1]).toEqual(
+        expect.objectContaining({
+          headless: true,
+          noSessionPersistence: true,
+        })
+      )
     })
   })
 
