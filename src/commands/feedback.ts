@@ -5,6 +5,7 @@ import { AgentManager } from '../lib/AgentManager.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import { gatherDiagnosticInfo, formatDiagnosticsAsMarkdown } from '../utils/diagnostics.js'
 import { capitalizeFirstLetter } from '../utils/text.js'
+import { loadPromptExtensions } from '../lib/PromptExtensions.js'
 
 // Hardcoded target repository for feedback
 const FEEDBACK_REPOSITORY = 'iloom-ai/iloom-cli'
@@ -59,6 +60,11 @@ export class FeedbackCommand {
 		// Step 2: Gather diagnostic information
 		const diagnostics = await gatherDiagnosticInfo()
 		const diagnosticsMarkdown = formatDiagnosticsAsMarkdown(diagnostics)
+
+		// Preload repository-local prompt extensions (ILOOM.md) so ILOOM_MD_CONTENT
+		// propagates into any templates rendered downstream by IssueEnhancementService.
+		// Use process.cwd() so linked-worktree users see their branch-local ILOOM.md.
+		await loadPromptExtensions(process.cwd())
 
 		// Step 3: Create enhanced issue body with marker and diagnostics
 		const userBody = body ?? description

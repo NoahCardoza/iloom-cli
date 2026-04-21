@@ -229,6 +229,10 @@ This example shows how to configure a project-wide default (e.g., GitHub remote)
 }
 ```
 
+### Repository Guidance (ILOOM.md)
+
+Drop an optional `ILOOM.md` at your repository root to inject project-specific guidance (review priorities, conventions, feature-flag guardrails) into every iloom agent prompt — see [ILOOM.md — Repository Guidance](docs/iloom-commands.md#iloommd--repository-guidance) for details.
+
 ### Multi-Language/Framework Project Support
 
 iloom supports projects in any programming language through `.iloom/package.iloom.json`. This file defines scripts using raw shell commands instead of npm scripts.

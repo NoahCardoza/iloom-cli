@@ -35,6 +35,7 @@ Complete documentation for all iloom CLI commands, options, and flags.
   - [il feedback](#il-feedback)
   - [il contribute](#il-contribute)
   - [il telemetry](#il-telemetry)
+- [ILOOM.md — Repository Guidance](#iloommd--repository-guidance)
 
 ---
 
@@ -2093,6 +2094,81 @@ On first run, iloom displays a disclosure message informing you that anonymous t
 **Privacy:**
 
 For details on what data is and is not collected, see the [Telemetry section in the README](../README.md#telemetry).
+
+---
+
+## ILOOM.md — Repository Guidance
+
+`ILOOM.md` is an optional per-repository file you can drop at the root of your project to steer iloom's behavior without forking the CLI or its prompt templates. Its contents are injected into every agent prompt iloom renders — so you can tune review priorities, enforce conventions, or hand AI agents project-specific guardrails that live alongside your code and evolve with it.
+
+**Purpose:**
+
+- Steer iloom behavior (analyzers, planners, implementers, reviewers) without forking the CLI or its prompt templates
+- Keep project conventions version-controlled alongside the code that needs them
+- Let different repos use the same iloom binary with different guidance
+
+**File location:**
+
+- `./ILOOM.md` at the repository root (same directory as `.iloom/`, `package.json`, etc.)
+- Tracked in git like any other source file
+
+**When iloom reads it:**
+
+Every command that renders a prompt template loads `ILOOM.md` at invocation time and injects its contents into the rendered prompt. This applies to `il start`, `il spin`, `il plan`, `il enhance`, `il init`, `il summary`, and all swarm-mode and agent-driven flows.
+
+**Silent no-op when absent:**
+
+If `ILOOM.md` does not exist, iloom silently omits the Repository Guidance section from all prompts. There is no warning, no error, and no configuration required — it is purely opt-in. Existing projects are unaffected.
+
+**Example `ILOOM.md`:**
+
+```markdown
+# Repository Guidance for iloom Agents
+
+## Review Priorities
+
+When reviewing code, apply these priorities in order:
+
+1. **Accessibility first** — all UI changes must preserve ARIA labels and keyboard navigation. Flag any missing `aria-*` attributes as blocking.
+2. **No direct DOM mutation** outside `src/dom/` — we use the abstraction layer everywhere else.
+3. **Error handling** — never swallow errors. Always rethrow with context or log at `error` level.
+
+## Theming Conventions
+
+- Use design tokens from `src/theme/tokens.ts`. Never hardcode hex colors in components.
+- Dark mode is the default; light mode tokens live in `src/theme/light.ts`.
+- Component variants go through `variants()` — do not branch on `theme.mode` inside components.
+
+## Feature Flag Guardrails
+
+All new features must be gated behind a flag in `src/flags/registry.ts`:
+
+- Flags default to `false` until explicitly launched
+- Never remove a flag in the same PR that adds the feature
+- Flag removal requires a separate PR after at least one release cycle
+
+## Testing
+
+- Prefer integration tests in `tests/integration/` over mock-heavy unit tests
+- Do not mock our own modules — only mock external HTTP / filesystem / shell boundaries
+- Snapshot tests are allowed only for stable, rarely-changing output (CLI help text, etc.)
+```
+
+**How it appears in prompts:**
+
+When `ILOOM.md` is present, agents see a clearly labeled section near the top of their prompt:
+
+```
+## Repository Guidance (from ILOOM.md)
+
+The repository maintainers have provided the following guidance via ILOOM.md. Apply it throughout your work.
+
+<contents of ILOOM.md>
+```
+
+**Telemetry:**
+
+iloom emits a single `iloom_md.loaded` telemetry event per process, indicating whether `ILOOM.md` was present and a coarse size bucket (`empty` / `small` / `medium` / `large`). The file's contents are never transmitted.
 
 ---
 

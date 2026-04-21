@@ -159,6 +159,7 @@ describe('SessionSummaryService', () => {
 				LOOM_TYPE: 'issue',
 				COMPACT_SUMMARIES: '',
 				RECAP_DATA: '',
+				ILOOM_MD_CONTENT: '',
 			})
 
 			// Verify Claude was called
@@ -326,6 +327,7 @@ describe('SessionSummaryService', () => {
 				LOOM_TYPE: 'issue',
 				COMPACT_SUMMARIES: compactSummary,
 				RECAP_DATA: '',
+				ILOOM_MD_CONTENT: '',
 			})
 		})
 

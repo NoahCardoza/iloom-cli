@@ -24,6 +24,7 @@ import { SwarmSetupService } from '../lib/SwarmSetupService.js'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
 import { detectProjectLanguage } from '../utils/language-detector.js'
+import { loadPromptExtensions } from '../lib/PromptExtensions.js'
 
 /**
  * Error thrown when the spin command is run from an invalid location
@@ -278,7 +279,9 @@ export class IgniteCommand {
 			}
 
 			// Step 2.2: Get prompt template with variable substitution
+			const promptExtensions = await loadPromptExtensions(context.workspacePath)
 			const variables = this.buildTemplateVariables(context, effectiveOneShot, draftPrNumber, draftPrUrl)
+			variables.ILOOM_MD_CONTENT = promptExtensions.iloomMd
 
 			// Step 2.5: Add first-time user context if needed
 			if (isFirstRun) {
@@ -953,6 +956,8 @@ export class IgniteCommand {
 		// Determine issue prefix for commit message trailers
 		const issuePrefix = providerName === 'github' ? '#' : ''
 
+		const promptExtensions = await loadPromptExtensions(epicWorktreePath)
+
 		const variables: TemplateVariables = {
 			EPIC_ISSUE_NUMBER: epicIssueNumber,
 			EPIC_WORKTREE_PATH: epicWorktreePath,
@@ -960,6 +965,7 @@ export class IgniteCommand {
 			CHILD_ISSUES: JSON.stringify(childIssuesData, null, 2),
 			DEPENDENCY_MAP: JSON.stringify(metadata.dependencyMap, null, 2),
 			ISSUE_PREFIX: issuePrefix,
+			ILOOM_MD_CONTENT: promptExtensions.iloomMd,
 			...(skipCleanup && { NO_CLEANUP: true }),
 		}
 

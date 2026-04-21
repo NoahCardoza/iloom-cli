@@ -107,6 +107,11 @@ export interface AutoSwarmCompletedProperties {
   fallback_to_normal: boolean
 }
 
+export interface IlommMdLoadedProperties {
+  present: boolean
+  size_bucket: 'empty' | 'small' | 'medium' | 'large'
+}
+
 // --- Event name → properties map (for type-safe track() in downstream issues) ---
 export interface TelemetryEventMap {
   'cli.installed': CliInstalledProperties
@@ -127,6 +132,7 @@ export interface TelemetryEventMap {
   'init.completed': InitCompletedProperties
   'auto_swarm.started': AutoSwarmStartedProperties
   'auto_swarm.completed': AutoSwarmCompletedProperties
+  'iloom_md.loaded': IlommMdLoadedProperties
 }
 
 export type TelemetryEventName = keyof TelemetryEventMap

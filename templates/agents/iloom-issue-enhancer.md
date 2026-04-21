@@ -6,6 +6,15 @@ color: purple
 model: opus
 ---
 
+{{#if ILOOM_MD_CONTENT}}
+
+## Repository Guidance (from ILOOM.md)
+
+The repository maintainers have provided the following guidance via ILOOM.md. Apply it throughout your work.
+
+{{ILOOM_MD_CONTENT}}
+
+{{/if}}
 {{#if SWARM_MODE}}
 ## Swarm Mode
 

@@ -11,6 +11,7 @@ import { getLogger } from '../utils/logger-context.js'
 import { installDependencies } from '../utils/package-manager.js'
 import { generateWorktreePath } from '../utils/git.js'
 import { generateAndWriteMcpConfigFile } from '../utils/mcp.js'
+import { loadPromptExtensions } from './PromptExtensions.js'
 
 /**
  * Result of the swarm setup process
@@ -234,9 +235,11 @@ export class SwarmSetupService {
 		await fs.ensureDir(claudeAgentsDir)
 
 		const settings = await this.settingsManager.loadSettings()
+		const promptExtensions = await loadPromptExtensions(epicWorktreePath)
 
 		const templateVariables: TemplateVariables = {
 			SWARM_MODE: true,
+			ILOOM_MD_CONTENT: promptExtensions.iloomMd,
 		}
 
 		const agents = await this.agentManager.loadAgents(settings, templateVariables)
@@ -324,6 +327,9 @@ export class SwarmSetupService {
 			const subAgentTimeoutMinutes = settings?.agents?.['iloom-swarm-worker']?.subAgentTimeout ?? 10
 			const subAgentTimeoutMs = subAgentTimeoutMinutes * 60 * 1000
 
+			// Load repository-local prompt extensions (ILOOM.md)
+			const promptExtensions = await loadPromptExtensions(epicWorktreePath)
+
 			// Build template variables for swarm worker agent rendering
 			const variables: TemplateVariables = {
 				SWARM_MODE: true,
@@ -331,6 +337,7 @@ export class SwarmSetupService {
 				EPIC_WORKTREE_PATH: epicWorktreePath,
 				ISSUE_PREFIX: issuePrefix,
 				SWARM_SUB_AGENT_TIMEOUT_MS: subAgentTimeoutMs,
+				ILOOM_MD_CONTENT: promptExtensions.iloomMd,
 				...(agentMetadata && { SWARM_AGENT_METADATA: JSON.stringify(agentMetadata) }),
 				...buildReviewTemplateVariables(settings?.agents),
 			}

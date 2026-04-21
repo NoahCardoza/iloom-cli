@@ -105,6 +105,7 @@ describe('ClaudeService', () => {
 					WORKSPACE_PATH: '/workspace/issue-123',
 					PORT: 3123,
 					IS_VSCODE_MODE: false,
+					ILOOM_MD_CONTENT: '',
 				})
 
 				expect(claudeUtils.launchClaudeInNewTerminalWindow).toHaveBeenCalledWith(prompt, {
@@ -136,6 +137,7 @@ describe('ClaudeService', () => {
 					WORKSPACE_PATH: '/workspace',
 					PORT: 3123,
 					IS_VSCODE_MODE: false,
+					ILOOM_MD_CONTENT: '',
 				})
 			})
 
@@ -156,6 +158,7 @@ describe('ClaudeService', () => {
 					ISSUE_NUMBER: 123,
 					WORKSPACE_PATH: '/workspace',
 					IS_VSCODE_MODE: false,
+					ILOOM_MD_CONTENT: '',
 				})
 			})
 		})
@@ -183,6 +186,7 @@ describe('ClaudeService', () => {
 					WORKSPACE_PATH: '/workspace/pr-456',
 					PORT: 3456,
 					IS_VSCODE_MODE: false,
+					ILOOM_MD_CONTENT: '',
 				})
 
 				// PR workflow uses acceptEdits permission mode by default
@@ -214,6 +218,7 @@ describe('ClaudeService', () => {
 				expect(mockTemplateManager.getPrompt).toHaveBeenCalledWith('regular', {
 					WORKSPACE_PATH: '/workspace/feature',
 					IS_VSCODE_MODE: false,
+					ILOOM_MD_CONTENT: '',
 				})
 
 				// Regular workflow uses acceptEdits permission mode by default

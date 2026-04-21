@@ -16,6 +16,7 @@ import { promptConfirmation, isInteractiveEnvironment } from '../utils/prompt.js
 import { TelemetryService } from '../lib/TelemetryService.js'
 import { StartCommand } from './start.js'
 import { IgniteCommand } from './ignite.js'
+import { loadPromptExtensions } from '../lib/PromptExtensions.js'
 
 // Define provider arrays for validation and dynamic flag generation
 const PLANNER_PROVIDERS = ['claude', 'gemini', 'codex'] as const
@@ -435,6 +436,9 @@ export class PlanCommand {
 
 		// Load plan prompt template with mode-specific variables
 		logger.debug('Loading plan prompt template')
+		// Use process.cwd() rather than getRepoRoot() so linked-worktree users
+		// see their branch-local ILOOM.md instead of the main checkout's.
+		const planPromptExtensions = await loadPromptExtensions(process.cwd())
 		const templateVariables: TemplateVariables = {
 			IS_VSCODE_MODE: isVscodeMode,
 			EXISTING_ISSUE_MODE: !!decompositionContext,
@@ -452,6 +456,7 @@ export class PlanCommand {
 			REVIEWER: effectiveReviewer,
 			HAS_REVIEWER: effectiveReviewer !== 'none',
 			AUTO_SWARM_MODE: autoSwarm ?? false,
+			ILOOM_MD_CONTENT: planPromptExtensions.iloomMd,
 			...providerFlags,
 		}
 		const architectPrompt = await this.templateManager.getPrompt('plan', templateVariables)

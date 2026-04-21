@@ -2,6 +2,7 @@ import { detectClaudeCli, launchClaude, launchClaudeInNewTerminalWindow, ClaudeC
 import { PromptTemplateManager, TemplateVariables } from './PromptTemplateManager.js'
 import { SettingsManager, IloomSettings } from './SettingsManager.js'
 import { logger } from '../utils/logger.js'
+import { loadPromptExtensions } from './PromptExtensions.js'
 
 export interface ClaudeWorkflowOptions {
 	type: 'issue' | 'pr' | 'regular'
@@ -69,9 +70,13 @@ export class ClaudeService {
 			// Settings are pre-validated at CLI startup, so no error handling needed here
 			this.settings ??= await this.settingsManager.loadSettings()
 
+			// Load repository-local prompt extensions (ILOOM.md)
+			const promptExtensions = await loadPromptExtensions(workspacePath)
+
 			// Build template variables
 			const variables: TemplateVariables = {
 				WORKSPACE_PATH: workspacePath,
+				ILOOM_MD_CONTENT: promptExtensions.iloomMd,
 			}
 
 			if (issueNumber !== undefined) {

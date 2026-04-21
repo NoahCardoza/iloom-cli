@@ -14,6 +14,7 @@ import { SettingsMigrationManager } from '../lib/SettingsMigrationManager.js'
 import { getRepoRoot, isFileGitignored } from '../utils/git.js'
 import { FirstRunManager } from '../utils/FirstRunManager.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
+import { loadPromptExtensions } from '../lib/PromptExtensions.js'
 
 /**
  * Initialize iloom configuration
@@ -368,6 +369,11 @@ export class InitCommand {
       const hasPackageJson = existsSync(packageJsonPath)
       logger.debug('Package.json detection', { packageJsonPath, hasPackageJson })
 
+      // Load repository-local prompt extensions (ILOOM.md).
+      // Use process.cwd() rather than getRepoRoot() so linked-worktree users
+      // see their branch-local ILOOM.md instead of the main checkout's.
+      const promptExtensions = await loadPromptExtensions(process.cwd())
+
       // Build template variables
       const variables = {
         SETTINGS_SCHEMA: schemaContent,
@@ -388,6 +394,7 @@ export class InitCommand {
         // Multi-language support - mutually exclusive booleans
         HAS_PACKAGE_JSON: hasPackageJson,
         NO_PACKAGE_JSON: !hasPackageJson,
+        ILOOM_MD_CONTENT: promptExtensions.iloomMd,
       }
 
       logger.debug('Building template variables', {

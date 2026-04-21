@@ -7,6 +7,7 @@ import { openBrowser } from '../utils/browser.js'
 import { waitForKeypress } from '../utils/prompt.js'
 import { getLogger } from '../utils/logger-context.js'
 import { generateIssueManagementMcpConfig } from '../utils/mcp.js'
+import { loadPromptExtensions } from './PromptExtensions.js'
 
 /**
  * Options for enhancing an existing issue
@@ -80,9 +81,12 @@ export class IssueEnhancementService {
 
 			// Load only the enhancer agent with template variables so Handlebars expressions resolve
 			const settings = await this.settingsManager.loadSettings()
+			// Use process.cwd() so linked-worktree users see their branch-local ILOOM.md.
+			const promptExtensions = await loadPromptExtensions(process.cwd())
 			const templateVariables: TemplateVariables = {
 				STANDARD_ISSUE_MODE: true,
 				DIRECT_PROMPT_MODE: true,
+				ILOOM_MD_CONTENT: promptExtensions.iloomMd,
 			}
 			const loadedAgents = await this.agentManager.loadAgents(
 				settings,
@@ -210,9 +214,12 @@ Press any key to open issue for editing...`
 
 		// Load only the enhancer agent with template variables so Handlebars expressions resolve
 		const settings = await this.settingsManager.loadSettings()
+		// Use process.cwd() so linked-worktree users see their branch-local ILOOM.md.
+		const promptExtensions = await loadPromptExtensions(process.cwd())
 		const templateVariables: TemplateVariables = {
 			ISSUE_NUMBER: issueNumber,
 			STANDARD_ISSUE_MODE: true,
+			ILOOM_MD_CONTENT: promptExtensions.iloomMd,
 		}
 		const loadedAgents = await this.agentManager.loadAgents(
 			settings,

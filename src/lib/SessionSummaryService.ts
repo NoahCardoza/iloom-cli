@@ -22,6 +22,7 @@ import type { IssueProvider } from '../mcp/types.js'
 import { hasMultipleRemotes } from '../utils/remote.js'
 import type { RecapFile, RecapOutput } from '../mcp/recap-types.js'
 import { formatRecapMarkdown } from '../utils/recap-formatter.js'
+import { loadPromptExtensions } from './PromptExtensions.js'
 
 const RECAPS_DIR = path.join(os.homedir(), '.config', 'iloom-ai', 'recaps')
 
@@ -162,12 +163,14 @@ export class SessionSummaryService {
 			}
 
 			// 6. Load and process the session-summary template
+			const promptExtensions = await loadPromptExtensions(input.worktreePath)
 			const prompt = await this.templateManager.getPrompt('session-summary', {
 				ISSUE_NUMBER: String(input.issueNumber),
 				BRANCH_NAME: input.branchName,
 				LOOM_TYPE: input.loomType,
 				COMPACT_SUMMARIES: compactSummaries ?? '',
 				RECAP_DATA: recapData ?? '',
+				ILOOM_MD_CONTENT: promptExtensions.iloomMd,
 			})
 
 			logger.debug('Session summary prompt:\n' + prompt)
@@ -254,12 +257,14 @@ export class SessionSummaryService {
 		}
 
 		// 5. Load and process the session-summary template
+		const promptExtensions = await loadPromptExtensions(worktreePath)
 		const prompt = await this.templateManager.getPrompt('session-summary', {
 			ISSUE_NUMBER: issueNumber !== undefined ? String(issueNumber) : '',
 			BRANCH_NAME: branchName,
 			LOOM_TYPE: loomType,
 			COMPACT_SUMMARIES: compactSummaries ?? '',
 			RECAP_DATA: recapData ?? '',
+			ILOOM_MD_CONTENT: promptExtensions.iloomMd,
 		})
 
 		logger.debug('Session summary prompt:\n' + prompt)
