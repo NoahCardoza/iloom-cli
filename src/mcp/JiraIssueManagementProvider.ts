@@ -35,6 +35,22 @@ import type { JiraTrackerConfig } from '../lib/providers/jira/JiraIssueTracker.j
 import type { Issue } from '../types/index.js'
 import { SettingsManager } from '../lib/SettingsManager.js'
 import type { IloomSettings } from '../lib/SettingsManager.js'
+import { mergeLabels, parseLabelsFromEnv } from '../utils/labels.js'
+
+/**
+ * Validate that labels don't contain whitespace or commas. Jira rejects these
+ * with a 400 error; surfacing a clear error here lets agents see which label
+ * is the problem instead of getting a generic API error.
+ */
+function validateJiraLabels(labels: string[]): void {
+	for (const label of labels) {
+		if (/[\s,]/.test(label)) {
+			throw new Error(
+				`Jira labels cannot contain whitespace or commas: "${label}". Remove spaces/tabs/newlines/commas before creating the issue.`
+			)
+		}
+	}
+}
 
 /**
  * Normalize Jira author to FlexibleAuthor format
@@ -72,6 +88,9 @@ const getJiraTrackerConfig = (settings: IloomSettings): JiraTrackerConfig => {
 		if (jiraSettings.defaultSubtaskType) {
 			config.defaultSubtaskType = jiraSettings.defaultSubtaskType
 		}
+		if (jiraSettings.defaultLabels && jiraSettings.defaultLabels.length > 0) {
+			config.defaultLabels = jiraSettings.defaultLabels
+		}
 
 		return config;
 	}
@@ -96,6 +115,10 @@ const getJiraTrackerConfig = (settings: IloomSettings): JiraTrackerConfig => {
 		}
 		if (process.env.JIRA_DEFAULT_SUBTASK_TYPE) {
 			config.defaultSubtaskType = process.env.JIRA_DEFAULT_SUBTASK_TYPE
+		}
+		const envLabels = parseLabelsFromEnv(process.env.JIRA_DEFAULT_LABELS, 'JIRA_DEFAULT_LABELS')
+		if (envLabels.length > 0) {
+			config.defaultLabels = envLabels
 		}
 
 		return config
@@ -262,12 +285,25 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 
 	/**
 	 * Create a new issue
+	 *
+	 * Merges configured default labels with any agent-supplied labels via the
+	 * shared mergeLabels helper (configured labels come first, case-sensitive
+	 * dedupe). Jira rejects labels containing whitespace, so we validate
+	 * up-front with a clear error identifying the offending label.
 	 */
 	async createIssue(input: CreateIssueInput): Promise<CreateIssueResult> {
-		const { title, body } = input
+		const { title, body, labels } = input
 
-		// Create issue via tracker (labels not supported in current implementation)
-		const issue = await this.tracker.createIssue(title, body)
+		const configured = this.tracker.getConfig().defaultLabels ?? []
+		const merged = mergeLabels(configured, labels ?? [])
+		validateJiraLabels(merged)
+
+		const issue = await this.tracker.createIssue(
+			title,
+			body,
+			undefined,
+			merged.length > 0 ? merged : undefined
+		)
 
 		const result: CreateIssueResult = {
 			id: String(issue.number),
@@ -294,18 +330,28 @@ export class JiraIssueManagementProvider implements IssueManagementProvider {
 
 	/**
 	 * Create a child issue linked to a parent issue
-	 * Uses Jira's parent field to create a subtask
+	 * Uses Jira's parent field to create a subtask.
+	 *
+	 * Merges configured default labels with any agent-supplied labels via the
+	 * shared mergeLabels helper. Jira rejects labels containing whitespace,
+	 * so we validate up-front with a clear error identifying the offending
+	 * label.
 	 */
 	async createChildIssue(input: CreateChildIssueInput): Promise<CreateIssueResult> {
-		const { parentId, title, body } = input
+		const { parentId, title, body, labels } = input
 		const parentKey = this.tracker.normalizeIdentifier(parentId)
+
+		const configured = this.tracker.getConfig().defaultLabels ?? []
+		const merged = mergeLabels(configured, labels ?? [])
+		validateJiraLabels(merged)
 
 		const jiraIssue = await this.tracker.getApiClient().createIssueWithParent(
 			this.projectKey,
 			title,
 			body,
 			parentKey,
-			this.tracker.getConfig().defaultSubtaskType
+			this.tracker.getConfig().defaultSubtaskType,
+			merged.length > 0 ? merged : undefined
 		)
 
 		return {

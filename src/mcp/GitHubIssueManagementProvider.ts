@@ -49,6 +49,21 @@ import {
 	editGhIssue,
 } from '../utils/github.js'
 import { processMarkdownImages } from '../utils/image-processor.js'
+import { mergeLabels, parseLabelsFromEnv } from '../utils/labels.js'
+import type { IloomSettings } from '../lib/SettingsManager.js'
+
+/**
+ * Resolve the configured GitHub default labels from pre-loaded settings or the
+ * GITHUB_DEFAULT_LABELS environment variable (JSON-encoded array).
+ * Settings take precedence when both are present.
+ */
+function resolveGithubDefaultLabels(settings?: IloomSettings): string[] {
+	const fromSettings = settings?.issueManagement?.github?.defaultLabels
+	if (fromSettings && fromSettings.length > 0) {
+		return fromSettings
+	}
+	return parseLabelsFromEnv(process.env.GITHUB_DEFAULT_LABELS, 'GITHUB_DEFAULT_LABELS')
+}
 
 /**
  * GitHub-specific author structure from API
@@ -99,6 +114,19 @@ export function extractNumericIdFromUrl(url: string | null | undefined): string 
 export class GitHubIssueManagementProvider implements IssueManagementProvider {
 	readonly providerName = 'github'
 	readonly issuePrefix = '#'
+
+	private readonly defaultLabels: string[]
+
+	/**
+	 * @param settings Optional pre-loaded iloom settings. When provided,
+	 *   `issueManagement.github.defaultLabels` is used as the source of
+	 *   configured labels. Falls back to the GITHUB_DEFAULT_LABELS env var
+	 *   (JSON-encoded array) so the provider works both in CLI contexts (with
+	 *   settings) and in the MCP server subprocess (env-var bridge).
+	 */
+	constructor(settings?: IloomSettings) {
+		this.defaultLabels = resolveGithubDefaultLabels(settings)
+	}
 
 	/**
 	 * Fetch issue details using gh CLI
@@ -518,12 +546,21 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 
 	/**
 	 * Create a new issue
+	 *
+	 * Merges configured default labels with any agent-supplied labels via the
+	 * shared mergeLabels helper (configured labels come first, case-sensitive
+	 * dedupe). Passes `undefined` to the underlying `gh` helper when the
+	 * merged result is empty so we don't change the `gh` invocation for users
+	 * who haven't configured defaults.
 	 */
 	async createIssue(input: CreateIssueInput): Promise<CreateIssueResult> {
 		const { title, body, labels, repo } = input
 		// teamKey is ignored for GitHub
 
-		const result = await createIssue(title, body, { labels, repo })
+		const merged = mergeLabels(this.defaultLabels, labels ?? [])
+		const mergedLabels = merged.length > 0 ? merged : undefined
+
+		const result = await createIssue(title, body, { labels: mergedLabels, repo })
 
 		// Ensure number is numeric
 		const issueNumber = typeof result.number === 'number'
@@ -539,7 +576,11 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 
 	/**
 	 * Create a child issue linked to a parent issue
-	 * GitHub requires two-step process: create issue, then link via GraphQL
+	 * GitHub requires two-step process: create issue, then link via GraphQL.
+	 *
+	 * Merges configured default labels with any agent-supplied labels via the
+	 * shared mergeLabels helper so child issues get the same default-label
+	 * treatment as standalone issues.
 	 */
 	async createChildIssue(input: CreateChildIssueInput): Promise<CreateIssueResult> {
 		const { parentId, title, body, labels, repo } = input
@@ -554,8 +595,10 @@ export class GitHubIssueManagementProvider implements IssueManagementProvider {
 		// Step 1: Get parent issue's GraphQL node ID
 		const parentNodeId = await getIssueNodeId(parentNumber, repo)
 
-		// Step 2: Create the child issue
-		const childResult = await createIssue(title, body, { labels, repo })
+		// Step 2: Create the child issue (with merged default + supplied labels)
+		const merged = mergeLabels(this.defaultLabels, labels ?? [])
+		const mergedLabels = merged.length > 0 ? merged : undefined
+		const childResult = await createIssue(title, body, { labels: mergedLabels, repo })
 		const childNumber = typeof childResult.number === 'number'
 			? childResult.number
 			: parseInt(String(childResult.number), 10)

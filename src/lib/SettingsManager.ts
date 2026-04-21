@@ -579,6 +579,14 @@ export const IloomSettingsSchema = z.object({
 						.string()
 						.min(1, 'Remote name cannot be empty')
 						.describe('Git remote name to use for GitHub operations'),
+					defaultLabels: z
+						.array(z.string().min(1, 'Label cannot be empty'))
+						.optional()
+						.default([])
+						.describe(
+							'Labels to automatically apply to issues created by iloom agents. ' +
+								'Labels must already exist on the target GitHub repository; `gh` errors if an unknown label is supplied.'
+						),
 				})
 				.optional(),
 			linear: z
@@ -640,6 +648,14 @@ export const IloomSettingsSchema = z.object({
 						.optional()
 						.default(['Done'])
 						.describe('Status names to exclude from issue lists (e.g., ["Done", "Closed", "Verify"])'),
+					defaultLabels: z
+						.array(z.string().min(1, 'Label cannot be empty'))
+						.optional()
+						.default([])
+						.describe(
+							'Labels to automatically apply to issues created by iloom agents. ' +
+								'Jira labels must not contain whitespace — Jira rejects them with a 400 error.'
+						),
 				})
 				.optional(),
 		})
@@ -873,6 +889,13 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 						.string()
 						.min(1, 'Remote name cannot be empty')
 						.describe('Git remote name to use for GitHub operations'),
+					defaultLabels: z
+						.array(z.string().min(1, 'Label cannot be empty'))
+						.optional()
+						.describe(
+							'Labels to automatically apply to issues created by iloom agents. ' +
+								'Labels must already exist on the target GitHub repository; `gh` errors if an unknown label is supplied.'
+						),
 				})
 				.optional(),
 			linear: z
@@ -932,6 +955,13 @@ export const IloomSettingsSchemaNoDefaults = z.object({
 						.optional()
 						.default(['Done'])
 						.describe('Status names to exclude from issue lists (e.g., ["Done", "Closed", "Verify"])'),
+					defaultLabels: z
+						.array(z.string().min(1, 'Label cannot be empty'))
+						.optional()
+						.describe(
+							'Labels to automatically apply to issues created by iloom agents. ' +
+								'Jira labels must not contain whitespace — Jira rejects them with a 400 error.'
+						),
 				})
 				.optional(),
 		})

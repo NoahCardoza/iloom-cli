@@ -286,3 +286,183 @@ describe('JiraIssueManagementProvider - dependencies', () => {
 		})
 	})
 })
+
+describe('JiraIssueManagementProvider - createIssue / createChildIssue label merging', () => {
+	let provider: JiraIssueManagementProvider
+	let mockCreateIssue: ReturnType<typeof vi.fn>
+	let mockCreateIssueWithParent: ReturnType<typeof vi.fn>
+	let configuredDefaultLabels: string[] | undefined
+
+	function buildProvider(opts: { defaultLabels?: string[] } = {}) {
+		configuredDefaultLabels = opts.defaultLabels
+		mockCreateIssue = vi.fn().mockResolvedValue({ key: 'PROJ-42' })
+		mockCreateIssueWithParent = vi.fn().mockResolvedValue({ key: 'PROJ-43' })
+
+		const mockApiClient = {
+			createIssue: mockCreateIssue,
+			createIssueWithParent: mockCreateIssueWithParent,
+		}
+
+		const mockTracker = {
+			normalizeIdentifier: (id: string) => id.toUpperCase(),
+			getApiClient: () => mockApiClient,
+			getConfig: () => ({
+				host: 'https://jira.example.com',
+				defaultSubtaskType: 'Subtask',
+				...(configuredDefaultLabels !== undefined && {
+					defaultLabels: configuredDefaultLabels,
+				}),
+			}),
+			// createIssue on the tracker calls the api client.createIssue; emulate that
+			createIssue: (title: string, body: string, _repo?: string, labels?: string[]) => {
+				return mockCreateIssue('PROJ', title, body, undefined, labels).then(
+					(issue: { key: string }) => ({
+						number: issue.key,
+						url: `https://jira.example.com/browse/${issue.key}`,
+					})
+				)
+			},
+		}
+
+		const settings = {
+			issueManagement: {
+				jira: {
+					host: 'https://jira.example.com',
+					username: 'user',
+					apiToken: 'token',
+					projectKey: 'PROJ',
+				},
+			},
+		}
+
+		provider = new JiraIssueManagementProvider(settings as IloomSettings)
+		;(provider as unknown as { tracker: typeof mockTracker }).tracker = mockTracker
+		// projectKey is captured in the constructor from the real config; we need
+		// to update it so createChildIssue uses the expected project key
+		;(provider as unknown as { projectKey: string }).projectKey = 'PROJ'
+	}
+
+	describe('createIssue', () => {
+		it('merges configured defaultLabels with agent-supplied labels (configured first)', async () => {
+			buildProvider({ defaultLabels: ['ai-generated', 'needs-triage'] })
+
+			await provider.createIssue({ title: 'T', body: 'B', labels: ['bug'] })
+
+			// Extract the labels arg (5th positional argument)
+			const labelsArg = mockCreateIssue.mock.calls[0][4]
+			expect(labelsArg).toEqual(['ai-generated', 'needs-triage', 'bug'])
+		})
+
+		it('dedupes overlap between configured and supplied labels', async () => {
+			buildProvider({ defaultLabels: ['bug', 'needs-triage'] })
+
+			await provider.createIssue({ title: 'T', body: 'B', labels: ['bug', 'feature'] })
+
+			const labelsArg = mockCreateIssue.mock.calls[0][4]
+			expect(labelsArg).toEqual(['bug', 'needs-triage', 'feature'])
+		})
+
+		it('rejects labels containing whitespace with a clear error naming the label', async () => {
+			buildProvider({ defaultLabels: ['needs triage'] })
+
+			await expect(
+				provider.createIssue({ title: 'T', body: 'B' })
+			).rejects.toThrow(/"needs triage"/)
+			expect(mockCreateIssue).not.toHaveBeenCalled()
+		})
+
+		it('rejects agent-supplied labels containing whitespace', async () => {
+			buildProvider({ defaultLabels: [] })
+
+			await expect(
+				provider.createIssue({ title: 'T', body: 'B', labels: ['has space'] })
+			).rejects.toThrow(/"has space"/)
+			expect(mockCreateIssue).not.toHaveBeenCalled()
+		})
+
+		it('rejects labels containing commas with a clear error naming the label', async () => {
+			buildProvider({ defaultLabels: ['needs,triage'] })
+
+			await expect(
+				provider.createIssue({ title: 'T', body: 'B' })
+			).rejects.toThrow(/whitespace or commas: "needs,triage"/)
+			expect(mockCreateIssue).not.toHaveBeenCalled()
+		})
+
+		it('passes undefined labels to the API when no labels are configured or supplied (regression)', async () => {
+			buildProvider({ defaultLabels: [] })
+
+			await provider.createIssue({ title: 'T', body: 'B' })
+
+			const labelsArg = mockCreateIssue.mock.calls[0][4]
+			expect(labelsArg).toBeUndefined()
+		})
+
+		it('uses configured labels alone when agent supplies none', async () => {
+			buildProvider({ defaultLabels: ['ai-generated'] })
+
+			await provider.createIssue({ title: 'T', body: 'B' })
+
+			const labelsArg = mockCreateIssue.mock.calls[0][4]
+			expect(labelsArg).toEqual(['ai-generated'])
+		})
+	})
+
+	describe('createChildIssue', () => {
+		it('merges configured defaultLabels with agent-supplied labels (configured first)', async () => {
+			buildProvider({ defaultLabels: ['ai-generated', 'needs-triage'] })
+
+			await provider.createChildIssue({
+				parentId: 'PROJ-1',
+				title: 'T',
+				body: 'B',
+				labels: ['bug'],
+			})
+
+			// createIssueWithParent(projectKey, title, body, parentKey, issueType, labels)
+			const labelsArg = mockCreateIssueWithParent.mock.calls[0][5]
+			expect(labelsArg).toEqual(['ai-generated', 'needs-triage', 'bug'])
+		})
+
+		it('dedupes overlapping labels', async () => {
+			buildProvider({ defaultLabels: ['bug'] })
+
+			await provider.createChildIssue({
+				parentId: 'PROJ-1',
+				title: 'T',
+				body: 'B',
+				labels: ['bug', 'feature'],
+			})
+
+			const labelsArg = mockCreateIssueWithParent.mock.calls[0][5]
+			expect(labelsArg).toEqual(['bug', 'feature'])
+		})
+
+		it('omits labels from the API call when neither configured nor supplied (regression)', async () => {
+			buildProvider({ defaultLabels: [] })
+
+			await provider.createChildIssue({ parentId: 'PROJ-1', title: 'T', body: 'B' })
+
+			const labelsArg = mockCreateIssueWithParent.mock.calls[0][5]
+			expect(labelsArg).toBeUndefined()
+		})
+
+		it('validates whitespace for child issues too', async () => {
+			buildProvider({ defaultLabels: ['has space'] })
+
+			await expect(
+				provider.createChildIssue({ parentId: 'PROJ-1', title: 'T', body: 'B' })
+			).rejects.toThrow(/"has space"/)
+			expect(mockCreateIssueWithParent).not.toHaveBeenCalled()
+		})
+
+		it('validates commas for child issues too', async () => {
+			buildProvider({ defaultLabels: ['has,comma'] })
+
+			await expect(
+				provider.createChildIssue({ parentId: 'PROJ-1', title: 'T', body: 'B' })
+			).rejects.toThrow(/"has,comma"/)
+			expect(mockCreateIssueWithParent).not.toHaveBeenCalled()
+		})
+	})
+})

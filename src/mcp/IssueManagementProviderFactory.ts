@@ -20,7 +20,10 @@ export class IssueManagementProviderFactory {
 	static create(provider: IssueProvider, settings?: IloomSettings): IssueManagementProvider {
 		switch (provider) {
 			case 'github':
-				return new GitHubIssueManagementProvider()
+				// Pass settings through so GitHub provider can honor
+				// issueManagement.github.defaultLabels. Env-var fallback
+				// (GITHUB_DEFAULT_LABELS) kicks in when settings is undefined.
+				return new GitHubIssueManagementProvider(settings)
 			case 'linear':
 				return new LinearIssueManagementProvider()
 			case 'jira':

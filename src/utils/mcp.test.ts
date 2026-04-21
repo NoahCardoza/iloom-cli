@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { generateRecapMcpConfig, generateHarnessMcpConfig } from './mcp.js'
+import { generateRecapMcpConfig, generateHarnessMcpConfig, generateIssueManagementMcpConfig } from './mcp.js'
 import os from 'os'
 import path from 'path'
 import type { LoomMetadata } from '../lib/MetadataManager.js'
+import type { IloomSettings } from '../lib/SettingsManager.js'
 
 // Mock the github module
 vi.mock('./github.js', () => ({
@@ -245,5 +246,85 @@ describe('generateHarnessMcpConfig', () => {
 		const serverPath = (harnessConfig.args as string[])[0]
 
 		expect(path.isAbsolute(serverPath)).toBe(true)
+	})
+})
+
+describe('generateIssueManagementMcpConfig - defaultLabels env-var bridge', () => {
+	// Helpers to pull the env vars out of the generated MCP server config
+	// without re-asserting the full config shape (already covered elsewhere).
+	async function envForGithub(settings?: IloomSettings): Promise<Record<string, string>> {
+		const cfg = await generateIssueManagementMcpConfig('issue', 'owner/repo', 'github', settings)
+		const server = (cfg[0].mcpServers as Record<string, unknown>).issue_management as Record<string, unknown>
+		return server.env as Record<string, string>
+	}
+	async function envForJira(settings: IloomSettings): Promise<Record<string, string>> {
+		const cfg = await generateIssueManagementMcpConfig('issue', undefined, 'jira', settings)
+		const server = (cfg[0].mcpServers as Record<string, unknown>).issue_management as Record<string, unknown>
+		return server.env as Record<string, string>
+	}
+
+	it('serializes GitHub defaultLabels as a JSON array in GITHUB_DEFAULT_LABELS', async () => {
+		const env = await envForGithub({
+			issueManagement: {
+				github: {
+					remote: 'origin',
+					defaultLabels: ['ai-generated', 'needs-triage'],
+				},
+			},
+		} as IloomSettings)
+
+		expect(env.GITHUB_DEFAULT_LABELS).toBeDefined()
+		expect(JSON.parse(env.GITHUB_DEFAULT_LABELS)).toEqual(['ai-generated', 'needs-triage'])
+	})
+
+	it('omits GITHUB_DEFAULT_LABELS when defaultLabels is empty', async () => {
+		const env = await envForGithub({
+			issueManagement: {
+				github: {
+					remote: 'origin',
+					defaultLabels: [],
+				},
+			},
+		} as IloomSettings)
+
+		expect(env.GITHUB_DEFAULT_LABELS).toBeUndefined()
+	})
+
+	it('omits GITHUB_DEFAULT_LABELS when defaultLabels is not configured', async () => {
+		const env = await envForGithub(undefined)
+		expect(env.GITHUB_DEFAULT_LABELS).toBeUndefined()
+	})
+
+	it('serializes Jira defaultLabels as a JSON array in JIRA_DEFAULT_LABELS', async () => {
+		const env = await envForJira({
+			issueManagement: {
+				jira: {
+					host: 'https://example.atlassian.net',
+					username: 'u',
+					apiToken: 't',
+					projectKey: 'PROJ',
+					defaultLabels: ['ai-generated', 'from-iloom'],
+				},
+			},
+		} as IloomSettings)
+
+		expect(env.JIRA_DEFAULT_LABELS).toBeDefined()
+		expect(JSON.parse(env.JIRA_DEFAULT_LABELS)).toEqual(['ai-generated', 'from-iloom'])
+	})
+
+	it('omits JIRA_DEFAULT_LABELS when defaultLabels is empty', async () => {
+		const env = await envForJira({
+			issueManagement: {
+				jira: {
+					host: 'https://example.atlassian.net',
+					username: 'u',
+					apiToken: 't',
+					projectKey: 'PROJ',
+					defaultLabels: [],
+				},
+			},
+		} as IloomSettings)
+
+		expect(env.JIRA_DEFAULT_LABELS).toBeUndefined()
 	})
 })
