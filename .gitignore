@@ -42,13 +42,14 @@ coverage/
 *.tmp
 *.temp
 .cache/
+tmp/
 
 # Logs
 logs/
 *.log
 
-tmp/
-.vscode/
+# AI
+.claude/settings.local.json
 
 # Added by iloom CLI
 .iloom/settings.local.json
