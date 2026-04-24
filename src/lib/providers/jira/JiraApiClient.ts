@@ -314,20 +314,32 @@ export class JiraApiClient {
 	/**
 	 * Create a new issue
 	 * Accepts Markdown description which is converted to ADF for Jira
+	 *
+	 * @param labels Optional array of Jira labels. Only included in the POST body
+	 *   when a non-empty array is supplied, so callers that don't use labels still
+	 *   produce the exact same request shape as before.
 	 */
-	async createIssue(projectKey: string, summary: string, description: string, issueType = 'Task'): Promise<JiraIssue> {
-		return this.post<JiraIssue>('/issue', {
-			fields: {
-				project: {
-					key: projectKey,
-				},
-				summary,
-				description: markdownToAdf(description),
-				issuetype: {
-					name: issueType,
-				},
+	async createIssue(
+		projectKey: string,
+		summary: string,
+		description: string,
+		issueType = 'Task',
+		labels?: string[]
+	): Promise<JiraIssue> {
+		const fields: Record<string, unknown> = {
+			project: {
+				key: projectKey,
 			},
-		})
+			summary,
+			description: markdownToAdf(description),
+			issuetype: {
+				name: issueType,
+			},
+		}
+		if (labels && labels.length > 0) {
+			fields.labels = labels
+		}
+		return this.post<JiraIssue>('/issue', { fields })
 	}
 
 	/**
@@ -350,29 +362,36 @@ export class JiraApiClient {
 	/**
 	 * Create an issue with a parent (subtask or child issue)
 	 * Accepts Markdown description which is converted to ADF for Jira
+	 *
+	 * @param labels Optional array of Jira labels. Only included in the POST body
+	 *   when a non-empty array is supplied, so callers that don't use labels still
+	 *   produce the exact same request shape as before.
 	 */
 	async createIssueWithParent(
 		projectKey: string,
 		summary: string,
 		description: string,
 		parentKey: string,
-		issueType = 'Subtask'
+		issueType = 'Subtask',
+		labels?: string[]
 	): Promise<JiraIssue> {
-		return this.post<JiraIssue>('/issue', {
-			fields: {
-				project: {
-					key: projectKey,
-				},
-				summary,
-				description: markdownToAdf(description),
-				issuetype: {
-					name: issueType,
-				},
-				parent: {
-					key: parentKey,
-				},
+		const fields: Record<string, unknown> = {
+			project: {
+				key: projectKey,
 			},
-		})
+			summary,
+			description: markdownToAdf(description),
+			issuetype: {
+				name: issueType,
+			},
+			parent: {
+				key: parentKey,
+			},
+		}
+		if (labels && labels.length > 0) {
+			fields.labels = labels
+		}
+		return this.post<JiraIssue>('/issue', { fields })
 	}
 
 	/**

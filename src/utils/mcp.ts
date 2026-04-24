@@ -67,6 +67,13 @@ export async function generateIssueManagementMcpConfig(
 			...(githubEventName && { GITHUB_EVENT_NAME: githubEventName }),
 		}
 
+		// Pass configured default labels through so the MCP provider can merge them
+		// with agent-supplied labels when creating issues.
+		const githubDefaultLabels = settings?.issueManagement?.github?.defaultLabels
+		if (githubDefaultLabels && githubDefaultLabels.length > 0) {
+			envVars.GITHUB_DEFAULT_LABELS = JSON.stringify(githubDefaultLabels)
+		}
+
 		logger.debug('Generated MCP config for GitHub issue management', {
 			provider,
 			repoOwner: owner,
@@ -120,6 +127,9 @@ export async function generateIssueManagementMcpConfig(
 		}
 		if (jiraSettings?.defaultSubtaskType) {
 			envVars.JIRA_DEFAULT_SUBTASK_TYPE = jiraSettings.defaultSubtaskType
+		}
+		if (jiraSettings?.defaultLabels && jiraSettings.defaultLabels.length > 0) {
+			envVars.JIRA_DEFAULT_LABELS = JSON.stringify(jiraSettings.defaultLabels)
 		}
 
 		logger.debug('Generated MCP config for Jira issue management', {

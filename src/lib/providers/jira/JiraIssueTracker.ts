@@ -17,6 +17,7 @@ export interface JiraTrackerConfig extends JiraConfig {
 	transitionMappings?: Record<string, string> // Map iloom states to Jira transition names
 	defaultIssueType?: string // Default issue type for creating issues (e.g., "Task", "Story")
 	defaultSubtaskType?: string // Default issue type for creating subtasks (e.g., "Subtask", "Sub-task")
+	defaultLabels?: string[] // Labels to automatically apply when iloom agents create issues
 }
 
 /**
@@ -168,18 +169,20 @@ export class JiraIssueTracker implements IssueTracker {
 		title: string,
 		body: string,
 		_repository?: string,
-		_labels?: string[]
+		labels?: string[]
 	): Promise<{ number: string | number; url: string }> {
-		getLogger().debug('Creating Jira issue', { title, projectKey: this.config.projectKey })
+		getLogger().debug('Creating Jira issue', {
+			title,
+			projectKey: this.config.projectKey,
+			labelCount: labels?.length ?? 0,
+		})
 
-		// Convert markdown body to plain text for Jira description
-		// Note: Jira API expects Atlassian Document Format (ADF)
-		// We use a simplified plain text approach here
 		const jiraIssue = await this.client.createIssue(
 			this.config.projectKey,
 			title,
 			body,
-			this.config.defaultIssueType
+			this.config.defaultIssueType,
+			labels
 		)
 
 		return {

@@ -2272,6 +2272,15 @@ il init "configure neon database with project ID abc-123"
 - Base port for development servers
 - Environment variable names
 
+**GitHub Advanced Settings:**
+
+The following GitHub settings can be configured in `.iloom/settings.json` under `issueManagement.github`:
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `remote` | string | `"origin"` | Git remote name used for GitHub operations |
+| `defaultLabels` | string[] | `[]` | Labels to automatically apply to issues created by iloom agents. Merged with any labels the agent supplies (configured first, then agent-supplied, case-sensitive dedupe). Example: `["ai-generated", "needs-triage"]`. Labels must already exist on the target repository — `gh` errors if an unknown label is supplied. |
+
 **Jira Advanced Settings:**
 
 The following Jira settings can be configured in `.iloom/settings.json` under `issueManagement.jira`:
@@ -2287,6 +2296,7 @@ The following Jira settings can be configured in `.iloom/settings.json` under `i
 | `defaultIssueType` | string | `"Task"` | Issue type name for creating issues (e.g., `"Task"`, `"Story"`, `"Bug"`) |
 | `defaultSubtaskType` | string | `"Subtask"` | Issue type name for creating child issues (e.g., `"Subtask"`, `"Sub-task"`) |
 | `doneStatuses` | string[] | `["Done"]` | Status names to exclude from `il issues` output |
+| `defaultLabels` | string[] | `[]` | Labels to automatically apply to issues created by iloom agents. Merged with any labels the agent supplies (configured first, then agent-supplied, case-sensitive dedupe). Example: `["ai-generated", "needs-triage"]`. Jira labels cannot contain whitespace — iloom rejects offending labels with a clear error before calling the API. |
 
 **Note:** Different Jira instances may use different issue type names. If issue creation fails with a 400 error, check your Jira project's available issue types and configure `defaultIssueType` and `defaultSubtaskType` accordingly.
 

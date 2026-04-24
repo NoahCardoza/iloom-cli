@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
 import { GitHubIssueManagementProvider, extractNumericIdFromUrl } from './GitHubIssueManagementProvider.js'
 
 // Mock the github utils
@@ -1262,6 +1262,154 @@ describe('GitHubIssueManagementProvider', () => {
 			).rejects.toThrow('Invalid GitHub issue number: invalid. GitHub issue IDs must be numeric.')
 
 			expect(editGhIssue).not.toHaveBeenCalled()
+		})
+	})
+})
+
+describe('GitHubIssueManagementProvider - defaultLabels merging', () => {
+	// Ensure env-var source is clean between tests so we can test both paths
+	// (settings-based and env-var-based) deterministically.
+	const originalEnv = process.env.GITHUB_DEFAULT_LABELS
+
+	beforeEach(() => {
+		delete process.env.GITHUB_DEFAULT_LABELS
+	})
+
+	afterAll(() => {
+		if (originalEnv === undefined) {
+			delete process.env.GITHUB_DEFAULT_LABELS
+		} else {
+			process.env.GITHUB_DEFAULT_LABELS = originalEnv
+		}
+	})
+
+	it('merges configured defaultLabels from settings with agent-supplied labels (createIssue)', async () => {
+		vi.mocked(createIssue).mockResolvedValueOnce({
+			number: 1,
+			url: 'https://github.com/owner/repo/issues/1',
+		})
+
+		const provider = new GitHubIssueManagementProvider({
+			issueManagement: {
+				github: {
+					remote: 'origin',
+					defaultLabels: ['ai-generated', 'needs-triage'],
+				},
+			},
+		} as unknown as Parameters<typeof GitHubIssueManagementProvider>[0])
+
+		await provider.createIssue({ title: 'T', body: 'B', labels: ['bug'] })
+
+		expect(createIssue).toHaveBeenCalledWith('T', 'B', {
+			labels: ['ai-generated', 'needs-triage', 'bug'],
+			repo: undefined,
+		})
+	})
+
+	it('dedupes overlapping configured and supplied labels (createIssue)', async () => {
+		vi.mocked(createIssue).mockResolvedValueOnce({
+			number: 1,
+			url: 'https://github.com/owner/repo/issues/1',
+		})
+
+		const provider = new GitHubIssueManagementProvider({
+			issueManagement: {
+				github: {
+					remote: 'origin',
+					defaultLabels: ['bug', 'needs-triage'],
+				},
+			},
+		} as unknown as Parameters<typeof GitHubIssueManagementProvider>[0])
+
+		await provider.createIssue({ title: 'T', body: 'B', labels: ['bug', 'feature'] })
+
+		expect(createIssue).toHaveBeenCalledWith('T', 'B', {
+			labels: ['bug', 'needs-triage', 'feature'],
+			repo: undefined,
+		})
+	})
+
+	it('reads defaultLabels from GITHUB_DEFAULT_LABELS env var when settings are absent', async () => {
+		process.env.GITHUB_DEFAULT_LABELS = JSON.stringify(['from-env'])
+
+		vi.mocked(createIssue).mockResolvedValueOnce({
+			number: 1,
+			url: 'https://github.com/owner/repo/issues/1',
+		})
+
+		const provider = new GitHubIssueManagementProvider()
+
+		await provider.createIssue({ title: 'T', body: 'B', labels: ['bug'] })
+
+		expect(createIssue).toHaveBeenCalledWith('T', 'B', {
+			labels: ['from-env', 'bug'],
+			repo: undefined,
+		})
+	})
+
+	it('does not pass any labels when defaults are unset and agent supplies none (regression)', async () => {
+		vi.mocked(createIssue).mockResolvedValueOnce({
+			number: 1,
+			url: 'https://github.com/owner/repo/issues/1',
+		})
+
+		const provider = new GitHubIssueManagementProvider()
+
+		await provider.createIssue({ title: 'T', body: 'B' })
+
+		expect(createIssue).toHaveBeenCalledWith('T', 'B', {
+			labels: undefined,
+			repo: undefined,
+		})
+	})
+
+	it('merges labels for createChildIssue too', async () => {
+		vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_PARENT')
+		vi.mocked(createIssue).mockResolvedValueOnce({
+			number: 2,
+			url: 'https://github.com/owner/repo/issues/2',
+		})
+		vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_CHILD')
+		vi.mocked(addSubIssue).mockResolvedValueOnce(undefined)
+
+		const provider = new GitHubIssueManagementProvider({
+			issueManagement: {
+				github: {
+					remote: 'origin',
+					defaultLabels: ['ai-generated'],
+				},
+			},
+		} as unknown as Parameters<typeof GitHubIssueManagementProvider>[0])
+
+		await provider.createChildIssue({
+			parentId: '1',
+			title: 'Child',
+			body: 'B',
+			labels: ['bug'],
+		})
+
+		expect(createIssue).toHaveBeenCalledWith('Child', 'B', {
+			labels: ['ai-generated', 'bug'],
+			repo: undefined,
+		})
+	})
+
+	it('createChildIssue regression: no labels forwarded when none configured or supplied', async () => {
+		vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_PARENT')
+		vi.mocked(createIssue).mockResolvedValueOnce({
+			number: 2,
+			url: 'https://github.com/owner/repo/issues/2',
+		})
+		vi.mocked(getIssueNodeId).mockResolvedValueOnce('I_CHILD')
+		vi.mocked(addSubIssue).mockResolvedValueOnce(undefined)
+
+		const provider = new GitHubIssueManagementProvider()
+
+		await provider.createChildIssue({ parentId: '1', title: 'Child', body: 'B' })
+
+		expect(createIssue).toHaveBeenCalledWith('Child', 'B', {
+			labels: undefined,
+			repo: undefined,
 		})
 	})
 })
