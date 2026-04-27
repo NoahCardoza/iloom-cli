@@ -1,8 +1,8 @@
-/* global ReadableStream */
+/* global ReadableStream, setTimeout */
 import { describe, test, expect, vi, beforeEach } from 'vitest'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { existsSync, mkdirSync, writeFileSync, rmSync, utimesSync, readdirSync } from 'node:fs'
 
 // Mock execa before importing the module
 vi.mock('execa', () => ({
@@ -24,6 +24,8 @@ import {
   rewriteMarkdownUrls,
   processMarkdownImages,
   clearCachedGitHubToken,
+  resetPruneFlagForTesting,
+  resetLegacyCleanupFlagForTesting,
   CACHE_DIR
 } from './image-processor.js'
 import { execa } from 'execa'
@@ -32,6 +34,8 @@ describe('ImageProcessor', () => {
   // Clear cached GitHub token before each test to ensure test isolation
   beforeEach(() => {
     clearCachedGitHubToken()
+    resetPruneFlagForTesting()
+    resetLegacyCleanupFlagForTesting()
   })
   describe('extractMarkdownImageUrls', () => {
     test('extracts standard markdown image syntax: ![alt](url)', () => {
@@ -243,15 +247,6 @@ End of content
   })
 
   describe('getCachedImagePath', () => {
-    const testCacheDir = join(tmpdir(), 'iloom-images-test-cache')
-
-    beforeEach(() => {
-      // Clean up test cache directory
-      if (existsSync(testCacheDir)) {
-        rmSync(testCacheDir, { recursive: true })
-      }
-    })
-
     test('returns path when cached file exists', () => {
       // Create the cache directory and a fake cached file
       mkdirSync(CACHE_DIR, { recursive: true })
@@ -412,6 +407,84 @@ End of content
       await expect(downloadAndSaveImage('https://example.com/image.png', destPath))
         .rejects.toThrow('Response body is null')
     })
+
+    test('strips auth header on cross-origin redirect (case-insensitive match)', async () => {
+      const imageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47])
+
+      // First response: 302 redirect to a different origin
+      mockFetch.mockResolvedValueOnce({
+        status: 302,
+        headers: new Map([['Location', 'https://s3.amazonaws.com/bucket/image.png']])
+      })
+      // Second response: success at new origin (must not include Authorization)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['Content-Length', String(imageData.length)]]),
+        body: createMockReadableStream([imageData])
+      })
+
+      const destPath = join(CACHE_DIR, 'test-redirect-strip-lower.png')
+      await downloadAndSaveImage('https://github.com/img.png', destPath, 'Bearer secret')
+
+      // Verify the second call (after redirect) does NOT include any auth header,
+      // regardless of case. The strip iterates all keys with lowercased comparison
+      // so any future variant ('authorization', 'AUTHORIZATION', etc.) is also dropped.
+      const secondCall = mockFetch.mock.calls[1]
+      const sentHeaders = (secondCall?.[1] as { headers?: Record<string, string> } | undefined)?.headers ?? {}
+      const headerKeys = Object.keys(sentHeaders).map(k => k.toLowerCase())
+      expect(headerKeys).not.toContain('authorization')
+
+      if (existsSync(destPath)) rmSync(destPath)
+    })
+
+    test('preserves Authorization header on same-origin redirect', async () => {
+      const imageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47])
+
+      mockFetch.mockResolvedValueOnce({
+        status: 302,
+        headers: new Map([['Location', 'https://github.com/different-path.png']])
+      })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['Content-Length', String(imageData.length)]]),
+        body: createMockReadableStream([imageData])
+      })
+
+      const destPath = join(CACHE_DIR, 'test-redirect-same-origin.png')
+      await downloadAndSaveImage('https://github.com/img.png', destPath, 'Bearer secret')
+
+      const secondCall = mockFetch.mock.calls[1]
+      const sentHeaders = (secondCall?.[1] as { headers?: Record<string, string> } | undefined)?.headers ?? {}
+      expect(sentHeaders['Authorization']).toBe('Bearer secret')
+
+      if (existsSync(destPath)) rmSync(destPath)
+    })
+
+    test('preserves Authorization on same-host http -> https upgrade', async () => {
+      const imageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47])
+
+      mockFetch.mockResolvedValueOnce({
+        status: 301,
+        headers: new Map([['Location', 'https://api.example.com/asset.png']])
+      })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map([['Content-Length', String(imageData.length)]]),
+        body: createMockReadableStream([imageData])
+      })
+
+      const destPath = join(CACHE_DIR, 'test-https-upgrade.png')
+      await downloadAndSaveImage('http://api.example.com/asset.png', destPath, 'Bearer secret')
+
+      const secondCall = mockFetch.mock.calls[1]
+      const sentHeaders = (secondCall?.[1] as { headers?: Record<string, string> } | undefined)?.headers ?? {}
+      expect(sentHeaders['Authorization']).toBe('Bearer secret')
+
+      if (existsSync(destPath)) rmSync(destPath)
+    })
   })
 
   describe('getCacheDestPath', () => {
@@ -419,7 +492,7 @@ End of content
       const url = 'https://uploads.linear.app/test/image.png'
       const destPath = getCacheDestPath(url)
 
-      expect(destPath).toContain('iloom-images')
+      expect(destPath).toContain(CACHE_DIR)
       expect(destPath).toMatch(/\.png$/)
     })
 
@@ -429,6 +502,45 @@ End of content
 
       expect(existsSync(CACHE_DIR)).toBe(true)
       expect(destPath.startsWith(CACHE_DIR)).toBe(true)
+    })
+  })
+
+  describe('legacy cache cleanup', () => {
+    test('removes legacy /tmp/iloom-images dir on first ensureCacheDir call', async () => {
+      const legacyDir = join(tmpdir(), 'iloom-images')
+      mkdirSync(legacyDir, { recursive: true })
+      writeFileSync(join(legacyDir, 'stale.png'), 'stale')
+      expect(existsSync(legacyDir)).toBe(true)
+
+      // Trigger ensureCacheDir via the public API
+      getCacheDestPath('https://uploads.linear.app/x/image.png')
+
+      // rm is async fire-and-forget; wait for the microtask/IO to settle
+      for (let i = 0; i < 20 && existsSync(legacyDir); i++) {
+        await new Promise(resolve => setTimeout(resolve, 10))
+      }
+      expect(existsSync(legacyDir)).toBe(false)
+    })
+
+    test('legacy cleanup runs only once per process (idempotent)', async () => {
+      const legacyDir = join(tmpdir(), 'iloom-images')
+
+      // First call: cleanup runs (flag flips). Reset flag to simulate fresh process.
+      resetLegacyCleanupFlagForTesting()
+      getCacheDestPath('https://uploads.linear.app/x/first.png')
+
+      // Now without resetting, recreate the legacy dir and call again — should NOT be removed.
+      mkdirSync(legacyDir, { recursive: true })
+      writeFileSync(join(legacyDir, 'stale-second.png'), 'stale')
+
+      getCacheDestPath('https://uploads.linear.app/x/second.png')
+
+      // Wait briefly to give any cleanup a chance to run (it shouldn't).
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(existsSync(legacyDir)).toBe(true)
+
+      // Cleanup
+      rmSync(legacyDir, { recursive: true, force: true })
     })
   })
 
@@ -559,7 +671,7 @@ Some text
 
       // Should contain local file path instead of remote URL
       expect(result).not.toContain('private-user-images.githubusercontent.com')
-      expect(result).toContain('iloom-images')
+      expect(result).toContain(CACHE_DIR)
     })
 
     test('downloads and rewrites Linear images', async () => {
@@ -582,7 +694,7 @@ Some text
 
         // Should contain local file path instead of remote URL
         expect(result).not.toContain('uploads.linear.app')
-        expect(result).toContain('iloom-images')
+        expect(result).toContain(CACHE_DIR)
       } finally {
         if (originalToken) {
           process.env.LINEAR_API_TOKEN = originalToken
@@ -590,6 +702,70 @@ Some text
           delete process.env.LINEAR_API_TOKEN
         }
       }
+    })
+
+    test('sends raw Linear API key without Bearer prefix in Authorization header', async () => {
+      const originalToken = process.env.LINEAR_API_TOKEN
+      process.env.LINEAR_API_TOKEN = 'lin_api_test123'
+
+      // Unique URL to avoid hitting any cached file from prior runs.
+      const url = `https://uploads.linear.app/auth-header-linear-${Date.now()}/image.png`
+
+      try {
+        const content = `![diagram](${url})`
+
+        const imageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47])
+        const mockStream = createMockReadableStream([imageData])
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          headers: new Map([['Content-Length', String(imageData.length)]]),
+          body: mockStream
+        })
+
+        await processMarkdownImages(content, 'linear')
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          url,
+          expect.objectContaining({
+            headers: { Authorization: 'lin_api_test123' }
+          })
+        )
+      } finally {
+        if (originalToken) {
+          process.env.LINEAR_API_TOKEN = originalToken
+        } else {
+          delete process.env.LINEAR_API_TOKEN
+        }
+      }
+    })
+
+    test('sends Bearer-prefixed token in Authorization header for GitHub', async () => {
+      // Unique URL to avoid hitting any cached file from prior runs.
+      const url = `https://private-user-images.githubusercontent.com/auth-header-github-${Date.now()}/image.png?jwt=token`
+      const content = `![screenshot](${url})`
+
+      vi.mocked(execa).mockResolvedValueOnce({
+        stdout: 'ghp_testtoken',
+        stderr: '',
+        exitCode: 0
+      } as never)
+
+      const imageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47])
+      const mockStream = createMockReadableStream([imageData])
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Map([['Content-Length', String(imageData.length)]]),
+        body: mockStream
+      })
+
+      await processMarkdownImages(content, 'github')
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining({
+          headers: { Authorization: 'Bearer ghp_testtoken' }
+        })
+      )
     })
 
     test('uses cached image path when file exists', async () => {
@@ -707,7 +883,7 @@ Some text
         const result = await processMarkdownImages(content, 'linear')
 
         // First should be replaced (local path)
-        expect(result).toContain('iloom-images')
+        expect(result).toContain(CACHE_DIR)
         // Second should preserve original URL
         expect(result).toContain(secondUrl)
       } finally {
@@ -717,6 +893,146 @@ Some text
           delete process.env.LINEAR_API_TOKEN
         }
       }
+    })
+  })
+
+  describe('stale cache pruning', () => {
+    const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+    // Helper: write a file with a specific mtime
+    function writeFileWithAge(filePath: string, ageMs: number): void {
+      writeFileSync(filePath, 'cached data')
+      const mtime = new Date(Date.now() - ageMs)
+      utimesSync(filePath, mtime, mtime)
+    }
+
+    test('processMarkdownImages triggers pruneStaleCache exactly once per process', async () => {
+      mkdirSync(CACHE_DIR, { recursive: true })
+
+      // Seed: one stale file (older than TTL) and one fresh file
+      const staleName = `prune-test-stale-${Date.now()}.png`
+      const freshName = `prune-test-fresh-${Date.now()}.png`
+      const stalePath = join(CACHE_DIR, staleName)
+      const freshPath = join(CACHE_DIR, freshName)
+
+      writeFileWithAge(stalePath, CACHE_TTL_MS + 60_000) // 1 min past TTL
+      writeFileWithAge(freshPath, 60_000) // 1 min old
+
+      try {
+        // First call: should prune stale, keep fresh
+        await processMarkdownImages('no images here', 'github')
+        expect(existsSync(stalePath)).toBe(false)
+        expect(existsSync(freshPath)).toBe(true)
+
+        // Re-add the stale file: a second call must NOT prune it again (flag is set)
+        writeFileWithAge(stalePath, CACHE_TTL_MS + 60_000)
+        await processMarkdownImages('still no images', 'github')
+        expect(existsSync(stalePath)).toBe(true)
+      } finally {
+        if (existsSync(stalePath)) rmSync(stalePath)
+        if (existsSync(freshPath)) rmSync(freshPath)
+      }
+    })
+
+    test('pruning re-runs after PRUNE_INTERVAL_MS has elapsed', async () => {
+      const PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000
+      mkdirSync(CACHE_DIR, { recursive: true })
+
+      const staleName = `prune-test-interval-${Date.now()}.png`
+      const stalePath = join(CACHE_DIR, staleName)
+      writeFileWithAge(stalePath, CACHE_TTL_MS + 60_000)
+
+      try {
+        // First call (lastPruneAt=0) should prune
+        await processMarkdownImages('', 'github')
+        expect(existsSync(stalePath)).toBe(false)
+
+        // Recreate stale file; immediate second call should NOT prune (within interval)
+        writeFileWithAge(stalePath, CACHE_TTL_MS + 60_000)
+        await processMarkdownImages('', 'github')
+        expect(existsSync(stalePath)).toBe(true)
+
+        // Advance Date.now beyond PRUNE_INTERVAL_MS so the next call re-prunes
+        const realNow = Date.now.bind(Date)
+        const dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + PRUNE_INTERVAL_MS + 1000)
+        try {
+          await processMarkdownImages('', 'github')
+          expect(existsSync(stalePath)).toBe(false)
+        } finally {
+          dateNowSpy.mockRestore()
+        }
+      } finally {
+        if (existsSync(stalePath)) rmSync(stalePath)
+      }
+    })
+
+    test('after resetPruneFlagForTesting, pruning runs again on next call', async () => {
+      mkdirSync(CACHE_DIR, { recursive: true })
+
+      const staleName = `prune-test-reset-${Date.now()}.png`
+      const stalePath = join(CACHE_DIR, staleName)
+      writeFileWithAge(stalePath, CACHE_TTL_MS + 60_000)
+
+      try {
+        // First call prunes
+        await processMarkdownImages('', 'github')
+        expect(existsSync(stalePath)).toBe(false)
+
+        // Recreate stale file; without reset, second call should NOT prune
+        writeFileWithAge(stalePath, CACHE_TTL_MS + 60_000)
+        await processMarkdownImages('', 'github')
+        expect(existsSync(stalePath)).toBe(true)
+
+        // After reset, next call prunes again
+        resetPruneFlagForTesting()
+        await processMarkdownImages('', 'github')
+        expect(existsSync(stalePath)).toBe(false)
+      } finally {
+        if (existsSync(stalePath)) rmSync(stalePath)
+      }
+    })
+
+    test('keeps files whose mtime is within TTL', async () => {
+      mkdirSync(CACHE_DIR, { recursive: true })
+
+      const freshName = `prune-fresh-only-${Date.now()}.png`
+      const freshPath = join(CACHE_DIR, freshName)
+      // Just under TTL
+      writeFileWithAge(freshPath, CACHE_TTL_MS - 60_000)
+
+      try {
+        await processMarkdownImages('', 'github')
+        expect(existsSync(freshPath)).toBe(true)
+      } finally {
+        if (existsSync(freshPath)) rmSync(freshPath)
+      }
+    })
+
+    test('pruning failure does not throw out of processMarkdownImages', async () => {
+      // Make readdir fail by pointing CACHE_DIR-readdir at... we cannot easily
+      // mutate the dir constant. Instead, simulate failure by ensuring the call
+      // succeeds gracefully even when the cache dir has unreadable contents.
+      // The simplest fail-open assertion: processMarkdownImages completes
+      // normally even if the cache dir doesn't exist.
+      if (existsSync(CACHE_DIR)) {
+        // Remove only if we can; ignore on failure
+        try {
+          // Remove all entries we created in prior tests
+          for (const entry of readdirSync(CACHE_DIR)) {
+            try {
+              rmSync(join(CACHE_DIR, entry))
+            } catch {
+              // ignore
+            }
+          }
+          rmSync(CACHE_DIR, { recursive: true })
+        } catch {
+          // ignore
+        }
+      }
+
+      // Should not throw even though cache dir is missing
+      await expect(processMarkdownImages('', 'github')).resolves.toBe('')
     })
   })
 })

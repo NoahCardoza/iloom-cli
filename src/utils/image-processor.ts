@@ -1,10 +1,11 @@
-/* global fetch, AbortController, setTimeout, clearTimeout */
-import { tmpdir } from 'node:os'
+/* global fetch, AbortController, AbortSignal, Response, setTimeout, clearTimeout */
+import { homedir, tmpdir } from 'node:os'
 import { join, extname } from 'node:path'
-import { existsSync, mkdirSync, createWriteStream, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, createWriteStream, chmodSync } from 'node:fs'
+import { readdir, stat, unlink, rename, rm } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { Readable } from 'node:stream'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { execa } from 'execa'
 import { logger } from './logger.js'
 import type { IssueProvider } from '../mcp/types.js'
@@ -34,14 +35,83 @@ const MAX_IMAGE_SIZE = 10 * 1024 * 1024
 const REQUEST_TIMEOUT_MS = 30000
 
 /**
- * Cache directory path for downloaded images
+ * Cache directory path for downloaded images.
+ * Lives under the per-user iloom-ai config dir (not /tmp) so it isn't world-readable
+ * and isn't subject to pre-creation/cache-poisoning by other users on shared hosts.
  */
-export const CACHE_DIR = join(tmpdir(), 'iloom-images')
+export const CACHE_DIR = join(homedir(), '.config', 'iloom-ai', 'cache', 'images')
+
+/**
+ * Cache TTL: files older than this are pruned during periodic prune sweeps
+ */
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * How often to run the stale-cache prune sweep within a single process.
+ * Long-running processes (orchestrator, watch mode) need to prune more than once.
+ */
+const PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000
+
+/**
+ * Timestamp of the most recent prune within this process. Zero means "never pruned yet".
+ */
+let lastPruneAt = 0
 
 /**
  * Cached GitHub auth token (module-level to avoid repeated `gh auth token` calls)
  */
 let cachedGitHubToken: string | undefined
+
+/**
+ * One-shot flag for legacy cache cleanup. Reset via resetLegacyCleanupFlagForTesting()
+ * in tests so each test can re-trigger the cleanup path.
+ */
+let legacyCleanedThisRun = false
+
+/**
+ * Best-effort recursive cleanup of the legacy /tmp/iloom-images cache dir from
+ * earlier builds. macOS doesn't reliably purge /tmp on reboot, so users who
+ * upgrade leave a world-readable image cache behind. Runs once per process.
+ */
+function cleanupLegacyCache(): void {
+  if (legacyCleanedThisRun) return
+  legacyCleanedThisRun = true
+
+  const legacyDir = join(tmpdir(), 'iloom-images')
+  if (!existsSync(legacyDir)) return
+
+  rm(legacyDir, { recursive: true, force: true }).catch((error: unknown) => {
+    if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
+      throw error
+    }
+    logger.debug(`Failed to remove legacy cache at ${legacyDir}: ${error instanceof Error ? error.message : String(error)}`)
+  })
+}
+
+/**
+ * Ensure CACHE_DIR exists with restrictive (0o700) permissions.
+ * mkdir's mode is only honored on creation, so chmod defensively to fix
+ * pre-existing dirs that may have been created with broader permissions.
+ *
+ * Uses sync chmod so the tightened perms are guaranteed in place before
+ * any caller writes to the dir (the next line in downloadAndSaveImage is
+ * createWriteStream — async chmod could race with the write).
+ */
+function ensureCacheDir(): void {
+  if (!existsSync(CACHE_DIR)) {
+    mkdirSync(CACHE_DIR, { recursive: true, mode: 0o700 })
+  }
+  try {
+    chmodSync(CACHE_DIR, 0o700)
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
+      throw error
+    }
+    logger.debug(`chmod on cache dir failed (non-fatal): ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  cleanupLegacyCache()
+}
 
 /**
  * Extract all image URLs from markdown content
@@ -236,7 +306,122 @@ export function clearCachedGitHubToken(): void {
 }
 
 /**
- * Download image from URL and stream it directly to a file
+ * Reset the periodic prune timestamp (for testing purposes)
+ */
+export function resetPruneFlagForTesting(): void {
+  lastPruneAt = 0
+}
+
+/**
+ * Reset the legacy-cleanup one-shot flag (for testing purposes)
+ */
+export function resetLegacyCleanupFlagForTesting(): void {
+  legacyCleanedThisRun = false
+}
+
+/**
+ * Delete cached image files older than CACHE_TTL_MS.
+ * Fail-open: pruning errors must NEVER break the actual image-fetch flow.
+ */
+async function pruneStaleCache(cacheDir: string): Promise<void> {
+  try {
+    if (!existsSync(cacheDir)) {
+      return
+    }
+    const entries = await readdir(cacheDir)
+    const now = Date.now()
+    await Promise.all(entries.map(async (entry) => {
+      const entryPath = join(cacheDir, entry)
+      try {
+        const stats = await stat(entryPath)
+        if (stats.isFile() && now - stats.mtimeMs > CACHE_TTL_MS) {
+          await unlink(entryPath)
+        }
+      } catch (err) {
+        // Per-entry failure is non-fatal; continue pruning others
+        logger.debug(`pruneStaleCache: failed for ${entryPath}: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }))
+  } catch (err) {
+    // Top-level failure is non-fatal; image fetch must proceed
+    logger.debug(`pruneStaleCache: failed to read ${cacheDir}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+/**
+ * Maximum number of redirects to follow before giving up.
+ */
+const MAX_REDIRECTS = 5
+
+/**
+ * Fetch the URL while following redirects manually so we can drop the
+ * Authorization header on cross-origin redirects (e.g., GitHub
+ * /user-attachments/assets/* 302s to S3 / objects.githubusercontent.com,
+ * and we must not leak `Bearer <gh-token>` to AWS).
+ */
+async function fetchFollowingRedirects(
+  initialUrl: string,
+  initialHeaders: Record<string, string>,
+  signal: AbortSignal
+): Promise<Response> {
+  let currentUrl = initialUrl
+  let currentHeaders = { ...initialHeaders }
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const response = await fetch(currentUrl, {
+      headers: currentHeaders,
+      signal,
+      redirect: 'manual',
+    })
+
+    const status = response.status
+    const isRedirect = status === 301 || status === 302 || status === 303 || status === 307 || status === 308
+    if (!isRedirect) {
+      return response
+    }
+
+    const location = response.headers.get('Location') ?? response.headers.get('location')
+    if (!location) {
+      return response
+    }
+
+    const nextUrl = new URL(location, currentUrl).toString()
+    const fromUrl = new URL(currentUrl)
+    const toUrl = new URL(nextUrl)
+
+    // Treat http→https on the same hostname as same-origin for auth purposes.
+    // URL.origin includes the protocol, so a same-host upgrade would otherwise
+    // strip auth and break the follow-up GET with 401.
+    const isHttpsUpgrade =
+      fromUrl.hostname === toUrl.hostname &&
+      fromUrl.protocol === 'http:' &&
+      toUrl.protocol === 'https:'
+    const sameOrigin = fromUrl.origin === toUrl.origin || isHttpsUpgrade
+
+    if (!sameOrigin) {
+      // Drop auth header(s) case-insensitively on cross-origin redirect to avoid
+      // leaking tokens to third parties. HTTP header names are case-insensitive
+      // per spec — strip any key whose lowercased name is 'authorization'.
+      const next: Record<string, string> = {}
+      for (const [k, v] of Object.entries(currentHeaders)) {
+        if (k.toLowerCase() !== 'authorization') next[k] = v
+      }
+      currentHeaders = next
+    }
+
+    currentUrl = nextUrl
+  }
+
+  throw new Error(`Too many redirects (>${MAX_REDIRECTS}) while downloading image`)
+}
+
+/**
+ * Download image from URL and stream it directly to a file.
+ *
+ * Writes to a per-call temp file (`${destPath}.<uuid>.tmp`) and atomically
+ * renames into place on success. This prevents torn writes when multiple
+ * parallel callers race the same destPath (children processed in Promise.all,
+ * plan + orchestrator in same process, etc.).
  *
  * @param url - Image URL to download
  * @param destPath - Destination file path
@@ -257,8 +442,10 @@ export async function downloadAndSaveImage(
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
+  const tmpPath = `${destPath}.${randomUUID()}.tmp`
+
   try {
-    const response = await fetch(url, { headers, signal: controller.signal })
+    const response = await fetchFollowingRedirects(url, headers, controller.signal)
 
     if (!response.ok) {
       throw new Error(`Failed to download image: ${response.status} ${response.statusText}`)
@@ -301,24 +488,27 @@ export async function downloadAndSaveImage(
       }
     })
 
-    // Ensure cache directory exists
-    if (!existsSync(CACHE_DIR)) {
-      mkdirSync(CACHE_DIR, { recursive: true })
-    }
+    ensureCacheDir()
 
-    // Stream to file
-    const writeStream = createWriteStream(destPath)
+    // Stream to per-call temp file, then atomically rename into place on success.
+    const writeStream = createWriteStream(tmpPath)
 
     try {
       await pipeline(nodeReadable, writeStream)
+      await rename(tmpPath, destPath)
     } catch (pipelineError) {
-      // Clean up partial file on error
+      // Clean up temp file on error (best-effort; ignore ENOENT).
       try {
-        if (existsSync(destPath)) {
-          unlinkSync(destPath)
+        await unlink(tmpPath)
+      } catch (unlinkError) {
+        if (
+          unlinkError instanceof TypeError ||
+          unlinkError instanceof ReferenceError ||
+          unlinkError instanceof SyntaxError
+        ) {
+          throw unlinkError
         }
-      } catch {
-        // Ignore cleanup errors
+        // ENOENT and similar fs errors are expected; nothing to clean up.
       }
       throw pipelineError
     }
@@ -339,10 +529,7 @@ export async function downloadAndSaveImage(
  * @returns Local file path where image should be saved
  */
 export function getCacheDestPath(url: string): string {
-  // Ensure cache directory exists
-  if (!existsSync(CACHE_DIR)) {
-    mkdirSync(CACHE_DIR, { recursive: true })
-  }
+  ensureCacheDir()
 
   // Generate cache key from URL
   const cacheKey = getCacheKey(url)
@@ -360,13 +547,16 @@ export function rewriteMarkdownUrls(
   content: string,
   urlMap: Map<string, string>
 ): string {
-  let result = content
+  // Sort by descending key length so that when one URL is a prefix of another
+  // (e.g., same image with and without `?query`), the longer one is replaced
+  // first and isn't corrupted by an earlier replacement of the shorter one.
+  const sorted = [...urlMap.entries()].sort(([a], [b]) => b.length - a.length)
 
-  for (const [originalUrl, localPath] of urlMap) {
-    // Escape special regex characters in the URL
-    const escapedUrl = originalUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const urlRegex = new RegExp(escapedUrl, 'g')
-    result = result.replace(urlRegex, localPath)
+  let result = content
+  for (const [originalUrl, localPath] of sorted) {
+    // split/join is literal — neither side interprets regex metacharacters
+    // nor `String.prototype.replace`'s special replacement tokens ($&, $1, etc.).
+    result = result.split(originalUrl).join(localPath)
   }
 
   return result
@@ -384,6 +574,18 @@ export async function processMarkdownImages(
   content: string,
   provider: IssueProvider
 ): Promise<string> {
+  // Periodic stale-cache prune (fail-open). Long-running processes (orchestrator,
+  // watch mode) need this to fire on a schedule, not just once per process.
+  if (Date.now() - lastPruneAt > PRUNE_INTERVAL_MS) {
+    lastPruneAt = Date.now()
+    await pruneStaleCache(CACHE_DIR).catch((error: unknown) => {
+      if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
+        throw error
+      }
+      logger.debug(`Cache prune failed: ${error instanceof Error ? error.message : String(error)}`)
+    })
+  }
+
   // Early return if empty
   if (!content) {
     return ''
@@ -423,11 +625,16 @@ export async function processMarkdownImages(
       // Cache miss - download and stream directly to file
       logger.debug(`Downloading image: ${url}`)
       const destPath = getCacheDestPath(url)
-      await downloadAndSaveImage(
-        url,
-        destPath,
-        authToken ? `Bearer ${authToken}` : undefined
-      )
+      // Linear personal API keys (lin_api_*) require the raw token in the
+      // Authorization header — Linear's docs reject `Bearer <key>` for personal
+      // keys (only OAuth access tokens use the Bearer scheme). GitHub tokens
+      // continue to use the standard `Bearer <token>` form.
+      const authHeader = authToken
+        ? provider === 'linear'
+          ? authToken
+          : `Bearer ${authToken}`
+        : undefined
+      await downloadAndSaveImage(url, destPath, authHeader)
       return { url, localPath: destPath }
     } catch (error) {
       // Graceful degradation - log warning, return null to keep original URL

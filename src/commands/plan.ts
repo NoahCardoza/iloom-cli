@@ -18,6 +18,7 @@ import { needsFirstRunSetup, launchFirstRunSetup } from '../utils/first-run-setu
 import type { IssueProvider, ChildIssueResult, DependenciesResult } from '../mcp/types.js'
 import { promptConfirmation, isInteractiveEnvironment } from '../utils/prompt.js'
 import { TelemetryService } from '../lib/TelemetryService.js'
+import { processMarkdownImages } from '../utils/image-processor.js'
 import { StartCommand } from './start.js'
 import { IgniteCommand } from './ignite.js'
 
@@ -225,44 +226,106 @@ export class PlanCommand {
 			if (detection.type === 'issue' && detection.identifier) {
 				// Valid issue found - fetch full details for decomposition context
 				const issue = await issueTracker.fetchIssue(detection.identifier)
+
+				// Construct the MCP provider once and reuse for body+comments and
+				// children/dependencies. If construction fails, all MCP fetches are
+				// skipped and the planning session falls back to issueTracker.fetchIssue's
+				// body, with image-processing run on it explicitly below.
+				let mcpProvider: ReturnType<typeof IssueManagementProviderFactory.create> | null = null
+				try {
+					mcpProvider = IssueManagementProviderFactory.create(provider as IssueProvider, settings ?? undefined)
+				} catch (error) {
+					if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
+						throw error
+					}
+					logger.debug(`Failed to construct MCP provider, continuing without comments/children/dependencies: ${error instanceof Error ? error.message : String(error)}`)
+				}
+
+				// The MCP provider's getIssue is the source of truth for body content:
+				// it already runs processMarkdownImages AND appends provider-specific extras
+				// (e.g. Linear paperclip attachments). Discarding its body would silently drop
+				// attachments from the planning context.
+				let bodyForPlan = issue.body
+				let bodyFromMcp = false
+				let commentsSection = ''
+				if (mcpProvider) {
+					try {
+						const mcpIssue = await mcpProvider.getIssue({ number: detection.identifier, includeComments: true })
+						if (mcpIssue.body) {
+							bodyForPlan = mcpIssue.body
+							bodyFromMcp = true
+						}
+						if (mcpIssue.comments && mcpIssue.comments.length > 0) {
+							const commentBlocks = mcpIssue.comments.map(c => {
+								const displayName = c.author?.displayName
+								const login = c.author && typeof c.author.login === 'string' ? c.author.login : undefined
+								const author = displayName ?? login ?? 'unknown'
+								const body = c.body || ''
+								return `### Comment by ${author}\n\n${body}`
+							})
+							commentsSection = `\n\n## Comments\n\n${commentBlocks.join('\n\n---\n\n')}`
+						}
+					} catch (error) {
+						if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
+							throw error
+						}
+						logger.debug(`MCP getIssue failed for plan context, falling back to issueTracker body: ${error instanceof Error ? error.message : String(error)}`)
+					}
+				}
+
+				// Fallback: if MCP didn't supply a body (provider construction failed or
+				// getIssue threw), run image processing directly on the raw fetchIssue body
+				// so authenticated image URLs are still rewritten to local paths.
+				if (!bodyFromMcp) {
+					try {
+						bodyForPlan = await processMarkdownImages(issue.body, provider as IssueProvider)
+					} catch (error) {
+						if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) {
+							throw error
+						}
+						logger.debug(`processMarkdownImages fallback failed, using raw body: ${error instanceof Error ? error.message : String(error)}`)
+						bodyForPlan = issue.body
+					}
+				}
+
 				decompositionContext = {
 					identifier: String(issue.number),
 					title: issue.title,
-					body: issue.body
+					body: bodyForPlan + commentsSection
 				}
 				logger.info(chalk.dim(`Preparing to create a detailed plan for issue #${decompositionContext.identifier}: ${decompositionContext.title}`))
 
 				// Fetch existing children and dependencies using MCP provider
 				// This allows users to resume planning where they left off
-				try {
-					const mcpProvider = IssueManagementProviderFactory.create(provider as IssueProvider, settings ?? undefined)
+				if (mcpProvider) {
+					try {
+						// Fetch child issues
+						logger.debug('Fetching child issues for decomposition context', { identifier: decompositionContext.identifier })
+						const children = await mcpProvider.getChildIssues({ number: decompositionContext.identifier })
+						if (children.length > 0) {
+							decompositionContext.children = children
+							logger.debug('Found existing child issues', { count: children.length })
+						}
 
-					// Fetch child issues
-					logger.debug('Fetching child issues for decomposition context', { identifier: decompositionContext.identifier })
-					const children = await mcpProvider.getChildIssues({ number: decompositionContext.identifier })
-					if (children.length > 0) {
-						decompositionContext.children = children
-						logger.debug('Found existing child issues', { count: children.length })
-					}
-
-					// Fetch dependencies (both directions)
-					logger.debug('Fetching dependencies for decomposition context', { identifier: decompositionContext.identifier })
-					const dependencies = await mcpProvider.getDependencies({
-						number: decompositionContext.identifier,
-						direction: 'both'
-					})
-					if (dependencies.blocking.length > 0 || dependencies.blockedBy.length > 0) {
-						decompositionContext.dependencies = dependencies
-						logger.debug('Found existing dependencies', {
-							blocking: dependencies.blocking.length,
-							blockedBy: dependencies.blockedBy.length
+						// Fetch dependencies (both directions)
+						logger.debug('Fetching dependencies for decomposition context', { identifier: decompositionContext.identifier })
+						const dependencies = await mcpProvider.getDependencies({
+							number: decompositionContext.identifier,
+							direction: 'both'
+						})
+						if (dependencies.blocking.length > 0 || dependencies.blockedBy.length > 0) {
+							decompositionContext.dependencies = dependencies
+							logger.debug('Found existing dependencies', {
+								blocking: dependencies.blocking.length,
+								blockedBy: dependencies.blockedBy.length
+							})
+						}
+					} catch (error) {
+						// Log but don't fail - children/dependencies are optional context
+						logger.debug('Failed to fetch children/dependencies, continuing without them', {
+							error: error instanceof Error ? error.message : 'Unknown error'
 						})
 					}
-				} catch (error) {
-					// Log but don't fail - children/dependencies are optional context
-					logger.debug('Failed to fetch children/dependencies, continuing without them', {
-						error: error instanceof Error ? error.message : 'Unknown error'
-					})
 				}
 			} else {
 				// Input matched issue pattern but issue not found - treat as regular prompt
