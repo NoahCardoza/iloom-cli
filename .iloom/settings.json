@@ -10,10 +10,10 @@
     }
   },
   "agents": {
-    "iloom-issue-analyzer": { "model": "opus" },
-    "iloom-issue-planner": { "model": "opus" },
-    "iloom-issue-analyze-and-plan": { "model": "opus" },
-    "iloom-issue-implementer": { "model": "opus" },
+    "iloom-issue-analyzer": { "model": "claude-opus-4-6[1m]" },
+    "iloom-issue-planner": { "model": "claude-opus-4-6[1m]" },
+    "iloom-issue-analyze-and-plan": { "model": "claude-opus-4-6[1m]" },
+    "iloom-issue-implementer": { "model": "claude-opus-4-6[1m]" },
     "iloom-code-reviewer": { "providers": { "gemini": "gemini-3.1-pro-preview" } },
     "iloom-artifact-reviewer": { "enabled": true, "providers": { "gemini": "gemini-3.1-pro-preview" } }
   },
