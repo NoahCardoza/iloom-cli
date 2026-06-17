@@ -53,3 +53,6 @@ logs/
 
 # Added by iloom CLI
 .iloom/settings.local.json
+
+# Claude AI MCP servers settings
+.claude/settings.local.json

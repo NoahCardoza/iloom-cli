@@ -101,9 +101,9 @@ export const SpinAgentSettingsSchema = z.object({
  * Used for the plan command configuration
  */
 export const PlanCommandSettingsSchema = z.object({
-	model: claudeModelSchema
+	model: z.string().min(1)
 		.default('opus[1m]')
-		.describe('Claude model shorthand for plan command'),
+		.describe('Model for plan command. Use a Claude shorthand or claude-* model when planner is claude; use a Codex model name when planner is codex.'),
 	effort: z
 		.enum(VALID_EFFORT_LEVELS)
 		.optional()
@@ -1477,9 +1477,9 @@ export class SettingsManager {
 	 * Default is defined in PlanCommandSettingsSchema
 	 *
 	 * @param settings - Pre-loaded settings object
-	 * @returns Model shorthand (e.g. 'opus', 'sonnet', 'haiku', 'sonnet[1m]', 'opus[1m]')
+	 * @returns Model name for the configured planning provider
 	 */
-	getPlanModel(settings?: IloomSettings): ClaudeModel {
+	getPlanModel(settings?: IloomSettings): string {
 		return settings?.plan?.model ?? PlanCommandSettingsSchema.parse({}).model
 	}
 

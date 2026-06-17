@@ -706,7 +706,12 @@ il plan 42
 
 ```bash
 il plan --planner gemini --reviewer claude "Add OAuth support"
+
+# Codex planning runs the real Codex CLI directly
+il plan --planner codex --reviewer none "Refactor database layer"
 ```
+
+When `--planner codex` is selected, `il plan` launches Codex directly and persists plans through the same issue-management MCP tools used by Claude planning. Codex planning currently requires `--reviewer none`, does not support `--auto-swarm`, and ignores the `plan.model` Claude shorthand from settings unless you pass an explicit Codex model name via `--model`.
 
 **Autonomous Mode:** Skip prompts and let the Architect work independently:
 

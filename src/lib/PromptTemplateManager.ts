@@ -6,7 +6,16 @@ import Handlebars from 'handlebars'
 import { logger } from '../utils/logger.js'
 import type { AgentSettings } from './SettingsManager.js'
 
-export type TemplateName = 'issue' | 'pr' | 'regular' | 'init' | 'session-summary' | 'plan' | 'swarm-orchestrator' | 'epic-report'
+export type TemplateName =
+	| 'issue'
+	| 'pr'
+	| 'regular'
+	| 'init'
+	| 'session-summary'
+	| 'plan'
+	| 'plan-codex'
+	| 'swarm-orchestrator'
+	| 'epic-report'
 
 // Register raw helper to handle content with curly braces (e.g., JSON)
 // Usage: {{{{raw}}}}{{VARIABLE}}{{{{/raw}}}}

@@ -64,6 +64,16 @@ describe('PromptTemplateManager', () => {
 			expect(readFile).toHaveBeenCalledWith('templates/prompts/epic-report-prompt.txt', 'utf-8')
 		})
 
+		it('should load Codex plan template successfully', async () => {
+			const templateContent = 'Codex plan template'
+			vi.mocked(readFile).mockResolvedValueOnce(templateContent)
+
+			const result = await manager.loadTemplate('plan-codex')
+
+			expect(result).toBe(templateContent)
+			expect(readFile).toHaveBeenCalledWith('templates/prompts/plan-codex-prompt.txt', 'utf-8')
+		})
+
 		it('should throw error when template file is not found', async () => {
 			vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT: no such file'))
 

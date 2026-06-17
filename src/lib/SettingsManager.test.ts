@@ -3196,6 +3196,17 @@ const error: { code?: string; message: string } = {
 		})
 
 		describe('PlanCommandSettingsSchema', () => {
+			it('accepts Codex model names for provider-specific runtime validation', () => {
+				const result = PlanCommandSettingsSchema.safeParse({
+					planner: 'codex',
+					model: 'gpt-5.2-codex',
+				})
+				expect(result.success).toBe(true)
+				if (result.success) {
+					expect(result.data.model).toBe('gpt-5.2-codex')
+				}
+			})
+
 			it('includes optional effort field', () => {
 				const result = PlanCommandSettingsSchema.safeParse({ effort: 'max' })
 				expect(result.success).toBe(true)

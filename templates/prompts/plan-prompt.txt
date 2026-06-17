@@ -19,18 +19,6 @@ Look for available Gemini MCP tools (typically named with "gemini" in the tool n
 **Fallback**: If Gemini MCP tools are unavailable (error responses), continue using your own capabilities for planning.
 {{/if}}
 
-{{#if USE_CODEX_PLANNER}}
-### Using Codex for Planning (via MCP)
-
-You have access to Codex AI through MCP tools for code-aware planning.
-Look for available Codex MCP tools (typically named with "codex" in the tool name) for:
-- Code-focused analysis and implementation suggestions
-
-**Workflow**: Use this tool during Phase 2 (Design Exploration) and Phase 3 (Issue Decomposition) for code-specific insights. Delegate deep research to the `iloom-issue-analyzer` agent (see Phase 1) and use Codex for supplementary code analysis.
-
-**Fallback**: If Codex MCP tool is unavailable (error response), continue using your own capabilities for planning.
-{{/if}}
-
 {{#unless USE_GEMINI_PLANNER}}{{#unless USE_CODEX_PLANNER}}
 ### Default Planning (Claude)
 

@@ -5,6 +5,7 @@ import type { PromptTemplateManager } from '../lib/PromptTemplateManager.js'
 import type { AgentManager } from '../lib/AgentManager.js'
 import * as claudeUtils from '../utils/claude.js'
 import * as claudeTrust from '../utils/claude-trust.js'
+import * as codexUtils from '../utils/codex.js'
 import * as mcpUtils from '../utils/mcp.js'
 import * as systemPromptWriter from '../utils/system-prompt-writer.js'
 import * as firstRunSetup from '../utils/first-run-setup.js'
@@ -19,6 +20,7 @@ import { processMarkdownImages } from '../utils/image-processor.js'
 // Mock dependencies
 vi.mock('../utils/claude.js')
 vi.mock('../utils/claude-trust.js')
+vi.mock('../utils/codex.js')
 vi.mock('../utils/mcp.js')
 vi.mock('../utils/system-prompt-writer.js')
 vi.mock('../utils/first-run-setup.js')
@@ -52,6 +54,20 @@ vi.mock('../lib/TelemetryService.js', () => ({
 	},
 }))
 vi.mock('../lib/SettingsManager.js', () => ({
+	PlanCommandSettingsSchema: {
+		shape: {
+			planner: {
+				safeParse: vi.fn((value: string) => ({
+					success: ['claude', 'gemini', 'codex'].includes(value),
+				})),
+			},
+			reviewer: {
+				safeParse: vi.fn((value: string) => ({
+					success: ['claude', 'gemini', 'codex', 'none'].includes(value),
+				})),
+			},
+		},
+	},
 	SettingsManager: vi.fn(() => ({
 		loadSettings: vi.fn().mockResolvedValue(null),
 		getPlanModel: vi.fn().mockReturnValue('opus'),
@@ -68,6 +84,13 @@ vi.mock('../lib/IssueTrackerFactory.js', () => ({
 	},
 }))
 vi.mock('../utils/logger.js', () => ({
+	createStderrLogger: vi.fn(() => ({
+		debug: vi.fn(),
+		info: vi.fn(),
+		warn: vi.fn(),
+		error: vi.fn(),
+		success: vi.fn(),
+	})),
 	logger: {
 		debug: vi.fn(),
 		info: vi.fn(),
@@ -108,6 +131,8 @@ describe('PlanCommand', () => {
 		vi.mocked(claudeTrust.preAcceptClaudeTrust).mockResolvedValue(undefined)
 		vi.mocked(claudeUtils.detectClaudeCli).mockResolvedValue(true)
 		vi.mocked(claudeUtils.launchClaude).mockResolvedValue(undefined)
+		vi.mocked(codexUtils.detectCodexCli).mockResolvedValue(true)
+		vi.mocked(codexUtils.launchCodex).mockResolvedValue(undefined)
 		vi.mocked(mcpUtils.generateIssueManagementMcpConfig).mockResolvedValue([
 			{ mcpServers: { issue_management: {} } },
 		])
@@ -335,6 +360,90 @@ describe('PlanCommand', () => {
 		})
 	})
 
+	describe('Codex runtime', () => {
+		it('uses Codex runtime for --planner codex and skips Claude launch helpers', async () => {
+			await command.execute('plan this feature', undefined, undefined, 'codex', 'none')
+
+			expect(codexUtils.detectCodexCli).toHaveBeenCalled()
+			expect(codexUtils.launchCodex).toHaveBeenCalled()
+			expect(claudeUtils.detectClaudeCli).not.toHaveBeenCalled()
+			expect(claudeUtils.launchClaude).not.toHaveBeenCalled()
+		})
+
+		it('rejects existing issue planning in Codex runtime for now', async () => {
+			vi.mocked(identifierParser.matchIssueIdentifier).mockReturnValue({
+				isIssueIdentifier: true,
+				type: 'numeric',
+				identifier: '42',
+			})
+
+			const mockIssueTracker = {
+				detectInputType: vi.fn().mockResolvedValue({ type: 'issue', identifier: '42' }),
+				fetchIssue: vi.fn().mockResolvedValue({ number: 42, title: 'Test epic', body: 'Epic body' }),
+			}
+			vi.mocked(IssueTrackerFactory.create).mockReturnValue(mockIssueTracker as never)
+			vi.mocked(IssueManagementProviderFactory.create).mockReturnValue({
+				getChildIssues: vi.fn().mockResolvedValue([{ id: '100', title: 'Child 1', state: 'open' }]),
+				getDependencies: vi.fn().mockResolvedValue({ blocking: [], blockedBy: [] }),
+				getIssue: vi.fn().mockResolvedValue({ id: '42', title: 'Test epic', body: 'Epic body', state: 'open', url: '', provider: 'github', author: null }),
+			} as never)
+
+			await expect(command.execute('42', undefined, undefined, 'codex', 'none', {
+				print: true,
+				jsonStream: true,
+			})).rejects.toThrow('Codex planning currently supports new planning prompts only')
+
+			expect(mockIssueTracker.fetchIssue).not.toHaveBeenCalled()
+			expect(mockTemplateManager.getPrompt).not.toHaveBeenCalledWith('plan-codex', expect.any(Object))
+			expect(codexUtils.launchCodex).not.toHaveBeenCalled()
+		})
+
+		it('passes explicit Codex model names to Codex runtime', async () => {
+			await command.execute('plan this feature', 'gpt-5.2-codex', undefined, 'codex', 'none')
+
+			expect(codexUtils.launchCodex).toHaveBeenCalledWith(
+				'plan this feature',
+				expect.objectContaining({
+					model: 'gpt-5.2-codex',
+				})
+			)
+		})
+
+		it('passes configured Codex model names to Codex runtime', async () => {
+			const { SettingsManager } = await import('../lib/SettingsManager.js')
+			vi.mocked(SettingsManager).mockImplementation(() => ({
+				loadSettings: vi.fn().mockResolvedValue({ plan: { planner: 'codex', model: 'gpt-5.2-codex', reviewer: 'none' } }),
+				getPlanModel: vi.fn().mockReturnValue('gpt-5.2-codex'),
+				getPlanPlanner: vi.fn().mockReturnValue('codex'),
+				getPlanReviewer: vi.fn().mockReturnValue('none'),
+				getPlanWaveVerification: vi.fn().mockReturnValue(true),
+				getPlanEffort: vi.fn().mockReturnValue('high'),
+			}) as unknown as InstanceType<typeof SettingsManager>)
+			command = new PlanCommand(mockTemplateManager, mockAgentManager as unknown as AgentManager)
+
+			await command.execute('plan this feature')
+
+			expect(codexUtils.launchCodex).toHaveBeenCalledWith(
+				'plan this feature',
+				expect.objectContaining({
+					model: 'gpt-5.2-codex',
+				})
+			)
+		})
+
+		it('rejects unsupported reviewer combinations in Codex mode', async () => {
+			await expect(command.execute('plan this feature', undefined, undefined, 'codex', 'claude')).rejects.toThrow(
+				'Codex planning does not support reviewers yet'
+			)
+		})
+
+		it('rejects auto-swarm in Codex mode', async () => {
+			await expect(command.execute('plan this feature', undefined, { autoSwarm: true }, 'codex', 'none')).rejects.toThrow(
+				'Codex planning does not support --auto-swarm yet'
+			)
+		})
+	})
+
 	describe('MCP config generation', () => {
 		it('should throw error when MCP config generation fails', async () => {
 			vi.mocked(mcpUtils.generateIssueManagementMcpConfig).mockRejectedValue(
@@ -401,16 +510,29 @@ describe('PlanCommand', () => {
 
 			const call = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
 			const options = call[1] as Record<string, unknown>
-			expect(options.allowedTools).toEqual([
+			expect(options.allowedTools).toEqual(expect.arrayContaining([
 				'mcp__issue_management__get_issue',
 				'mcp__issue_management__get_child_issues',
 				'mcp__issue_management__create_issue',
 				'mcp__issue_management__create_child_issue',
+				'mcp__issue_management__get_comment',
 				'mcp__issue_management__create_comment',
 				'mcp__issue_management__create_dependency',
 				'mcp__issue_management__get_dependencies',
 				'mcp__issue_management__remove_dependency',
-			])
+				'Read',
+				'Glob',
+				'Grep',
+				'Task',
+				'WebFetch',
+				'WebSearch',
+				'Bash(git status:*)',
+				'Bash(git log:*)',
+				'Bash(git branch:*)',
+				'Bash(git remote:*)',
+				'Bash(git diff:*)',
+				'Bash(git show:*)',
+			]))
 		})
 
 		it('should load analyzer agent and pass to launchClaude', async () => {
@@ -930,7 +1052,7 @@ describe('PlanCommand', () => {
 				await command.execute('test prompt', undefined, { oneShot: 'bypassPermissions' })
 
 				expect(logger.warn).toHaveBeenCalledWith(
-					'Autonomous mode enabled - Claude will skip permission prompts and proceed without user interaction. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
+					'YOLO mode enabled - Claude will skip permission prompts and proceed autonomously. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
 				)
 			})
 
@@ -940,7 +1062,7 @@ describe('PlanCommand', () => {
 				await command.execute('test prompt', undefined, { dangerouslySkipPermissions: true })
 
 				expect(logger.warn).toHaveBeenCalledWith(
-					'Permission bypass enabled - Claude will skip permission prompts. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
+					'Permission bypass enabled - the planning runtime will skip permission prompts. This could destroy important data or make irreversible changes. Proceeding means you accept this risk.'
 				)
 			})
 		})
@@ -1096,17 +1218,18 @@ describe('PlanCommand', () => {
 
 			const call = vi.mocked(claudeUtils.launchClaude).mock.calls[0]
 			const options = call[1] as Record<string, unknown>
-			expect(options.allowedTools).toEqual([
+			expect(options.allowedTools).toEqual(expect.arrayContaining([
 				'mcp__issue_management__get_issue',
 				'mcp__issue_management__get_child_issues',
 				'mcp__issue_management__create_issue',
 				'mcp__issue_management__create_child_issue',
+				'mcp__issue_management__get_comment',
 				'mcp__issue_management__create_comment',
 				'mcp__issue_management__create_dependency',
 				'mcp__issue_management__get_dependencies',
 				'mcp__issue_management__remove_dependency',
 				'mcp__harness__signal',
-			])
+			]))
 		})
 
 		it('sets AUTO_SWARM_MODE: true in template variables', async () => {

@@ -644,8 +644,8 @@ il spin [options]
 | `--complexity` | `trivial`, `simple`, `complex` | Override complexity evaluation (session-only, does not persist) |
 | `--effort` | `low`, `medium`, `high`, `max` | Set effort level for Claude (session-only, does not persist) |
 | `-p, --print` | | Enable print/headless mode for CI/CD (uses `bypassPermissions`) |
-| `--output-format` | `json`, `stream-json`, `text` | Output format for Claude CLI (requires `--print`) |
-| `--verbose` | | Enable verbose output (requires `--print`) |
+| `--output-format` | `json`, `stream-json`, `text` | Output format for headless planning runtime (requires `--print`) |
+| `--verbose` | | Enable verbose output when supported (requires `--print`) |
 | `--set` | `key=value` | Override settings using dot notation (repeatable). Same as global `--set` flag. |
 | `--skip-cleanup` | | Skip automatic cleanup of child worktrees in swarm mode |
 
@@ -1451,7 +1451,7 @@ il plan <issue-number> [options]
 
 | Flag | Values | Description |
 |------|--------|-------------|
-| `--model <model>` | `opus`, `sonnet`, `haiku`, `opus[1m]`, `sonnet[1m]` | Model to use (default: from settings `plan.model`, falls back to 'opus[1m]'). The `[1m]` variants use the 1M context window. `opus[1m]` requires a Max or Team plan. |
+| `--model <model>` | `opus`, `sonnet`, `haiku`, `opus[1m]`, `sonnet[1m]`, or a Codex model name | Model to use. For `claude` and `gemini`, this uses Claude shorthand from `plan.model` and supports the `[1m]` variants. For `codex`, pass an explicit Codex model name or omit `--model` to use Codex defaults. |
 | `--one-shot <mode>` | `default`, `noReview`, `bypassPermissions` | One-shot automation mode (`noReview` skips confirmation gates; `bypassPermissions` skips both gates and permission prompts) |
 | `--dangerously-skip-permissions` | - | Skip Claude permission prompts without skipping confirmation gates (composable with `--one-shot`) |
 | `--autonomous` | - | Alias for `--one-shot=bypassPermissions` (backwards compat) |
@@ -1461,8 +1461,8 @@ il plan <issue-number> [options]
 | `--reviewer <provider>` | `claude`, `gemini`, `codex`, `none` | AI provider for plan review (default: from settings `plan.reviewer`, falls back to 'none') |
 | `--effort` | `low`, `medium`, `high`, `max` | Set effort level for Claude (default: from settings `plan.effort`) |
 | `-p, --print` | - | Enable print/headless mode for CI/CD (implies autonomous + `bypassPermissions`) |
-| `--output-format` | `json`, `stream-json`, `text` | Output format for Claude CLI (requires `--print`) |
-| `--verbose` | - | Enable verbose output (requires `--print`) |
+| `--output-format` | `json`, `stream-json`, `text` | Output format for the headless planning runtime (requires `--print`) |
+| `--verbose` | - | Enable verbose output when supported (requires `--print`) |
 
 **Flag Behavior Matrix:**
 
@@ -1481,9 +1481,9 @@ All flags are composable. For example:
 
 **Behavior:**
 
-1. Loads settings to detect issue provider (GitHub/Linear) and model preference
+1. Loads settings to detect issue provider (GitHub/Linear/Jira) and model preference
 2. If an issue identifier is provided, fetches issue details, existing children, and dependencies
-3. Launches Claude with Architect persona
+3. Launches the configured planning runtime: Claude for `claude`/`gemini`, Codex for `codex`
 4. Architect helps decompose features using brainstorming patterns
 5. At session end, creates parent epic issue if none provided, and child issues with dependencies
 
@@ -1529,9 +1529,16 @@ il plan --planner gemini --reviewer claude "Add OAuth support"
 # Use Claude for planning with no review
 il plan --planner claude --reviewer none "Fix login flow"
 
-# Use Codex for both phases
-il plan --planner codex --reviewer codex "Refactor database layer"
+# Use Codex as the planning runtime
+il plan --planner codex --reviewer none "Refactor database layer"
 ```
+
+**Codex planner notes:**
+- `il plan --planner codex` runs the real Codex CLI directly (`codex` interactively, `codex exec` in `--print` mode)
+- Codex planning persists parent comments, child issues, and dependencies through the existing issue-management MCP server
+- Codex planning currently requires `--reviewer none`
+- Codex planning does **not** support `--auto-swarm`
+- `plan.model` remains a Claude shorthand setting; in Codex mode omit `--model` to use Codex defaults, or pass an explicit Codex model name
 
 **Autonomous Mode (--yolo):**
 
@@ -1638,6 +1645,9 @@ il plan ENG-123
 
 # Multi-AI provider - Gemini plans, Claude reviews
 il plan --planner gemini --reviewer claude "Add OAuth support"
+
+# Codex planning runtime
+il plan --planner codex --reviewer none "Refactor database layer"
 
 # Autonomous mode - skip all prompts
 il plan --yolo "Add GitLab integration"
